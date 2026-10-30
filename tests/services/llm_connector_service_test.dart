@@ -10,6 +10,7 @@ import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/aws_sigv4.dart';
 
 void main() {
   group('LlmConnectorRegistry', () {
@@ -42,6 +43,76 @@ void main() {
       expect(
         LlmConnectorRegistry.find('kimi.ai')?.quotaAvailability,
         LlmQuotaAvailability.unknown,
+      );
+    });
+
+    test('registers the approved API-key providers with honest auth types', () {
+      final expectedApiKeyProviders = {
+        'openai-api',
+        'claude',
+        'gemini',
+        'moonshot',
+        'glm',
+        'deepseek',
+        'minimax',
+        'qwen',
+      };
+
+      for (final id in expectedApiKeyProviders) {
+        final connector = LlmConnectorRegistry.find(id);
+        expect(connector, isNotNull, reason: '$id must be addable');
+        expect(connector!.authTypes, contains('api_key'), reason: id);
+      }
+
+      for (final id in {
+        'openai-api',
+        'moonshot',
+        'glm',
+        'deepseek',
+        'minimax',
+        'qwen',
+      }) {
+        expect(
+          LlmConnectorRegistry.chatAdapterEndpointType(id),
+          'openai',
+          reason: '$id must be selectable for internal Chat and Task Flow',
+        );
+      }
+
+      expect(
+        LlmConnectorRegistry.find('gemini')!.authTypes,
+        {'api_key', 'oauth'},
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('claude'),
+        'anthropic',
+      );
+      expect(LlmConnectorRegistry.find('bedrock'), isNotNull);
+      expect(
+        LlmConnectorRegistry.find('vertex')!.authTypes,
+        containsAll({'api_key', 'service_account'}),
+      );
+      expect(
+        LlmConnectorRegistry.find('vertex')!.authTypes,
+        isNot(contains('oauth')),
+      );
+    });
+
+    test('pinned Vertex catalog excludes embedding and rerank models', () {
+      final vertex = LlmConnectorRegistry.find('vertex')!;
+
+      expect(
+        vertex.modelCatalog.every(
+          (id) => !RegExp(
+            r'embedding|rerank',
+            caseSensitive: false,
+          ).hasMatch(id),
+        ),
+        isTrue,
+      );
+      expect(
+        vertex.modelCatalog,
+        contains('imagen-4.0-generate-001'),
       );
     });
   });
@@ -845,6 +916,603 @@ void main() {
     });
 
     test(
+      'rejects malformed Vertex service-account JSON before persistence',
+      () async {
+        await expectLater(
+          service.saveAccount(
+            LlmAccount(
+              id: 'vertex-malformed-account',
+              connectorType: 'vertex',
+              authType: 'service_account',
+              displayName: 'Malformed Vertex account',
+            ),
+            secret: jsonEncode({
+              'type': 'service_account',
+              'private_key': 'not-a-key',
+            }),
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(await service.listAccounts(), isEmpty);
+        expect(credentials.values, isEmpty);
+      },
+    );
+
+    test(
+      'refreshes missing and expired Vertex service-account tokens before discovery',
+      () async {
+        for (final bundle in [
+          Map<String, dynamic>.from(_vertexServiceAccount),
+          {
+            ..._vertexServiceAccount,
+            'access_token': 'expired-vertex-token',
+            'expires_at': '2000-01-01T00:00:00Z',
+          },
+        ]) {
+          final requests = <RequestOptions>[];
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              requests.add(options);
+              if (options.uri.host == 'oauth2.googleapis.com') {
+                return ResponseBody.fromString(
+                  jsonEncode({
+                    'access_token': 'refreshed-vertex-token',
+                    'expires_in': 3600,
+                  }),
+                  200,
+                  headers: const {
+                    'content-type': ['application/json'],
+                  },
+                );
+              }
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'publisherModels': [
+                    {
+                      'name': 'publishers/google/models/gemini-2.5-flash',
+                      'supportedActions': ['generateContent'],
+                    },
+                  ],
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final discoveryService = LlmAccountConnectorService(
+            preferences: _MemoryPreferences(),
+            credentialStore: _MemoryCredentials(),
+            dio: dio,
+          );
+          final account = await discoveryService.saveAccount(
+            LlmAccount(
+              id: 'vertex-token-refresh-${bundle.containsKey('access_token')}',
+              connectorType: 'vertex',
+              authType: 'service_account',
+              displayName: 'Vertex account',
+              endpointConfig: const {'projectId': 'vertex-project'},
+            ),
+            secret: jsonEncode(bundle),
+          );
+
+          final models = await discoveryService.discoverModels(
+            account,
+            refreshRemote: true,
+          );
+
+          expect(models.map((model) => model.upstreamModelId), [
+            'gemini-2.5-flash',
+          ]);
+          expect(requests.first.uri.host, 'oauth2.googleapis.com');
+          expect(
+            requests.last.headers['Authorization'],
+            'Bearer refreshed-vertex-token',
+          );
+        }
+      },
+    );
+
+    test(
+      'discovers Vertex chat models using service-account project and default location',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'publisherModels': [
+                  {
+                    'name': 'publishers/google/models/gemini-2.5-flash',
+                    'displayName': 'Gemini 2.5 Flash',
+                    'supportedActions': ['generateContent'],
+                  },
+                  {
+                    'name': 'publishers/google/models/text-embedding-005',
+                    'supportedActions': ['embedContent'],
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'vertex-discovery',
+            connectorType: 'vertex',
+            authType: 'service_account',
+            displayName: 'Vertex account',
+          ),
+          secret: jsonEncode({
+            'access_token': 'vertex-short-lived-token',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 1))
+                .toIso8601String(),
+            'service_account': {
+              ..._vertexServiceAccount,
+              'project_id': 'credential-project',
+            },
+          }),
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(
+          captured?.uri.toString(),
+          contains(
+            '/projects/credential-project/locations/us-central1/publishers/google/models',
+          ),
+        );
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer vertex-short-lived-token',
+        );
+        expect(models.map((model) => model.upstreamModelId), [
+          'gemini-2.5-flash',
+        ]);
+        expect(models.single.displayName, 'Gemini 2.5 Flash');
+      },
+    );
+
+    test('discovers Vertex Imagen models that support prediction', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'publisherModels': [
+                {
+                  'name': 'publishers/google/models/imagen-4.0-generate-001',
+                  'displayName': 'Imagen 4 Generate',
+                  'supportedActions': ['predict'],
+                },
+                {
+                  'name': 'publishers/google/models/text-embedding-005',
+                  'supportedActions': ['embedContent'],
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'vertex-imagen-discovery',
+          connectorType: 'vertex',
+          authType: 'api_key',
+          displayName: 'Vertex API key',
+          endpointConfig: const {
+            'projectId': 'vertex-project',
+            'location': 'us-central1',
+          },
+        ),
+        secret: 'vertex-api-key',
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(
+        models.map((model) => model.upstreamModelId),
+        ['imagen-4.0-generate-001'],
+      );
+    });
+
+    test('blocks Vertex model discovery with unsupported generic OAuth',
+        () async {
+      var requestsSent = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
+        });
+      final preferences = _MemoryPreferences();
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'vertex-oauth-discovery',
+          connectorType: 'vertex',
+          authType: 'api_key',
+          displayName: 'Vertex OAuth account',
+          models: const [
+            LlmUpstreamModel(
+              id: 'cached-vertex-model',
+              upstreamModelId: 'gemini-2.5-flash',
+              displayName: 'Gemini 2.5 Flash',
+            ),
+          ],
+          endpointConfig: const {
+            'projectId': 'oauth-project',
+            'location': 'europe-west4',
+          },
+        ),
+        secret: 'vertex-api-key',
+      );
+      final accountsEnvelope = jsonDecode(
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+      ) as Map<String, dynamic>;
+      final accountRecord = Map<String, dynamic>.from(
+        (accountsEnvelope['items'] as List).single as Map,
+      )..['authType'] = 'oauth';
+      accountsEnvelope['items'] = [accountRecord];
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+          jsonEncode(accountsEnvelope);
+      final legacyAccount = (await discoveryService.getAccount(account.id))!;
+
+      await expectLater(
+        discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      await expectLater(
+        discoveryService.discoverModels(legacyAccount),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      accountRecord['models'] = <Map<String, dynamic>>[];
+      accountsEnvelope['items'] = [accountRecord];
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+          jsonEncode(accountsEnvelope);
+      final legacyAccountWithoutModels =
+          (await discoveryService.getAccount(account.id))!;
+      await expectLater(
+        discoveryService.discoverModels(legacyAccountWithoutModels),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      expect(requestsSent, 0);
+      expect(
+        () => LlmNativeRequestBuilder().build(
+          account: legacyAccount,
+          credential: 'legacy-vertex-oauth',
+          modelId: 'gemini-2.5-flash',
+          body: const {'contents': []},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
+    test('follows OpenAI and Anthropic model-list cursors', () async {
+      for (final connector in ['openai-api', 'claude']) {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            final isSecondPage = options.uri.queryParameters.containsKey(
+              connector == 'openai-api' ? 'after' : 'after_id',
+            );
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': isSecondPage ? 'model-second' : 'model-first'},
+                ],
+                'has_more': !isSecondPage,
+                'last_id': isSecondPage ? 'model-second' : 'model-first',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          _account('cursor-$connector', connector),
+          secret: '$connector-test-key',
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(requests, hasLength(2), reason: connector);
+        expect(requests.first.uri.path, '/v1/models', reason: connector);
+        expect(
+          requests[1].uri.queryParameters[
+              connector == 'openai-api' ? 'after' : 'after_id'],
+          'model-first',
+          reason: connector,
+        );
+        expect(
+            models.map((model) => model.upstreamModelId),
+            [
+              'model-first',
+              'model-second',
+            ],
+            reason: connector);
+      }
+    });
+
+    test(
+      'discovers provider API-key models and filters non-chat models',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'deepseek-chat'},
+                  {'id': 'text-embedding-v3'},
+                  {'id': 'deepseek-reranker'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          _account('deepseek-discovery', 'deepseek'),
+          secret: 'deepseek-private-key',
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(captured?.uri.toString(), 'https://api.deepseek.com/models');
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer deepseek-private-key',
+        );
+        expect(models.map((model) => model.upstreamModelId), ['deepseek-chat']);
+      },
+    );
+
+    test(
+      'signs Bedrock model discovery and excludes non-text models',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'modelSummaries': [
+                  {
+                    'modelId': 'amazon.titan-text-express-v1',
+                    'modelName': 'Titan Text Express',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['TEXT'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
+                  },
+                  {
+                    'modelId': 'amazon.titan-embed-text-v2:0',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['EMBEDDING'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
+                  },
+                  {
+                    'modelId': 'cohere.rerank-v3-5:0',
+                    'modelName': 'Cohere Rerank',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['TEXT'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
+                  },
+                  {
+                    'modelId': 'amazon.titan-image-generator-v1',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['IMAGE'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
+                  },
+                  {
+                    'modelId': 'amazon.titan-text-legacy-v1',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['TEXT'],
+                    'modelLifecycle': {'status': 'INACTIVE'},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'bedrock-discovery',
+            connectorType: 'bedrock',
+            authType: 'aws_credentials',
+            displayName: 'Bedrock',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: jsonEncode({
+            'accessKeyId': 'AKIDEXAMPLE',
+            'secretAccessKey': 'private-aws-secret',
+            'sessionToken': 'private-session-token',
+          }),
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(captured?.method, 'GET');
+        expect(captured?.uri.host, 'bedrock.us-east-1.amazonaws.com');
+        expect(captured?.uri.path, '/foundation-models');
+        expect(captured?.uri.queryParameters['byOutputModality'], 'TEXT');
+        expect(
+          captured?.headers['x-amz-security-token'],
+          'private-session-token',
+        );
+        expect(models.map((model) => model.upstreamModelId), [
+          'amazon.titan-text-express-v1',
+        ]);
+      },
+    );
+
+    test('uses the AWS China host for Bedrock model discovery', () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({'modelSummaries': []}),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'bedrock-china-discovery',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock',
+          endpointConfig: const {'region': 'cn-north-1'},
+        ),
+        secret: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+        }),
+      );
+
+      await discoveryService.discoverModels(account, refreshRemote: true);
+
+      expect(captured?.uri.host, 'bedrock.cn-north-1.amazonaws.com.cn');
+    });
+
+    test('follows Bedrock foundation-model nextToken pages', () async {
+      final requests = <RequestOptions>[];
+      var page = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          final response = page++ == 0
+              ? {
+                  'modelSummaries': [
+                    {
+                      'modelId': 'amazon.titan-text-express-v1',
+                      'inputModalities': ['TEXT'],
+                      'outputModalities': ['TEXT'],
+                      'modelLifecycle': {'status': 'ACTIVE'},
+                    },
+                  ],
+                  'nextToken': 'bedrock-next',
+                }
+              : {
+                  'modelSummaries': [
+                    {
+                      'modelId': 'anthropic.claude-3-5-sonnet-v2:0',
+                      'inputModalities': ['TEXT'],
+                      'outputModalities': ['TEXT'],
+                      'modelLifecycle': {'status': 'ACTIVE'},
+                    },
+                  ],
+                };
+          return ResponseBody.fromString(
+            jsonEncode(response),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'bedrock-pages',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+          'sessionToken': 'private-session-token',
+        }),
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(requests, hasLength(2));
+      expect(requests.first.uri.queryParameters['byOutputModality'], 'TEXT');
+      expect(requests[1].uri.queryParameters['nextToken'], 'bedrock-next');
+      expect(models.map((model) => model.upstreamModelId), [
+        'amazon.titan-text-express-v1',
+        'anthropic.claude-3-5-sonnet-v2:0',
+      ]);
+    });
+
+    test(
       'attributes Gemini OAuth model discovery to its Cloud project',
       () async {
         RequestOptions? captured;
@@ -1592,6 +2260,66 @@ void main() {
       );
     });
 
+    test('rejects custom Bedrock endpoints outside the configured region', () {
+      expect(
+        () => builder.build(
+          account: LlmAccount(
+            id: 'bedrock-foreign-endpoint',
+            connectorType: 'bedrock',
+            authType: 'aws_credentials',
+            displayName: 'Bedrock',
+            endpointConfig: const {
+              'region': 'us-east-1',
+              'baseUrl': 'https://bedrock-runtime.attacker.example',
+            },
+          ),
+          credential: jsonEncode({
+            'accessKeyId': 'AKIDEXAMPLE',
+            'secretAccessKey': 'private-aws-secret',
+          }),
+          awsCredentials: const AwsSigV4Credentials(
+            accessKeyId: 'AKIDEXAMPLE',
+            secretAccessKey: 'private-aws-secret',
+          ),
+          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
+    test('uses the AWS China host for Bedrock requests in cn regions', () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'bedrock-china-region',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock',
+          endpointConfig: const {'region': 'cn-north-1'},
+        ),
+        credential: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+        }),
+        awsCredentials: const AwsSigV4Credentials(
+          accessKeyId: 'AKIDEXAMPLE',
+          secretAccessKey: 'private-aws-secret',
+        ),
+        modelId: 'amazon.titan-text-express-v1',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+      );
+
+      expect(request.uri.host, 'bedrock-runtime.cn-north-1.amazonaws.com.cn');
+    });
+
     test('uses Anthropic Messages with Claude Code OAuth credentials', () {
       final request = builder.build(
         account: _account('claude-1', 'claude', authType: 'oauth'),
@@ -1679,6 +2407,20 @@ void main() {
           null,
         ),
       ];
+      for (final connector in [
+        'openai-api',
+        'moonshot',
+        'glm',
+        'deepseek',
+        'minimax',
+        'qwen',
+      ]) {
+        cases.add((
+          _account('stream-$connector', connector),
+          '$connector-api-key',
+          null,
+        ));
+      }
 
       for (final (account, credential, nativeFormat) in cases) {
         final request = builder.build(
@@ -1761,6 +2503,27 @@ void main() {
         '/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-3.1-pro:generateContent',
       );
       expect(request.headers['x-goog-api-key'], 'vertex-api-secret');
+    });
+
+    test('keeps legacy Vertex region settings routable', () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'vertex-legacy-region',
+          connectorType: 'vertex',
+          authType: 'api_key',
+          displayName: 'Vertex legacy account',
+          endpointConfig: const {
+            'projectId': 'my-project',
+            'region': 'europe-west4',
+          },
+        ),
+        credential: 'vertex-api-secret',
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+      );
+
+      expect(request.uri.host, 'europe-west4-aiplatform.googleapis.com');
+      expect(request.uri.path, contains('/locations/europe-west4/'));
     });
 
     test('uses the native Vertex Imagen predict request shape', () {
@@ -2260,6 +3023,184 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('preserves AWS credential resolution error classification', () async {
+      var requestsSent = 0;
+      final credentials = _MemoryCredentials();
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'bedrock-missing-credentials',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+        }),
+      );
+      credentials.values[account.credentialRef!] = 'invalid-json';
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
+        });
+
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          body: const {'messages': []},
+        ),
+        throwsA(
+          isA<LlmConnectorHttpException>().having(
+            (error) => error.code,
+            'code',
+            'aws_credentials_unavailable',
+          ),
+        ),
+      );
+      expect(requestsSent, 0);
+    });
+
+    test(
+      'signs Bedrock Converse requests and adapts streamed chat output',
+      () async {
+        RequestOptions? captured;
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromBytes(
+              _bedrockTestStream(),
+              200,
+              headers: const {
+                'content-type': ['application/vnd.amazon.eventstream'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'bedrock-chat',
+            connectorType: 'bedrock',
+            authType: 'aws_credentials',
+            displayName: 'Bedrock',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: jsonEncode({
+            'accessKeyId': 'AKIDEXAMPLE',
+            'secretAccessKey': 'private-aws-secret',
+            'sessionToken': 'private-session-token',
+          }),
+        );
+
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          stream: true,
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'Say hello.'},
+            ],
+            'max_tokens': 100,
+          },
+        );
+
+        final preferencesJson = preferences.values.values.join();
+        expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
+        expect(captured?.uri.path, endsWith('/converse-stream'));
+        expect(
+          captured?.headers['Accept'],
+          'application/vnd.amazon.eventstream',
+        );
+        expect(
+          captured?.headers['x-amz-security-token'],
+          'private-session-token',
+        );
+        expect(
+          captured?.headers['Authorization'],
+          startsWith('AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/'),
+        );
+        expect(captured?.data, isA<Map>());
+        expect(response.body, isA<Stream<List<int>>>());
+        final chunks = await (response.body as Stream<List<int>>).toList();
+        final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
+        expect(text, contains('Bedrock answer'));
+        expect(text, contains('data: [DONE]'));
+        expect(preferencesJson, isNot(contains('private-aws-secret')));
+        expect(preferencesJson, isNot(contains('private-session-token')));
+      },
+    );
+
+    test(
+      'does not discover a private Antigravity project for CLI OAuth',
+      () async {
+        var projectLookups = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            if (options.uri.path.endsWith(':loadCodeAssist')) {
+              projectLookups++;
+              expect(
+                options.headers['Authorization'],
+                'Bearer antigravity-token',
+              );
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'cloudaicompanionProject': {'id': 'resolved-project'},
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            fail('Antigravity CLI OAuth must not reach private inference APIs');
+          });
+        final preferences = _MemoryPreferences();
+        final accounts = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          _account(
+            'antigravity-project-lookup',
+            'antigravity',
+            authType: 'oauth',
+          ),
+          secret: jsonEncode({'access_token': 'antigravity-token'}),
+        );
+
+        await expectLater(
+          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {
+              'request': {'contents': []},
+            },
+          ),
+          throwsA(isA<LlmConnectorAuthenticationRequired>()),
+        );
+
+        expect(projectLookups, 0);
+        final storedPreferences = preferences.values.values.join();
+        expect(storedPreferences, isNot(contains('antigravity-token')));
+      },
+    );
+
     test(
       'does not route OAuth providers without public inference contracts',
       () async {
@@ -2485,6 +3426,34 @@ void main() {
           'vertex-api-key',
           'https://us-central1-aiplatform.googleapis.com/v1/projects/native-project/locations/us-central1/publishers/google/models/gemini-3.1-pro:generateContent',
           const {'contents': []},
+        ),
+        for (final provider in [
+          ('openai-api', 'https://api.openai.com/v1/chat/completions'),
+          ('moonshot', 'https://api.moonshot.ai/v1/chat/completions'),
+          ('glm', 'https://open.bigmodel.cn/api/paas/v4/chat/completions'),
+          ('deepseek', 'https://api.deepseek.com/chat/completions'),
+          ('minimax', 'https://api.minimax.io/v1/chat/completions'),
+          (
+            'qwen',
+            'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+          ),
+        ])
+          (
+            _account('native-${provider.$1}', provider.$1),
+            '${provider.$1}-test-key',
+            provider.$2,
+            const {
+              'model': 'provider-chat-model',
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+            },
+          ),
+        (
+          _account('native-claude-api-key', 'claude'),
+          'anthropic-api-test-key',
+          'https://api.anthropic.com/v1/messages',
+          const {'model': 'claude-sonnet-4-6', 'messages': []},
         ),
         (
           LlmAccount(
@@ -3808,6 +4777,70 @@ void main() {
     expect(observation.requestUsage.unit, 'tokens');
     expect(observation.remainingQuota.isKnown, isFalse);
   });
+}
+
+Uint8List _bedrockTestStream() => Uint8List.fromList([
+      ..._bedrockEvent('messageStart', {
+        'messageStart': {'role': 'assistant'},
+      }),
+      ..._bedrockEvent('contentBlockDelta', {
+        'contentBlockIndex': 0,
+        'delta': {'text': 'Bedrock answer'},
+      }),
+      ..._bedrockEvent('messageStop', {
+        'messageStop': {'stopReason': 'end_turn'},
+      }),
+      ..._bedrockEvent('metadata', {
+        'metadata': {
+          'usage': {'inputTokens': 7, 'outputTokens': 3},
+        },
+      }),
+    ]);
+
+Uint8List _bedrockEvent(String name, Map<String, dynamic> payload) {
+  final encodedName = utf8.encode(':event-type');
+  final encodedValue = utf8.encode(name);
+  final header = <int>[
+    encodedName.length,
+    ...encodedName,
+    7,
+    encodedValue.length >> 8,
+    encodedValue.length & 0xff,
+    ...encodedValue,
+  ];
+  final body = utf8.encode(
+    jsonEncode(payload.containsKey(name) ? payload[name] : payload),
+  );
+  final totalLength = 12 + header.length + body.length + 4;
+  final prelude = Uint8List(8);
+  ByteData.sublistView(prelude)
+    ..setUint32(0, totalLength, Endian.big)
+    ..setUint32(4, header.length, Endian.big);
+  final crcPrelude = ByteData(4)
+    ..setUint32(0, _bedrockCrc32(prelude), Endian.big);
+  final withoutMessageCrc = Uint8List.fromList([
+    ...prelude,
+    ...crcPrelude.buffer.asUint8List(),
+    ...header,
+    ...body,
+  ]);
+  final crcMessage = ByteData(4)
+    ..setUint32(0, _bedrockCrc32(withoutMessageCrc), Endian.big);
+  return Uint8List.fromList([
+    ...withoutMessageCrc,
+    ...crcMessage.buffer.asUint8List(),
+  ]);
+}
+
+int _bedrockCrc32(List<int> bytes) {
+  var crc = 0xffffffff;
+  for (final byte in bytes) {
+    crc ^= byte;
+    for (var bit = 0; bit < 8; bit++) {
+      crc = (crc & 1) == 1 ? (crc >> 1) ^ 0xedb88320 : crc >> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) & 0xffffffff;
 }
 
 Uint8List _devinQuotaResponse({

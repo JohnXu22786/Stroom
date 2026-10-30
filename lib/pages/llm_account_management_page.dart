@@ -626,7 +626,9 @@ class _AccountCard extends StatelessWidget {
               ],
             ),
             Text(_connectionExplanation(account.status)),
-            Text('认证方式：${_authLabel(account.authType)}'),
+            Text(
+              '认证方式：${_authLabel(account.authType, connectorType: account.connectorType)}',
+            ),
             Text('授权来源：${_authSourceLabel(account, connector)}'),
             if (authLimitation != null)
               Padding(
@@ -903,15 +905,22 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
       AiGatewayAccountStatus.needsAttention => '账号需要重新认证后才会参与路由。',
     };
 
-String _authLabel(String type) => switch (type) {
-      'api_key' => 'API Key',
-      'oauth' => '订阅 OAuth',
-      'service_account' => '企业服务账号凭据',
-      'session_token' => '会话令牌',
-      'relay' => '应用内中继',
-      'none' => '无认证',
-      _ => type,
-    };
+String _authLabel(String type, {String? connectorType}) {
+  if (type == 'oauth' && connectorType == 'vertex') {
+    return '旧版 OAuth（不支持）';
+  }
+  return switch (type) {
+    'api_key' => 'API Key',
+    'oauth' => '订阅 OAuth',
+    'service_account' => 'Google 服务账号',
+    'aws_credentials' => 'AWS Access + Secret Key（Session Token 可选）',
+    'aws_credential_chain' => 'AWS 默认凭据链',
+    'session_token' => '会话令牌',
+    'relay' => '应用内中继',
+    'none' => '无认证',
+    _ => type,
+  };
+}
 
 String _authSourceLabel(
   AiGatewayAccount account,
@@ -919,11 +928,15 @@ String _authSourceLabel(
 ) {
   final provider = connector?.displayName ?? account.connectorType;
   return switch (account.authType) {
-    'oauth' => '$provider OAuth',
+    'oauth' => account.connectorType == 'vertex'
+        ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
+        : '$provider OAuth',
     'api_key' => account.connectorType == 'openai-compatibility'
         ? '用户提供的上游 API Key'
         : '$provider API Key',
     'service_account' => '$provider 企业服务凭据',
+    'aws_credentials' => 'AWS Bedrock 用户提供的静态凭据',
+    'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '$provider 用户提供的会话令牌',
     'relay' => 'Stroom 应用内 AI Studio 中继',
     'none' => '本地兼容端点，无凭据',
@@ -1025,6 +1038,8 @@ class _AccountEditorDialog extends StatefulWidget {
 class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _name;
   late final TextEditingController _endpoint;
+  late final TextEditingController _region;
+  late final TextEditingController _projectId;
   late final TextEditingController _credential;
   late final TextEditingController _models;
   late final TextEditingController _oauthClientId;
@@ -1048,6 +1063,29 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
+    final configuredLocation = account?.endpointConfig['location'];
+    final configuredRegion = account?.endpointConfig['region'];
+    final region = account?.connectorType == 'vertex'
+        ? configuredLocation is String
+            ? configuredLocation
+            : configuredRegion is String
+                ? configuredRegion
+                : null
+        : configuredRegion is String
+            ? configuredRegion
+            : null;
+    _region = TextEditingController(
+      text: region ??
+          (account?.connectorType == 'bedrock'
+              ? 'us-east-1'
+              : account?.connectorType == 'vertex'
+                  ? 'us-central1'
+                  : ''),
+    );
+    final projectId = account?.endpointConfig['projectId'];
+    _projectId = TextEditingController(
+      text: projectId is String ? projectId : '',
+    );
     _credential = TextEditingController();
     final oauthClientId = account?.endpointConfig['clientId'];
     _oauthClientId = TextEditingController(
@@ -1082,6 +1120,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   void dispose() {
     _name.dispose();
     _endpoint.dispose();
+    _region.dispose();
+    _projectId.dispose();
     _credential.dispose();
     _oauthClientId.dispose();
     _oauthClientSecret.dispose();
@@ -1094,7 +1134,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   Widget build(BuildContext context) {
     final connectors = widget.providerCatalog.providers.toList();
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
-    final authTypes = connector.supportedAuthTypes.toList()..sort();
+    final authTypes = connector.supportedAuthTypes.toList();
+    if (widget.account?.connectorType == _connectorType &&
+        widget.account?.authType == 'oauth' &&
+        !authTypes.contains('oauth')) {
+      // Keep a legacy unsupported value visible so the editor cannot silently
+      // rewrite it to another credential type before the user chooses one.
+      authTypes.add('oauth');
+    }
+    authTypes.sort();
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
     return AlertDialog(
@@ -1125,7 +1173,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   if (value == null) return;
                   setState(() {
                     _draftChanged = true;
+                    final previousConnectorType = _connectorType;
                     _connectorType = value;
+                    if (value == 'bedrock' &&
+                        previousConnectorType != 'bedrock') {
+                      _region.text = 'us-east-1';
+                    } else if (value == 'vertex' &&
+                        previousConnectorType != 'vertex') {
+                      _region.text = 'us-central1';
+                    }
                     final available = widget.providerCatalog
                         .findProvider(value)!
                         .supportedAuthTypes
@@ -1134,7 +1190,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     if (!available.contains(_authType)) {
                       _authType = available.first;
                     }
-                    if (_authType == 'none' || _authType == 'relay') {
+                    if (_connectorType == 'bedrock' &&
+                        _region.text.trim().isEmpty) {
+                      _region.text = 'us-east-1';
+                    } else if (_connectorType == 'vertex' &&
+                        _region.text.trim().isEmpty) {
+                      _region.text = 'us-central1';
+                    }
+                    if (_authType == 'none' ||
+                        _authType == 'relay' ||
+                        _authType == 'aws_credential_chain') {
                       _credential.clear();
                     }
                   });
@@ -1150,6 +1215,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _authType,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '认证方式'),
                 items: [
                   for (final type in authTypes)
@@ -1157,7 +1223,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       value: type,
                       enabled: type != 'oauth' ||
                           connector.authTypeLimitations[type] == null,
-                      child: Text(_authLabel(type)),
+                      child: Text(
+                        _authLabel(type, connectorType: _connectorType),
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -1165,7 +1233,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   setState(() {
                     _draftChanged = true;
                     _authType = value;
-                    if (value == 'none' || value == 'relay') {
+                    if (value == 'none' ||
+                        value == 'relay' ||
+                        value == 'aws_credential_chain') {
                       _credential.clear();
                     }
                   });
@@ -1180,6 +1250,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
+                ),
+              if (_authType == 'oauth' && oauthLimitation != null)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('请选择受支持的认证方式后再保存此账号。'),
                 ),
               if (_connectorType == 'gemini' && _authType == 'oauth') ...[
                 const SizedBox(height: 8),
@@ -1220,20 +1295,60 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _credential,
-                enabled: _authType != 'none' && _authType != 'relay',
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: _authType == 'none' || _authType == 'relay'
-                      ? '该认证方式无需凭据'
-                      : '凭据',
-                  hintText:
-                      !widget.hasCredential ? '保存在平台安全存储中' : '留空以保留当前安全凭据',
+              if (_connectorType == 'bedrock' ||
+                  _connectorType == 'vertex') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _region,
+                  decoration: InputDecoration(
+                    labelText:
+                        _connectorType == 'bedrock' ? 'AWS 区域' : 'Vertex 区域',
+                    hintText: _connectorType == 'bedrock'
+                        ? 'us-east-1'
+                        : 'us-central1',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
                 ),
-                onChanged: (_) => setState(() => _draftChanged = true),
-              ),
+              ],
+              if (_connectorType == 'vertex') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _projectId,
+                  decoration: const InputDecoration(
+                    labelText: 'Google Cloud 项目 ID',
+                    helperText: '可留空以使用服务账号 JSON 中的 project_id。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
+              if (!(_authType == 'oauth' && oauthLimitation != null)) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _credential,
+                  enabled: _authType != 'none' &&
+                      _authType != 'relay' &&
+                      _authType != 'aws_credential_chain',
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: _authType == 'none' ||
+                            _authType == 'relay' ||
+                            _authType == 'aws_credential_chain'
+                        ? '该认证方式无需输入凭据'
+                        : _connectorType == 'bedrock'
+                            ? 'AWS 凭据 JSON'
+                            : _connectorType == 'vertex' &&
+                                    _authType == 'service_account'
+                                ? '服务账号 JSON'
+                                : '凭据',
+                    hintText: _authType == 'aws_credential_chain'
+                        ? '使用运行环境的 AWS 默认凭据链'
+                        : !widget.hasCredential
+                            ? '保存在平台安全存储中'
+                            : '留空以保留当前安全凭据',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               const SizedBox(height: 8),
               DropdownButtonFormField<AiGatewayAccountStatus>(
                 initialValue: _status,
@@ -1297,7 +1412,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        if (widget.account != null && _authType == 'oauth')
+        if (widget.account != null &&
+            _authType == 'oauth' &&
+            oauthLimitation == null)
           OutlinedButton(
             onPressed: () => _save(reconnectOAuth: true),
             child: const Text('重新授权'),
@@ -1365,13 +1482,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             widget.account!.authType != _authType ||
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged);
-    if (_authType == 'oauth' &&
-        oauthLimitation != null &&
-        (widget.account == null ||
-            widget.account!.authType != 'oauth' ||
-            widget.account!.connectorType != _connectorType ||
-            reconnectOAuth)) {
-      setState(() => _error = oauthLimitation);
+    if (_authType == 'oauth' && oauthLimitation != null) {
+      setState(
+        () => _error = '$oauthLimitation\n请选择受支持的认证方式后再保存此账号。',
+      );
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();
@@ -1478,6 +1592,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     } else {
       endpointConfig['baseUrl'] = endpoint;
     }
+    if (_connectorType == 'bedrock') {
+      endpointConfig['region'] = _region.text.trim();
+      endpointConfig.remove('location');
+    } else if (_connectorType == 'vertex') {
+      endpointConfig['location'] = _region.text.trim();
+      endpointConfig.remove('region');
+    } else {
+      endpointConfig.remove('region');
+      endpointConfig.remove('location');
+    }
+    if (_connectorType == 'vertex' && _projectId.text.trim().isNotEmpty) {
+      endpointConfig['projectId'] = _projectId.text.trim();
+    } else {
+      endpointConfig.remove('projectId');
+    }
     final account = AiGatewayAccount(
       id: id,
       connectorType: _connectorType,
@@ -1493,7 +1622,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           const AiGatewayMetricObservation.unknown(),
       quotaSignals: widget.account?.quotaSignals ?? const {},
     );
-    final secret = _authType == 'none' || _authType == 'relay'
+    final secret = _authType == 'none' ||
+            _authType == 'relay' ||
+            _authType == 'aws_credential_chain'
         ? ''
         : _credential.text.trim();
     final requiresOAuthAuthorization = _authType == 'oauth' &&
@@ -1523,6 +1654,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     if (_authType != 'none' &&
         _authType != 'relay' &&
+        _authType != 'aws_credential_chain' &&
         _authType != 'oauth' &&
         secret.isEmpty &&
         (!widget.hasCredential || credentialIdentityChanged)) {

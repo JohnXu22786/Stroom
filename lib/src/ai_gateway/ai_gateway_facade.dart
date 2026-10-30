@@ -980,7 +980,6 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
   static Map<String, String> _oauthLimitations(
     LlmConnectorDefinition connector,
   ) {
-    if (!connector.authTypes.contains('oauth')) return const {};
     final policy = LlmOAuthProviderPolicy.forProvider(connector.id);
     return policy.supported ? const {} : {'oauth': policy.reason!};
   }

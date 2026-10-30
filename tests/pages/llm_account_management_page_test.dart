@@ -196,7 +196,7 @@ void main() {
       await service.saveAccount(
         LlmAccount(
           id: 'api-key-to-gemini-oauth',
-          connectorType: 'openai-compatibility',
+          connectorType: 'gemini',
           authType: 'api_key',
           displayName: 'Existing API-key account',
         ),
@@ -212,10 +212,6 @@ void main() {
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑账号'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Google Gemini API').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
       await tester.pumpAndSettle();
@@ -425,7 +421,6 @@ void main() {
     accountsEnvelope['items'] = [accountRecord];
     preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
         jsonEncode(accountsEnvelope);
-
     await tester.pumpWidget(
       MaterialApp(
         home: LlmAccountManagementPage(gateway: _testGateway(service)),
@@ -436,6 +431,408 @@ void main() {
     expect(find.text('剩余额度：250 credits'), findsOneWidget);
     expect(find.text('每日额度剩余：75 percent'), findsOneWidget);
     expect(find.text('额度未知'), findsNothing);
+  });
+
+  testWidgets(
+    'labels Bedrock static and default-chain credential sources accurately',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-static-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock static',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: '{"AccessKeyId":"AKID","SecretAccessKey":"safe-secret"}',
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-chain-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credential_chain',
+          displayName: 'Bedrock chain',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('授权来源：AWS Bedrock 用户提供的静态凭据'), findsOneWidget);
+      expect(find.text('授权来源：AWS 默认凭据链'), findsOneWidget);
+    },
+  );
+
+  testWidgets('labels Bedrock static access-key fields accurately', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AWS Bedrock').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('AWS Access + Secret Key（Session Token 可选）'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('clearing Vertex project ID removes the stored override', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'vertex-cleared-project',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Vertex account',
+        endpointConfig: const {
+          'projectId': 'stale-project',
+          'location': 'us-central1',
+        },
+      ),
+      secret: 'vertex-api-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(3), '');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig, isNot(contains('projectId')));
+    expect(await service.readCredential(saved.id), 'vertex-api-key');
+  });
+
+  testWidgets(
+    'saves Bedrock region and default credential chain without a secret',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Production Bedrock',
+      );
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS Bedrock').last);
+      await tester.pumpAndSettle();
+      final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+      await tester.ensureVisible(authDropdown);
+      await tester.tap(authDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS 默认凭据链').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'us-west-2');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'bedrock');
+      expect(account.authType, 'aws_credential_chain');
+      expect(account.endpointConfig['region'], 'us-west-2');
+      expect(account.credentialRef, isNull);
+      expect(credentials.values, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'Vertex account form stores project and location outside credentials',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Vertex AI').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'europe-west4');
+      await tester.enterText(find.byType(TextField).at(3), 'stroom-project');
+      await tester.enterText(
+        find.byType(TextField).at(4),
+        'vertex-key-for-test',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'vertex');
+      expect(account.endpointConfig['location'], 'europe-west4');
+      expect(account.endpointConfig.containsKey('region'), isFalse);
+      expect(account.endpointConfig['projectId'], 'stroom-project');
+      expect(account.credentialRef, isNotNull);
+      expect(credentials.values.values.single, 'vertex-key-for-test');
+      expect(
+        LlmNativeRequestBuilder()
+            .build(
+              account: account,
+              credential: 'vertex-key-for-test',
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+            )
+            .uri
+            .toString(),
+        'https://europe-west4-aiplatform.googleapis.com/v1/projects/stroom-project/locations/europe-west4/publishers/google/models/gemini-3.1-pro:generateContent',
+      );
+    },
+  );
+
+  testWidgets('Vertex generic OAuth is excluded without a public flow',
+      (tester) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth policy');
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Google Vertex AI').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Google OAuth Access Token'), findsNothing);
+    expect(
+      _testGateway(service)
+          .providerCatalog
+          .findProvider('vertex')!
+          .authTypeLimitations['oauth'],
+      contains('No public third-party OAuth inference flow'),
+    );
+  });
+
+  testWidgets('legacy Vertex OAuth edit requires supported reconfiguration', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'legacy-vertex-oauth',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Legacy Vertex OAuth',
+      ),
+      secret: 'legacy-vertex-oauth-token',
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['authType'] = 'oauth';
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      findsNothing,
+    );
+    expect(find.text('请选择受支持的认证方式后再保存此账号。'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('请选择受支持的认证方式后再保存此账号。'),
+      findsWidgets,
+    );
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'legacy-vertex-oauth-token',
+    );
+
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('API Key').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'replacement-vertex-api-key',
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect((await service.listAccounts()).single.authType, 'api_key');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'replacement-vertex-api-key',
+    );
+  });
+
+  testWidgets('editing Vertex ignores non-string stored project fields', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'vertex-malformed-project',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Vertex malformed project',
+        endpointConfig: const {
+          'projectId': 123,
+          'location': 'us-central1',
+        },
+      ),
+      secret: 'vertex-api-key',
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['endpointConfig'] = {
+      'projectId': 123,
+      'location': 42,
+      'region': 42,
+    };
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final projectIdField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Google Cloud 项目 ID',
+      ),
+    );
+    expect(projectIdField.controller?.text, isEmpty);
+    final regionField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Vertex 区域',
+      ),
+    );
+    expect(regionField.controller?.text, 'us-central1');
   });
 
   testWidgets('saves an account with no authentication and no secret', (

@@ -5,6 +5,10 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 import '../models/llm_account.dart';
+import 'aws_bedrock_converse.dart';
+import 'aws_bedrock_event_stream.dart';
+import 'aws_credential_chain.dart';
+import 'aws_sigv4.dart';
 import 'llm_ai_studio_webview_session_bridge.dart';
 import 'llm_connector_service.dart';
 import 'llm_oauth_flow.dart';
@@ -249,14 +253,42 @@ class LlmConnectorHttpClient {
       }
       late final LlmPreparedNativeRequest prepared;
       try {
+        AwsSigV4Credentials? awsCredentials;
+        if (storedAccount.connectorType == 'bedrock') {
+          try {
+            if (storedAccount.authType == 'aws_credentials') {
+              final decoded = jsonDecode(credential ?? '');
+              if (decoded is! Map) {
+                throw const LlmConnectorHttpException();
+              }
+              awsCredentials = AwsSigV4Credentials.fromJson(
+                Map<String, dynamic>.from(decoded),
+              );
+            } else {
+              awsCredentials = await AwsCredentialChain.resolve();
+            }
+          } catch (_) {
+            throw const LlmConnectorHttpException(
+              code: 'aws_credentials_unavailable',
+            );
+          }
+          if (awsCredentials == null) {
+            throw const LlmConnectorHttpException(
+              code: 'aws_credentials_unavailable',
+            );
+          }
+        }
         prepared = _requestBuilder.build(
           account: storedAccount,
           credential: credential,
+          awsCredentials: awsCredentials,
           modelId: modelId,
           body: body,
           stream: stream,
           nativeFormat: nativeFormat,
         );
+      } on LlmConnectorHttpException {
+        rethrow;
       } catch (_) {
         throw const LlmConnectorHttpException();
       }
@@ -317,6 +349,55 @@ class LlmConnectorHttpClient {
           storedAccount.connectorType,
           response.headers.map,
         );
+        if (storedAccount.connectorType == 'bedrock') {
+          final responseData = response.data;
+          final responseStream = responseData is ResponseBody
+              ? responseData.stream
+              : responseData is Stream<List<int>>
+                  ? responseData
+                  : null;
+          if (stream) {
+            if (responseStream == null) {
+              throw const LlmConnectorHttpException();
+            }
+            final converted = AwsBedrockEventStreamAdapter.toOpenAiSse(
+              responseStream,
+            );
+            final completed = Completer<LlmConnectorObservation>();
+            final chunks = _observeResponseStream(
+              storedAccount.connectorType,
+              converted,
+              headerObservation,
+              completed,
+            );
+            return LlmConnectorResponse(
+              statusCode: status,
+              headers: response.headers.map,
+              body: chunks,
+              observation: headerObservation,
+              completedObservation: completed.future,
+            );
+          }
+          final raw = _decodeResponseBody(
+            responseStream == null
+                ? responseData
+                : await _readResponseStream(responseStream),
+          );
+          final chatResponse = AwsBedrockConverseAdapter.fromConverse(raw);
+          final bodyObservation = parseLlmConnectorObservation(
+            storedAccount.connectorType,
+            chatResponse,
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: chatResponse,
+            observation: mergeLlmConnectorObservations(
+              headerObservation,
+              bodyObservation,
+            ),
+          );
+        }
         if (stream) {
           final responseBody = response.data;
           final source = responseBody is ResponseBody
@@ -393,7 +474,10 @@ class LlmConnectorHttpClient {
   static bool _canRefresh(LlmAccount account) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
     return connector?.canRefreshCredentials == true &&
-        (account.authType == 'oauth' ||
+        ((account.authType == 'oauth' &&
+                (account.connectorType != 'vertex' ||
+                    LlmOAuthProviderPolicy.forProvider(account.connectorType)
+                        .supported)) ||
             (account.connectorType == 'vertex' &&
                 account.authType == 'service_account'));
   }
