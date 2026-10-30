@@ -50,6 +50,30 @@ void main() {
       expect(headers['host'], uri.host);
     });
 
+    test('preserves literal plus signs when canonicalizing query values', () {
+      const credentials = AwsSigV4Credentials(
+        accessKeyId: 'AKIDEXAMPLE',
+        secretAccessKey: 'example-secret',
+      );
+      Map<String, String> sign(Uri uri) => AwsSigV4.sign(
+            method: 'GET',
+            uri: uri,
+            region: 'us-east-1',
+            service: 'bedrock',
+            headers: const {},
+            payload: Uint8List(0),
+            credentials: credentials,
+            now: DateTime.utc(2024, 1, 2, 3, 4, 5),
+          );
+
+      expect(
+        sign(Uri.parse('https://example.com/?query=hello+world'))[
+            'Authorization'],
+        sign(Uri.parse('https://example.com/?query=hello%2Bworld'))[
+            'Authorization'],
+      );
+    });
+
     test(
       'reads AWS SDK JSON credential field names including session token',
       () {

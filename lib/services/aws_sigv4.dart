@@ -158,11 +158,19 @@ abstract final class AwsSigV4 {
 
   static String _canonicalQuery(Uri uri) {
     final pairs = <(String, String)>[];
-    uri.queryParametersAll.forEach((key, values) {
-      for (final value in values) {
-        pairs.add((_encode(key), _encode(value)));
+    if (uri.hasQuery && uri.query.isNotEmpty) {
+      for (final parameter in uri.query.split('&')) {
+        final separator = parameter.indexOf('=');
+        final encodedKey =
+            separator < 0 ? parameter : parameter.substring(0, separator);
+        final encodedValue =
+            separator < 0 ? '' : parameter.substring(separator + 1);
+        pairs.add((
+          _encode(Uri.decodeComponent(encodedKey)),
+          _encode(Uri.decodeComponent(encodedValue)),
+        ));
       }
-    });
+    }
     pairs.sort((left, right) {
       final keyOrder = left.$1.compareTo(right.$1);
       return keyOrder != 0 ? keyOrder : left.$2.compareTo(right.$2);
