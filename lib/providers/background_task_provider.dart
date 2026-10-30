@@ -1873,11 +1873,32 @@ bool _legacyOcrTextContainsMaskedCredential(
   return false;
 }
 
+bool _legacyOcrHasSafeRedactedInstruction(String text) {
+  if (!text.contains('[redacted]')) return false;
+  final safeActionLead = RegExp(
+    r'^\s*(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b.*\[redacted\]',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
+  final safeUseLead = RegExp(
+    r'^\s*(?:please\s+)?use\b.*\[redacted\]\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
+  final safeKeepLead = RegExp(
+    r'^\s*(?:please\s+)?keep\b.*\[redacted\]',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
+  return safeActionLead || safeUseLead || safeKeepLead;
+}
+
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final body = rawRequest?['body'];
   if (body is! Map || body['messages'] is! List) return null;
   final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
   final textParts = <String>[];
+  final textPartsHadCredential = <bool>[];
   for (final message in body['messages'] as List) {
     if (message is! Map ||
         message['role'] != 'user' ||
@@ -1887,10 +1908,13 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
         var text = part['text'] as String;
-        if (_legacyOcrTextContainsCredential(text, credentialValues)) {
+        final hadCredential =
+            _legacyOcrTextContainsCredential(text, credentialValues);
+        if (hadCredential) {
           text = _legacyOcrRedactMaskedCredentialEchoes(text, credentialValues);
         }
         textParts.add(text);
+        textPartsHadCredential.add(hadCredential);
       }
     }
   }
@@ -1919,7 +1943,9 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     );
   }).toList();
   var textOffset = 0;
+  var textPartIndex = 0;
   final safeTextParts = redactedMarkedInstruction.split('\u0000').where((text) {
+    final hadCredential = textPartsHadCredential[textPartIndex++];
     final start = textOffset;
     final end = start + text.length;
     textOffset = end + 1;
@@ -1927,7 +1953,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       (match) => match.start < end && match.end > start,
     );
     return preservesNaturalPlural ||
-        !_legacyOcrTextContainsCredential(text, credentialValues);
+        (!_legacyOcrTextContainsCredential(text, credentialValues) &&
+            (!hadCredential || _legacyOcrHasSafeRedactedInstruction(text)));
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
