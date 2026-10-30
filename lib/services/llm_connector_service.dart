@@ -229,7 +229,7 @@ abstract final class LlmConnectorRegistry {
       displayName: 'Google Vertex AI',
       protocol: LlmNativeProtocol.vertexGenerateContent,
       authTypes: {'service_account', 'api_key'},
-      modelCatalog: [],
+      modelCatalog: kPinnedVertexModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
@@ -1710,10 +1710,19 @@ class LlmAccountConnectorService {
               .replaceFirst(RegExp(r'^models/'), '');
           final methods = map['supportedGenerationMethods'];
           final actions = map['supportedActions'];
+          final isVertexImagen = account.connectorType == 'vertex' &&
+              modelId.toLowerCase().contains('imagen');
+          final supportsImagenPredict = isVertexImagen &&
+              actions is List &&
+              actions.any(
+                (action) =>
+                    action is String && action.toLowerCase() == 'predict',
+              );
           if ((isGemini || account.connectorType == 'vertex') &&
               methods is List &&
               !methods.contains('generateContent') &&
-              !methods.contains('streamGenerateContent')) {
+              !methods.contains('streamGenerateContent') &&
+              !supportsImagenPredict) {
             continue;
           }
           if (account.connectorType == 'vertex' &&
@@ -1723,10 +1732,11 @@ class LlmAccountConnectorService {
                     action is String &&
                     (action.toLowerCase().contains('generatecontent') ||
                         action.toLowerCase().contains('generate_content')),
-              )) {
+              ) &&
+              !supportsImagenPredict) {
             continue;
           }
-          if (!_isChatModel(modelId, map)) continue;
+          if (!_isChatModel(modelId, map) && !supportsImagenPredict) continue;
           models.add(
             LlmUpstreamModel(
               id: '${account.id}:remote:${models.length}',

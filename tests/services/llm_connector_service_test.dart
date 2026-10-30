@@ -98,17 +98,21 @@ void main() {
       );
     });
 
-    test('pinned Vertex catalog excludes image-only models', () {
+    test('pinned Vertex catalog excludes embedding and rerank models', () {
       final vertex = LlmConnectorRegistry.find('vertex')!;
 
       expect(
         vertex.modelCatalog.every(
           (id) => !RegExp(
-            r'imagen|embedding|rerank',
+            r'embedding|rerank',
             caseSensitive: false,
           ).hasMatch(id),
         ),
         isTrue,
+      );
+      expect(
+        vertex.modelCatalog,
+        contains('imagen-4.0-generate-001'),
       );
     });
   });
@@ -1082,6 +1086,59 @@ void main() {
         expect(models.single.displayName, 'Gemini 2.5 Flash');
       },
     );
+
+    test('discovers Vertex Imagen models that support prediction', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'publisherModels': [
+                {
+                  'name': 'publishers/google/models/imagen-4.0-generate-001',
+                  'displayName': 'Imagen 4 Generate',
+                  'supportedActions': ['predict'],
+                },
+                {
+                  'name': 'publishers/google/models/text-embedding-005',
+                  'supportedActions': ['embedContent'],
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'vertex-imagen-discovery',
+          connectorType: 'vertex',
+          authType: 'api_key',
+          displayName: 'Vertex API key',
+          endpointConfig: const {
+            'projectId': 'vertex-project',
+            'location': 'us-central1',
+          },
+        ),
+        secret: 'vertex-api-key',
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(
+        models.map((model) => model.upstreamModelId),
+        ['imagen-4.0-generate-001'],
+      );
+    });
 
     test('blocks Vertex model discovery with unsupported generic OAuth',
         () async {
