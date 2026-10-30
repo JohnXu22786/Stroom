@@ -750,6 +750,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'characterize',
     'characters',
     'configuration',
+    'data',
     'description',
     'enumerate',
     'construction',
@@ -1019,7 +1020,7 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   if (_legacyOcrIsNaturalOAuthVersion(candidate)) return false;
 
   final prefixOffset = candidate.toLowerCase().indexOf(prefix.toLowerCase());
-  if (prefix.length < 3 || prefix.length >= 8 || prefixOffset <= 0) {
+  if (prefix.length >= 8 || prefixOffset <= 0) {
     return false;
   }
 
@@ -1035,9 +1036,22 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   final hasShortKeyboardSequence = continuation.length >= 5 &&
       _legacyOcrHasKeyboardSequence(continuation) &&
       !_legacyOcrHasNaturalWordContinuation(prefix, continuation);
+  final hasNumericMarker = RegExp(
+    r'[\p{N}_]',
+    unicode: true,
+  ).hasMatch(continuation);
   final hasCredentialUseContext = text != null &&
       match != null &&
       _legacyOcrHasCredentialUseContext(text, match, prefix, continuation);
+  final hasCredentialLikeContinuation =
+      (hasNumericMarker && continuation.length >= 5) ||
+          hasShortMixedCaseOpaqueContinuation ||
+          hasShortUncommonAlphaContinuation ||
+          hasShortKeyboardSequence;
+  if (prefix.length < 3 &&
+      (!hasCredentialUseContext || !hasCredentialLikeContinuation)) {
+    return false;
+  }
   final ordinaryReadInstructionsPrompt = text != null &&
       match != null &&
       _legacyOcrHasNaturalWordContinuation(prefix, continuation) &&
@@ -1052,10 +1066,6 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   if (ordinaryReadInstructionsPrompt && !hasCredentialUseContext) {
     return false;
   }
-  final hasNumericMarker = RegExp(
-    r'[\p{N}_]',
-    unicode: true,
-  ).hasMatch(continuation);
   if ((continuation.length < 6 &&
           !hasNumericMarker &&
           !hasCredentialUseContext &&
