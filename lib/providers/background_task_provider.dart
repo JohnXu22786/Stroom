@@ -1331,6 +1331,29 @@ String _legacyOcrOpenMaskPrefixPattern(String prefix) {
       '${RegExp.escape(delimiter)})';
 }
 
+String _legacyOcrNormalizeNulsWithinMaskedPrefixes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var normalized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.isEmpty) continue;
+    final splitPrefix = RegExp(
+      prefix.split('').map(RegExp.escape).join(r'\u0000*'),
+      caseSensitive: false,
+    );
+    normalized = normalized.replaceAllMapped(
+      splitPrefix,
+      (match) => match.group(0)!.replaceAll('\u0000', ''),
+    );
+  }
+  return normalized;
+}
+
 bool _legacyOcrHasRepeatedHyphenatedAlphaComponent(
   String prefix,
   String suffix,
@@ -1883,7 +1906,10 @@ bool _legacyOcrTextContainsMaskedCredential(
   return false;
 }
 
-bool _legacyOcrHasSafeRedactedInstruction(String text) {
+bool _legacyOcrHasSafeRedactedInstruction(
+  String text, {
+  bool allowBareAction = false,
+}) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
     r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
@@ -1911,10 +1937,33 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  return safeActionLead ||
+  final bareRedactedAction = RegExp(
+    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(text);
+  return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
       (safeUseLead && safeRequestUseLead) ||
       safeScanContext ||
       safeKeepLead;
+}
+
+bool _legacyOcrShouldPreserveBareRedactedAction(String sourceText) {
+  if (RegExp(
+    r'^\s*(?:please\s+)?(?:transcribe|recognize)\b',
+    caseSensitive: false,
+  ).hasMatch(sourceText)) {
+    return true;
+  }
+  if (!RegExp(r'^\s*(?:please\s+)?read\b', caseSensitive: false)
+      .hasMatch(sourceText)) {
+    return false;
+  }
+  return RegExp(r'^\s*(?:please\s+)?read\s+\S*\d', caseSensitive: false)
+          .hasMatch(sourceText) ||
+      RegExp(
+        r'^\s*please\s+read\s*[\r\n]+\s*carefully\b',
+        caseSensitive: false,
+      ).hasMatch(sourceText);
 }
 
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
@@ -1962,8 +2011,15 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       credentialCheckText,
       credentialValues,
     );
+    final redactionSourceText = _legacyOcrNormalizeNulsWithinMaskedPrefixes(
+      sourceText,
+      credentialValues,
+    );
     final redactedText = hadCredential
-        ? _legacyOcrRedactMaskedCredentialEchoes(sourceText, credentialValues)
+        ? _legacyOcrRedactMaskedCredentialEchoes(
+            redactionSourceText,
+            credentialValues,
+          )
         : sourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
     final containsUnmaskedExactCredential = credentialValues.any((value) {
@@ -2017,7 +2073,9 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   var textOffset = 0;
   var textPartIndex = 0;
   final safeTextParts = redactedMarkedInstruction.split('\u0000').where((text) {
-    final hadCredential = textPartsHadCredential[textPartIndex++];
+    final partIndex = textPartIndex++;
+    final hadCredential = textPartsHadCredential[partIndex];
+    final sourceText = sourceTextParts[partIndex];
     final start = textOffset;
     final end = start + text.length;
     textOffset = end + 1;
@@ -2028,7 +2086,12 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     if (_legacyOcrTextContainsCredential(text, credentialValues)) return false;
     if (!hadCredential) return true;
     return text.contains('[redacted]') &&
-        _legacyOcrHasSafeRedactedInstruction(text);
+        _legacyOcrHasSafeRedactedInstruction(
+          text,
+          allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
+            sourceText,
+          ),
+        );
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
