@@ -6047,14 +6047,37 @@ void main() {
           OcrRetrySnapshot.fromMap(
             secretPluralTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nPlease keep [redacted] private',
+          '$safePrompt\n$secretPluralPrompt',
         );
         expect(secretPluralPersisted, contains(safePrompt));
         expect(
           secretPluralPersisted,
+          contains(secretPluralPrompt),
+        );
+        expect(secretPluralPersisted, isNot(contains('[redacted] private')));
+
+        const secretEchoInPrivatePhrase = 'secrets123456789';
+        final secretEchoInPrivatePhraseTask = taskFor(
+          'legacy-ocr-short-credential-word-private-phrase-echo',
+          [safePrompt, 'Please keep $secretEchoInPrivatePhrase private'],
+          credentialPrefix: 'secret',
+        );
+        final secretEchoInPrivatePhrasePersisted =
+            jsonEncode(secretEchoInPrivatePhraseTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretEchoInPrivatePhraseTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep [redacted] private',
+        );
+        expect(
+          secretEchoInPrivatePhrasePersisted,
           contains('Please keep [redacted] private'),
         );
-        expect(secretPluralPersisted, isNot(contains('secrets')));
+        expect(
+          secretEchoInPrivatePhrasePersisted,
+          isNot(contains(secretEchoInPrivatePhrase)),
+        );
 
         const tokenizationKey = 'tokenization';
         const tokenizationPrompt =

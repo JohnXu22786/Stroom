@@ -2124,6 +2124,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   String naturalWord, {
   required bool hasCredentialUseContext,
   required bool isNaturalWordContinuation,
+  required bool isNaturalSecretPlural,
 }) {
   final before = text.substring(0, match.start).trimRight();
   final after = text.substring(match.end).trimLeft();
@@ -2240,6 +2241,9 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
+  final naturalSecretPluralPrivatePrompt = isNaturalSecretPlural &&
+      RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
+      RegExp(r'^private\b', caseSensitive: false).hasMatch(after);
   final naturalDefinitionQuestion = isNaturalWordContinuation &&
       RegExp(r'\bwhat does$', caseSensitive: false).hasMatch(before) &&
       RegExp(r'^mean\b', caseSensitive: false).hasMatch(after);
@@ -2260,6 +2264,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readNaturalNounInstructionPrompt ||
           naturalImperativePrompt ||
           naturalNounInstructionPrompt ||
+          naturalSecretPluralPrivatePrompt ||
           naturalDefinitionQuestion ||
           naturalNounSentence);
 }
@@ -2325,6 +2330,8 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
           prefix,
           naturalSuffix,
         ),
+        isNaturalSecretPlural:
+            naturalWord == 'secrets' && naturalSuffix.toLowerCase() == 's',
       );
       final credentialWordEcho = isCredentialWord &&
           (!secretaryWord || hasCredentialUseContext) &&
