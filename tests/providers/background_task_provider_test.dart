@@ -6183,6 +6183,52 @@ void main() {
         );
         expect(secretPluralPersisted, isNot(contains('[redacted] private')));
 
+        const echoedExactCredential = 'testCredential123456789';
+        final secretPluralWithExactCredential = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-plural-with-exact-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer $echoedExactCredential'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': safePrompt},
+                    {
+                      'type': 'text',
+                      'text':
+                          '$secretPluralPrompt. Use $echoedExactCredential for this receipt',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final secretPluralWithExactCredentialPersisted = jsonEncode(
+          secretPluralWithExactCredential.toMap(),
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralWithExactCredential.retryData!,
+          ).instructionContent,
+          safePrompt,
+        );
+        expect(
+          secretPluralWithExactCredentialPersisted,
+          contains(safePrompt),
+        );
+        expect(
+          secretPluralWithExactCredentialPersisted,
+          isNot(contains(echoedExactCredential)),
+        );
+
         const secretPluralSafePrompt = 'Please keep secrets safe';
         final secretPluralSafeTask = taskFor(
           'legacy-ocr-short-credential-word-natural-plural-safe',

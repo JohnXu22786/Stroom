@@ -2111,11 +2111,35 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     final start = textOffset;
     final end = start + text.length;
     textOffset = end + 1;
-    final preservesNaturalPlural = naturalSecretPluralRanges.any(
-      (match) => match.start < end && match.end > start,
-    );
+    final partNaturalPluralRanges = naturalSecretPluralRanges
+        .where((match) => match.start < end && match.end > start)
+        .toList();
+    var textWithoutNaturalPlural = text;
+    for (final match in partNaturalPluralRanges.reversed) {
+      final localStart = match.start > start ? match.start - start : 0;
+      final localEnd = match.end < end ? match.end - start : text.length;
+      textWithoutNaturalPlural =
+          '${textWithoutNaturalPlural.substring(0, localStart)} '
+          '${textWithoutNaturalPlural.substring(localEnd)}';
+    }
+    final preservesNaturalPlural = partNaturalPluralRanges.isNotEmpty;
+    final containsUnmaskedExactCredential = credentialValues.any((value) {
+      final candidate = value.trim();
+      if (candidate.isEmpty ||
+          candidate.contains('…') ||
+          candidate.trimRight().endsWith('...')) {
+        return false;
+      }
+      return textWithoutNaturalPlural.contains(candidate);
+    });
+    if (containsUnmaskedExactCredential ||
+        _legacyOcrTextContainsCredential(
+          textWithoutNaturalPlural,
+          credentialValues,
+        )) {
+      return false;
+    }
     if (preservesNaturalPlural) return true;
-    if (_legacyOcrTextContainsCredential(text, credentialValues)) return false;
     if (!hadCredential) return true;
     return text.contains('[redacted]') &&
         _legacyOcrHasSafeRedactedInstruction(
