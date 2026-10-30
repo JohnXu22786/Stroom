@@ -112,6 +112,38 @@ void main() {
     });
   });
 
+  test('request body Bearer tokens exclude bare echoed IDs but keep safe IDs',
+      () {
+    const apiToken = 'opaque-body-bearer-token-194';
+    const safeRequestId = 'req-safe-body-bearer-194';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'access_token': 'Bearer $apiToken'},
+    });
+
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': apiToken,
+        'data': {'id': apiToken},
+      },
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      },
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(apiToken));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
   test('access and subscription key headers exclude echoed diagnostics', () {
     for (final entry in [
       ('X-Access-Key', 'opaque-access-value-193'),

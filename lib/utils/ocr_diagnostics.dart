@@ -137,6 +137,13 @@ class OcrDiagnosticSnapshot {
         final credential = value.trim();
         if (credential.isNotEmpty && credential.length <= 512) {
           values.add(credential);
+          final token = RegExp(
+            r'^(?:Bearer|Basic)\s+(.+)$',
+            caseSensitive: false,
+          ).firstMatch(credential)?.group(1)?.trim();
+          if (token != null && token.isNotEmpty && token.length <= 512) {
+            values.add(token);
+          }
         }
       }
       if (value is Map) {
