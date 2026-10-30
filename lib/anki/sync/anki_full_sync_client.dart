@@ -1,114 +1,44 @@
-import 'dart:convert';
-import 'dart:math';
-import 'package:http/http.dart' as http;
 import 'generated/anki/sync.pb.dart';
-import 'generated/anki/cards.pb.dart';
-import 'generated/anki/notes.pb.dart';
-import 'generated/anki/decks.pb.dart';
+import 'anki_sync_protocol_client.dart';
 
-/// Full Anki sync client using protobuf messages.
-///
-/// Protocol (matching AnkiWeb's v3 sync):
-/// 1. Login → POST form → hkey
-/// 2. SyncStatus → POST protobuf → check if changes exist
-/// 3. SyncCollection → POST protobuf → send/receive data
+/// Legacy placeholder retained for source compatibility. The former protobuf
+/// calls to `/sync/sync` were not AnkiWeb's current sync API. Login now uses
+/// the verified v10 hostKey exchange; status and collection transfer must use
+/// [AnkiSyncProtocolClient] instead of these unfinished protobuf methods.
+@Deprecated(
+  'Use AnkiSyncProtocolClient; protobuf collection sync is unsupported',
+)
 class AnkiFullSyncClient {
-  static const String _baseUrl = 'https://sync.ankiweb.net/sync';
+  final AnkiSyncProtocolClient Function() _clientFactory;
 
-  String? _hkey;
+  AnkiFullSyncClient({AnkiSyncProtocolClient Function()? clientFactory})
+      : _clientFactory = clientFactory ?? AnkiSyncProtocolClient.ankiWeb;
 
-  // ── Login ──────────────────────────────────────────────
-
-  /// Login to AnkiWeb and store the session key.
-  /// Matches Anki's Rust sync_login(): POST /sync/hostKey with {"u","p"} JSON.
   Future<SyncAuth> login(String email, String password) async {
-    final uri = Uri.parse('$_baseUrl/hostKey');
-    final body = jsonEncode({'u': email, 'p': password});
-    final header = jsonEncode({
-      'sync_version': 1,
-      'sync_key': '',
-      'session_key': _sessionId(),
-    });
-    final resp = await http.post(
-      uri,
-      body: body,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Sync-Header': header,
-      },
-    );
-    if (resp.statusCode != 200) {
-      throw Exception('登录失败 (${resp.statusCode}): ${resp.body}');
+    final client = _clientFactory();
+    try {
+      final key = await client.login(email, password);
+      return SyncAuth()..hkey = key;
+    } finally {
+      client.close();
     }
-    final json = jsonDecode(resp.body) as Map<String, dynamic>;
-    final key = json['key'] as String?;
-    if (key == null || key.isEmpty) throw Exception('登录失败: 响应中没有 key');
-    _hkey = key;
-    return SyncAuth()..hkey = key;
   }
 
-  /// 15 random bytes, base64-encoded → 20 chars (matching Anki Rust).
-  static String _sessionId() {
-    final r = Random.secure();
-    final bytes = List<int>.generate(15, (_) => r.nextInt(256));
-    return base64Url.encode(bytes);
-  }
+  SyncAuth authWithKey(String key) => SyncAuth()..hkey = key;
 
-  /// Login using existing session key.
-  SyncAuth authWithKey(String key) {
-    _hkey = key;
-    return SyncAuth()..hkey = key;
-  }
+  Future<SyncStatusResponse> checkStatus(String hkey) async =>
+      throw const AnkiSyncException(
+        '旧 protobuf 状态请求已停用；请使用 AnkiSyncProtocolClient.checkStatus()',
+      );
 
-  // ── Sync Status ────────────────────────────────────────
+  Future<SyncCollectionResponse> startSync(String hkey) async =>
+      throw const AnkiSyncException(
+        '旧 protobuf 集合请求已停用；当前只支持安全的单向 collection 传输',
+      );
 
-  /// Check sync status (what changes are needed).
-  Future<SyncStatusResponse> checkStatus(String hkey) async {
-    final auth = SyncAuth()..hkey = hkey;
-    final payload = auth.writeToBuffer();
-    final resp = await http.post(
-      Uri.parse('$_baseUrl/sync'),
-      body: payload,
-      headers: {'Content-Type': 'application/octet-stream'},
-    );
-    if (resp.statusCode != 200) {
-      throw Exception('同步状态检查失败: ${resp.statusCode}');
-    }
-    return SyncStatusResponse.fromBuffer(resp.bodyBytes);
-  }
+  Future<void> fullUpload(String hkey, List<int> collectionData) async =>
+      throw const AnkiSyncException('请使用 AnkiCollectionTransfer，并在上传前确认覆盖服务器');
 
-  // ── Sync Collection ────────────────────────────────────
-
-  /// Start a sync session with the server.
-  /// Returns the server response with host_number and required action.
-  Future<SyncCollectionResponse> startSync(String hkey) async {
-    final auth = SyncAuth()..hkey = hkey;
-    final req = SyncCollectionRequest()
-      ..auth = auth
-      ..syncMedia = false;
-    final payload = req.writeToBuffer();
-    final resp = await http.post(
-      Uri.parse('$_baseUrl/sync'),
-      body: payload,
-      headers: {'Content-Type': 'application/octet-stream'},
-    );
-    if (resp.statusCode != 200) {
-      throw Exception('同步启动失败: ${resp.statusCode}');
-    }
-    return SyncCollectionResponse.fromBuffer(resp.bodyBytes);
-  }
-
-  // ── Full Upload / Download ─────────────────────────────
-
-  /// Upload local collection to server (full sync).
-  Future<void> fullUpload(String hkey, List<int> collectionData) async {
-    // The full upload wraps the collection data in a sync message
-    // This requires understanding the server protocol
-    throw UnimplementedError('fullUpload: 需要实现 chunks 传输协议');
-  }
-
-  /// Download collection from server (full sync).
-  Future<List<int>> fullDownload(String hkey) async {
-    throw UnimplementedError('fullDownload: 需要实现 chunks 传输协议');
-  }
+  Future<List<int>> fullDownload(String hkey) async =>
+      throw const AnkiSyncException('请使用 AnkiCollectionTransfer，以便验证文件并保留本地备份');
 }

@@ -23,6 +23,7 @@ import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
+import '../anki/sync/anki_media_sync.dart';
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
 import '../utils/backup_archive_path.dart';
@@ -4324,6 +4325,7 @@ class BackupService {
     if (key == 'collection.anki2') {
       if (!selection.ankiData) return false;
       await AnkiDatabase.closeOpenedInstance();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       await writeEntry('', key);
       return true;
     }
@@ -4368,6 +4370,9 @@ class BackupService {
       //（备份归档内的路径为 anki/collection.anki2）。
       // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
       await AnkiDatabase.closeOpenedInstance();
+      if (relativePath == 'collection.anki2') {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       await writeEntry('', relativePath);
       return true;
     }
@@ -4406,6 +4411,11 @@ class BackupService {
   // ================================================================
   // 文件清理辅助
   // ================================================================
+
+  static Future<void> _invalidateAnkiSyncMetadataMigrationMarker() async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+    await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+  }
 
   /// 删除指定目录中的一个文件。
   ///
@@ -4721,9 +4731,11 @@ class BackupService {
     }
 
     String fileNameFor(int seconds) {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-        seconds * 1000,
-      ).toIso8601String().split('.').first.replaceAll(':', '-');
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
+          .toIso8601String()
+          .split('.')
+          .first
+          .replaceAll(':', '-');
       return 'backup_$timestamp.zip';
     }
 
@@ -4800,7 +4812,7 @@ class BackupService {
         // 桌面：先选择保存位置，再流式写入，避免把整个备份留在内存中。
         final saveLocation = await getSaveLocation(
           acceptedTypeGroups: [
-            XTypeGroup(extensions: ['zip'])
+            XTypeGroup(extensions: ['zip']),
           ],
           suggestedName: defaultName,
           initialDirectory: SystemPickDirectories.documents(),
@@ -4839,9 +4851,8 @@ class BackupService {
 
       if (savedLocation == null) return false;
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
       return true;
@@ -5561,13 +5572,25 @@ class BackupService {
     // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
     if (selection.ankiData) {
       await AnkiDatabase.closeOpenedInstance();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&
           (completeFileInventories == null ||
-              completeFileInventories.contains(DataParts.anki)) &&
-          !await _deleteDirectory('collection.media')) {
-        deleteFailed = true;
+              completeFileInventories.contains(DataParts.anki))) {
+        final mediaDirectoryDeleted =
+            await _deleteDirectory('collection.media');
+        if (!mediaDirectoryDeleted) deleteFailed = true;
+        if (mediaDirectoryDeleted && !kIsWeb && !WebFileStore.isTestMode) {
+          try {
+            await AnkiMediaSync.clearSyncIndexes(
+              documentsPath: await AppStorage.directory,
+            );
+          } catch (e) {
+            debugPrint('删除 Anki 媒体同步索引失败: $e');
+            deleteFailed = true;
+          }
+        }
       }
     }
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:path_provider/path_provider.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'app_log_service.dart';
 
 /// Static utility that provides a cached, resilient path to the application
@@ -19,32 +20,58 @@ class AppStorage {
   /// Returns the path to the application documents directory.
   ///
   /// Resolution order:
-  /// 1. [getApplicationDocumentsDirectory] (native)
-  /// 2. If [MissingPluginException] is thrown:
-  ///    - `FLUTTER_TEST` environment is set → [Directory.systemTemp]
+  /// 1. [getApplicationDocumentsDirectory] (native or test override)
+  /// 2. In Flutter tests with the default platform provider → [Directory.systemTemp]
+  /// 3. If [MissingPluginException] is thrown:
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
   ///
   /// The result is cached after the first successful resolution.
   static Future<String> get directory async {
     if (_resolved != null) return _resolved!;
+
+    var isFlutterTest = false;
+    if (!kIsWeb) {
+      try {
+        isFlutterTest = Platform.environment['FLUTTER_TEST'] == 'true';
+      } catch (e) {
+        AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');
+      }
+    }
+
+    if (isFlutterTest && _usesDefaultPathProvider) {
+      _resolved = await _safeTempPath();
+      return _resolved!;
+    }
+
     await AppLogService.info('AppStorage', '获取应用文档目录');
 
     try {
       final dir = await getApplicationDocumentsDirectory();
       _resolved = dir.path;
     } on MissingPluginException {
-      _resolved = _fallbackPath();
+      _resolved = await _fallbackPath();
     }
 
     return _resolved!;
+  }
+
+  static bool get _usesDefaultPathProvider {
+    final type = PathProviderPlatform.instance.runtimeType.toString();
+    return const {
+      'MethodChannelPathProvider',
+      'PathProviderAndroid',
+      'PathProviderFoundation',
+      'PathProviderLinux',
+      'PathProviderWindows',
+    }.contains(type);
   }
 
   /// Determines a fallback path when [getApplicationDocumentsDirectory] fails.
   ///
   /// Uses [kIsWeb] + try-catch to safely check platform conditions across
   /// all Flutter targets (web, desktop, mobile, test).
-  static String _fallbackPath() {
+  static Future<String> _fallbackPath() async {
     // Web: dart:io (Directory, Platform) is unavailable.
     // Return a placeholder — actual file operations won't work on web.
     if (kIsWeb) {
@@ -72,10 +99,13 @@ class AppStorage {
     return _safeTempPath();
   }
 
-  /// Returns [Directory.systemTemp.path] safely, or a fallback if unavailable.
-  static String _safeTempPath() {
+  /// Returns a Stroom-specific path under the system temp directory safely.
+  static Future<String> _safeTempPath() async {
     try {
-      return Directory.systemTemp.path;
+      final path = '${Directory.systemTemp.path}'
+          '${Platform.pathSeparator}stroom_data';
+      await Directory(path).create(recursive: true);
+      return path;
     } catch (e) {
       AppLogService.warning('AppStorage', '获取系统临时目录失败，使用 /tmp 回退: $e');
       return '/tmp';
@@ -83,12 +113,14 @@ class AppStorage {
   }
 
   /// Returns [Directory.current.path]/[subDir] safely, or a fallback.
-  static String _safeCwdPath(String subDir) {
+  static Future<String> _safeCwdPath(String subDir) async {
     try {
-      return '${Directory.current.path}/$subDir';
+      final path = '${Directory.current.path}/$subDir';
+      await Directory(path).create(recursive: true);
+      return path;
     } catch (e) {
-      AppLogService.warning('AppStorage', '获取当前工作目录失败，使用 /tmp 回退: $e');
-      return '/tmp/$subDir';
+      AppLogService.warning('AppStorage', '获取当前工作目录失败，使用系统临时目录回退: $e');
+      return _safeTempPath();
     }
   }
 
