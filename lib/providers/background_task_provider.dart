@@ -956,6 +956,10 @@ bool _legacyOcrHasCredentialUseContext(
         r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final useForReceiptContext = useVerb &&
+      !_legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
+      RegExp(r'^for (?:this|the) receipt\b', caseSensitive: false)
+          .hasMatch(after);
   final authenticateWithToProcessContext =
       RegExp(r'\bauthenticate with$', caseSensitive: false).hasMatch(before) &&
           (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
@@ -967,6 +971,7 @@ bool _legacyOcrHasCredentialUseContext(
       setToCredentialContext ||
       reportedValueContext ||
       useToProcessContext ||
+      useForReceiptContext ||
       authenticateWithToProcessContext ||
       identifiedLabelContext;
 }
@@ -1881,7 +1886,7 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*[.!?]?$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -2081,11 +2086,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               RegExp(
                 r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b',
                 caseSensitive: false,
-              ).hasMatch(sanitized.substring(match.end)) ||
-          RegExp(
-            r'^\s*(?:please\s+)?use\s+$',
-            caseSensitive: false,
-          ).hasMatch(beforeEcho);
+              ).hasMatch(sanitized.substring(match.end));
       final rawEcho = match.group(1)!;
       final echo = rawEcho.replaceFirst(
         RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
@@ -2152,14 +2153,17 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         r'\b(?:and|then)\s+(?:(?:please)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|answer|extract|interpret|count|copy|compute|find|give|search|transcribe|translate|classify|explain|process|provide|show|tell|check|look|scan|ocr|decode|write|list|record|output|report|note|state|add|return|respond|subtract|sum)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bbefore\s+(?:reading|checking|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding|locating)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bto\s+(?:verify|confirm)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b',
         caseSensitive: false,
       ).hasMatch(afterEcho);
+      final confirmedMaskedCredentialEcho =
+          _legacyOcrTextContainsMaskedCredential(echo, [value]);
       if ((!hasSentenceBoundary &&
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
               !hasSafeInstructionAfterEcho &&
               !safeCredentialValueActionLead &&
-              !hasCredentialUseContext) ||
+              !hasCredentialUseContext &&
+              !confirmedMaskedCredentialEcho) ||
           echo.length <= prefix.length ||
-          (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
+          (!confirmedMaskedCredentialEcho &&
               !hasCredentialUseContext &&
               !lineBrokenCarefulActionEcho)) {
         return match.group(0)!;
