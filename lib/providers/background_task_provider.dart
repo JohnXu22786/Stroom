@@ -960,6 +960,10 @@ bool _legacyOcrHasCredentialUseContext(
       !_legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
       RegExp(r'^for (?:this|the) receipt\b', caseSensitive: false)
           .hasMatch(after);
+  final terminalUseCredentialContext = useVerb &&
+      !_legacyOcrHasNaturalAlphaContinuation(suffix) &&
+      !_legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
+      after.isEmpty;
   final authenticateWithToProcessContext =
       RegExp(r'\bauthenticate with$', caseSensitive: false).hasMatch(before) &&
           (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
@@ -972,6 +976,7 @@ bool _legacyOcrHasCredentialUseContext(
       reportedValueContext ||
       useToProcessContext ||
       useForReceiptContext ||
+      terminalUseCredentialContext ||
       authenticateWithToProcessContext ||
       identifiedLabelContext;
 }
@@ -1885,6 +1890,10 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final bareActionOnRedactedValue = RegExp(
+    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(text);
   final safeUseLead = RegExp(
     r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
@@ -1906,7 +1915,7 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  return safeActionLead ||
+  return (safeActionLead && !bareActionOnRedactedValue) ||
       (safeUseLead && safeRequestUseLead) ||
       safeScanContext ||
       safeKeepLead;
@@ -1916,8 +1925,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final body = rawRequest?['body'];
   if (body is! Map || body['messages'] is! List) return null;
   final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
-  final textParts = <String>[];
-  final textPartsHadCredential = <bool>[];
+  final sourceTextParts = <String>[];
   for (final message in body['messages'] as List) {
     if (message is! Map ||
         message['role'] != 'user' ||
@@ -1926,22 +1934,45 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
-        final sourceText = part['text'] as String;
-        final credentialCheckText = sourceText.replaceAll('\u0000', '');
-        final hadCredential = _legacyOcrTextContainsCredential(
-          credentialCheckText,
-          credentialValues,
-        );
-        final text = hadCredential
-            ? _legacyOcrRedactMaskedCredentialEchoes(
-                credentialCheckText,
-                credentialValues,
-              )
-            : sourceText.replaceAll('\u0000', ' ');
-        textParts.add(text);
-        textPartsHadCredential.add(hadCredential);
+        sourceTextParts.add(part['text'] as String);
       }
     }
+  }
+  final hasEmbeddedNul = sourceTextParts.any((text) => text.contains('\u0000'));
+  final hasCredentialInOnePart = sourceTextParts.any(
+    (text) => _legacyOcrTextContainsCredential(
+      text.replaceAll('\u0000', ''),
+      credentialValues,
+    ),
+  );
+  final joinedCredentialCheckText = sourceTextParts.join().replaceAll('\u0000', '');
+  if (hasEmbeddedNul &&
+      !hasCredentialInOnePart &&
+      _legacyOcrTextContainsCredential(
+        joinedCredentialCheckText,
+        credentialValues,
+      )) {
+    // Removing a NUL within or between parts can reconnect a credential that
+    // no individual part exposes. Fail closed before display normalization.
+    return null;
+  }
+
+  final textParts = <String>[];
+  final textPartsHadCredential = <bool>[];
+  for (final sourceText in sourceTextParts) {
+    final credentialCheckText = sourceText.replaceAll('\u0000', '');
+    final hadCredential = _legacyOcrTextContainsCredential(
+      credentialCheckText,
+      credentialValues,
+    );
+    final text = hadCredential
+        ? _legacyOcrRedactMaskedCredentialEchoes(
+            credentialCheckText,
+            credentialValues,
+          )
+        : sourceText.replaceAll('\u0000', ' ');
+    textParts.add(text);
+    textPartsHadCredential.add(hadCredential);
   }
   if (textParts.isEmpty) return null;
   final redactedMarkedInstruction = _legacyOcrRedactNaturalWordCredentialEchoes(

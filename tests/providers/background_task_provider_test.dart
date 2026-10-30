@@ -5905,6 +5905,28 @@ void main() {
           isNot(contains('secret123456789')),
         );
 
+        final embeddedNulSplitCredentialTask = taskFor(
+          'legacy-ocr-embedded-nul-split-across-text-parts',
+          [
+            safePrompt,
+            'Use se\u0000',
+            'cret123456789 to process this image',
+          ],
+          credentialPrefix: 'secret',
+        );
+        final embeddedNulSplitCredentialPersisted =
+            jsonEncode(embeddedNulSplitCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulSplitCredentialTask.retryData!,
+          ).instructionContent,
+          isNull,
+        );
+        expect(
+          embeddedNulSplitCredentialPersisted,
+          isNot(contains('secret123456789')),
+        );
+
         final echoedKeyTask = taskFor('legacy-ocr-short-prefix-echoed-key', [
           safePrompt,
           'Use $apiKey to process this image',
