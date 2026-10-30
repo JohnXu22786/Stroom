@@ -1881,7 +1881,7 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|^\s*(?:please\s+)?use\s+\[redacted\]\s*[.!?]?$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*[.!?]?$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -1912,12 +1912,18 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
-        var text = (part['text'] as String).replaceAll('\u0000', ' ');
-        final hadCredential =
-            _legacyOcrTextContainsCredential(text, credentialValues);
-        if (hadCredential) {
-          text = _legacyOcrRedactMaskedCredentialEchoes(text, credentialValues);
-        }
+        final sourceText = part['text'] as String;
+        final credentialCheckText = sourceText.replaceAll('\u0000', '');
+        final hadCredential = _legacyOcrTextContainsCredential(
+          credentialCheckText,
+          credentialValues,
+        );
+        final text = hadCredential
+            ? _legacyOcrRedactMaskedCredentialEchoes(
+                credentialCheckText,
+                credentialValues,
+              )
+            : sourceText.replaceAll('\u0000', ' ');
         textParts.add(text);
         textPartsHadCredential.add(hadCredential);
       }
@@ -1957,11 +1963,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     final preservesNaturalPlural = naturalSecretPluralRanges.any(
       (match) => match.start < end && match.end > start,
     );
-    return preservesNaturalPlural ||
-        (!_legacyOcrTextContainsCredential(text, credentialValues) &&
-            (!hadCredential ||
-                !text.contains('[redacted]') ||
-                _legacyOcrHasSafeRedactedInstruction(text)));
+    if (preservesNaturalPlural) return true;
+    if (_legacyOcrTextContainsCredential(text, credentialValues)) return false;
+    if (!hadCredential) return true;
+    return text.contains('[redacted]') &&
+        _legacyOcrHasSafeRedactedInstruction(text);
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||

@@ -5887,6 +5887,24 @@ void main() {
           safePrompt,
         );
 
+        final embeddedNulCredentialTask = taskFor(
+          'legacy-ocr-embedded-nul-in-masked-secret-echo',
+          ['Use se\u0000cret123456789 to process this image'],
+          credentialPrefix: 'secret',
+        );
+        final embeddedNulCredentialPersisted =
+            jsonEncode(embeddedNulCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulCredentialTask.retryData!,
+          ).instructionContent,
+          'Use [redacted] to process this image',
+        );
+        expect(
+          embeddedNulCredentialPersisted,
+          isNot(contains('secret123456789')),
+        );
+
         final echoedKeyTask = taskFor('legacy-ocr-short-prefix-echoed-key', [
           safePrompt,
           'Use $apiKey to process this image',
