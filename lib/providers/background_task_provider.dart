@@ -2081,7 +2081,11 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               RegExp(
                 r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b',
                 caseSensitive: false,
-              ).hasMatch(sanitized.substring(match.end));
+              ).hasMatch(sanitized.substring(match.end)) ||
+          RegExp(
+            r'^\s*(?:please\s+)?use\s+$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho);
       final rawEcho = match.group(1)!;
       final echo = rawEcho.replaceFirst(
         RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
