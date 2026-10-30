@@ -3068,6 +3068,44 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves text boundaries around echoed keys',
+      () {
+        const apiKey = 'secret123456';
+        const instruction = 'Use $apiKey to process\u0000this image';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-use-instruction-key-echo-nul-boundary',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Use [redacted] to process this image',
+        );
+        expect(persisted, contains('Use [redacted] to process this image'));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts embedded natural words in use-to-process context',
       () {
         const apiKey = 'xsecretariat';

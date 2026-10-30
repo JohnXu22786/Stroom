@@ -1962,12 +1962,19 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       credentialCheckText,
       credentialValues,
     );
-    final text = hadCredential
-        ? _legacyOcrRedactMaskedCredentialEchoes(
-            credentialCheckText,
-            credentialValues,
-          )
-        : sourceText.replaceAll('\u0000', ' ');
+    final redactedText = hadCredential
+        ? _legacyOcrRedactMaskedCredentialEchoes(sourceText, credentialValues)
+        : sourceText;
+    if (hadCredential &&
+        _legacyOcrTextContainsCredential(
+          redactedText.replaceAll('\u0000', ''),
+          credentialValues,
+        )) {
+      // If a NUL split the credential so the redactor could not remove its
+      // echo, discard this request instead of retaining a partial secret.
+      return null;
+    }
+    final text = redactedText.replaceAll('\u0000', ' ');
     textParts.add(text);
     textPartsHadCredential.add(hadCredential);
   }
