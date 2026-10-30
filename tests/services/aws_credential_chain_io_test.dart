@@ -174,9 +174,12 @@ region = us-east-2
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
       String? receivedAuthorization;
+      String? receivedSsoBearerToken;
       String? receivedQuery;
       server.listen((request) async {
         receivedAuthorization = request.headers.value('Authorization');
+        receivedSsoBearerToken =
+            request.headers.value('x-amz-sso_bearer-token');
         receivedQuery = request.uri.query;
         request.response
           ..statusCode = HttpStatus.ok
@@ -226,7 +229,8 @@ sso_region = us-east-1
         },
       );
 
-      expect(receivedAuthorization, 'Bearer cached-sso-token');
+      expect(receivedAuthorization, isNull);
+      expect(receivedSsoBearerToken, 'cached-sso-token');
       expect(receivedQuery, contains('account_id=123456789012'));
       expect(receivedQuery, contains('role_name=Developer'));
       expect(credentials?.accessKeyId, 'sso-access');

@@ -319,7 +319,7 @@ Future<AwsSigV4Credentials?> _ssoCredentials(
     }
     final response = await _httpRequest(
       endpoint,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: {'x-amz-sso_bearer-token': accessToken},
     );
     if (response.statusCode != HttpStatus.ok) {
       throw const AwsCredentialChainException();
