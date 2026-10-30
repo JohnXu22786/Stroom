@@ -1452,6 +1452,25 @@ bool _legacyOcrTextContainsMaskedCredential(
                 _legacyOcrHasOpaqueUnicodeContinuation(prefix, suffix);
             final naturalWordContinuation =
                 _legacyOcrHasNaturalWordContinuation(prefix, suffix);
+            final naturalWord = '$prefix$suffix'
+                .replaceAll(RegExp(r'[^a-zA-Z]'), '')
+                .toLowerCase();
+            final ordinaryNaturalPromptContext =
+                _legacyOcrHasOrdinaryNaturalPromptContext(
+              textWithoutPartMarkers,
+              match,
+              naturalWord,
+              hasCredentialUseContext: _legacyOcrHasCredentialUseContext(
+                textWithoutPartMarkers,
+                match,
+                prefix,
+                suffix,
+              ),
+              isNaturalWordContinuation: naturalWordContinuation,
+              isNaturalSecretPlural:
+                  naturalWord == 'secrets' && suffix.toLowerCase() == 's',
+            );
+            if (ordinaryNaturalPromptContext) continue;
             final naturalHyphenatedAlphaContinuation = suffix.startsWith('-') &&
                 RegExp(r'^[a-zA-Z]+$').hasMatch(prefix) &&
                 _legacyOcrHasNaturalAlphaContinuation(
@@ -1880,17 +1899,36 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     textParts.join('\u0000'),
     credentialValues,
   );
-  final safeTextParts = _legacyOcrTextContainsCredential(
-    redactedMarkedInstruction,
-    credentialValues,
-  )
-      ? redactedMarkedInstruction
-          .split('\u0000')
-          .where(
-            (text) => !_legacyOcrTextContainsCredential(text, credentialValues),
-          )
-          .join('\u0000')
-      : redactedMarkedInstruction;
+  final naturalSecretPluralRanges = RegExp(
+    r'\bsecret\u0000*s\b',
+    caseSensitive: false,
+  ).allMatches(redactedMarkedInstruction).where((match) {
+    final hasCredentialUseContext = _legacyOcrHasCredentialUseContext(
+      redactedMarkedInstruction,
+      match,
+      'secret',
+      's',
+    );
+    return _legacyOcrHasOrdinaryNaturalPromptContext(
+      redactedMarkedInstruction,
+      match,
+      match.group(0)!.replaceAll('\u0000', '').toLowerCase(),
+      hasCredentialUseContext: hasCredentialUseContext,
+      isNaturalWordContinuation: true,
+      isNaturalSecretPlural: true,
+    );
+  }).toList();
+  var textOffset = 0;
+  final safeTextParts = redactedMarkedInstruction.split('\u0000').where((text) {
+    final start = textOffset;
+    final end = start + text.length;
+    textOffset = end + 1;
+    final preservesNaturalPlural = naturalSecretPluralRanges.any(
+      (match) => match.start < end && match.end > start,
+    );
+    return preservesNaturalPlural ||
+        !_legacyOcrTextContainsCredential(text, credentialValues);
+  }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
       RegExp(
