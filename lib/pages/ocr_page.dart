@@ -214,6 +214,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _isRetryImagesLoading = false;
   int _pendingImageImports = 0;
   bool get _isImageImportPending => _pendingImageImports > 0;
+  // File reads may overlap, but batches are committed in selection order.
+  Future<void> _systemGalleryCommitTail = Future<void>.value();
   bool get _hasReusablePageResults =>
       _retryPageOutcomes.any((outcome) => outcome.canReuseResult);
   bool get _isImageSelectionLocked =>
@@ -228,7 +230,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _selectedImages.length != _requiredRetryImageCount;
 
   bool _useOriginalImageQuality = false;
-  String? _errorMessage;
+  String? _errorMessageValue;
+  String? _lastImageImportErrorMessage;
+  String? get _errorMessage => _errorMessageValue;
+  set _errorMessage(String? message) {
+    _errorMessageValue = message;
+    _lastImageImportErrorMessage = null;
+  }
+
   int _selectedModelIndex = 0;
   String? _selectedConfigId;
   String? _selectedModelRecordId;
@@ -240,6 +249,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// stable negative values, while -1 keeps the default images-only request.
   int _selectedInstructionIndex = -1;
 
+  /// Keeps a live custom selection stable if async loading prepends entries.
+  OcrInstruction? _selectedInstruction;
+
   /// Instruction index restored from retry data, pending until the generic
   /// instruction list finishes loading. The provider's initial state is
   /// empty until its async load completes, so without this a restored
@@ -250,8 +262,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// when the generic list is later edited or the entry is deleted.
   String? _retryInstructionSnapshot;
 
-  /// Whether [_startOcr] is inside its retry-instruction resolve await —
-  /// blocks a second tap from starting a duplicate OCR during that gap.
+  int _instructionIdentityIndex(
+    List<OcrInstruction> instructions,
+    OcrInstruction selected,
+  ) =>
+      instructions.indexWhere(
+        (instruction) => identical(instruction, selected),
+      );
+
+  int _instructionSelectionValue(List<OcrInstruction> instructions) {
+    final selected = _selectedInstruction;
+    if (selected == null) return _selectedInstructionIndex;
+    final index = _instructionIdentityIndex(instructions, selected);
+    return index >= 0 ? index : _selectedInstructionIndex;
+  }
+
+  /// Whether [_startOcr] is waiting on image preparation or retry-instruction
+  /// restoration, blocking a second tap from starting duplicate OCR work.
   bool _ocrStarting = false;
 
   Future<OcrImagePayload> _prepareImagePayload(Uint8List bytes) =>
@@ -266,6 +293,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   void _finishImageImport() {
     if (!mounted) return;
     setState(() => _pendingImageImports--);
+  }
+
+  int _invalidateImageImports() {
+    _systemGalleryCommitTail = Future<void>.value();
+    return ++_imageImportGeneration;
   }
 
   OcrImageImportMode get _imageImportMode => _useOriginalImageQuality
@@ -791,6 +823,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return const SizedBox.shrink();
     }
     final instructions = ref.watch(ocrInstructionsProvider);
+    ref.listen(ocrInstructionsProvider, (previous, next) {
+      final selected = _selectedInstruction;
+      if (selected == null ||
+          previous == null ||
+          _instructionIdentityIndex(next, selected) >= 0) {
+        return;
+      }
+      final selectedIndex = _instructionIdentityIndex(previous, selected);
+      if (selectedIndex >= 0 &&
+          previous.length == next.length &&
+          selectedIndex < next.length) {
+        // Editing replaces the value in place. Carry the live selection over
+        // that replacement so a later async prepend can still resolve it.
+        setState(() {
+          _selectedInstruction = next[selectedIndex];
+          _selectedInstructionIndex = selectedIndex;
+        });
+      }
+    });
 
     // A captured instruction stays selected even when it no longer exists in
     // the editable generic list. Legacy index-only restore waits for the list
@@ -798,7 +849,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final pending = _pendingRetryInstructionIndex;
     final rawIndex = _retryInstructionSnapshot != null
         ? -2
-        : (pending ?? _selectedInstructionIndex);
+        : (pending ?? _instructionSelectionValue(instructions));
     final clamped =
         rawIndex == -2 || ocrOutputTemplateForSelection(rawIndex) != null
             ? rawIndex
@@ -873,6 +924,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             if (idx == null) return;
                             setState(() {
                               _selectedInstructionIndex = idx;
+                              _selectedInstruction =
+                                  idx >= 0 ? instructions[idx] : null;
                               if (idx != -2) _retryInstructionSnapshot = null;
                               // An explicit user choice wins over a pending
                               // retry restore.
@@ -931,21 +984,45 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               // default 48px tap target would inflate the card).
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              onPressed: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => OcrInstructionManageDialog(
-                    onInstructionDeleted: (deletedIndex) {
-                      if (!mounted) return;
-                      if (deletedIndex == _selectedInstructionIndex) {
-                        setState(() => _selectedInstructionIndex = -1);
-                      } else if (deletedIndex < _selectedInstructionIndex) {
-                        setState(() => _selectedInstructionIndex--);
-                      }
+              onPressed: _hasReusablePageResults
+                  ? null
+                  : () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => OcrInstructionManageDialog(
+                          onInstructionDeleted: (deletedIndex) {
+                            if (!mounted) return;
+                            final selected = _selectedInstruction;
+                            if (selected != null) {
+                              final currentInstructions = ref.read(
+                                ocrInstructionsProvider,
+                              );
+                              final selectedIndex = _instructionIdentityIndex(
+                                currentInstructions,
+                                selected,
+                              );
+                              if (selectedIndex < 0) {
+                                setState(() {
+                                  _selectedInstruction = null;
+                                  _selectedInstructionIndex = -1;
+                                });
+                              } else {
+                                setState(() {
+                                  _selectedInstructionIndex = selectedIndex;
+                                });
+                              }
+                              return;
+                            }
+                            if (deletedIndex == _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex = -1);
+                            } else if (deletedIndex <
+                                _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex--);
+                            }
+                          },
+                        ),
+                      );
                     },
-                  ),
-                );
-              },
             ),
           ],
         ),
@@ -1070,9 +1147,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing || _isRetryImagesLoading
-                        ? null
-                        : _showAlbumChoicePanel,
+                    onPressed:
+                        _isImageSelectionLocked ? null : _showAlbumChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1630,14 +1706,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               height: 48,
               child: FilledButton.icon(
                 onPressed: _selectedImages.isEmpty ||
+                        _ocrStarting ||
                         _isProcessing ||
                         _isImageImportPending ||
                         _isRetryImagesLoading ||
                         _retryImagesUnavailable ||
-                        _retryImageCountMismatch
+                        _retryImageCountMismatch ||
+                        _legacyModelConfirmationPending
                     ? null
                     : _startOcr,
-                icon: _isProcessing
+                icon: _ocrStarting || _isProcessing
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -1648,15 +1726,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       )
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
-                  _isProcessing
-                      ? _isPreparingRetryData
-                          ? '保存重试图片...'
-                          : '识别中...'
-                      : _isRetryImagesLoading
-                          ? '读取重试图片...'
-                          : _isImageImportPending
-                              ? '正在导入图片...'
-                              : '开始识别',
+                  _ocrStarting
+                      ? '准备图片中...'
+                      : _isProcessing
+                          ? _isPreparingRetryData
+                              ? '保存重试图片...'
+                              : '识别中...'
+                          : _isRetryImagesLoading
+                              ? '读取重试图片...'
+                              : _isImageImportPending
+                                  ? '正在导入图片...'
+                                  : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1683,7 +1763,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: _pickSaveFolder,
+        onTap: _ocrStarting || _isProcessing ? null : _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -1713,8 +1793,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Future<void> _pickSaveFolder() async {
+    if (_ocrStarting || _isProcessing) return;
     final folders = await TextManifest.getAllFolders();
-    if (!mounted) return;
+    if (!mounted || _ocrStarting || _isProcessing) return;
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: _saveFolder,
@@ -1726,7 +1807,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       },
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
-    if (result != null && mounted) {
+    if (result != null && mounted && !_ocrStarting && !_isProcessing) {
       setState(() => _saveFolder = result);
     }
   }
@@ -1765,9 +1846,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(height: 24),
               Text(
                 '选择图片来源',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -1826,7 +1908,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      importGeneration = ++_imageImportGeneration;
+      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
       final bytes = await file.readAsBytes();
@@ -1841,6 +1923,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             // Camera: temp file, no source name
           ),
         );
+        if (_errorMessage == _lastImageImportErrorMessage) {
+          _errorMessage = null;
+        }
+        _lastImageImportErrorMessage = null;
         _updateRetryImageReselectionState();
       });
     } catch (e) {
@@ -1860,6 +1946,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromSystemGallery() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
+    final previousGalleryCommit = _systemGalleryCommitTail;
+    final galleryCommit = Completer<void>();
+    _systemGalleryCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
@@ -1882,11 +1971,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      importGeneration = ++_imageImportGeneration;
+      // Overlapping gallery selections share a generation so the later batch
+      // cannot invalidate images still being read by the earlier batch.
       _beginImageImport();
       importPending = true;
       final newImages = <SelectedImage>[];
       String? firstError;
+      Object? firstFileFailure;
       for (final file in files) {
         if (!mounted || importGeneration != _imageImportGeneration) return;
         try {
@@ -1911,10 +2002,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           );
         } on FormatException catch (error) {
           firstError ??= error.message;
+        } catch (error) {
+          firstFileFailure ??= error;
         }
         if (!mounted || importGeneration != _imageImportGeneration) return;
       }
 
+      if (!mounted || importGeneration != _imageImportGeneration) return;
+      await previousGalleryCommit;
       if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
@@ -1924,20 +2019,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ? _retryUnavailableMessage
                     : _retryReselectAllMessage(_requiredRetryImageCount!))
                 : null);
+        _lastImageImportErrorMessage = firstError;
         _updateRetryImageReselectionState();
       });
       if (firstError != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(firstError)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(firstError)));
+      }
+      if (firstFileFailure != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择图片失败: $firstFileFailure')));
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     } finally {
+      if (!galleryCommit.isCompleted) {
+        galleryCommit.complete();
+      }
       if (importPending) _finishImageImport();
     }
   }
@@ -1954,7 +2055,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
-      importGeneration = ++_imageImportGeneration;
+      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
       var loadedCount = 0;
@@ -1980,9 +2081,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     } finally {
       if (importPending) _finishImageImport();
@@ -2008,16 +2108,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             sourceName: fileName, // App album file has original name
           ),
         );
+        if (_errorMessage == _lastImageImportErrorMessage) {
+          _errorMessage = null;
+        }
+        _lastImageImportErrorMessage = null;
         _updateRetryImageReselectionState();
       });
       return true;
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
         final message = e is FormatException ? e.message : '处理图片失败: $e';
-        setState(() => _errorMessage = message);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        setState(() {
+          _errorMessage = message;
+          _lastImageImportErrorMessage = message;
+        });
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
       return false;
     }
@@ -2103,25 +2209,27 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   ) async {
     if (!mounted ||
         _isImageSelectionLocked ||
-        !_selectedImages.any((image) => identical(image, currentImage))) {
+        !_selectedImages.any(
+          (image) => image.hasSameSelectionAs(currentImage),
+        )) {
       return;
     }
 
     try {
       final payload = await _prepareImagePayload(editedBytes);
-      if (!mounted) return;
+      if (!mounted || _ocrStarting || _isImageSelectionLocked) return;
       final currentIndex = _selectedImages.indexWhere(
-        (image) => identical(image, currentImage),
+        (image) => image.hasSameSelectionAs(currentImage),
       );
       if (currentIndex < 0) return;
       setState(() {
-        _selectedImages[currentIndex] = currentImage.withEditedPayload(payload);
+        _selectedImages[currentIndex] =
+            _selectedImages[currentIndex].withEditedPayload(payload);
       });
     } on FormatException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
       }
     }
   }
@@ -2177,7 +2285,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     final resetReusableResults =
         _retryImagesUnavailable && _hasReusablePageResults;
-    _imageImportGeneration++;
+    _invalidateImageImports();
     setState(() {
       _selectedImages.clear();
       if (resetReusableResults) _retryPageOutcomes.clear();
@@ -2207,8 +2315,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return bytes > 0 ? bytes : null;
   }
 
-  String _formatRequestSizeMib(int bytes) =>
-      (bytes / (1024 * 1024)).toStringAsFixed(2);
+  String _formatRequestSizeMib(int bytes) {
+    final mebibytes = bytes / (1024 * 1024);
+    return mebibytes < 0.005
+        ? mebibytes.toStringAsFixed(8)
+        : mebibytes.toStringAsFixed(2);
+  }
 
   Future<void> _editRequestSizeBudget() async {
     final previousValue = _requestSizeBudgetMiBController.text;
@@ -2316,6 +2428,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       if (encodedBytes <= budgetBytes) return budgetBytes;
+      final budgetBeforeDialog = _requestSizeBudgetMiBController.text;
       final choice = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
@@ -2325,6 +2438,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
       if (!mounted) return null;
       if (choice == null) {
+        _requestSizeBudgetMiBController.text = budgetBeforeDialog;
         setState(() => _errorMessage = '本次识别已取消；可切换识别方式或提高请求上限后重试。');
         return null;
       }
@@ -2494,7 +2608,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
 
-    _ocrStarting = true;
+    setState(() {
+      _ocrStarting = true;
+      _errorMessage = null;
+    });
     final sourceImages = List<SelectedImage>.of(_selectedImages);
     final images = <SelectedImage>[];
     try {
@@ -2511,15 +2628,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         }
       }
     } on FormatException catch (error) {
-      _ocrStarting = false;
       if (mounted) {
-        final retryImageCount = widget.retryData == null
-            ? 0
-            : OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+        var retryImageCount = 0;
+        try {
+          if (widget.retryData != null) {
+            retryImageCount =
+                OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+          }
+        } catch (retryDataError) {
+          debugPrint(
+            '[OCR] Failed to read retry image count: ${retryDataError.runtimeType}',
+          );
+        }
         if (widget.retryData == null && widget.retryTaskId == null) {
-          setState(() => _errorMessage = error.message);
+          setState(() {
+            _ocrStarting = false;
+            _errorMessage = error.message;
+          });
         } else {
           setState(() {
+            _ocrStarting = false;
             _retryImagesUnavailable = true;
             _retryImageCountUnknown = retryImageCount == 0;
             _requiredRetryImageCount =
@@ -2533,9 +2661,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
       return;
     } catch (error) {
-      _ocrStarting = false;
       if (mounted) {
-        setState(() => _errorMessage = '处理 OCR 图片失败，请重试');
+        setState(() {
+          _ocrStarting = false;
+          _errorMessage = '处理 OCR 图片失败，请重试';
+        });
       }
       debugPrint('[OCR] Image preparation failed: ${error.runtimeType}');
       return;
@@ -2551,16 +2681,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     }
     if (selectionChanged) {
-      _ocrStarting = false;
-      setState(() => _errorMessage = '图片列表已变化，请重新开始识别。');
+      setState(() {
+        _ocrStarting = false;
+        _errorMessage = '图片列表已变化，请重新开始识别。';
+      });
       return;
     }
     final requestModelOptions = _getOcrModelOptions(ref);
     final requestModelIndex = _selectedModelOptionIndex(requestModelOptions);
     if (requestModelOptions.isEmpty || requestModelIndex == null) {
-      _ocrStarting = false;
       if (mounted) {
         setState(() {
+          _ocrStarting = false;
           _errorMessage = requestModelOptions.isEmpty
               ? '请先在设置中配置 OCR 供应商和模型'
               : _modelSelectionMessage(requestModelIndex) ?? '请重新选择 OCR 供应商和模型';
@@ -2573,6 +2705,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ..clear()
         ..addAll(images);
       _errorMessage = null;
+      _ocrStarting = false;
       _isProcessing = true;
       _isPreparingRetryData = true;
     });
@@ -2590,9 +2723,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _requestSizeBudgetMiBController.text,
     );
     if (requestSizeBudgetBytes == null) {
-      _ocrStarting = false;
       if (mounted) {
         setState(() {
+          _ocrStarting = false;
           _isProcessing = false;
           _isPreparingRetryData = false;
           _errorMessage = '请求上限必须是大于 0 的 MiB 数值';
@@ -2618,9 +2751,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       try {
         await _resolvePendingRetryInstruction();
       } catch (error) {
-        _ocrStarting = false;
         if (mounted) {
           setState(() {
+            _ocrStarting = false;
             _isProcessing = false;
             _isPreparingRetryData = false;
             _errorMessage = '读取识别指令失败，请重试';
@@ -2638,7 +2771,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Inject the selected generic instruction into the request (service
     // reads typeConfig['userInstruction']); unselected = images-only.
     final instructions = ref.read(ocrInstructionsProvider);
-    final selectedInstructionIndex = _selectedInstructionIndex;
+    final selectedInstructionIndex = _instructionSelectionValue(instructions);
     final retryInstructionSnapshot = _retryInstructionSnapshot;
     final instructionContent = retryInstructionSnapshot ??
         selectedOcrInstructionContent(instructions, selectedInstructionIndex);
@@ -2657,15 +2790,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
     }
 
-    final effectiveBudgetBytes = await (widget.testRequestSizePreflight?.call(
-          effectiveConfig,
-          images,
-        ) ??
-        _preflightRequestSize(effectiveConfig, images));
+    final effectiveBudgetBytes =
+        await (widget.testRequestSizePreflight?.call(effectiveConfig, images) ??
+            _preflightRequestSize(effectiveConfig, images));
     if (!mounted) return;
     if (effectiveBudgetBytes == null) {
-      _ocrStarting = false;
       setState(() {
+        _ocrStarting = false;
         _isProcessing = false;
         _isPreparingRetryData = false;
       });
@@ -2738,7 +2869,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return true;
       },
     );
-    if (!taskPublished) return;
+    if (!taskPublished) {
+      if (mounted) {
+        setState(() {
+          _ocrStarting = false;
+          _isProcessing = false;
+          _isPreparingRetryData = false;
+        });
+      }
+      return;
+    }
 
     final runner = OcrTaskRunner(
       taskId: taskId,

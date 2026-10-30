@@ -46,7 +46,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       // New model: check if any field is non-empty or any param changed
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
-      if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_customParams.any(
+        (p) => p.paramName.isNotEmpty || p.defaultValue.isNotEmpty,
+      )) {
+        return true;
+      }
       if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
@@ -95,6 +99,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
+    _nameController.addListener(_handleControllerChanged);
+    _modelIdController.addListener(_handleControllerChanged);
 
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
@@ -109,6 +115,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _maxTokensController = TextEditingController(
       text: maxTokens != null ? maxTokens.toString() : '',
     );
+    _maxTokensController.addListener(_handleControllerChanged);
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -117,8 +124,15 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
   }
 
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _nameController.removeListener(_handleControllerChanged);
+    _modelIdController.removeListener(_handleControllerChanged);
+    _maxTokensController.removeListener(_handleControllerChanged);
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
@@ -282,30 +296,33 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
 
-    // Parse optional maxTokens
-    final maxTokensStr = _maxTokensController.text.trim();
-    if (maxTokensStr.isNotEmpty) {
-      final maxTokens = int.tryParse(maxTokensStr);
-      if (maxTokens == null || maxTokens <= 0) {
+    // Validate and serialize maxTokens only when enabled. A disabled field
+    // retains its text, which may be stale or invalid.
+    if (_enableMaxTokens) {
+      final maxTokensStr = _maxTokensController.text.trim();
+      if (maxTokensStr.isNotEmpty) {
+        final maxTokens = int.tryParse(maxTokensStr);
+        if (maxTokens == null || maxTokens <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('最大 Token 数必须为正整数'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() => _isSaving = false);
+          return;
+        }
+        typeConfig['maxTokens'] = maxTokens;
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('最大 Token 数必须为正整数'),
+            content: Text('最大 Token 数已启用但未填写'),
             behavior: SnackBarBehavior.floating,
           ),
         );
         setState(() => _isSaving = false);
         return;
       }
-      typeConfig['maxTokens'] = maxTokens;
-    } else if (_enableMaxTokens) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最大 Token 数已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
     }
 
     // Instructions are now generic (configured on the OCR page, not per

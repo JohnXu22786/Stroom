@@ -12,6 +12,7 @@ import '../../../providers/task_provider_shared.dart';
 import '../../../services/ocr_service.dart';
 import '../../../utils/http_timeout.dart';
 import '../../../utils/ocr_image_payload.dart';
+import '../../../utils/ocr_diagnostics.dart';
 import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -232,16 +233,25 @@ Future<String> executeOcrBlock({
     return result;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
+    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          e.toString(),
+          excludedValues: [config.key],
+        ) ??
+        OcrDiagnosticSnapshot.safeTaskError(
+          e,
+          excludedValues: [config.key],
+        );
+    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $e',
+      '识别失败: $safeError',
     );
     throw BlockExecutionException(
-      e.toString(),
+      safeError,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );

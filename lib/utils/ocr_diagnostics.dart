@@ -19,6 +19,7 @@ class OcrDiagnosticSnapshot {
   static const _knownFinishReasons = {
     'stop',
     'length',
+    'max_tokens',
     'content_filter',
     'function_call',
     'tool_calls',
@@ -124,13 +125,52 @@ class OcrDiagnosticSnapshot {
       ...credentialValuesFromHeaders(rawRequest['headers']),
       ...credentialValuesFromUrl(rawRequest['url']),
       ...credentialValuesFromUrl(rawRequest['host']),
+      ..._credentialValuesFromBody(rawRequest['body']),
     }.toList(growable: false);
+  }
+
+  static List<String> _credentialValuesFromBody(dynamic rawBody) {
+    final values = <String>{};
+
+    void collect(dynamic value, {bool credentialField = false}) {
+      if (credentialField && value is String) {
+        final credential = value.trim();
+        if (credential.isNotEmpty && credential.length <= 512) {
+          values.add(credential);
+          final token = RegExp(
+            r'^(?:Bearer|Basic)\s+(.+)$',
+            caseSensitive: false,
+          ).firstMatch(credential)?.group(1)?.trim();
+          if (token != null && token.isNotEmpty && token.length <= 512) {
+            values.add(token);
+          }
+        }
+      }
+      if (value is Map) {
+        for (final entry in value.entries) {
+          if (entry.key is String) {
+            collect(
+              entry.value,
+              credentialField:
+                  _credentialQueryParameter.hasMatch(entry.key as String),
+            );
+          }
+        }
+      } else if (value is List) {
+        for (final item in value) {
+          collect(item, credentialField: credentialField);
+        }
+      }
+    }
+
+    collect(rawBody);
+    return values.toList(growable: false);
   }
 
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
-      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?token|refresh.?token|(?:private|secret).?key|client.?secret|password|cookie)',
+      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
       caseSensitive: false,
     );
     final values = <String>{};
@@ -553,6 +593,11 @@ class OcrDiagnosticSnapshot {
       final bytes = base64Decode(padded);
       if (base64Encode(bytes).replaceFirst(RegExp(r'=+$'), '') != unpadded) {
         return false;
+      }
+      final decodedText = utf8.decode(bytes, allowMalformed: true).trimLeft();
+      if (RegExp(r'^<svg(?:[\s/>])', caseSensitive: false)
+          .hasMatch(decodedText)) {
+        return true;
       }
       bool matches(List<int> signature, {int offset = 0}) =>
           bytes.length >= offset + signature.length &&

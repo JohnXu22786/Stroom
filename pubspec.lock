@@ -736,7 +736,7 @@ packages:
     source: sdk
     version: "0.0.0"
   function_tree:
-    dependency: "direct dev"
+    dependency: transitive
     description:
       name: function_tree
       sha256: "098f41f8c8d55952fd162cbeb709e8213a709065ab6fbebffe323701c785a259"

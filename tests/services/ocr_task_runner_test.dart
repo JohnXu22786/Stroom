@@ -500,6 +500,74 @@ void main() {
   });
 
   test(
+    'service setup failure terminalizes the running page outcome',
+    () async {
+      var serviceCreations = 0;
+      final setupFailurePublished = Completer<void>();
+      notifier.addListener((tasks) {
+        if (!setupFailurePublished.isCompleted &&
+            tasks.single.ocrPageOutcomes.length == 2 &&
+            tasks.single.ocrPageOutcomes[1].status ==
+                OcrPageOutcomeStatus.failed) {
+          setupFailurePublished.complete();
+        }
+      }, fireImmediately: false);
+      final setupFailureRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+        ],
+        executionMode: OcrBatchMode.perImage,
+        perImageConcurrency: 2,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) {
+          serviceCreations++;
+          if (serviceCreations == 2) {
+            throw StateError('injected service setup failure');
+          }
+          return OcrService(
+            config: config,
+            dio: Dio()..httpClientAdapter = adapter,
+          );
+        },
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = setupFailureRunner.run();
+      final request = await adapter.requested.future;
+      await setupFailurePublished.future;
+
+      request.onSendProgress!(10, 10);
+      final stepsDuringOtherPageRequest = notifier.state.single.steps;
+      expect(stepsDuringOtherPageRequest[1].status, BgStepStatus.pending);
+      expect(stepsDuringOtherPageRequest[2].status, BgStepStatus.running);
+
+      adapter.succeed();
+      await running;
+
+      final task = notifier.state.single;
+      expect(task.status, TaskStatus.failed);
+      expect(task.ocrPageOutcomes[0].status, OcrPageOutcomeStatus.succeeded);
+      expect(task.ocrPageOutcomes[1].status, OcrPageOutcomeStatus.failed);
+      expect(
+        task.ocrPageOutcomes.every(
+          (outcome) =>
+              outcome.status != OcrPageOutcomeStatus.running &&
+              outcome.status != OcrPageOutcomeStatus.pending,
+        ),
+        isTrue,
+      );
+      expect(task.steps[1].status, isNot(BgStepStatus.completed));
+      expect(task.steps[2].status, isNot(BgStepStatus.completed));
+    },
+  );
+
+  test(
     'pre-upload per-image failure does not complete later aggregate stages',
     () async {
       final failedBeforeUploadAdapter = _OutOfOrderAdapter();
@@ -1199,6 +1267,65 @@ void main() {
     final record = (await TextManifest.loadRecords()).single;
     expect(record.name, 'owned（部分结果）');
     expect(await TextManifest.readText(record.storageFileName), 'owned text');
+  });
+
+  test(
+      'partial save waits for durable approval and restore retains it after cancellation',
+      () async {
+    notifier.setResult(id, 'owned partial text', isComplete: false);
+    notifier.failTask(id, error: 'incomplete OCR result');
+    await notifier.pendingPersistence;
+
+    final approvalWriteStarted = Completer<void>();
+    final releaseApprovalWrite = Completer<void>();
+    var snapshotWrites = 0;
+    BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+      snapshotWrites++;
+      if (snapshotWrites == 1) {
+        approvalWriteStarted.complete();
+        await releaseApprovalWrite.future;
+      }
+    };
+    final saveWriteStarted = Completer<void>();
+    final releaseSaveWrite = Completer<void>();
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: '',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        saveWriteStarted.complete();
+        await releaseSaveWrite.future;
+        return name;
+      },
+    );
+
+    try {
+      final retry = saver.retryTaskResult(allowPartial: true);
+      await approvalWriteStarted.future;
+      expect(saveWriteStarted.isCompleted, isFalse);
+
+      releaseApprovalWrite.complete();
+      await saveWriteStarted.future;
+      notifier.cancelTask(id);
+      releaseSaveWrite.complete();
+      await expectLater(retry, throwsA(anything));
+      await notifier.pendingPersistence;
+
+      final restored = BackgroundTaskNotifier();
+      try {
+        expect(await restored.restoreFromPersistence(), isTrue);
+        expect(restored.taskById(id)?.partialSaveRequested, isTrue);
+      } finally {
+        restored.dispose();
+        await restored.pendingPersistence;
+      }
+    } finally {
+      if (!releaseApprovalWrite.isCompleted) releaseApprovalWrite.complete();
+      if (!releaseSaveWrite.isCompleted) releaseSaveWrite.complete();
+      BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+    }
   });
 
   test('cancelling save-only retry preserves an existing shared text file',

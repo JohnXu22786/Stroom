@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,83 @@ Int16List _sineWave(int samples, {double freq = 440, int sampleRate = 16000}) {
 
 void main() {
   group('ADPCM encoder', () {
+    test('yielding encoder preserves encoded bytes', () async {
+      final pcm = _sineWave(256 * 12);
+      var yieldCount = 0;
+
+      final yielded = await encodeAdpcmWithEventLoopYield(
+        pcm,
+        AdpcmConfig(),
+        yieldEveryBlocks: 3,
+        onYield: () => yieldCount++,
+      );
+
+      expect(yieldCount, greaterThan(0));
+      expect(yielded, orderedEquals(encodeAdpcm(pcm, AdpcmConfig())));
+    });
+
+    test('yielding encoder observes pre-cancellation for a short input',
+        () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeAdpcmWithEventLoopYield(
+          _sineWave(128),
+          AdpcmConfig(),
+          checkCancelled: () {
+            checks++;
+            throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 1);
+    });
+
+    test('yielding encoder stops when cancellation is observed', () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeAdpcmWithEventLoopYield(
+          _sineWave(256 * 128),
+          AdpcmConfig(),
+          yieldEveryBlocks: 1,
+          checkCancelled: () {
+            checks++;
+            if (checks == 2) throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 2);
+    });
+
+    test(
+      'yields and observes queued cancellation after the final batch',
+      () async {
+        var cancelled = false;
+        var yieldCount = 0;
+        Timer.run(() => cancelled = true);
+
+        await expectLater(
+          encodeAdpcmWithEventLoopYield(
+            _sineWave(256 * 3),
+            AdpcmConfig(),
+            yieldEveryBlocks: 32,
+            onYield: () => yieldCount++,
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsStateError,
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
     test('encodes and produces smaller output than PCM', () {
       final pcm = _sineWave(8192);
 
@@ -43,6 +121,81 @@ void main() {
   });
 
   group('FLAC encoder', () {
+    test('yielding encoder preserves encoded bytes', () async {
+      final pcm = _sineWave(4096 * 9);
+      var yieldCount = 0;
+
+      final yielded = await encodeFlacWithEventLoopYield(
+        pcm,
+        sampleRate: 16000,
+        yieldEveryFrames: 2,
+        onYield: () => yieldCount++,
+      );
+
+      expect(yieldCount, greaterThan(0));
+      expect(yielded, orderedEquals(encodeFlac(pcm, sampleRate: 16000)));
+    });
+
+    test('yielding encoder observes pre-cancellation for empty input',
+        () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeFlacWithEventLoopYield(
+          Int16List(0),
+          checkCancelled: () {
+            checks++;
+            throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 1);
+    });
+
+    test('yielding encoder stops when cancellation is observed', () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeFlacWithEventLoopYield(
+          _sineWave(4096 * 16),
+          yieldEveryFrames: 1,
+          checkCancelled: () {
+            checks++;
+            if (checks == 2) throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 2);
+    });
+
+    test(
+      'yields and observes queued cancellation after the final batch',
+      () async {
+        var cancelled = false;
+        var yieldCount = 0;
+        Timer.run(() => cancelled = true);
+
+        await expectLater(
+          encodeFlacWithEventLoopYield(
+            _sineWave(4096 * 2),
+            sampleRate: 16000,
+            yieldEveryFrames: 4,
+            onYield: () => yieldCount++,
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsStateError,
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
     test('produces valid FLAC file with fLaC marker', () {
       final pcm = _sineWave(8192);
 

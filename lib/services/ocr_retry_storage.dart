@@ -37,6 +37,9 @@ class OcrRetryStorage {
   static Future<void> Function(String reference, Uint8List bytes)?
       debugBeforeCacheWrite;
 
+  @visibleForTesting
+  static Future<void> Function(String reference)? debugBeforeNativeReadAsBytes;
+
   /// Serializes cache writes through task publication against orphan cleanup.
   static Future<T> withCacheMaintenanceLock<T>(Future<T> Function() operation) {
     final previous = _cacheMaintenanceTail;
@@ -188,14 +191,28 @@ class OcrRetryStorage {
   static Map<String, dynamic> unavailableSnapshotForCount({
     required String taskId,
     required int imageCount,
+    String? configId,
     String? modelId,
     String? instructionContent,
+    String saveFolder = '',
+    OcrBatchMode batchMode = OcrBatchMode.joint,
+    int perImageConcurrency = 1,
+    int requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
+    int? legacyModelIndex,
+    int? legacyInstructionIndex,
   }) =>
       _unavailableSnapshot(
         taskId: taskId,
         imageCount: imageCount,
+        configId: configId,
         modelId: modelId,
         instructionContent: instructionContent,
+        saveFolder: saveFolder,
+        batchMode: batchMode,
+        perImageConcurrency: perImageConcurrency,
+        requestSizeBudgetBytes: requestSizeBudgetBytes,
+        legacyModelIndex: legacyModelIndex,
+        legacyInstructionIndex: legacyInstructionIndex,
       );
 
   static Map<String, dynamic> _unavailableSnapshot({
@@ -249,8 +266,14 @@ class OcrRetryStorage {
     final restored = <OcrRetryImage>[];
     var missing = snapshot.imageEntryCount - snapshot.images.length;
     for (final image in snapshot.images) {
-      final bytes = image.bytes ??
-          (image.storageRef == null ? null : await read(image.storageRef!));
+      Uint8List? bytes = image.bytes;
+      if (bytes == null && image.storageRef != null) {
+        try {
+          bytes = await read(image.storageRef!);
+        } on FileSystemException {
+          // A cache cleanup may remove the file after read() checks existence.
+        }
+      }
       if (bytes == null || bytes.isEmpty) {
         missing++;
         continue;
@@ -274,6 +297,7 @@ class OcrRetryStorage {
     if (_usesWebStore) return WebFileStore.read(reference);
     final file = await _nativeFile(reference);
     if (!await file.exists()) return null;
+    await debugBeforeNativeReadAsBytes?.call(reference);
     return file.readAsBytes();
   }
 

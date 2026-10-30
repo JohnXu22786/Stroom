@@ -58,6 +58,7 @@ void main() {
     for (final entry in [
       ('X-Secret-Key', 'opaque-user-secret-192'),
       ('X-Private-Key', 'opaque-private-value-192'),
+      ('X-Secret', 'opaque-bare-secret-value-192'),
     ]) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(
@@ -68,6 +69,7 @@ void main() {
       final response = OcrDiagnosticSnapshot.sanitizeResponse(
         {
           'statusCode': 401,
+          'requestId': entry.$2,
           'data': {'id': entry.$2},
         },
         excludedValues: credentialValues,
@@ -75,6 +77,98 @@ void main() {
 
       expect(credentialValues, contains(entry.$2), reason: entry.$1);
       expect(response, {'statusCode': 401}, reason: entry.$1);
+    }
+  });
+
+  test('request body API keys exclude echoed response IDs but keep safe IDs',
+      () {
+    const apiKey = 'opaque-body-api-key-194';
+    const safeRequestId = 'req-safe-body-194';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': apiKey},
+    });
+
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': apiKey,
+        'data': {'id': apiKey},
+      },
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      },
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(apiKey));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
+  test('request body Bearer tokens exclude bare echoed IDs but keep safe IDs',
+      () {
+    const apiToken = 'opaque-body-bearer-token-194';
+    const safeRequestId = 'req-safe-body-bearer-194';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'access_token': 'Bearer $apiToken'},
+    });
+
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': apiToken,
+        'data': {'id': apiToken},
+      },
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      },
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(apiToken));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
+  test('access and subscription key headers exclude echoed diagnostics', () {
+    for (final entry in [
+      ('X-Access-Key', 'opaque-access-value-193'),
+      ('Ocp-Apim-Subscription-Key', 'opaque-subscription-value-193'),
+    ]) {
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': {entry.$1: entry.$2},
+      });
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': entry.$2,
+          'data': {'id': entry.$2},
+        },
+        excludedValues: credentialValues,
+      )!;
+      final legacyError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR识别失败: provider echoed ${entry.$2}',
+        excludedValues: credentialValues,
+      );
+
+      expect(credentialValues, contains(entry.$2), reason: entry.$1);
+      expect(response, {'statusCode': 401}, reason: entry.$1);
+      expect(legacyError, isNot(contains(entry.$2)), reason: entry.$1);
     }
   });
 
@@ -241,6 +335,25 @@ void main() {
     expect(jsonEncode(response), isNot(contains(imageDataUri)));
   });
 
+  test('bare SVG base64 is dropped from request ID fields', () {
+    const svg = 'IDxzdmcvPiAg';
+    final request = OcrDiagnosticSnapshot.sanitizeRequest({
+      'headers': {'x-request-id': svg},
+    })!;
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': svg,
+      'data': {'id': svg},
+    })!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'req-safe-svg-neighbor-123',
+    })!;
+
+    expect(request, isEmpty);
+    expect(response, isEmpty);
+    expect(safeResponse, {'requestId': 'req-safe-svg-neighbor-123'});
+    expect(jsonEncode([request, response]), isNot(contains(svg)));
+  });
+
   test('bare PNG base64 is dropped from request ID fields', () {
     const png =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC';
@@ -289,13 +402,42 @@ void main() {
           ],
         },
       })!;
+      final maxTokens = OcrDiagnosticSnapshot.sanitizeResponse({
+        'data': {
+          'choices': [
+            {'finish_reason': 'max_tokens'},
+          ],
+        },
+      })!;
+      final excludedMaxTokens = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'finishReason': 'max_tokens'},
+        excludedValues: ['max_tokens'],
+      )!;
 
       expect(unsafe, {'durationMs': 842});
       expect(jsonEncode(unsafe), isNot(contains(providerText)));
       expect(safe, {'finishReason': 'stop', 'durationMs': 842});
       expect(truncated, {'finishReason': 'length'});
+      expect(maxTokens, {'finishReason': 'max_tokens'});
+      expect(excludedMaxTokens, isEmpty);
     },
   );
+
+  test('stored OCR task errors retain the safe max_tokens finish reason', () {
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 返回了不完整结果（finish_reason=max_tokens）',
+      ),
+      'OCR 返回了不完整结果（finish_reason=max_tokens）',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 返回了不完整结果（finish_reason=max_tokens）',
+        excludedValues: ['max_tokens'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
 
   test('request IDs reject prose from generic provider id fields', () {
     final response = OcrDiagnosticSnapshot.sanitizeResponse({
@@ -392,6 +534,24 @@ void main() {
       expect(jsonEncode(response), isNot(contains(apiKey)));
     },
   );
+
+  test('credential-named headers exclude echoed opaque response IDs', () {
+    const credential = 'opaque-client-value-123';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
+      'X-Credentials': credential,
+    });
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'requestId': credential,
+        'data': {'id': credential},
+      },
+      excludedValues: excludedValues,
+    )!;
+
+    expect(excludedValues, contains(credential));
+    expect(response, isEmpty);
+    expect(jsonEncode(response), isNot(contains(credential)));
+  });
 
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';

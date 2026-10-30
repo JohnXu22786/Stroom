@@ -1,5 +1,11 @@
+import hashlib
 import json
+import shutil
+import struct
+import subprocess
+import sys
 import unittest
+import zlib
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -15,6 +21,11 @@ from evaluate import (
 
 
 ROOT = Path(__file__).resolve().parent
+
+
+def png_chunk(chunk_type, data):
+    checksum = zlib.crc32(data, zlib.crc32(chunk_type)) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", checksum)
 
 
 def small_manifest():
@@ -58,6 +69,93 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def _run_cli_with_output(self, directory, output_path):
+        directory_path = Path(directory)
+        manifest_path = directory_path / "manifest.json"
+        predictions_path = directory_path / "predictions.json"
+        manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+        predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "evaluate.py"),
+                "--manifest",
+                str(manifest_path),
+                "--predictions",
+                str(predictions_path),
+                "--output",
+                str(output_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_cli_output_write_failure_is_reported_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            output_directory = Path(directory) / "output"
+            output_directory.mkdir()
+
+            result = self._run_cli_with_output(directory, output_directory)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: cannot write .*output")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_output_file_contains_json(self):
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "report.json"
+
+            result = self._run_cli_with_output(directory, output_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            report = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "pending")
+
+    def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-anchor",
+                    "gold_text": "A intro B section A body",
+                    "reading_order": ["B", "A"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-anchor", "text": "A intro B section A body"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-anchor",
+                    "gold_text": "A intro B section A body",
+                    "reading_order": ["B", "A"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-anchor", "text": "A intro A body B section"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
     def test_empty_gold_is_rejected_for_nonblank_fixture_but_blank_is_valid(self):
         manifest = {
             "fixtures": [
@@ -1928,6 +2026,36 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["character_error_rate"]["value"], 0
                 )
 
+    def test_latex_cer_ignores_left_right_sizing_commands_only(self):
+        cases = (
+            ("(x)", r"\left(x\right)", 0),
+            ("(x)", r"\left[x\right]", "positive"),
+            ("R", r"\mathbb{R}", "positive"),
+        )
+        for expected, actual, expected_cer in cases:
+            with self.subTest(expected=expected, actual=actual):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "sizing-delimiters",
+                            "gold_text": expected,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [{"fixture_id": "sizing-delimiters", "text": actual}]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                cer = report["metrics"]["character_error_rate"]["value"]
+                if expected_cer == "positive":
+                    self.assertGreater(cer, 0)
+                else:
+                    self.assertEqual(cer, expected_cer)
+
     def test_latex_greek_commands_match_unicode_formula_symbols(self):
         for symbol, command in (("θ", "theta"), ("α", "alpha")):
             with self.subTest(symbol=symbol):
@@ -3584,6 +3712,197 @@ class EvaluateTests(unittest.TestCase):
                 "low_contrast",
             }.issubset(summary["categories"])
         )
+
+    def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
+        image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
+        self._assert_fixture_png_rejected(image_bytes)
+
+    def test_fixture_verification_rejects_transparency_chunk_after_image_data(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"tRNS", b"\x00\x00\x00\x00\x00\x00")
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_significant_bits_after_palette(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
+            + png_chunk(b"PLTE", b"\x00\x00\x00")
+            + png_chunk(b"sBIT", b"\x08\x08\x08")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_zero_gamma(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"gAMA", b"\x00\x00\x00\x00")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_gamma_after_palette(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
+            + png_chunk(b"PLTE", b"\x00\x00\x00")
+            + png_chunk(b"gAMA", struct.pack(">I", 100000))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_transparency_sample_above_bit_depth(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"tRNS", struct.pack(">HHH", 256, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_unsupported_iccp_chunk(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"iCCP", b"profile\x00\x00")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_palette_after_transparency(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"tRNS", b"\x00" * 6)
+            + png_chunk(b"PLTE", b"\x00\x00\x00")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_background_sample_above_bit_depth(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"bKGD", struct.pack(">HHH", 256, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_chromaticity_above_png_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", 100001, 1, 1, 1, 1, 1, 1, 1))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_unsupported_exif_chunk(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"eXIf", b"")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_accepts_color_metadata_before_palette(self):
+        valid_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([1] * 8)))
+            + png_chunk(b"gAMA", struct.pack(">I", 100000))
+            + png_chunk(b"sBIT", b"\x08\x08\x08")
+            + png_chunk(b"sRGB", b"\x00")
+            + png_chunk(b"PLTE", b"\x00\x00\x00")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_accepted(valid_png)
+
+    def test_fixture_verification_rejects_invalid_splt_keyword(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"sPLT", b"\x01\x00\x08" + b"\x00" * 6)
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_invalid_time_chunk(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"tIME", struct.pack(">HBBBBB", 2026, 13, 1, 0, 0, 0))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_text_chunk_without_keyword_separator(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"tEXt", b"missing separator")
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def test_fixture_verification_rejects_palette_index_out_of_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
+            + png_chunk(b"PLTE", b"\x00\x00\x00")
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x80"))
+            + png_chunk(b"IEND", b"")
+        )
+
+        self._assert_fixture_png_rejected(malformed_png)
+
+    def _assert_fixture_png_rejected(self, image_bytes):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            image_path = fixture_root / fixture["image"]
+            image_path.write_bytes(image_bytes)
+            fixture["sha256"] = hashlib.sha256(image_bytes).hexdigest()
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(EvaluationError, "PNG"):
+                verify_fixtures(manifest_path)
+
+    def _assert_fixture_png_accepted(self, image_bytes):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            image_path = fixture_root / fixture["image"]
+            image_path.write_bytes(image_bytes)
+            fixture["sha256"] = hashlib.sha256(image_bytes).hexdigest()
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            verify_fixtures(manifest_path)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import binascii
 import hashlib
 import json
 import math
@@ -11,6 +12,7 @@ import re
 import struct
 import sys
 import unicodedata
+import zlib
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -26,6 +28,17 @@ REQUIRED_CATEGORIES = {
     "formula",
     "blank",
     "low_contrast",
+}
+PNG_PRE_IDAT_CHUNKS = {
+    b"bKGD",
+    b"cHRM",
+    b"gAMA",
+    b"hIST",
+    b"pHYs",
+    b"sBIT",
+    b"sPLT",
+    b"sRGB",
+    b"tRNS",
 }
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
 LITERAL_LATEX_DOLLAR = "\ue000"
@@ -861,6 +874,7 @@ def _strip_latex_markup(value: str) -> str:
     )
     text = re.sub(r"\\([#$%&_{}])", r"\1", text)
     text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
+    text = re.sub(r"\\(?:left|right)(?![A-Za-z])\s*", "", text)
     text = re.sub(
         r"\\(?:mathit|mathrm|operatorname|text)\s*\{([^{}]*)\}",
         r"\1",
@@ -1621,11 +1635,18 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        positions = [normalized_prediction.find(anchor) for anchor in anchors]
-        for left_index, left_position in enumerate(positions):
-            for right_position in positions[left_index + 1 :]:
-                if left_position >= 0 and right_position >= 0:
-                    if left_position < right_position:
+        occurrences = []
+        for anchor in anchors:
+            positions = []
+            start = 0
+            while (position := normalized_prediction.find(anchor, start)) >= 0:
+                positions.append(position)
+                start = position + 1
+            occurrences.append(positions)
+        for left_index, left_positions in enumerate(occurrences):
+            for right_positions in occurrences[left_index + 1 :]:
+                if left_positions and right_positions:
+                    if min(left_positions) < max(right_positions):
                         correct_pairs += 1
 
     if not eligible:
@@ -1815,6 +1836,346 @@ def compare_reports(
     return comparison
 
 
+def _valid_png_keyword(value: bytes) -> bool:
+    return (
+        1 <= len(value) <= 79
+        and value[0] != 32
+        and value[-1] != 32
+        and b"  " not in value
+        and all(32 <= byte <= 126 or 161 <= byte <= 255 for byte in value)
+    )
+
+
+def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
+    def invalid() -> EvaluationError:
+        return EvaluationError(f"{fixture_id}: PNG is malformed or truncated")
+
+    if image_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+        raise EvaluationError(f"{fixture_id}: fixture is not a PNG")
+
+    offset = 8
+    width = height = color_type = bit_depth = interlace = None
+    palette_seen = False
+    palette_entries = 0
+    ancillary_chunks_seen: set[bytes] = set()
+    suggested_palette_names: set[bytes] = set()
+    image_data_seen = False
+    image_data_ended = False
+    decompressor = zlib.decompressobj()
+    passes: list[tuple[int, int]] = []
+    pass_index = 0
+    pass_rows_remaining = 0
+    scanline_length = 0
+    scanline_position = 0
+    pass_width_pixels = 0
+    scanline_filter = 0
+    scanline_buffer = bytearray()
+    previous_row = b""
+
+    def set_pass(index: int) -> None:
+        nonlocal pass_index, pass_rows_remaining, scanline_length
+        nonlocal pass_width_pixels, previous_row
+        pass_index = index
+        while pass_index < len(passes):
+            pass_width, pass_height = passes[pass_index]
+            if pass_width and pass_height:
+                pass_width_pixels = pass_width
+                scanline_length = (pass_width * bits_per_pixel + 7) // 8 + 1
+                pass_rows_remaining = pass_height
+                previous_row = b""
+                return
+            pass_index += 1
+        pass_rows_remaining = 0
+        scanline_length = 0
+
+    def consume_pixels(decoded: bytes) -> None:
+        nonlocal scanline_position, pass_rows_remaining, scanline_filter
+        nonlocal previous_row
+        for value in decoded:
+            if pass_rows_remaining == 0:
+                raise invalid()
+            if scanline_position == 0:
+                if value > 4:
+                    raise invalid()
+                scanline_filter = value
+                scanline_buffer.clear()
+            elif color_type == 3:
+                scanline_buffer.append(value)
+            scanline_position += 1
+            if scanline_position == scanline_length:
+                if color_type == 3:
+                    reconstructed = bytearray(len(scanline_buffer))
+                    for index, byte in enumerate(scanline_buffer):
+                        left = reconstructed[index - 1] if index else 0
+                        above = previous_row[index] if index < len(previous_row) else 0
+                        upper_left = previous_row[index - 1] if index else 0
+                        if scanline_filter == 1:
+                            predictor = left
+                        elif scanline_filter == 2:
+                            predictor = above
+                        elif scanline_filter == 3:
+                            predictor = (left + above) // 2
+                        elif scanline_filter == 4:
+                            estimate = left + above - upper_left
+                            left_distance = abs(estimate - left)
+                            above_distance = abs(estimate - above)
+                            upper_left_distance = abs(estimate - upper_left)
+                            if left_distance <= above_distance and left_distance <= upper_left_distance:
+                                predictor = left
+                            elif above_distance <= upper_left_distance:
+                                predictor = above
+                            else:
+                                predictor = upper_left
+                        else:
+                            predictor = 0
+                        reconstructed[index] = (byte + predictor) & 0xFF
+                    sample_mask = (1 << bit_depth) - 1
+                    for pixel_index in range(pass_width_pixels):
+                        bit_offset = pixel_index * bit_depth
+                        shift = 8 - bit_depth - bit_offset % 8
+                        if (reconstructed[bit_offset // 8] >> shift) & sample_mask >= palette_entries:
+                            raise invalid()
+                    previous_row = reconstructed
+                scanline_position = 0
+                pass_rows_remaining -= 1
+                if pass_rows_remaining == 0:
+                    set_pass(pass_index + 1)
+
+    bits_per_pixel = 0
+    while offset < len(image_bytes):
+        if offset + 12 > len(image_bytes):
+            raise invalid()
+        chunk_length = struct.unpack_from(">I", image_bytes, offset)[0]
+        chunk_type = image_bytes[offset + 4 : offset + 8]
+        if (
+            any(
+                not (65 <= byte <= 90 or 97 <= byte <= 122)
+                for byte in chunk_type
+            )
+            or chunk_type[2] & 0x20
+        ):
+            raise invalid()
+        data_start = offset + 8
+        if chunk_length > 0x7FFFFFFF:
+            raise invalid()
+        data_end = data_start + chunk_length
+        chunk_end = data_end + 4
+        if data_end < data_start or chunk_end > len(image_bytes):
+            raise invalid()
+        chunk_data = image_bytes[data_start:data_end]
+        expected_crc = struct.unpack_from(">I", image_bytes, data_end)[0]
+        actual_crc = binascii.crc32(chunk_data, binascii.crc32(chunk_type)) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            raise invalid()
+
+        if width is None:
+            if chunk_type != b"IHDR" or chunk_length != 13:
+                raise invalid()
+            width, height, bit_depth, color_type, compression, filtering, interlace = (
+                struct.unpack(">IIBBBBB", chunk_data)
+            )
+            valid_bit_depths = {
+                0: {1, 2, 4, 8, 16},
+                2: {8, 16},
+                3: {1, 2, 4, 8},
+                4: {8, 16},
+                6: {8, 16},
+            }
+            if (
+                width < 1
+                or height < 1
+                or width > 0x7FFFFFFF
+                or height > 0x7FFFFFFF
+                or bit_depth not in valid_bit_depths.get(color_type, set())
+                or compression != 0
+                or filtering != 0
+                or interlace not in (0, 1)
+            ):
+                raise invalid()
+            channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+            bits_per_pixel = channels * bit_depth
+            if interlace == 0:
+                passes = [(width, height)]
+            else:
+                passes = [
+                    (
+                        max(0, (width - x_start + x_step - 1) // x_step),
+                        max(0, (height - y_start + y_step - 1) // y_step),
+                    )
+                    for x_start, y_start, x_step, y_step in (
+                        (0, 0, 8, 8),
+                        (4, 0, 8, 8),
+                        (0, 4, 4, 8),
+                        (2, 0, 4, 4),
+                        (0, 2, 2, 4),
+                        (1, 0, 2, 2),
+                        (0, 1, 1, 2),
+                    )
+                ]
+            set_pass(0)
+        elif chunk_type == b"IHDR":
+            raise invalid()
+
+        if chunk_type == b"PLTE":
+            if (
+                image_data_seen
+                or palette_seen
+                or color_type in (0, 4)
+                or ancillary_chunks_seen.intersection(
+                    {b"bKGD", b"tRNS"}
+                )
+            ):
+                raise invalid()
+            if chunk_length == 0 or chunk_length > 768 or chunk_length % 3:
+                raise invalid()
+            if color_type == 3 and chunk_length // 3 > 2**bit_depth:
+                raise invalid()
+            palette_seen = True
+            palette_entries = chunk_length // 3
+        elif chunk_type in PNG_PRE_IDAT_CHUNKS:
+            if image_data_seen or (
+                chunk_type in ancillary_chunks_seen and chunk_type != b"sPLT"
+            ):
+                raise invalid()
+            if chunk_type != b"sPLT":
+                ancillary_chunks_seen.add(chunk_type)
+            if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
+                raise invalid()
+            if chunk_type == b"cHRM":
+                if chunk_length != 32 or any(
+                    value > 100000
+                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                ):
+                    raise invalid()
+            if chunk_type == b"gAMA" and (
+                chunk_length != 4 or struct.unpack(">I", chunk_data)[0] == 0
+            ):
+                raise invalid()
+            if chunk_type == b"pHYs" and (
+                chunk_length != 9 or chunk_data[8] not in (0, 1)
+            ):
+                raise invalid()
+            if chunk_type == b"sRGB" and (
+                chunk_length != 1 or chunk_data[0] > 3
+            ):
+                raise invalid()
+            if chunk_type == b"sBIT":
+                expected_length = {0: 1, 2: 3, 3: 3, 4: 2, 6: 4}[color_type]
+                maximum = 8 if color_type == 3 else bit_depth
+                if (
+                    palette_seen
+                    or chunk_length != expected_length
+                    or any(not 1 <= value <= maximum for value in chunk_data)
+                ):
+                    raise invalid()
+            if chunk_type == b"sPLT":
+                name_end = chunk_data.find(b"\x00", 0, 80)
+                if (
+                    name_end < 1
+                    or name_end + 1 >= chunk_length
+                    or not _valid_png_keyword(chunk_data[:name_end])
+                ):
+                    raise invalid()
+                palette_name = chunk_data[:name_end]
+                sample_depth = chunk_data[name_end + 1]
+                entry_size = 6 if sample_depth == 8 else 10 if sample_depth == 16 else 0
+                if (
+                    entry_size == 0
+                    or len(chunk_data) - name_end - 2 < entry_size
+                    or (len(chunk_data) - name_end - 2) % entry_size
+                    or palette_name in suggested_palette_names
+                ):
+                    raise invalid()
+                suggested_palette_names.add(palette_name)
+            if chunk_type == b"tRNS":
+                expected_length = {0: 2, 2: 6}.get(color_type)
+                if color_type == 3:
+                    if not palette_seen or not 1 <= chunk_length <= palette_entries:
+                        raise invalid()
+                elif expected_length is None or chunk_length != expected_length:
+                    raise invalid()
+                if color_type in (0, 2):
+                    maximum_sample = (1 << bit_depth) - 1
+                    if any(
+                        sample > maximum_sample
+                        for (sample,) in struct.iter_unpack(">H", chunk_data)
+                    ):
+                        raise invalid()
+            if chunk_type == b"hIST" and (
+                not palette_seen or chunk_length != palette_entries * 2
+            ):
+                raise invalid()
+            if chunk_type == b"bKGD":
+                expected_length = 1 if color_type == 3 else 2 if color_type in (0, 4) else 6
+                if chunk_length != expected_length:
+                    raise invalid()
+                if color_type == 3 and (
+                    not palette_seen or chunk_data[0] >= palette_entries
+                ):
+                    raise invalid()
+                if color_type != 3:
+                    maximum_sample = (1 << bit_depth) - 1
+                    if any(
+                        sample > maximum_sample
+                        for (sample,) in struct.iter_unpack(">H", chunk_data)
+                    ):
+                        raise invalid()
+        elif chunk_type == b"IDAT":
+            if image_data_ended or (color_type == 3 and not palette_seen):
+                raise invalid()
+            image_data_seen = True
+            compressed = chunk_data
+            while compressed:
+                try:
+                    decoded = decompressor.decompress(compressed, 65536)
+                except zlib.error as error:
+                    raise invalid() from error
+                consume_pixels(decoded)
+                compressed = decompressor.unconsumed_tail
+                if decompressor.unused_data or (decompressor.eof and compressed):
+                    raise invalid()
+        elif chunk_type == b"IEND":
+            if chunk_length != 0 or not image_data_seen or chunk_end != len(image_bytes):
+                raise invalid()
+            if decompressor.unconsumed_tail or decompressor.unused_data:
+                raise invalid()
+            try:
+                consume_pixels(decompressor.flush())
+            except zlib.error as error:
+                raise invalid() from error
+            if not decompressor.eof or scanline_position or pass_rows_remaining:
+                raise invalid()
+            return
+        elif chunk_type == b"tIME":
+            if chunk_type in ancillary_chunks_seen or chunk_length != 7:
+                raise invalid()
+            ancillary_chunks_seen.add(chunk_type)
+            _, month, day, hour, minute, second = struct.unpack(">HBBBBB", chunk_data)
+            if (
+                not 1 <= month <= 12
+                or not 1 <= day <= 31
+                or hour > 23
+                or minute > 59
+                or second > 60
+            ):
+                raise invalid()
+        elif chunk_type != b"IHDR":
+            if image_data_seen:
+                image_data_ended = True
+            if chunk_type[0] & 0x20:
+                if chunk_type not in PNG_PRE_IDAT_CHUNKS and chunk_type != b"tIME":
+                    raise EvaluationError(
+                        f"{fixture_id}: unsupported PNG ancillary chunk {chunk_type.decode('ascii')}"
+                    )
+            elif chunk_type not in (b"PLTE",):
+                raise invalid()
+        if chunk_type != b"IDAT" and image_data_seen:
+            image_data_ended = True
+        offset = chunk_end
+
+    raise invalid()
+
+
 def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1850,11 +2211,7 @@ def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
             image_bytes = image_path.read_bytes()
         except OSError as error:
             raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
-        if len(image_bytes) < 24 or image_bytes[:8] != b"\x89PNG\r\n\x1a\n":
-            raise EvaluationError(f"{fixture_id}: fixture is not a PNG")
-        width, height = struct.unpack(">II", image_bytes[16:24])
-        if width < 1 or height < 1:
-            raise EvaluationError(f"{fixture_id}: PNG dimensions are invalid")
+        _validate_png(image_bytes, fixture_id)
         actual_digest = hashlib.sha256(image_bytes).hexdigest()
         if actual_digest != digest:
             raise EvaluationError(f"{fixture_id}: PNG SHA-256 does not match")
@@ -1931,7 +2288,10 @@ def main(argv: list[str] | None = None) -> int:
                 }
         output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
         if args.output:
-            args.output.write_text(output + "\n", encoding="utf-8")
+            try:
+                args.output.write_text(output + "\n", encoding="utf-8")
+            except OSError as error:
+                raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
             print(output)
         return 0

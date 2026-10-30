@@ -101,7 +101,11 @@ class _AsrAdapter implements HttpClientAdapter {
   void close({bool force = false}) => closeCalls++;
 }
 
-class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
+class _MemoryRetryAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStorageCancellable,
+        AsrRetryStoragePresence {
   final Map<String, Uint8List> files = {};
 
   @override
@@ -112,6 +116,18 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
   @override
   Future<Uint8List?> read(String key) async =>
       files[key] == null ? null : Uint8List.fromList(files[key]!);
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    return read(key);
+  }
+
+  @override
+  Future<bool> contains(String key) async => files.containsKey(key);
 
   @override
   Future<void> delete(String key) async {

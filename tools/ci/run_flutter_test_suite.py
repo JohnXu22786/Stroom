@@ -118,6 +118,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/ocr*_test.dart",
         "providers/tts_save_cancellation_test.dart",
         "utils/ocr_diagnostics_test.dart",
+        "utils/asr_evaluation_test.dart",
         "utils/audio*_test.dart",
         "utils/ocr_image_payload_test.dart",
         "utils/image_send_compressor_test.dart",
@@ -148,7 +149,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/html_code_block_widget_test.dart",
         "widgets/markdown_widgets_test.dart",
         "widgets/math*_test.dart",
-        "pages/content/math_drawing_page_test.dart",
+        "pages/content/math_drawing_integration_test.dart",
         "pages/content/text_preview_edit_page_test.dart",
     ),
     "tasks-workflow": (

@@ -469,6 +469,73 @@ void main() {
         },
       );
 
+      for (final finishReason in ['tool_calls', 'function_call']) {
+        test(
+          'recognize retains text and marks $finishReason results incomplete',
+          () async {
+            final dio = _mockDioWithSuccess({
+              'choices': [
+                {
+                  'finish_reason': finishReason,
+                  'message': {'content': 'partial OCR text'},
+                },
+              ],
+            });
+            final service = OcrService(config: _testOcrConfig, dio: dio);
+
+            final result = await service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+            );
+
+            expect(result.text, 'partial OCR text');
+            expect(result.isComplete, isFalse);
+            expect(result.finishReason, finishReason);
+          },
+        );
+      }
+
+      test(
+        'recognize retains text and marks an unlisted finish reason incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'max_tokens',
+                'message': {'content': 'partial OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+          );
+
+          expect(result.text, 'partial OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'max_tokens');
+        },
+      );
+
+      test('recognize keeps explicit stop responses complete', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'stop',
+              'message': {'content': 'complete OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(result.isComplete, isTrue);
+        expect(result.finishReason, 'stop');
+      });
+
       test('custom params cannot replace protected request fields', () async {
         for (final protectedName in ['model', 'messages']) {
           var sent = false;
@@ -795,6 +862,83 @@ void main() {
         },
       );
 
+      for (final finishReason in ['tool_calls', 'function_call']) {
+        test(
+          'recognizeBatch retains text and marks $finishReason results incomplete',
+          () async {
+            final dio = _mockDioWithSuccess({
+              'choices': [
+                {
+                  'finish_reason': finishReason,
+                  'message': {'content': 'partial batch OCR text'},
+                },
+              ],
+            });
+            final service = OcrService(config: _testOcrConfig, dio: dio);
+
+            final result = await service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+                (Uint8List.fromList([4, 5, 6]), 'png'),
+              ],
+            );
+
+            expect(result.text, 'partial batch OCR text');
+            expect(result.isComplete, isFalse);
+            expect(result.finishReason, finishReason);
+          },
+        );
+      }
+
+      test(
+        'recognizeBatch retains text and marks an unlisted finish reason '
+        'incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'max_tokens',
+                'message': {'content': 'partial batch OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+              (Uint8List.fromList([4, 5, 6]), 'png'),
+            ],
+          );
+
+          expect(result.text, 'partial batch OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'max_tokens');
+        },
+      );
+
+      test('recognizeBatch keeps explicit stop responses complete', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'stop',
+              'message': {'content': 'complete batch OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'png'),
+          ],
+        );
+
+        expect(result.isComplete, isTrue);
+        expect(result.finishReason, 'stop');
+      });
+
       test('recognizeBatch extracts text when content is a List', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
@@ -966,6 +1110,123 @@ void main() {
           expect(service.lastRequestBody?['top_p'], equals(0.9));
         },
       );
+
+      test('enabled invalid built-in parameters fail before dispatch',
+          () async {
+        var requests = 0;
+        final dio = Dio()
+          ..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests++;
+                handler.resolve(Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'choices': [
+                      {
+                        'message': {'content': 'test'},
+                      },
+                    ],
+                  },
+                ));
+              },
+            ),
+          );
+        final invalidConfigs = [
+          {'enableMaxTokens': true},
+          {'enableMaxTokens': true, 'maxTokens': -1},
+          {'enableMaxTokens': true, 'maxTokens': 3.5},
+          {'enableMaxTokens': true, 'maxTokens': '3'},
+          {'enableTemperature': true},
+          {'enableTemperature': true, 'temperature': -0.1},
+          {'enableTemperature': true, 'temperature': 2.1},
+          {'enableTemperature': true, 'temperature': '1'},
+          {'enableTopP': true},
+          {'enableTopP': true, 'topP': -0.1},
+          {'enableTopP': true, 'topP': 1.1},
+          {'enableTopP': true, 'topP': '0.5'},
+        ];
+
+        for (final typeConfig in invalidConfigs) {
+          final service = OcrService(
+            config: OcrConfig(
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              typeConfig: typeConfig,
+            ),
+            dio: dio,
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsArgumentError,
+          );
+        }
+
+        expect(requests, 0);
+      });
+
+      test('enabled built-in parameter boundaries are sent unchanged',
+          () async {
+        final service = OcrService(
+          config: OcrConfig(
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableMaxTokens': true,
+              'maxTokens': 1,
+              'enableTemperature': true,
+              'temperature': 2,
+              'enableTopP': true,
+              'topP': 0,
+            },
+          ),
+          dio: _mockDioWithSuccess({
+            'choices': [
+              {
+                'message': {'content': 'test'},
+              },
+            ],
+          }),
+        );
+
+        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+        expect(service.lastRequestBody?['max_tokens'], 1);
+        expect(service.lastRequestBody?['temperature'], 2);
+        expect(service.lastRequestBody?['top_p'], 0);
+      });
+
+      test('disabled invalid built-in parameters remain omitted', () async {
+        final service = OcrService(
+          config: OcrConfig(
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableMaxTokens': false,
+              'maxTokens': 0.5,
+              'enableTemperature': false,
+              'temperature': 3,
+              'enableTopP': false,
+              'topP': -1,
+            },
+          ),
+          dio: _mockDioWithSuccess({
+            'choices': [
+              {
+                'message': {'content': 'test'},
+              },
+            ],
+          }),
+        );
+
+        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+        expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
+        expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
+        expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
+      });
 
       test(
         'single image with userInstruction sends instruction after image',
@@ -1509,6 +1770,119 @@ void main() {
         expect(service.lastResponseData, isNotNull);
         expect(service.lastResponseStatusCode, equals(200));
       });
+
+      test(
+        'recognize preserves cancellation exceptions and diagnostics',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.cancel,
+                      message: 'request cancelled',
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<DioException>().having(
+                (error) => error.type,
+                'type',
+                DioExceptionType.cancel,
+              ),
+            ),
+          );
+
+          expect(service.diagnosticResponse()['errorType'], 'cancel');
+        },
+      );
+
+      test(
+        'recognizeBatch preserves cancellation exceptions and diagnostics',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.cancel,
+                      message: 'batch request cancelled',
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg')
+              ],
+            ),
+            throwsA(
+              isA<DioException>().having(
+                (error) => error.type,
+                'type',
+                DioExceptionType.cancel,
+              ),
+            ),
+          );
+
+          expect(service.diagnosticResponse()['errorType'], 'cancel');
+        },
+      );
+
+      test(
+        'recognize keeps wrapping non-cancellation Dio failures',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 503,
+                        data: {
+                          'error': {'message': 'service unavailable'}
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(contains('HTTP 503'), contains('service unavailable')),
+              ),
+            ),
+          );
+
+          expect(service.lastResponseStatusCode, 503);
+          expect(service.diagnosticResponse()['errorType'], 'badResponse');
+        },
+      );
 
       test('recognize captures non-map response body in diagnostics', () async {
         const responseBody = 'unexpected OCR response body';

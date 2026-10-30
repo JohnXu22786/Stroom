@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -6,6 +7,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
+import 'package:stroom/utils/audio_chunker.dart';
+import 'package:stroom/utils/audio_codecs.dart';
 
 /// A mock [HttpClientAdapter] that maps paths to responses and records every
 /// request (method, content type, body bytes/string).
@@ -210,6 +213,147 @@ void main() {
       );
 
   group('ASR fallback strategies', () {
+    test('cancellation during chunk planning skips budget preflight', () async {
+      final adapter = _RouteAdapter();
+      adapter.onPost('/audio/transcriptions', (options, bodyBytes) => ok('ok'));
+      final service = AsrService(
+        config: AsrConfig(
+          apiKey: 'k',
+          host: host,
+          maxFileSizeBytes: 3000,
+          chunking: 'fixedDuration',
+          fallbackMethod: 'generic',
+        ),
+        dio: testDio(adapter),
+      );
+      final cancelToken = CancelToken();
+      var chunkAttempts = 0;
+      Timer(const Duration(milliseconds: 5), () {
+        cancelToken.cancel('cancel during chunk planning');
+      });
+
+      await expectLater(
+        service.transcribe(
+          audioBytes: _buildWav(seconds: 120),
+          audioFormat: 'wav',
+          cancelToken: cancelToken,
+          onChunkAttempt: (_) async => chunkAttempts++,
+        ),
+        throwsA(
+          predicate<Object>(
+            (error) => error is DioException && CancelToken.isCancel(error),
+          ),
+        ),
+      );
+
+      expect(chunkAttempts, 0);
+      expect(adapter.requests, isEmpty);
+    });
+
+    test(
+      'cancellation before compression request creation skips native buffer transfer',
+      () async {
+        final wav = _buildWav(seconds: 5);
+        final adapter = _RouteAdapter();
+        final cancelToken = CancelToken();
+        var requestCreations = 0;
+        // ignore: invalid_use_of_visible_for_testing_member
+        final service = AsrService.forTesting(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            maxFileSizeBytes: 10000,
+            chunking: 'fixedDuration',
+            compression: 'adpcm',
+            fallbackMethod: 'generic',
+          ),
+          dio: testDio(adapter),
+          beforeCompression: (_) => cancelToken.cancel('cancel before encode'),
+          beforeCompressionRequest: () => requestCreations++,
+        );
+
+        await expectLater(
+          service.transcribe(
+            audioBytes: wav,
+            audioFormat: 'wav',
+            cancelToken: cancelToken,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error is DioException && CancelToken.isCancel(error),
+            ),
+          ),
+        );
+
+        expect(requestCreations, 0);
+        expect(adapter.requests, isEmpty);
+      },
+    );
+
+    test(
+      'transient re-encode size fallback fails before marking a chunk uncertain',
+      () async {
+        final wav = _buildWav(seconds: 5);
+        final adapter = _RouteAdapter();
+        adapter.onPost(
+          '/audio/transcriptions',
+          (options, bodyBytes) => ok('ok'),
+        );
+        final encodeCounts = <String, int>{};
+        // ignore: invalid_use_of_visible_for_testing_member
+        final service = AsrService.forTesting(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            maxFileSizeBytes: 10000,
+            chunking: 'fixedDuration',
+            compression: 'adpcm',
+            fallbackMethod: 'generic',
+          ),
+          dio: testDio(adapter),
+          beforeCompression: (bytes) {
+            if (bytes.length >= wav.length) return;
+            final signature = base64.encode(bytes);
+            final count = (encodeCounts[signature] ?? 0) + 1;
+            encodeCounts[signature] = count;
+            if (count == 2) {
+              throw StateError('transient chunk compression failure');
+            }
+          },
+        );
+        // A status retained from a previous request must not override this
+        // local encoding failure's diagnostic category.
+        service.lastResponseStatusCode = 401;
+        var chunkAttempts = 0;
+
+        Object? failure;
+        try {
+          await service.transcribe(
+            audioBytes: wav,
+            audioFormat: 'wav',
+            onChunkAttempt: (_) async => chunkAttempts++,
+          );
+        } catch (error) {
+          failure = error;
+        }
+
+        expect(failure, isA<AsrChunkedTranscriptionException>());
+        final chunkFailure = failure! as AsrChunkedTranscriptionException;
+        expect(chunkFailure.chunks, hasLength(1));
+        expect(chunkFailure.chunks.single.status, AsrChunkStatus.failed);
+        expect(
+          chunkFailure.chunks.single.error,
+          allOf(
+            contains('sizeLimit'),
+            contains('encoding'),
+            contains('chunk 1/'),
+          ),
+        );
+        expect(chunkAttempts, 0);
+        expect(adapter.requests, isEmpty);
+      },
+    );
+
     test('fallbackMethod=none rejects over-limit files without any request',
         () async {
       final adapter = _RouteAdapter();
@@ -228,8 +372,13 @@ void main() {
           audioBytes: _buildWav(seconds: 1), // 16000 bytes > 1024
           audioFormat: 'wav',
         ),
-        throwsA(predicate(
-            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
+        throwsA(
+          isA<AsrFailureDiagnostic>().having(
+            (error) => error.category,
+            'category',
+            AsrFailureCategory.sizeLimit,
+          ),
+        ),
       );
       expect(adapter.requests, isEmpty);
     });
@@ -415,6 +564,54 @@ void main() {
       expect(bodyStr, contains('audio.flac'));
     });
 
+    test(
+      'fallbackMethod=all reports encoded size when compressed chunking fails',
+      () async {
+        const limit = 100;
+        final audioBytes = _buildWav(seconds: 1, sampleRate: 8000);
+        final wavInfo = parseWavHeader(audioBytes);
+        final samples = readPcmSamplesFloat(audioBytes, wavInfo);
+        final pcm = Int16List(samples.length);
+        for (var index = 0; index < samples.length; index++) {
+          pcm[index] = (samples[index] * 32767).round().clamp(-32768, 32767);
+        }
+        final expectedEncodedBytes = encodeFlac(
+          pcm,
+          sampleRate: wavInfo.sampleRate,
+        ).length;
+        expect(expectedEncodedBytes, greaterThan(limit));
+
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return err400();
+        });
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: limit,
+            compression: 'flac',
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDio(adapter),
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: audioBytes, audioFormat: 'wav'),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              contains('编码文件 $expectedEncodedBytes 字节'),
+            ),
+          ),
+        );
+        expect(adapter.requests, isEmpty);
+      },
+    );
+
     test('fallbackMethod=generic wraps ADPCM in a WAV container', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
@@ -503,6 +700,83 @@ void main() {
       expect(uploadedPcmBytes, _wavPcmDataSize(sourceAudio));
       _expectChunkCoverage(result, adapter.requests.length, 10);
     });
+
+    test(
+      'lazy chunk uploads preserve ordered text and timed frame offsets',
+      () async {
+        final adapter = _RouteAdapter();
+        var call = 0;
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          call++;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'text': 'chunk $call',
+              'segments': [
+                {'start': 0.25, 'end': 0.75, 'text': 'segment $call'},
+              ],
+              'words': [
+                {'start': 0.3, 'end': 0.4, 'word': 'word $call'},
+              ],
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            maxFileSizeBytes: 64 * 1024,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+            typeConfig: {
+              'enableResponseFormat': true,
+              'responseFormat': 'verbose_json',
+            },
+          ),
+          dio: testDio(adapter),
+        );
+
+        final result = await service.transcribe(
+          audioBytes: _buildWav(seconds: 10, sampleRate: 8000),
+          audioFormat: 'wav',
+        );
+
+        final chunks = result.chunks!;
+        expect(chunks.length, greaterThan(1));
+        _expectChunkCoverage(result, chunks.length, 10);
+        expect(
+          result.text,
+          List.generate(
+            chunks.length,
+            (index) => 'chunk ${index + 1}',
+          ).join(' '),
+        );
+        expect(result.segments, hasLength(chunks.length));
+        expect(result.words, hasLength(chunks.length));
+        for (var index = 0; index < chunks.length; index++) {
+          expect(
+            result.segments![index].startSeconds,
+            closeTo(chunks[index].startSeconds + 0.25, 1e-9),
+          );
+          expect(
+            result.segments![index].endSeconds,
+            closeTo(chunks[index].startSeconds + 0.75, 1e-9),
+          );
+          expect(
+            result.words![index].startSeconds,
+            closeTo(chunks[index].startSeconds + 0.3, 1e-9),
+          );
+          expect(
+            result.words![index].endSeconds,
+            closeTo(chunks[index].startSeconds + 0.4, 1e-9),
+          );
+        }
+        expect(adapter.requests, hasLength(chunks.length));
+      },
+    );
 
     test('chunked transcription throws when every chunk fails', () async {
       final adapter = _RouteAdapter();

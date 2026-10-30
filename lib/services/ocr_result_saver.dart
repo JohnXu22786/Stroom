@@ -86,7 +86,9 @@ class OcrResultSaver {
     _checkActive();
     final taskGeneration = _taskGeneration!;
     if (!task.resultIsComplete && allowPartial) {
-      notifier.markPartialResultSaveRequested(taskId);
+      if (!await notifier.markPartialResultSaveRequested(taskId)) {
+        throw StateError('不完整的 OCR 结果保存选择未能持久化');
+      }
       _checkActive();
     }
     final cancellationOwner = notifier.registerCancellationForGeneration(

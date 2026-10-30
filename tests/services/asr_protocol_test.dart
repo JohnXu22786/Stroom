@@ -12,12 +12,14 @@ class _ProtocolAdapter implements HttpClientAdapter {
     this.responseBodies = const [],
     this.statusCode = 200,
     this.responseContentType = Headers.jsonContentType,
+    this.responseHeaders = const {},
   });
 
   final String responseBody;
   final List<String> responseBodies;
   final int statusCode;
   final String responseContentType;
+  final Map<String, List<String>> responseHeaders;
 
   Uint8List? requestBody;
   final requestBodies = <Uint8List>[];
@@ -46,6 +48,7 @@ class _ProtocolAdapter implements HttpClientAdapter {
       statusCode,
       headers: {
         Headers.contentTypeHeader: [responseContentType],
+        ...responseHeaders,
       },
     );
   }
@@ -68,6 +71,7 @@ Future<({AsrResult result, AsrService service, _ProtocolAdapter adapter})>
   String fallbackMethod = 'none',
   Map<String, dynamic> extraTypeConfig = const {},
   List<CustomParam> customParams = const [],
+  AsrProgressCallback? onProgress,
 }) async {
   final adapter = _ProtocolAdapter(
     responseBody: responseBody,
@@ -95,6 +99,7 @@ Future<({AsrResult result, AsrService service, _ProtocolAdapter adapter})>
   final result = await service.transcribe(
     audioBytes: audioBytes ?? Uint8List.fromList([1, 2, 3]),
     audioFormat: 'wav',
+    onProgress: onProgress,
   );
   return (result: result, service: service, adapter: adapter);
 }
@@ -147,6 +152,490 @@ Uint8List _testWavForDuration(int durationSeconds) {
 }
 
 void main() {
+  group('ASR failure diagnostics', () {
+    test(
+      'classifies injected provider and local failures by stage and chunk',
+      () {
+        final request = RequestOptions(path: 'https://api.test.com');
+        final auth = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: request,
+            response: Response<dynamic>(
+              requestOptions: request,
+              statusCode: 401,
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+          stage: AsrFailureStage.request,
+          chunkIndex: 2,
+          chunkCount: 4,
+        );
+        final throttled = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/'),
+              statusCode: 429,
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+          stage: AsrFailureStage.request,
+        );
+        final tooLarge = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/'),
+              statusCode: 413,
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+          stage: AsrFailureStage.request,
+        );
+        final network = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.connectionTimeout,
+          ),
+          stage: AsrFailureStage.request,
+        );
+        final wrappedNetwork = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.unknown,
+            error: Exception('SocketException: connection reset'),
+          ),
+          stage: AsrFailureStage.request,
+        );
+        final parse = AsrFailureDiagnostic.fromError(
+          const FormatException('invalid JSON'),
+          stage: AsrFailureStage.parsing,
+        );
+        final local = AsrFailureDiagnostic.fromError(
+          Exception('codec failed'),
+          stage: AsrFailureStage.preprocessing,
+        );
+        final validation = AsrFailureDiagnostic.fromError(
+          Exception('invalid audio format'),
+          stage: AsrFailureStage.validation,
+        );
+        final listResponse = AsrFailureDiagnostic.fromError(
+          DioException(
+            requestOptions: request,
+            response: Response<dynamic>(
+              requestOptions: request,
+              statusCode: 400,
+              data: [1, 2, 3],
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+          stage: AsrFailureStage.response,
+        );
+        final preDispatch = AsrFailureDiagnostic.fromError(
+          Exception('invalid endpoint configuration'),
+          stage: AsrFailureStage.request,
+        );
+
+        expect(auth.category, AsrFailureCategory.authentication);
+        expect(auth.stage, AsrFailureStage.request);
+        expect(auth.chunkIndex, 2);
+        expect(auth.chunkCount, 4);
+        expect(throttled.category, AsrFailureCategory.rateLimit);
+        expect(tooLarge.category, AsrFailureCategory.sizeLimit);
+        expect(network.category, AsrFailureCategory.network);
+        expect(wrappedNetwork.category, AsrFailureCategory.network);
+        expect(parse.category, AsrFailureCategory.responseParsing);
+        expect(local.category, AsrFailureCategory.localProcessing);
+        expect(validation.category, AsrFailureCategory.localProcessing);
+        expect(preDispatch.category, AsrFailureCategory.localProcessing);
+        expect(listResponse.toString(), isNot(contains('[1, 2, 3]')));
+      },
+    );
+
+    test('redacts keys, signed URLs, and encoded audio from visible details',
+        () {
+      const secret = 'sk-test-very-secret-key';
+      final diagnostic = AsrFailureDiagnostic.fromError(
+        Exception(
+          'Bearer $secret https://files.test/audio.wav?X-Amz-Signature=abc123 '
+          'payload=${'A' * 180}',
+        ),
+        stage: AsrFailureStage.request,
+        apiKey: secret,
+      );
+      final visible = diagnostic.toString();
+
+      expect(visible, isNot(contains(secret)));
+      expect(visible, isNot(contains('abc123')));
+      expect(visible, isNot(contains('A' * 100)));
+      expect(visible, contains('request'));
+    });
+
+    test('redacts alphabetic Base64 values in free-text diagnostics', () {
+      final diagnostic = AsrFailureDiagnostic.fromError(
+        Exception('Provider returned YWJj'),
+        stage: AsrFailureStage.response,
+      );
+
+      expect(diagnostic.toString(), isNot(contains('YWJj')));
+    });
+
+    test('redacts credential assignments with unconfigured values', () {
+      final safe = sanitizeAsrDiagnostic(
+        'api_key=key-test x-api-key: other-secret Authorization: bearer-value',
+      );
+
+      expect(safe, isNot(contains('key-test')));
+      expect(safe, isNot(contains('other-secret')));
+      expect(safe, isNot(contains('bearer-value')));
+    });
+
+    test('preserves credential route names while redacting path values', () {
+      const secret = 'scheduler-path-secret';
+      final safe = sanitizeAsrDiagnostic(
+        '/transcribe/api_key/$secret',
+        apiKey: 'key',
+      );
+
+      expect(safe, contains('/transcribe/api_key'));
+      expect(safe, isNot(contains(secret)));
+    });
+
+    test('redacts configured keys embedded in ordinary path segments', () {
+      const secret = 'k3y1234';
+      final safe = sanitizeAsrDiagnostic(
+        '/transcribe/${secret}suffix',
+        apiKey: secret,
+      );
+
+      expect(safe, isNot(contains(secret)));
+    });
+
+    test('redacts list and short Base64 payloads in provider error maps', () {
+      final request = RequestOptions(path: '/');
+      final diagnostic = AsrFailureDiagnostic.fromError(
+        DioException(
+          requestOptions: request,
+          response: Response<dynamic>(
+            requestOptions: request,
+            statusCode: 500,
+            data: {
+              'error': {
+                'message': 'provider failed',
+                'audio': [1, 2, 3],
+                'payload': 'QUJDREVGRw==',
+              },
+            },
+          ),
+          type: DioExceptionType.badResponse,
+        ),
+        stage: AsrFailureStage.response,
+      );
+
+      expect(diagnostic.toString(), contains('provider failed'));
+      expect(diagnostic.toString(), isNot(contains('[1, 2, 3]')));
+      expect(diagnostic.toString(), isNot(contains('QUJDREVGRw==')));
+    });
+
+    test(
+      'URL request failures retain the response stage in chunk details',
+      () async {
+        final adapter = _ProtocolAdapter(
+          responseBody: '{"error":{"message":"provider failure"}}',
+          statusCode: 500,
+        );
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+            uploadMethod: AudioUploadMethod.url,
+          ),
+          dio: dio,
+        );
+        Object? failure;
+        try {
+          await service.transcribeFromUrl('https://files.test/audio.wav');
+        } catch (error) {
+          failure = error;
+        }
+
+        expect(failure, isA<AsrChunkedTranscriptionException>());
+        expect(failure.toString(), contains('at response chunk 1/1'));
+      },
+    );
+
+    test(
+      'reports upload size, phase duration, and completed request/chunk counts',
+      () async {
+        final events = <AsrRequestProgress>[];
+        await _transcribe(
+          responseBody: '{"text":"ok"}',
+          onProgress: events.add,
+        );
+
+        final response = events.singleWhere(
+          (event) => event.phase == AsrRequestPhase.responseReceived,
+        );
+        expect(response.elapsedMs, greaterThanOrEqualTo(0));
+        expect(response.phaseElapsedMs, greaterThanOrEqualTo(0));
+        expect(response.completedRequestCount, 1);
+        expect(events.any((event) => event.totalSendBytes > 0), isTrue);
+        expect(
+          events
+              .where((event) => event.phase == AsrRequestPhase.waiting)
+              .length,
+          greaterThanOrEqualTo(2),
+        );
+        expect(
+          events
+              .singleWhere(
+                (event) => event.phase == AsrRequestPhase.chunkCompleted,
+              )
+              .completedChunkCount,
+          1,
+        );
+      },
+    );
+
+    test('sanitizes request and response diagnostics', () async {
+      const signedUrl =
+          'https://files.test/audio?sv=2025-01-01&sig=sas-private-signature';
+      final adapter = _ProtocolAdapter(
+        responseBody: jsonEncode({
+          'text': 'Bearer test-key $signedUrl ${'B' * 180}',
+          'audio': [1, 2, 3],
+          'audio_base64': 'QUJDREVGRw==',
+          'file': 'QUJDREVGRw==',
+          'data': 'QUJDREVGRw==',
+          'x-api-key': 'provider-secret-key',
+        }),
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions?token=secret-token',
+        ),
+        dio: dio,
+      );
+
+      await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      final diagnostics =
+          '${service.lastRequestBody} ${service.lastRequestUrl} '
+          '${service.lastRequestHeaders} ${service.lastResponseData} '
+          '${service.lastResponseHeaders}';
+      expect(diagnostics, isNot(contains('test-key')));
+      expect(diagnostics, isNot(contains('sas-private-signature')));
+      expect(diagnostics, isNot(contains('secret-token')));
+      expect(diagnostics, isNot(contains('B' * 100)));
+      expect(diagnostics, isNot(contains('[1, 2, 3]')));
+      expect(diagnostics, isNot(contains('QUJDREVGRw==')));
+      expect(diagnostics, isNot(contains('provider-secret-key')));
+    });
+
+    test('keeps safe response headers typed and redacts credentials', () async {
+      final adapter = _ProtocolAdapter(
+        responseBody: '{"text":"ok"}',
+        responseHeaders: {
+          'x-trace-id': ['trace-123'],
+          'set-cookie': ['session-secret'],
+        },
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+
+      final headers = service.lastResponseHeaders!;
+      final trace = headers.entries
+          .singleWhere((entry) => entry.key.toLowerCase() == 'x-trace-id')
+          .value;
+      final cookie = headers.entries
+          .singleWhere((entry) => entry.key.toLowerCase() == 'set-cookie')
+          .value;
+      expect(trace, ['trace-123']);
+      expect(cookie, ['[PAYLOAD REDACTED]']);
+    });
+
+    test('redacts credential headers captured from Dio errors', () async {
+      final adapter = _ProtocolAdapter(
+        responseBody: '{"error":{"message":"unauthorized"}}',
+        statusCode: 401,
+        responseHeaders: {
+          'x-trace-id': ['trace-401'],
+          'set-cookie': ['session-secret'],
+        },
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      try {
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      } catch (_) {
+        // The unauthorized response is expected; its diagnostics must be safe.
+      }
+
+      final headers = service.lastResponseHeaders!;
+      final trace = headers.entries
+          .singleWhere((entry) => entry.key.toLowerCase() == 'x-trace-id')
+          .value;
+      final cookie = headers.entries
+          .singleWhere((entry) => entry.key.toLowerCase() == 'set-cookie')
+          .value;
+      expect(trace, ['trace-401']);
+      expect(cookie, ['[PAYLOAD REDACTED]']);
+    });
+
+    test('redacts sensitive fields in JSON string error bodies', () async {
+      const shortAudioBase64 = 'QUJDREVGRw==';
+      const body = '{"audio":"QUJDREVGRw==","x-api-key":"short-secret"}';
+      final adapter = _ProtocolAdapter(
+        responseBody: body,
+        statusCode: 401,
+        responseContentType: Headers.textPlainContentType,
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      Object? failure;
+      try {
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure, isNotNull);
+      final diagnostics = '$failure ${service.lastResponseData}';
+      expect(diagnostics, isNot(contains(shortAudioBase64)));
+      expect(diagnostics, isNot(contains('short-secret')));
+    });
+
+    test('redacts short Base64 tokens in free-text error bodies', () async {
+      const shortAudioBase64 = 'QUJDREVGRw==';
+      const shortUnpaddedBase64 = 'AQID';
+      final adapter = _ProtocolAdapter(
+        responseBody:
+            'Provider rejected audio $shortAudioBase64 $shortUnpaddedBase64',
+        statusCode: 400,
+        responseContentType: Headers.textPlainContentType,
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      Object? failure;
+      try {
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure, isNotNull);
+      final diagnostics = '$failure ${service.lastResponseData}';
+      expect(diagnostics, isNot(contains(shortAudioBase64)));
+      expect(diagnostics, isNot(contains(shortUnpaddedBase64)));
+    });
+
+    test(
+      'redacts sensitive JSON fields in successful text response bodies',
+      () async {
+        const shortAudioBase64 = 'AQID';
+        final adapter = _ProtocolAdapter(
+          responseBody: jsonEncode({'text': 'ok', 'audio': shortAudioBase64}),
+          responseContentType: Headers.textPlainContentType,
+        );
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+          ),
+          dio: dio,
+        );
+
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+
+        expect(
+          '${service.lastResponseData}',
+          isNot(contains(shortAudioBase64)),
+        );
+      },
+    );
+
+    test('redacts top-level numeric arrays in response diagnostics', () async {
+      final adapter = _ProtocolAdapter(responseBody: jsonEncode([1, 2, 3]));
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      try {
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      } catch (_) {
+        // The provider body is intentionally not a valid ASR response.
+      }
+
+      expect('${service.lastResponseData}', isNot(contains('[1, 2, 3]')));
+    });
+
+    test('sanitizes provider error objects without a message field', () async {
+      final adapter = _ProtocolAdapter(
+        responseBody: jsonEncode({
+          'error': {
+            'audio': [1, 2, 3],
+            'reason': 'provider rejected audio',
+          },
+        }),
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+        ),
+        dio: dio,
+      );
+
+      Object? failure;
+      try {
+        await service.transcribe(audioBytes: Uint8List.fromList([1, 2, 3]));
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure, isNotNull);
+      expect('$failure', isNot(contains('[1, 2, 3]')));
+    });
+  });
+
   group('ASR response protocol', () {
     test('extracts text from a JSON response', () async {
       final call = await _transcribe(responseBody: '{"text":"Hello world"}');
@@ -277,37 +766,39 @@ void main() {
       },
     );
 
-    test('preserves zero-duration subtitle cues when transcribed in chunks',
-        () async {
-      for (final format in ['srt', 'vtt']) {
-        String cue(String text) {
-          final timeSeparator = format == 'srt' ? ',' : '.';
-          final prefix = format == 'srt' ? '1\n' : '';
-          return '$prefix'
-              '00:00:00${timeSeparator}000 --> '
-              '00:00:00${timeSeparator}000\n'
-              '$text';
+    test(
+      'preserves zero-duration subtitle cues when transcribed in chunks',
+      () async {
+        for (final format in ['srt', 'vtt']) {
+          String cue(String text) {
+            final timeSeparator = format == 'srt' ? ',' : '.';
+            final prefix = format == 'srt' ? '1\n' : '';
+            return '$prefix'
+                '00:00:00${timeSeparator}000 --> '
+                '00:00:00${timeSeparator}000\n'
+                '$text';
+          }
+
+          final call = await _transcribe(
+            responseBody: cue('first'),
+            responseBodies: [cue('first'), cue('second'), cue('third')],
+            responseContentType: format == 'srt'
+                ? 'text/plain; charset=utf-8'
+                : 'text/vtt; charset=utf-8',
+            responseFormat: format,
+            audioBytes: _testWavForDuration(2),
+            maxFileSizeBytes: 12000,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+          );
+          final zeroDurationCue = format == 'srt'
+              ? '00:00:01,453 --> 00:00:01,453'
+              : '00:00:01.453 --> 00:00:01.453';
+
+          expect(call.result.subtitle, contains(zeroDurationCue));
         }
-
-        final call = await _transcribe(
-          responseBody: cue('first'),
-          responseBodies: [cue('first'), cue('second'), cue('third')],
-          responseContentType: format == 'srt'
-              ? 'text/plain; charset=utf-8'
-              : 'text/vtt; charset=utf-8',
-          responseFormat: format,
-          audioBytes: _testWavForDuration(2),
-          maxFileSizeBytes: 12000,
-          chunking: 'fixedSize',
-          fallbackMethod: 'generic',
-        );
-        final zeroDurationCue = format == 'srt'
-            ? '00:00:01,453 --> 00:00:01,453'
-            : '00:00:01.453 --> 00:00:01.453';
-
-        expect(call.result.subtitle, contains(zeroDurationCue));
-      }
-    });
+      },
+    );
 
     test('rebases JSON segment and word timestamps for each chunk', () async {
       final response = jsonEncode({
@@ -696,8 +1187,9 @@ void main() {
           ],
         );
 
-        final body = jsonDecode(utf8.decode(call.adapter.requestBody!))
-            as Map<String, dynamic>;
+        final body = jsonDecode(
+          utf8.decode(call.adapter.requestBody!),
+        ) as Map<String, dynamic>;
         expect(body['metadata'], {
           'enabled': true,
           'labels': ['a', 2],
@@ -747,9 +1239,9 @@ void main() {
             'timestampGranularities': 'word',
           },
         );
-        final jsonBody =
-            jsonDecode(utf8.decode(jsonVerbose.adapter.requestBody!))
-                as Map<String, dynamic>;
+        final jsonBody = jsonDecode(
+          utf8.decode(jsonVerbose.adapter.requestBody!),
+        ) as Map<String, dynamic>;
         expect(jsonBody['timestamp_granularities'], ['word']);
 
         final standard = await _transcribe(

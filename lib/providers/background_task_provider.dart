@@ -541,16 +541,16 @@ String? _legacyOcrModelId(Map<String, dynamic>? rawRequest) {
   if (modelId is! String) return null;
   final value = modelId.trim();
   final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
-  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) ||
-      RegExp(
-        r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
-        caseSensitive: false,
-      ).hasMatch(value) ||
-      _legacyOcrTextContainsCredential(value, credentialValues)) {
-    return null;
-  }
-  return value;
+  return _isSafeOcrModelId(value, credentialValues) ? value : null;
 }
+
+bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) &&
+    !RegExp(
+      r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
+      caseSensitive: false,
+    ).hasMatch(value) &&
+    !_legacyOcrTextContainsCredential(value, credentialValues);
 
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
@@ -644,6 +644,7 @@ bool _legacyOcrHasShortOpaqueUnicodeContinuation(
             RegExp(r'[-_0-9]').hasMatch(prefix)));
 
 bool _legacyOcrHasOpaqueUnicodeContinuation(String prefix, String suffix) =>
+    !_legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
     RegExp(r'[^\x00-\x7F]').hasMatch(suffix) &&
     RegExp(r'^\p{L}', unicode: true).hasMatch(suffix) &&
     (_legacyOcrHasShortOpaqueUnicodeContinuation(prefix, suffix) ||
@@ -698,7 +699,9 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
   final unicodeWord = '$prefix$suffix'
       .replaceAll(RegExp(r'[^\p{L}]', unicode: true), '')
       .toLowerCase();
-  if (const {'secretaría', 'secretária'}.contains(unicodeWord)) return true;
+  if (const {'cañón', 'secretaría', 'secretária'}.contains(unicodeWord)) {
+    return true;
+  }
   final word =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
   const naturalWords = {
@@ -780,6 +783,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'secretion',
     'secretariat',
     'secretarial',
+    'secretbased',
     'secretive',
     'secretmenu',
     'summarize',
@@ -846,11 +850,12 @@ bool _legacyOcrHasCredentialUseContext(
     r'\b(use|using|send|provide|enter|supply|pass|set|read|extract|identify|recognize|transcribe)$',
     caseSensitive: false,
   ).firstMatch(before);
-  final credentialTargetAfterConsumedConnector = suffix.toLowerCase() == 'as' &&
-      RegExp(
-        r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
-        caseSensitive: false,
-      ).hasMatch(after);
+  final credentialTargetAfterConsumedConnector =
+      const {'as', 'to'}.contains(suffix.toLowerCase()) &&
+          RegExp(
+            r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
+            caseSensitive: false,
+          ).hasMatch(after);
   final explicitCredentialTarget = RegExp(
         r'^as (?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
         caseSensitive: false,
@@ -893,6 +898,10 @@ bool _legacyOcrHasCredentialUseContext(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final bareSecretBasedUseContext = useVerb &&
+      prefix.toLowerCase() == 'secret' &&
+      suffix.toLowerCase() == '-based' &&
+      RegExp(r'^[.!?]*$').hasMatch(after);
   final naturalReadFromSourcePrompt = isNaturalWordContinuation &&
       actionVerb?.group(1)?.toLowerCase() == 'read' &&
       _legacyOcrNaturalSourcePhrasePattern.hasMatch(after);
@@ -940,11 +949,18 @@ bool _legacyOcrHasCredentialUseContext(
         r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final authenticateWithToProcessContext =
+      RegExp(r'\bauthenticate with$', caseSensitive: false).hasMatch(before) &&
+          (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+              maskPrefixIsEmbedded) &&
+          RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
+      bareSecretBasedUseContext ||
       assignmentContext ||
       setToCredentialContext ||
       reportedValueContext ||
       useToProcessContext ||
+      authenticateWithToProcessContext ||
       identifiedLabelContext;
 }
 
@@ -1016,6 +1032,20 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   final hasCredentialUseContext = text != null &&
       match != null &&
       _legacyOcrHasCredentialUseContext(text, match, prefix, continuation);
+  final ordinaryReadInstructionsPrompt = text != null &&
+      match != null &&
+      _legacyOcrHasNaturalWordContinuation(prefix, continuation) &&
+      RegExp(
+        r'\b(?:please\s+)?read\s*$',
+        caseSensitive: false,
+      ).hasMatch(text.substring(0, match.start)) &&
+      RegExp(
+        r'^instructions?\b',
+        caseSensitive: false,
+      ).hasMatch(text.substring(match.end).trimLeft());
+  if (ordinaryReadInstructionsPrompt && !hasCredentialUseContext) {
+    return false;
+  }
   final hasNumericMarker = RegExp(
     r'[\p{N}_]',
     unicode: true,
@@ -1190,6 +1220,20 @@ const _legacyOcrNaturalCarefulInstructionActions = {
   'write',
 };
 
+bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) =>
+    const {'read', 'check'}.contains(
+      prefix.toLowerCase(),
+    ) &&
+    RegExp(
+      r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+      r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+      r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+      caseSensitive: false,
+      unicode: true,
+    ).hasMatch(text);
+
 bool _legacyOcrHasNaturalConnectorAfterLineBreak(
   String text,
   Match match,
@@ -1212,6 +1256,8 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
     r'^[,;:]?\s*(?:and|then)\s+(?:please\s+)?([a-z]+)\b',
     caseSensitive: false,
   ).firstMatch(sourcePhraseTail ?? followingText)?.group(1)?.toLowerCase();
+  final isNaturalCarefullyObjectPhrase =
+      _legacyOcrIsNaturalCarefullyObjectPhrase(prefix, followingText);
   final isReadCarefullyFromOcrSource = prefix.toLowerCase() == 'read' &&
       ocrSourcePhrase != null &&
       (sourcePhraseTail!.isEmpty ||
@@ -1231,6 +1277,7 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
         caseSensitive: false,
       ).hasMatch(beforeMatch) &&
       (followingText.isEmpty ||
+          isNaturalCarefullyObjectPhrase ||
           isReadCarefullyFromOcrSource ||
           isReadCarefullyFollowUp)) {
     // The line break in this ordinary OCR prompt can join the action and
@@ -1600,7 +1647,26 @@ bool _legacyOcrTextContainsMaskedCredential(
                     ).hasMatch(
                       textWithoutPartMarkers.substring(0, match.start).trim(),
                     );
-            if (isLineBrokenCarefulActionEcho) return true;
+            final followingText =
+                textWithoutPartMarkers.substring(match.end).trimLeft();
+            final naturalCheckPrompt = prefix.toLowerCase() == 'check' &&
+                _legacyOcrIsNaturalCarefullyObjectPhrase(
+                  prefix,
+                  followingText,
+                );
+            final naturalReadPrompt = prefix.toLowerCase() == 'read' &&
+                _legacyOcrIsNaturalCarefullyObjectPhrase(
+                  prefix,
+                  followingText,
+                );
+            final naturalTerminalReviewPrompt =
+                prefix.toLowerCase() == 'review' && followingText.isEmpty;
+            if (isLineBrokenCarefulActionEcho &&
+                !naturalCheckPrompt &&
+                !naturalReadPrompt &&
+                !naturalTerminalReviewPrompt) {
+              return true;
+            }
             if (_legacyOcrHasNaturalConnectorAfterLineBreak(
               textWithoutPartMarkers,
               match,
@@ -1757,9 +1823,16 @@ bool _legacyOcrTextContainsMaskedCredential(
     // A very short visible prefix is too common to identify a credential in
     // free text; the general credential-shape checks above still redact
     // explicit assignments and recognizable tokens.
-    if (prefix.length >= 4 &&
-        RegExp('${RegExp.escape(prefix)}\\S{1,12}').hasMatch(compactedText)) {
-      return true;
+    if (prefix.length >= 4) {
+      final openMaskEcho = RegExp(
+        '${RegExp.escape(prefix)}(\\S{1,12})',
+        caseSensitive: false,
+      );
+      for (final match in openMaskEcho.allMatches(textWithoutPartMarkers)) {
+        if (!_legacyOcrHasNaturalWordContinuation(prefix, match.group(1)!)) {
+          return true;
+        }
+      }
     }
   }
   return false;
@@ -1803,7 +1876,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       // Preserve text-part boundaries separately so an echoed key split
       // between parts can be identified without removing natural whitespace.
       _legacyOcrTextContainsMaskedCredential(
-        textParts.join('\u0000'),
+        redactedMarkedInstruction,
         credentialValues,
       )) {
     return null;
@@ -1845,6 +1918,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
       final beforeEcho = sanitized.substring(0, match.start + boundaryLength);
+      final afterEcho = sanitized.substring(match.end);
       final naturalCarefulInstructionLead =
           _legacyOcrNaturalCarefulInstructionActions
                   .contains(prefix.toLowerCase()) &&
@@ -1925,9 +1999,41 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
+      final bareSecretBasedUseContext = prefix.toLowerCase() == 'secret' &&
+          echoSuffix.toLowerCase() == '-based' &&
+          RegExp(
+            r'\b(?:use|using)$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho.trimRight()) &&
+          RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
+      final authenticateWithToProcessContext = RegExp(
+            r'\bauthenticate with$',
+            caseSensitive: false,
+          ).hasMatch(sanitized.substring(0, match.start).trimRight()) &&
+          _legacyOcrHasCredentialUseContext(
+            sanitized,
+            match,
+            prefix,
+            echoSuffix,
+          );
+      final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
+          bareSecretBasedUseContext ||
+          authenticateWithToProcessContext;
+      final naturalReadInstructionsPrompt =
+          _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
+              RegExp(
+                r'\b(?:please\s+)?read\s*$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) &&
+              RegExp(
+                r'^instructions?\b',
+                caseSensitive: false,
+              ).hasMatch(afterEcho.trimLeft());
+      final ordinaryNaturalPromptContext =
+          naturalReadInstructionsPrompt && !hasCredentialUseContext;
+      if (ordinaryNaturalPromptContext) return match.group(0)!;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
-      final afterEcho = sanitized.substring(match.end);
       final hasAuthorizationConnectorAfterEcho = RegExp(
         r'^\s+as\s+',
         caseSensitive: false,
@@ -1943,10 +2049,11 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
               !hasSafeInstructionAfterEcho &&
-              !safeCredentialValueActionLead) ||
+              !safeCredentialValueActionLead &&
+              !hasCredentialUseContext) ||
           echo.length <= prefix.length ||
           (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
-              !splitEchoHasCredentialUseContext &&
+              !hasCredentialUseContext &&
               !lineBrokenCarefulActionEcho)) {
         return match.group(0)!;
       }
@@ -2034,6 +2141,16 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(r'^carefully\b', caseSensitive: false).hasMatch(after);
+  final readAuthenticationDocumentationPrompt =
+      naturalWord == 'documentation' &&
+          RegExp(
+            r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          RegExp(
+            r'^on authentication\b',
+            caseSensitive: false,
+          ).hasMatch(after);
   final naturalReadFromOcrSourcePrompt = isNaturalWordContinuation &&
       RegExp(
         r'\b(?:please\s+)?read(?:\s+(?:the|this|that|these|those|a|an))?$',
@@ -2094,11 +2211,11 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       (!_legacyOcrIsCredentialWord(naturalWord) ||
           naturalCredentialProcessSentenceWord) &&
       RegExp(
-        r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+        r'\b(?:please\s+)?read\s*(?:(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(
-        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide)\b',
+        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide|instructions?)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final naturalNounInstructionPrompt = RegExp(
@@ -2120,6 +2237,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   return !hasCredentialUseContext &&
       (politeNaturalVerbPrompt ||
           readDocumentationCarefullyPrompt ||
+          readAuthenticationDocumentationPrompt ||
           naturalReadFromOcrSourcePrompt ||
           naturalCredentialProcessInstructionPrompt ||
           readHandwritingInstructionPrompt ||
@@ -2253,12 +2371,27 @@ bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
 Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final taskId = map['id'] as String;
   final rawRetryData = map['retryData'];
+  final rawRequest = map['rawRequest'];
+  final request =
+      rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
   Map<String, dynamic>? malformedRetryData;
   if (rawRetryData is Map) {
     try {
       final retryData = Map<String, dynamic>.from(rawRetryData);
       if (map['type'] != BackgroundTaskType.ocr.name ||
           _retryDataHasSupportedOcrSchema(retryData)) {
+        final modelRef = retryData['modelRef'];
+        if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
+          final modelId = modelRef['modelId'];
+          if (modelId is String &&
+              !_isSafeOcrModelId(
+                modelId.trim(),
+                _legacyOcrCredentialValues(request),
+              )) {
+            retryData['modelRef'] = Map<String, dynamic>.from(modelRef)
+              ..remove('modelId');
+          }
+        }
         return retryData;
       }
       malformedRetryData = retryData;
@@ -2268,10 +2401,44 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   }
   if (map['type'] != BackgroundTaskType.ocr.name) return null;
 
-  final rawRequest = map['rawRequest'];
-  final request =
-      rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
-  return _unavailableRetryDataFromLegacyRequest(taskId, request) ??
+  final unavailableRetryData =
+      _unavailableRetryDataFromLegacyRequest(taskId, request);
+  if (unavailableRetryData != null && malformedRetryData != null) {
+    final malformedSnapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
+    final unavailableSnapshot = OcrRetrySnapshot.fromMap(unavailableRetryData);
+    final unavailableImages = unavailableRetryData['images'] as List;
+    final imageCount =
+        malformedSnapshot.imageEntryCount > unavailableImages.length
+            ? malformedSnapshot.imageEntryCount
+            : unavailableImages.length;
+    final retryData = OcrRetryStorage.unavailableSnapshotForCount(
+      taskId: taskId,
+      imageCount: imageCount,
+      configId: malformedSnapshot.configId,
+      modelId: malformedSnapshot.modelId ?? unavailableSnapshot.modelId,
+      instructionContent: malformedSnapshot.instructionContent ??
+          unavailableSnapshot.instructionContent,
+      saveFolder: malformedSnapshot.saveFolder,
+      batchMode: malformedSnapshot.batchMode,
+      perImageConcurrency: malformedSnapshot.perImageConcurrency,
+      requestSizeBudgetBytes: malformedSnapshot.requestSizeBudgetBytes,
+      legacyModelIndex: malformedSnapshot.legacyModelIndex,
+      legacyInstructionIndex: malformedSnapshot.legacyInstructionIndex,
+    );
+    final images = retryData['images'] as List;
+    for (var index = 0; index < malformedSnapshot.images.length; index++) {
+      final image = malformedSnapshot.images[index];
+      final imageIndex = malformedSnapshot.imageEntryIndices[index];
+      images[imageIndex] = {
+        if (image.bytes != null) 'bytes': base64Encode(image.bytes!),
+        if (image.storageRef != null) 'storageRef': image.storageRef,
+        'format': image.format,
+        if (image.name != null) 'name': image.name,
+      };
+    }
+    return retryData;
+  }
+  return unavailableRetryData ??
       malformedRetryData ??
       (rawRetryData == null
           ? null
@@ -2283,11 +2450,14 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
 
 List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
   if (rawOutcomes is! List) return const [];
-  final outcomes = <OcrPageOutcome>[];
+  final outcomesByImageIndex = <int, OcrPageOutcome>{};
   for (final rawOutcome in rawOutcomes) {
     final outcome = OcrPageOutcome.fromMap(rawOutcome);
-    if (outcome != null) outcomes.add(outcome);
+    if (outcome != null) {
+      outcomesByImageIndex.putIfAbsent(outcome.imageIndex, () => outcome);
+    }
   }
+  final outcomes = outcomesByImageIndex.values.toList();
   outcomes.sort((a, b) => a.imageIndex.compareTo(b.imageIndex));
   return List.unmodifiable(outcomes);
 }
@@ -3008,7 +3178,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Persist the explicit user choice to save an incomplete OCR result.
-  void markPartialResultSaveRequested(String taskId) {
+  Future<bool> markPartialResultSaveRequested(String taskId) {
     state = state
         .map(
           (task) => task.id == taskId
@@ -3016,7 +3186,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               : task,
         )
         .toList();
-    _persistTasks();
+    return _persistTasks();
   }
 
   /// Reopen the save step for a failed OCR task whose result is still present.

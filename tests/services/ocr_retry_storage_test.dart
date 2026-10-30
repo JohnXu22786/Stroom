@@ -3,11 +3,22 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ocr_retry_storage.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,14 +30,71 @@ void main() {
     );
     BackgroundTaskNotifier.debugStorageDirectoryOverride = taskDirectory.path;
     WebFileStore.enableTestMode();
+    OcrRetryStorage.debugBeforeNativeReadAsBytes = null;
   });
 
   tearDown(() async {
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
+    OcrRetryStorage.debugBeforeNativeReadAsBytes = null;
     WebFileStore.disableTestMode();
     try {
       await taskDirectory.delete(recursive: true);
     } catch (_) {}
+  });
+
+  test('task serialization drops credential-valued OCR retry model refs', () {
+    for (final testCase in [
+      {
+        'modelId': 'sk-proj-abcdefghijk',
+        'headers': <String, String>{},
+        'expectedModelId': null,
+      },
+      {
+        'modelId': 'opaque-credential-value',
+        'headers': {'Authorization': 'Bearer opaque-credential-value'},
+        'expectedModelId': null,
+      },
+      {
+        'modelId': 'gpt-4o',
+        'headers': <String, String>{},
+        'expectedModelId': 'gpt-4o',
+      },
+    ]) {
+      final modelId = testCase['modelId']! as String;
+      final retryData = OcrRetrySnapshot.capture(
+        configId: 'config-1',
+        modelId: modelId,
+        images: [
+          OcrRetryImage.reference(
+            storageRef: 'ocr_retry_cache/${List.filled(64, "a").join()}.bin',
+            format: 'png',
+          ),
+        ],
+      ).toMap();
+      final task = BackgroundTask.fromMap({
+        'id': 'task-1',
+        'type': 'ocr',
+        'title': 'OCR task',
+        'status': 'completed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'steps': [],
+        'rawRequest': {'headers': testCase['headers']},
+        'retryData': retryData,
+      });
+
+      final serialized = jsonEncode(task.toMap());
+
+      if (testCase['expectedModelId'] == null) {
+        expect(serialized, isNot(contains(modelId)));
+      } else {
+        expect(serialized, contains(modelId));
+      }
+      expect(
+        (task.retryData!['modelRef'] as Map)['modelId'],
+        testCase['expectedModelId'],
+      );
+      expect((task.retryData!['modelRef'] as Map)['configId'], 'config-1');
+    }
   });
 
   test('current snapshot stores execution settings and restores image bytes',
@@ -64,6 +132,64 @@ void main() {
     expect(stored['perImageConcurrency'], 2);
     expect(stored['requestSizeBudgetBytes'], 7 * 1024 * 1024);
   });
+
+  test(
+    'native read race marks one image missing and restores later images',
+    () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      WebFileStore.disableTestMode();
+      PathProviderPlatform.instance = _DocumentsDirectory(taskDirectory.path);
+      AppStorage.resetCache();
+      addTearDown(() {
+        PathProviderPlatform.instance = originalPathProvider;
+        AppStorage.resetCache();
+      });
+
+      final firstBytes = Uint8List.fromList([1, 2, 3]);
+      final disappearingBytes = Uint8List.fromList([4, 5, 6]);
+      final lastBytes = Uint8List.fromList([7, 8, 9]);
+      final cached = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'restore-read-race',
+        snapshot: OcrRetrySnapshot.capture(
+          images: [
+            OcrRetryImage(bytes: firstBytes, format: 'png', name: 'first.png'),
+            OcrRetryImage(
+              bytes: disappearingBytes,
+              format: 'png',
+              name: 'disappearing.png',
+            ),
+            OcrRetryImage(bytes: lastBytes, format: 'png', name: 'last.png'),
+          ],
+        ),
+      );
+      final references = (cached['images'] as List)
+          .map((image) => (image as Map)['storageRef'] as String)
+          .toList();
+      OcrRetryStorage.debugBeforeNativeReadAsBytes = (reference) async {
+        if (reference != references[1]) return;
+        final file = File(
+          '${taskDirectory.path}${Platform.pathSeparator}ocr_retry_cache'
+          '${Platform.pathSeparator}${reference.split('/').last}',
+        );
+        await file.delete();
+      };
+
+      final restored = await OcrRetryStorage.restoreImages(
+        OcrRetrySnapshot.fromMap(cached),
+      );
+
+      expect(
+        restored.images.map((image) => image.bytes),
+        [firstBytes, lastBytes],
+      );
+      expect(
+        restored.images.map((image) => image.name),
+        ['first.png', 'last.png'],
+      );
+      expect(restored.missingImageCount, 1);
+      expect(restored.isComplete, isFalse);
+    },
+  );
 
   test(
     'invalid supplied references cannot overwrite unrelated web files',

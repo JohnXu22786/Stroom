@@ -53,8 +53,44 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
   await tester.pump();
 }
 
+Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
+  final field = find.byWidgetPredicate(
+    (widget) => widget is TextField && widget.decoration?.hintText == '如 4096',
+  );
+  await tester.enterText(field, text);
+  await tester.pump();
+}
+
+Future<void> _simulateSystemBack(WidgetTester tester) async {
+  // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
+    testWidgets(
+        'system Back prompts after a text edit and cancel keeps the edit',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'Original OCR model',
+        modelId: 'qwen-vl-ocr',
+      );
+      await _pumpConfigPage(tester, model: model);
+
+      await _enterField(tester, 0, 'Edited OCR model');
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Edited OCR model',
+      );
+    });
     testWidgets(
         'renders 3 universal params; instruction section and '
         'removed params absent', (tester) async {
@@ -118,6 +154,38 @@ void main() {
       expect(saved!.typeConfig['userInstructions'], [
         {'name': '发票', 'content': '提取发票号码和金额'},
       ]);
+    });
+  });
+
+  group('OcrModelConfigPage unsaved custom params', () {
+    testWidgets(
+        'system Back prompts when a blank-name param default is edited and '
+        'cancel keeps the edit', (tester) async {
+      await _pumpConfigPage(tester);
+
+      await _scrollTo(tester, find.text('添加参数'));
+      await tester.tap(find.text('添加参数'));
+      await tester.pumpAndSettle();
+
+      final defaultField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '默认参数值',
+      );
+      await _scrollTo(tester, defaultField);
+      await tester.enterText(defaultField, 'edited default');
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        tester.widget<TextField>(defaultField).controller!.text,
+        'edited default',
+      );
     });
   });
 
@@ -321,6 +389,51 @@ void main() {
         'FALSE',
         '{"source":"test"}',
       ]);
+    });
+  });
+
+  group('OcrModelConfigPage max token validation', () {
+    testWidgets('disabled invalid max tokens do not block saving other edits',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'enableMaxTokens': true, 'maxTokens': 1024},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await _enterField(tester, 0, 'Edited OCR model');
+      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _enterMaxTokens(tester, 'not an integer');
+      await tester.tap(find.byType(Switch).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.name, 'Edited OCR model');
+      expect(saved!.typeConfig['enableMaxTokens'], isFalse);
+      expect(saved!.typeConfig.containsKey('maxTokens'), isFalse);
+    });
+
+    testWidgets('enabled invalid max tokens still block saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'enableMaxTokens': true, 'maxTokens': 1024},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _enterMaxTokens(tester, 'not an integer');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('最大 Token 数必须为正整数'), findsOneWidget);
     });
   });
 }
