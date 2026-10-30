@@ -472,7 +472,10 @@ class LlmConnectorHttpClient {
   static bool _canRefresh(LlmAccount account) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
     return connector?.canRefreshCredentials == true &&
-        (account.authType == 'oauth' ||
+        ((account.authType == 'oauth' &&
+                (account.connectorType != 'vertex' ||
+                    LlmOAuthProviderPolicy.forProvider(account.connectorType)
+                        .supported)) ||
             (account.connectorType == 'vertex' &&
                 account.authType == 'service_account'));
   }

@@ -972,6 +972,9 @@ class LlmAccountConnectorService {
     if (connector == null || connector.id != account.connectorType) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+      throw const LlmAccountConnectorException();
+    }
     final hasRemoteCatalog = {
       'openai-compatibility',
       'openai-api',
@@ -1515,6 +1518,9 @@ class LlmAccountConnectorService {
     LlmAccount account,
   ) async {
     _validateSafeConfig(account.endpointConfig);
+    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+      throw const LlmAccountConnectorException();
+    }
     final isGemini = account.connectorType == 'gemini' ||
         account.connectorType == 'gemini-interactions';
     if (account.connectorType == 'bedrock') {
@@ -2641,6 +2647,9 @@ class LlmAccountConnectorService {
         !connector.authTypes.contains(account.authType)) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+      throw const LlmAccountConnectorException();
+    }
     _validateSafeConfig(account.endpointConfig);
     if (account.connectorType == 'bedrock') {
       final region = account.endpointConfig['region'];
@@ -2870,6 +2879,7 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        (account.connectorType == 'vertex' && account.authType == 'oauth') ||
         (stream && account.connectorType == 'devin') ||
         (stream &&
             _isVertexImagen(

@@ -907,7 +907,7 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
 
 String _authLabel(String type, {String? connectorType}) {
   if (type == 'oauth' && connectorType == 'vertex') {
-    return 'Google OAuth Access Token';
+    return 'Unsupported legacy Google OAuth';
   }
   return switch (type) {
     'api_key' => 'API Key',
@@ -928,7 +928,9 @@ String _authSourceLabel(
 ) {
   final provider = connector?.displayName ?? account.connectorType;
   return switch (account.authType) {
-    'oauth' => '$provider OAuth',
+    'oauth' => account.connectorType == 'vertex'
+        ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
+        : '$provider OAuth',
     'api_key' => account.connectorType == 'openai-compatibility'
         ? '用户提供的上游 API Key'
         : '$provider API Key',
@@ -1322,17 +1324,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           : _connectorType == 'vertex' &&
                                   _authType == 'service_account'
                               ? '服务账号 JSON'
-                              : _connectorType == 'vertex' &&
-                                      _authType == 'oauth'
-                                  ? 'Google OAuth Access Token'
-                                  : '凭据',
+                              : '凭据',
                   hintText: _authType == 'aws_credential_chain'
                       ? '使用运行环境的 AWS 默认凭据链'
-                      : _connectorType == 'vertex' && _authType == 'oauth'
-                          ? '粘贴 OAuth Access Token，或包含 access_token 的 JSON'
-                          : !widget.hasCredential
-                              ? '保存在平台安全存储中'
-                              : '留空以保留当前安全凭据',
+                      : !widget.hasCredential
+                          ? '保存在平台安全存储中'
+                          : '留空以保留当前安全凭据',
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),

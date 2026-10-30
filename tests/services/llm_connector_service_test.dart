@@ -1103,6 +1103,13 @@ void main() {
           connectorType: 'vertex',
           authType: 'api_key',
           displayName: 'Vertex OAuth account',
+          models: const [
+            LlmUpstreamModel(
+              id: 'cached-vertex-model',
+              upstreamModelId: 'gemini-2.5-flash',
+              displayName: 'Gemini 2.5 Flash',
+            ),
+          ],
           endpointConfig: const {
             'projectId': 'oauth-project',
             'location': 'europe-west4',
@@ -1122,7 +1129,21 @@ void main() {
       final legacyAccount = (await discoveryService.getAccount(account.id))!;
 
       await expectLater(
+        discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      await expectLater(
         discoveryService.discoverModels(legacyAccount),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      accountRecord['models'] = <Map<String, dynamic>>[];
+      accountsEnvelope['items'] = [accountRecord];
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+          jsonEncode(accountsEnvelope);
+      final legacyAccountWithoutModels =
+          (await discoveryService.getAccount(account.id))!;
+      await expectLater(
+        discoveryService.discoverModels(legacyAccountWithoutModels),
         throwsA(isA<LlmAccountConnectorException>()),
       );
       expect(requestsSent, 0);
