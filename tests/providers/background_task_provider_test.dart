@@ -3030,6 +3030,44 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves receipt use context around echoed keys',
+      () {
+        const apiKey = 'secret123456';
+        const instruction = 'Use $apiKey for this receipt';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-use-receipt-instruction-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Use [redacted] for this receipt',
+        );
+        expect(persisted, contains('Use [redacted] for this receipt'));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts embedded natural words in use-to-process context',
       () {
         const apiKey = 'xsecretariat';
