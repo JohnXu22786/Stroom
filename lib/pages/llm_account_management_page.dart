@@ -913,7 +913,7 @@ String _authLabel(String type, {String? connectorType}) {
     'api_key' => 'API Key',
     'oauth' => '订阅 OAuth',
     'service_account' => 'Google 服务账号',
-    'aws_credentials' => 'AWS Access Key + Session Token',
+    'aws_credentials' => 'AWS Access + Secret Key（Session Token 可选）',
     'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '会话令牌',
     'relay' => '应用内中继',
@@ -1215,6 +1215,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _authType,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '认证方式'),
                 items: [
                   for (final type in authTypes)

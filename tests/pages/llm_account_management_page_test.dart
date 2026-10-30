@@ -472,6 +472,40 @@ void main() {
     },
   );
 
+  testWidgets('labels Bedrock static access-key fields accurately', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AWS Bedrock').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('AWS Access + Secret Key（Session Token 可选）'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('clearing Vertex project ID removes the stored override', (
     tester,
   ) async {
