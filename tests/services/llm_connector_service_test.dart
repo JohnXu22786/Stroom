@@ -1197,6 +1197,7 @@ void main() {
         );
 
         expect(requests, hasLength(2), reason: connector);
+        expect(requests.first.uri.path, '/v1/models', reason: connector);
         expect(
           requests[1].uri.queryParameters[
               connector == 'openai-api' ? 'after' : 'after_id'],

@@ -1528,7 +1528,7 @@ class LlmAccountConnectorService {
     }
     final fallbackBase = switch (account.connectorType) {
       'openai-api' => 'https://api.openai.com/v1',
-      'claude' => 'https://api.anthropic.com',
+      'claude' => 'https://api.anthropic.com/v1',
       'gemini' ||
       'gemini-interactions' =>
         'https://generativelanguage.googleapis.com',
