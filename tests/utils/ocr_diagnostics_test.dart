@@ -80,6 +80,27 @@ void main() {
     }
   });
 
+  test('response header credentials exclude echoed IDs and retain safe IDs',
+      () {
+    const credential = 'opaque-response-token-195';
+    const safeRequestId = 'req-safe-after-response-credential-195';
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'headers': {
+          'X-Access-Token': [credential],
+          'x-request-id': [credential, safeRequestId],
+        },
+      },
+    )!;
+
+    expect(response, {
+      'statusCode': 401,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode(response), isNot(contains(credential)));
+  });
+
   test('request body API keys exclude echoed response IDs but keep safe IDs',
       () {
     const apiKey = 'opaque-body-api-key-194';

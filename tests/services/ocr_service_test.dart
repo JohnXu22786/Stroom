@@ -2066,6 +2066,37 @@ void main() {
         },
       );
 
+      test(
+        'success diagnostics exclude response header credentials from IDs',
+        () async {
+          const responseCredential = 'opaque-response-token-195';
+          const safeRequestId = 'req-safe-after-response-credential-195';
+          final dio = _mockDioWithSuccess(
+            {
+              'choices': [
+                {
+                  'message': {'content': 'test text'},
+                },
+              ],
+            },
+            headers: {
+              'x-access-token': [responseCredential],
+              'x-request-id': [responseCredential, safeRequestId],
+            },
+          );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          final response = service.diagnosticResponse();
+          expect(response['requestId'], safeRequestId);
+          expect(jsonEncode(response), isNot(contains(responseCredential)));
+        },
+      );
+
       test('diagnostic host excludes the configured API key', () async {
         const apiKey = 'opaque-user-secret-87';
         final dio = _mockDioWithSuccess({
