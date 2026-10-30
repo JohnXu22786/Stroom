@@ -221,7 +221,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
     Widget messageBubble;
     if (isAi) {
       final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
-      if ((chatMsg?.isError == true) || message.text.startsWith('错误:')) {
+      final hasStructuredPartialError = chatMsg?.isError == true &&
+          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true &&
+          (chatMsg.content.isNotEmpty ||
+              chatMsg.reasoningSections?.any((section) => section.isNotEmpty) ==
+                  true);
+      if (!hasStructuredPartialError &&
+          ((chatMsg?.isError == true) || message.text.startsWith('错误:'))) {
         messageBubble = _buildErrorMessageBubble(
           context: context,
           message: message,
