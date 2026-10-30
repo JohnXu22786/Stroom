@@ -5876,6 +5876,17 @@ void main() {
               },
             });
 
+        final embeddedNulPromptTask = taskFor(
+          'legacy-ocr-embedded-nul-in-text-part',
+          ['Read\u0000the receipt total carefully'],
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulPromptTask.retryData!,
+          ).instructionContent,
+          safePrompt,
+        );
+
         final echoedKeyTask = taskFor('legacy-ocr-short-prefix-echoed-key', [
           safePrompt,
           'Use $apiKey to process this image',

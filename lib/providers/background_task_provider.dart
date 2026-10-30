@@ -1876,12 +1876,17 @@ bool _legacyOcrTextContainsMaskedCredential(
 bool _legacyOcrHasSafeRedactedInstruction(String text) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
-    r'^\s*(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b.*\[redacted\]',
+    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:please\s+)?use\b.*\[redacted\]\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|^\s*(?:please\s+)?use\s+\[redacted\]\s*[.!?]?$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
+  final safeScanContext = RegExp(
+    r'^\s*the\s+scan\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -1890,7 +1895,7 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  return safeActionLead || safeUseLead || safeKeepLead;
+  return safeActionLead || safeUseLead || safeScanContext || safeKeepLead;
 }
 
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
@@ -1907,7 +1912,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
-        var text = part['text'] as String;
+        var text = (part['text'] as String).replaceAll('\u0000', ' ');
         final hadCredential =
             _legacyOcrTextContainsCredential(text, credentialValues);
         if (hadCredential) {
@@ -1954,41 +1959,26 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     );
     return preservesNaturalPlural ||
         (!_legacyOcrTextContainsCredential(text, credentialValues) &&
-            (!hadCredential || _legacyOcrHasSafeRedactedInstruction(text)));
+            (!hadCredential ||
+                !text.contains('[redacted]') ||
+                _legacyOcrHasSafeRedactedInstruction(text)));
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
       RegExp(
         r'(?:data:image/|base64,)',
         caseSensitive: false,
-      ).hasMatch(instruction)) {
+      ).hasMatch(instruction) ||
+      _legacyOcrTextContainsCredential(instruction, credentialValues) ||
+      // Preserve text-part boundaries separately so an echoed key split
+      // between parts can be identified without removing natural whitespace.
+      _legacyOcrTextContainsMaskedCredential(
+        safeTextParts,
+        credentialValues,
+      )) {
     return null;
   }
-  final hasCredential =
-      _legacyOcrTextContainsCredential(instruction, credentialValues);
-  // Preserve text-part boundaries separately so an echoed key split between
-  // parts can be identified without removing natural whitespace.
-  final hasMaskedCredentialAcrossParts =
-      _legacyOcrTextContainsMaskedCredential(safeTextParts, credentialValues);
-  if (!hasCredential && !hasMaskedCredentialAcrossParts) return instruction;
-
-  // A credential-like echo in one part must not discard otherwise safe OCR
-  // instructions from other parts. A credential split across parts remains
-  // rejected by the boundary-aware check after individually unsafe parts are
-  // removed.
-  final originalSafeParts = safeTextParts.split('\u0000');
-  final safeParts = originalSafeParts.where((text) {
-    return !_legacyOcrTextContainsCredential(text, credentialValues);
-  }).toList();
-  if (safeParts.length == originalSafeParts.length) return null;
-  final safePartText = safeParts.join('\u0000');
-  final safeInstruction = safePartText.replaceAll('\u0000', '\n');
-  if (safeInstruction.isEmpty ||
-      _legacyOcrTextContainsCredential(safeInstruction, credentialValues) ||
-      _legacyOcrTextContainsMaskedCredential(safePartText, credentialValues)) {
-    return null;
-  }
-  return safeInstruction;
+  return instruction;
 }
 
 String _legacyOcrRedactMaskedCredentialEchoes(
