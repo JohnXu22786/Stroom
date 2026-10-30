@@ -1965,11 +1965,23 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     final redactedText = hadCredential
         ? _legacyOcrRedactMaskedCredentialEchoes(sourceText, credentialValues)
         : sourceText;
-    if (hadCredential &&
-        _legacyOcrTextContainsCredential(
-          redactedText.replaceAll('\u0000', ''),
-          credentialValues,
-        )) {
+    final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
+    final containsUnmaskedExactCredential = credentialValues.any((value) {
+      final candidate = value.trim();
+      if (candidate.isEmpty ||
+          candidate.contains('…') ||
+          candidate.trimRight().endsWith('...')) {
+        return false;
+      }
+      return nullFreeRedactedText.contains(candidate);
+    });
+    if (sourceText.contains('\u0000') &&
+        hadCredential &&
+        (containsUnmaskedExactCredential ||
+            _legacyOcrTextContainsMaskedCredential(
+              nullFreeRedactedText,
+              credentialValues,
+            ))) {
       // If a NUL split the credential so the redactor could not remove its
       // echo, discard this request instead of retaining a partial secret.
       return null;
