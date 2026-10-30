@@ -907,7 +907,7 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
 
 String _authLabel(String type, {String? connectorType}) {
   if (type == 'oauth' && connectorType == 'vertex') {
-    return 'Unsupported legacy Google OAuth';
+    return '旧版 OAuth（不支持）';
   }
   return switch (type) {
     'api_key' => 'API Key',
@@ -1134,7 +1134,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   Widget build(BuildContext context) {
     final connectors = widget.providerCatalog.providers.toList();
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
-    final authTypes = connector.supportedAuthTypes.toList()..sort();
+    final authTypes = connector.supportedAuthTypes.toList();
+    if (widget.account?.connectorType == _connectorType &&
+        widget.account?.authType == 'oauth' &&
+        !authTypes.contains('oauth')) {
+      // Keep a legacy unsupported value visible so the editor cannot silently
+      // rewrite it to another credential type before the user chooses one.
+      authTypes.add('oauth');
+    }
+    authTypes.sort();
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
     return AlertDialog(
@@ -1242,6 +1250,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     ),
                   ),
                 ),
+              if (_authType == 'oauth' && oauthLimitation != null)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('请选择受支持的认证方式后再保存此账号。'),
+                ),
               if (_connectorType == 'gemini' && _authType == 'oauth') ...[
                 const SizedBox(height: 8),
                 const Text(
@@ -1307,32 +1320,34 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
-              const SizedBox(height: 8),
-              TextField(
-                controller: _credential,
-                enabled: _authType != 'none' &&
-                    _authType != 'relay' &&
-                    _authType != 'aws_credential_chain',
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: _authType == 'none' ||
-                          _authType == 'relay' ||
-                          _authType == 'aws_credential_chain'
-                      ? '该认证方式无需输入凭据'
-                      : _connectorType == 'bedrock'
-                          ? 'AWS 凭据 JSON'
-                          : _connectorType == 'vertex' &&
-                                  _authType == 'service_account'
-                              ? '服务账号 JSON'
-                              : '凭据',
-                  hintText: _authType == 'aws_credential_chain'
-                      ? '使用运行环境的 AWS 默认凭据链'
-                      : !widget.hasCredential
-                          ? '保存在平台安全存储中'
-                          : '留空以保留当前安全凭据',
+              if (!(_authType == 'oauth' && oauthLimitation != null)) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _credential,
+                  enabled: _authType != 'none' &&
+                      _authType != 'relay' &&
+                      _authType != 'aws_credential_chain',
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: _authType == 'none' ||
+                            _authType == 'relay' ||
+                            _authType == 'aws_credential_chain'
+                        ? '该认证方式无需输入凭据'
+                        : _connectorType == 'bedrock'
+                            ? 'AWS 凭据 JSON'
+                            : _connectorType == 'vertex' &&
+                                    _authType == 'service_account'
+                                ? '服务账号 JSON'
+                                : '凭据',
+                    hintText: _authType == 'aws_credential_chain'
+                        ? '使用运行环境的 AWS 默认凭据链'
+                        : !widget.hasCredential
+                            ? '保存在平台安全存储中'
+                            : '留空以保留当前安全凭据',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
                 ),
-                onChanged: (_) => setState(() => _draftChanged = true),
-              ),
+              ],
               const SizedBox(height: 8),
               DropdownButtonFormField<AiGatewayAccountStatus>(
                 initialValue: _status,
@@ -1396,7 +1411,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        if (widget.account != null && _authType == 'oauth')
+        if (widget.account != null &&
+            _authType == 'oauth' &&
+            oauthLimitation == null)
           OutlinedButton(
             onPressed: () => _save(reconnectOAuth: true),
             child: const Text('重新授权'),
@@ -1464,13 +1481,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             widget.account!.authType != _authType ||
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged);
-    if (_authType == 'oauth' &&
-        oauthLimitation != null &&
-        (widget.account == null ||
-            widget.account!.authType != 'oauth' ||
-            widget.account!.connectorType != _connectorType ||
-            reconnectOAuth)) {
-      setState(() => _error = oauthLimitation);
+    if (_authType == 'oauth' && oauthLimitation != null) {
+      setState(
+        () => _error = '$oauthLimitation\n请选择受支持的认证方式后再保存此账号。',
+      );
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();

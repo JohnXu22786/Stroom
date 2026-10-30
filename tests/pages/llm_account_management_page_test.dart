@@ -421,7 +421,6 @@ void main() {
     accountsEnvelope['items'] = [accountRecord];
     preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
         jsonEncode(accountsEnvelope);
-
     await tester.pumpWidget(
       MaterialApp(
         home: LlmAccountManagementPage(gateway: _testGateway(service)),
@@ -650,6 +649,91 @@ void main() {
           .findProvider('vertex')!
           .authTypeLimitations['oauth'],
       contains('No public third-party OAuth inference flow'),
+    );
+  });
+
+  testWidgets('legacy Vertex OAuth edit requires supported reconfiguration', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'legacy-vertex-oauth',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Legacy Vertex OAuth',
+      ),
+      secret: 'legacy-vertex-oauth-token',
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['authType'] = 'oauth';
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      findsNothing,
+    );
+    expect(find.text('请选择受支持的认证方式后再保存此账号。'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('请选择受支持的认证方式后再保存此账号。'),
+      findsWidgets,
+    );
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'legacy-vertex-oauth-token',
+    );
+
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('API Key').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'replacement-vertex-api-key',
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect((await service.listAccounts()).single.authType, 'api_key');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'replacement-vertex-api-key',
     );
   });
 
