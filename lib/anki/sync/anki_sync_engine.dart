@@ -1,13 +1,15 @@
-import 'dart:convert';
 import 'dart:math';
-import 'package:http/http.dart' as http;
+
+import 'anki_sync_protocol_client.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // Sync protocol implementation — translated from Anki's Rust source
 // (rslib/src/sync/)
 // ═══════════════════════════════════════════════════════════════
 
-/// Mirror of Rust's SyncHeader (from sync/request/header_and_stream.rs)
+/// Legacy sync-v1 header model. Current Anki servers require sync v8 or later;
+/// this type is retained only for source compatibility and is not sent.
+@Deprecated('Use AnkiSyncProtocolClient with sync v10')
 class SyncHeader {
   final int syncVersion;
   final String syncKey;
@@ -15,7 +17,7 @@ class SyncHeader {
   final String sessionKey;
 
   SyncHeader({
-    this.syncVersion = 1, // v1 = uncompressed JSON, works everywhere
+    this.syncVersion = 1,
     required this.syncKey,
     this.clientVer = 'ankidart:1.0',
     String? sessionKey,
@@ -32,8 +34,9 @@ class SyncHeader {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final rng = Random();
-    return String.fromCharCodes(Iterable.generate(
-        10, (_) => chars.codeUnitAt(rng.nextInt(chars.length))));
+    return String.fromCharCodes(
+      Iterable.generate(10, (_) => chars.codeUnitAt(rng.nextInt(chars.length))),
+    );
   }
 }
 
@@ -44,12 +47,12 @@ class SyncChunk {
   List<NoteEntry> notes;
   List<RevlogEntry> revlog;
 
-  SyncChunk(
-      {this.done = false,
-      List<CardEntry>? cards,
-      List<NoteEntry>? notes,
-      List<RevlogEntry>? revlog})
-      : cards = cards ?? [],
+  SyncChunk({
+    this.done = false,
+    List<CardEntry>? cards,
+    List<NoteEntry>? notes,
+    List<RevlogEntry>? revlog,
+  })  : cards = cards ?? [],
         notes = notes ?? [],
         revlog = revlog ?? [];
 
@@ -137,7 +140,7 @@ class CardEntry {
         odue,
         odid,
         flags,
-        data
+        data,
       ];
 
   factory CardEntry.fromJson(List<dynamic> j) => CardEntry(
@@ -190,8 +193,19 @@ class NoteEntry {
     this.data = '',
   });
 
-  List<dynamic> toJson() =>
-      [id, guid, mid, mtime, usn, tags, fields, sfld, csum, flags, data];
+  List<dynamic> toJson() => [
+        id,
+        guid,
+        mid,
+        mtime,
+        usn,
+        tags,
+        fields,
+        sfld,
+        csum,
+        flags,
+        data,
+      ];
 
   factory NoteEntry.fromJson(List<dynamic> j) => NoteEntry(
         id: j[0] as int,
@@ -220,19 +234,29 @@ class RevlogEntry {
   int time;
   int type_;
 
-  RevlogEntry(
-      {required this.id,
-      required this.cid,
-      this.usn = -1,
-      required this.ease,
-      required this.ivl,
-      this.lastIvl = 0,
-      this.factor = 2500,
-      this.time = 0,
-      this.type_ = 0});
+  RevlogEntry({
+    required this.id,
+    required this.cid,
+    this.usn = -1,
+    required this.ease,
+    required this.ivl,
+    this.lastIvl = 0,
+    this.factor = 2500,
+    this.time = 0,
+    this.type_ = 0,
+  });
 
-  List<dynamic> toJson() =>
-      [id, cid, usn, ease, ivl, lastIvl, factor, time, type_];
+  List<dynamic> toJson() => [
+        id,
+        cid,
+        usn,
+        ease,
+        ivl,
+        lastIvl,
+        factor,
+        time,
+        type_,
+      ];
   factory RevlogEntry.fromJson(List<dynamic> j) => RevlogEntry(
         id: j[0] as int,
         cid: j[1] as int,
@@ -258,7 +282,7 @@ class SyncMeta {
         'usn': usn,
         'ts': ts,
         'scm': 0,
-        'server_message_index': serverMessageIndex
+        'server_message_index': serverMessageIndex,
       };
   factory SyncMeta.fromJson(Map<String, dynamic> j) => SyncMeta()
     ..usn = j['usn'] as int? ?? 0
@@ -270,220 +294,103 @@ class SyncMeta {
 // HTTP Sync Client
 // ═══════════════════════════════════════════════════════════════
 
-const _syncHeaderName = 'X-Sync-Header';
-
-/// Full sync engine matching Anki's Rust HttpSyncClient.
+/// Compatibility wrapper for older callers. The old implementation sent
+/// sync-v1 JSON and X-Sync-Header requests that current Anki servers reject.
+/// Authentication and safe one-way collection transfer now use sync v10.
+@Deprecated('Use AnkiSyncProtocolClient and AnkiCollectionTransfer directly')
 class AnkiSyncEngine {
+  final String _endpoint;
   String syncKey = '';
-  String _sessionKey = '';
-  late http.Client _client;
-  String _endpoint = 'https://sync.ankiweb.net/sync';
+  AnkiSyncProtocolClient? _client;
 
-  AnkiSyncEngine({String? endpoint}) {
-    _endpoint = endpoint ?? 'https://sync.ankiweb.net/sync';
-    _client = http.Client();
-    _sessionKey = SyncHeader._randomSessionId();
-  }
+  AnkiSyncEngine({String? endpoint})
+      : _endpoint = endpoint ?? 'https://sync.ankiweb.net/sync/';
 
-  /// Login and get host key.
   Future<String> login(String email, String password) async {
-    final uri = Uri.parse('$_endpoint/hostKey');
-    final body = jsonEncode({'u': email, 'p': password});
-    final header = jsonEncode({
-      'sync_version': 1,
-      'sync_key': '',
-      'client_ver': 'ankidart:1.0',
-      'session_key': _sessionKey,
-    });
-    final resp = await http.post(
-      uri,
-      body: body,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Sync-Header': header,
-      },
-    );
-    if (resp.statusCode != 200) {
-      throw Exception('登录失败 (${resp.statusCode}): ${resp.body}');
-    }
-    final json = jsonDecode(resp.body) as Map<String, dynamic>;
-    final key = json['key'] as String?;
-    if (key == null || key.isEmpty) throw Exception('登录失败: 响应中没有 key');
-    syncKey = key;
-    return key;
+    final client = _clientForKey();
+    syncKey = await client.login(email, password);
+    return syncKey;
   }
 
-  /// Get the host key (used by the sync server).
-  Future<String> hostKey() async {
-    final uri = Uri.parse('$_endpoint/hostKey');
-    final header = jsonEncode({
-      'sync_version': 1,
-      'sync_key': syncKey,
-      'client_ver': 'ankidart:1.0',
-      'session_key': _sessionKey,
-    });
-    final resp = await http.post(
-      uri,
-      body: jsonEncode({'u': syncKey}),
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Sync-Header': header,
-      },
-    );
-    if (resp.statusCode != 200)
-      throw Exception('HostKey failed: ${resp.statusCode}');
-    final json = jsonDecode(resp.body) as Map<String, dynamic>;
-    return json['key'] as String? ?? '';
-  }
-
-  /// Send a sync request with uncompressed JSON (sync v1 protocol).
-  /// Returns the JSON response body.
-  Future<Map<String, dynamic>> _request(
-    String method,
-    Map<String, dynamic> body,
-  ) async {
-    final header = SyncHeader(syncKey: syncKey, sessionKey: _sessionKey);
-    final jsonStr = jsonEncode(body);
-
-    final resp = await _client.post(
-      Uri.parse('$_endpoint/$method'),
-      headers: {
-        'Content-Type': 'application/json',
-        _syncHeaderName: jsonEncode(header.toJson()),
-      },
-      body: jsonStr,
-    );
-
-    if (resp.statusCode != 200) {
-      throw Exception('Sync request $method 失败: ${resp.statusCode}');
-    }
-
-    return jsonDecode(resp.body) as Map<String, dynamic>;
-  }
-
-  /// Exchange metadata with server.
   Future<SyncMeta> meta(SyncMeta localMeta) async {
-    final resp = await _request('meta', localMeta.toJson());
-    return SyncMeta.fromJson(resp);
+    final remote = await _authenticatedClient().checkStatus();
+    return SyncMeta()
+      ..usn = remote.usn
+      ..ts = remote.serverTime;
   }
 
-  /// Start sync, get server graves.
-  Future<List<int>> start(int minUsn, int maxUsn) async {
-    final resp = await _request('start', {
-      'min_usn': minUsn,
-      'max_usn': maxUsn,
-      'server_graves': [],
-      'client_graves': [],
-    });
-    return (resp['graves'] as List?)?.cast<int>() ?? [];
-  }
+  Future<List<int>> start(int minUsn, int maxUsn) async =>
+      _incrementalSyncUnsupported();
 
-  /// Get next chunk of changes.
-  Future<SyncChunk> chunk() async {
-    final resp = await _request('chunk', {});
-    return SyncChunk.fromJson(resp);
-  }
+  Future<SyncChunk> chunk() async => _incrementalSyncUnsupported();
 
-  /// Apply a chunk of changes.
-  Future<void> applyChunk(SyncChunk chunk) async {
-    await _request('applyChunk', chunk.toJson());
-  }
+  Future<void> applyChunk(SyncChunk chunk) async =>
+      _incrementalSyncUnsupported();
 
-  /// Apply graves.
-  Future<void> applyGraves(List<int> ids, int type_) async {
-    await _request('applyGraves', {'ids': ids, 'type': type_});
-  }
+  Future<void> applyGraves(List<int> ids, int type_) async =>
+      _incrementalSyncUnsupported();
 
-  /// Sanity check.
   Future<Map<String, dynamic>> sanityCheck(
-      int clientCount, int serverCount) async {
-    return await _request('sanityCheck2', {
-      'client': clientCount,
-      'server': serverCount,
-    });
+    int clientCount,
+    int serverCount,
+  ) async =>
+      _incrementalSyncUnsupported();
+
+  Future<int> finish() async => _incrementalSyncUnsupported();
+
+  Future<void> fullUpload(List<int> data) async =>
+      throw const AnkiSyncException('请使用 AnkiCollectionTransfer，在备份和确认覆盖后上传');
+
+  Future<List<int>> fullDownload() async =>
+      _authenticatedClient().downloadCollection();
+
+  Future<Map<String, dynamic>> mediaBegin() async => _mediaSyncUnsupported();
+  Future<Map<String, dynamic>> mediaChanges() async => _mediaSyncUnsupported();
+  Future<void> mediaUpload(List<int> zipData) async => _mediaSyncUnsupported();
+  Future<List<int>> mediaDownload(List<int> fileIds) async =>
+      _mediaSyncUnsupported();
+
+  AnkiSyncProtocolClient _clientForKey() {
+    if (_client != null) return _client!;
+    final uri = Uri.tryParse(_endpoint);
+    if (uri != null &&
+        uri.host == 'sync.ankiweb.net' &&
+        (uri.path == '/sync' || uri.path == '/sync/')) {
+      _client = AnkiSyncProtocolClient.ankiWeb();
+    } else {
+      _client = AnkiSyncProtocolClient.selfHosted(endpoint: _endpoint);
+    }
+    return _client!;
   }
 
-  /// Finish sync.
-  Future<int> finish() async {
-    final resp = await _request('finish', {});
-    return resp['next_sync'] as int? ?? 0;
+  AnkiSyncProtocolClient _authenticatedClient() {
+    if (syncKey.isEmpty) {
+      throw const AnkiSyncException('请先登录同步账户');
+    }
+    if (_client == null) {
+      final uri = Uri.tryParse(_endpoint);
+      if (uri != null &&
+          uri.host == 'sync.ankiweb.net' &&
+          (uri.path == '/sync' || uri.path == '/sync/')) {
+        _client = AnkiSyncProtocolClient.ankiWeb(hostKey: syncKey);
+      } else {
+        _client = AnkiSyncProtocolClient.selfHosted(
+          endpoint: _endpoint,
+          hostKey: syncKey,
+        );
+      }
+    }
+    return _client!;
   }
 
-  /// Full upload (replace server data with local).
-  Future<void> fullUpload(List<int> data) async {
-    final header = SyncHeader(syncKey: syncKey, sessionKey: _sessionKey);
-    final resp = await _client.post(
-      Uri.parse('$_endpoint/upload'),
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        _syncHeaderName: jsonEncode(header.toJson()),
-      },
-      body: data,
-    );
-    if (resp.statusCode != 200)
-      throw Exception('Full upload failed: ${resp.statusCode}');
-  }
+  Never _incrementalSyncUnsupported() =>
+      throw const AnkiSyncException('旧版增量同步引擎已停用；Stroom 尚未实现安全的双向增量合并');
 
-  /// Full download (replace local data with server).
-  Future<List<int>> fullDownload() async {
-    final header = SyncHeader(syncKey: syncKey, sessionKey: _sessionKey);
-    final resp = await _client.post(
-      Uri.parse('$_endpoint/download'),
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        _syncHeaderName: jsonEncode(header.toJson()),
-      },
-    );
-    if (resp.statusCode != 200)
-      throw Exception('Full download failed: ${resp.statusCode}');
-    return resp.bodyBytes;
-  }
-
-  // ── Media Sync ──────────────────────────────────────────
-
-  /// Begin media sync.
-  Future<Map<String, dynamic>> mediaBegin() async {
-    return await _request('mediaBegin', {});
-  }
-
-  /// Get media changes.
-  Future<Map<String, dynamic>> mediaChanges() async {
-    return await _request('mediaChanges', {});
-  }
-
-  /// Upload media changes as ZIP.
-  Future<void> mediaUpload(List<int> zipData) async {
-    final header = SyncHeader(syncKey: syncKey, sessionKey: _sessionKey);
-    final resp = await _client.post(
-      Uri.parse('$_endpoint/uploadChanges'),
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        _syncHeaderName: jsonEncode(header.toJson()),
-      },
-      body: zipData,
-    );
-    if (resp.statusCode != 200)
-      throw Exception('Media upload failed: ${resp.statusCode}');
-  }
-
-  /// Download media files as ZIP.
-  Future<List<int>> mediaDownload(List<int> fileIds) async {
-    final header = SyncHeader(syncKey: syncKey, sessionKey: _sessionKey);
-    final payload = jsonEncode({'file_ids': fileIds});
-    final resp = await _client.post(
-      Uri.parse('$_endpoint/downloadFiles'),
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        _syncHeaderName: jsonEncode(header.toJson()),
-      },
-      body: utf8.encode(payload),
-    );
-    if (resp.statusCode != 200)
-      throw Exception('Media download failed: ${resp.statusCode}');
-    return resp.bodyBytes;
-  }
+  Never _mediaSyncUnsupported() =>
+      throw const AnkiSyncException('Stroom 尚未实现 Anki 媒体文件同步');
 
   void dispose() {
-    _client.close();
+    _client?.close();
+    _client = null;
   }
 }
