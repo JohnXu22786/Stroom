@@ -441,19 +441,30 @@ Future<AwsSigV4Credentials?> _instanceCredentials(
   if (!_isSafeCredentialEndpoint(base)) {
     throw const AwsCredentialChainException();
   }
-  final tokenResponse = await _httpRequest(
-    base.resolve('/latest/api/token'),
-    method: 'PUT',
-    headers: const {'X-aws-ec2-metadata-token-ttl-seconds': '21600'},
-  );
-  if (tokenResponse.statusCode != HttpStatus.ok ||
-      tokenResponse.body.trim().isEmpty) {
+  _HttpResult? tokenResponse;
+  try {
+    tokenResponse = await _httpRequest(
+      base.resolve('/latest/api/token'),
+      method: 'PUT',
+      headers: const {'X-aws-ec2-metadata-token-ttl-seconds': '21600'},
+    );
+  } catch (_) {
+    // Older IMDS deployments may not support the IMDSv2 token endpoint.
+  }
+  final token = tokenResponse?.statusCode == HttpStatus.ok
+      ? _nonEmpty(tokenResponse?.body)
+      : null;
+  if (token == null &&
+      _nonEmpty(environment['AWS_EC2_METADATA_V1_DISABLED'])?.toLowerCase() ==
+          'true') {
     return null;
   }
-  final token = tokenResponse.body.trim();
+  final requestHeaders = token == null
+      ? const <String, String>{}
+      : {'X-aws-ec2-metadata-token': token};
   final roleResponse = await _httpRequest(
     base.resolve('/latest/meta-data/iam/security-credentials/'),
-    headers: {'X-aws-ec2-metadata-token': token},
+    headers: requestHeaders,
   );
   if (roleResponse.statusCode != HttpStatus.ok) return null;
   final role = roleResponse.body.trim().split('\n').first;
@@ -462,7 +473,7 @@ Future<AwsSigV4Credentials?> _instanceCredentials(
     base.resolve(
       '/latest/meta-data/iam/security-credentials/${Uri.encodeComponent(role)}',
     ),
-    headers: {'X-aws-ec2-metadata-token': token},
+    headers: requestHeaders,
   );
   if (credentialsResponse.statusCode != HttpStatus.ok) return null;
   return _jsonCredentials(credentialsResponse.body);

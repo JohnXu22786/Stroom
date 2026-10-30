@@ -287,6 +287,76 @@ sso_region = us-east-1
       expect(credentials?.sessionToken, 'instance-session');
     });
 
+    test('falls back to IMDSv1 when IMDSv2 is unavailable', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      final requestHeaders = <String?>[];
+      server.listen((request) async {
+        requestHeaders.add(request.headers.value('X-aws-ec2-metadata-token'));
+        if (request.method == 'PUT' &&
+            request.uri.path == '/latest/api/token') {
+          request.response.statusCode = HttpStatus.forbidden;
+        } else if (request.uri.path.endsWith('/security-credentials/')) {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..write('instance-role');
+        } else {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.json
+            ..write(
+              jsonEncode({
+                'AccessKeyId': 'instance-v1-access',
+                'SecretAccessKey': 'instance-v1-secret',
+                'Token': 'instance-v1-session',
+              }),
+            );
+        }
+        await request.response.close();
+      });
+
+      final credentials = await resolveAwsCredentialChain(
+        environment: {
+          'AWS_EC2_METADATA_SERVICE_ENDPOINT':
+              'http://${server.address.address}:${server.port}',
+        },
+      );
+
+      expect(requestHeaders, [null, null, null]);
+      expect(credentials?.accessKeyId, 'instance-v1-access');
+      expect(credentials?.secretAccessKey, 'instance-v1-secret');
+      expect(credentials?.sessionToken, 'instance-v1-session');
+    });
+
+    test('honors AWS_EC2_METADATA_V1_DISABLED after token failure', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      var metadataRequests = 0;
+      server.listen((request) async {
+        if (request.method == 'PUT' &&
+            request.uri.path == '/latest/api/token') {
+          request.response.statusCode = HttpStatus.forbidden;
+        } else {
+          metadataRequests++;
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..write('instance-role');
+        }
+        await request.response.close();
+      });
+
+      final credentials = await resolveAwsCredentialChain(
+        environment: {
+          'AWS_EC2_METADATA_SERVICE_ENDPOINT':
+              'http://${server.address.address}:${server.port}',
+          'AWS_EC2_METADATA_V1_DISABLED': 'true',
+        },
+      );
+
+      expect(metadataRequests, 0);
+      expect(credentials, isNull);
+    });
+
     test('exchanges a web identity token for temporary credentials', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
