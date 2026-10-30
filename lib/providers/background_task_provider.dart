@@ -1965,9 +1965,9 @@ bool _legacyOcrHasStrongReceiptCredentialPrefix(
   if (echoedValue == null) return false;
   final echoedValueHasCredentialShape =
       RegExp(r'[-_0-9]').hasMatch(echoedValue) ||
-      _legacyOcrHasCredentialWord(echoedValue) ||
-      (_legacyOcrHasHighAlphabeticEntropy(echoedValue) &&
-          !_legacyOcrHasAscendingAlphabetRun(echoedValue));
+          _legacyOcrHasCredentialWord(echoedValue) ||
+          (_legacyOcrHasHighAlphabeticEntropy(echoedValue) &&
+              !_legacyOcrHasAscendingAlphabetRun(echoedValue));
   if (!echoedValueHasCredentialShape) return false;
   for (final credentialValue in credentialValues) {
     final prefix = RegExp(r'([A-Za-z0-9_-]{4,})(?:…|\.{3})\s*$')
