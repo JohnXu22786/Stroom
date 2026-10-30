@@ -13185,6 +13185,151 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a short embedded mask in authenticate context',
+      () {
+        const credentialEcho = 'projectaQw9Lm2';
+        const instruction =
+            'Authenticate with $credentialEcho to process this image.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-embedded-mask-authenticate-context',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'imageCount': 1,
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer a…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(
+          migratedInstruction,
+          'Authenticate with [redacted] to process this image.',
+        );
+        expect(persisted, contains(jsonEncode(migratedInstruction)));
+        expect(persisted, isNot(contains(credentialEcho)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts embedded-digit credentials after a short mask',
+      () {
+        BackgroundTask taskFor(String id, String credentialEcho) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'imageCount': 1,
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer a…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {
+                          'type': 'text',
+                          'text':
+                              'Authenticate with $credentialEcho to process this image.',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        for (final credentialEcho in const [
+          'transa4ction',
+          'transaction1',
+        ]) {
+          final task = taskFor(
+            'legacy-ocr-short-mask-authenticate-embedded-digit',
+            credentialEcho,
+          );
+          final persisted = jsonEncode(task.toMap());
+          final migratedInstruction = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent!;
+
+          expect(
+            migratedInstruction,
+            'Authenticate with [redacted] to process this image.',
+          );
+          expect(persisted, isNot(contains(credentialEcho)));
+        }
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves natural words in short-mask authenticate context',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'imageCount': 1,
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer a…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        for (final instruction in const [
+          'Authenticate with data to process this image.',
+          'Authenticate with data2 to process this image.',
+        ]) {
+          final task = taskFor(
+            'legacy-ocr-short-mask-authenticate-natural-word',
+            instruction,
+          );
+          final persisted = jsonEncode(task.toMap());
+          final migratedInstruction = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent!;
+
+          expect(migratedInstruction, instruction);
+          expect(persisted, contains(instruction));
+        }
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves natural long words split by a line break',
       () {
         const prompt = 'Please read the countervailing\narguments in the note.';
