@@ -1890,6 +1890,12 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeRequestUseLead = RegExp(
+        r'^\s*(?:for page \d+,\s*)?please\s+use\b.*\[redacted\].*\bfor (?:the )?request\b',
+        caseSensitive: false,
+        dotAll: true,
+      ).hasMatch(text) ||
+      !RegExp(r'\bfor (?:the )?request\b', caseSensitive: false).hasMatch(text);
   final safeScanContext = RegExp(
     r'^\s*the\s+scan\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
     caseSensitive: false,
@@ -1900,7 +1906,10 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  return safeActionLead || safeUseLead || safeScanContext || safeKeepLead;
+  return safeActionLead ||
+      (safeUseLead && safeRequestUseLead) ||
+      safeScanContext ||
+      safeKeepLead;
 }
 
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
