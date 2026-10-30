@@ -14,12 +14,12 @@ import 'aws_sigv4.dart';
 import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
+import 'llm_oauth_flow.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
     'd318bcc3afb9ea8782862f5e8cdb541afdc9dfa5';
 
-const _codexOAuthClientId = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const _claudeOAuthClientId = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const _kimiOAuthClientId = '17e5f671-d194-4dfb-9706-5516cb48c098';
 const _xaiOAuthClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -154,8 +154,9 @@ abstract final class LlmConnectorRegistry {
       id: 'gemini',
       displayName: 'Google Gemini API',
       protocol: LlmNativeProtocol.geminiGenerateContent,
-      authTypes: {'api_key'},
+      authTypes: {'api_key', 'oauth'},
       modelCatalog: kPinnedGeminiModels,
+      canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
@@ -227,7 +228,7 @@ abstract final class LlmConnectorRegistry {
       id: 'vertex',
       displayName: 'Google Vertex AI',
       protocol: LlmNativeProtocol.vertexGenerateContent,
-      authTypes: {'service_account', 'oauth', 'api_key'},
+      authTypes: {'service_account', 'api_key'},
       modelCatalog: [],
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
@@ -993,6 +994,11 @@ class LlmAccountConnectorService {
       return List.unmodifiable(account.models);
     }
     if (hasRemoteCatalog) {
+      if (account.authType == 'oauth' &&
+          !LlmOAuthProviderPolicy.forProvider(account.connectorType)
+              .supported) {
+        throw const LlmAccountConnectorException();
+      }
       final discovered = await _discoverRemoteModels(account);
       return _mergeModelMappings(discovered, account.models);
     }
@@ -1036,6 +1042,10 @@ class LlmAccountConnectorService {
         LlmConnectorRegistry.canonicalId(account.connectorType) !=
             suppliedAccount.connectorType) {
       throw const LlmAccountConnectorException();
+    }
+    if (account.authType == 'oauth' &&
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      return false;
     }
     final connector = LlmConnectorRegistry.find(account.connectorType);
     if (connector == null) throw const LlmAccountConnectorException();
@@ -1396,13 +1406,32 @@ class LlmAccountConnectorService {
     const formContentType = 'application/x-www-form-urlencoded';
     switch (account.connectorType) {
       case 'codex':
+        final clientId = _firstString(bundle, const ['client_id', 'clientId']);
+        if (clientId == null) return null;
         return _LlmTokenRefreshRequest(
-          uri: Uri.parse('https://auth.openai.com/oauth/token'),
+          uri: Uri.parse('https://auth.openai.com/api/accounts/oauth/token'),
           body: {
-            'client_id': _codexOAuthClientId,
+            'client_id': clientId,
             'grant_type': 'refresh_token',
             'refresh_token': refreshToken,
-            'scope': 'openid profile email',
+            'resource': 'https://api.openai.com/v1',
+          },
+          contentType: formContentType,
+        );
+      case 'gemini':
+        final clientId = _firstString(bundle, const ['client_id', 'clientId']);
+        final clientSecret = _firstString(bundle, const [
+          'client_secret',
+          'clientSecret',
+        ]);
+        if (clientId == null || clientSecret == null) return null;
+        return _LlmTokenRefreshRequest(
+          uri: Uri.parse('https://oauth2.googleapis.com/token'),
+          body: {
+            'client_id': clientId,
+            'client_secret': clientSecret,
+            'grant_type': 'refresh_token',
+            'refresh_token': refreshToken,
           },
           contentType: formContentType,
         );
@@ -1521,6 +1550,8 @@ class LlmAccountConnectorService {
         : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
+    final usesGeminiOAuth =
+        account.authType == 'oauth' && account.connectorType == 'gemini';
     final configuredHeaders = account.endpointConfig['headers'];
     if (configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
@@ -1564,17 +1595,58 @@ class LlmAccountConnectorService {
       );
       if (accessToken == null) throw const LlmAccountConnectorException();
       headers['Authorization'] = 'Bearer $accessToken';
-    } else if (account.connectorType == 'vertex' &&
-        account.authType == 'oauth') {
+    } else if (usesGeminiOAuth) {
       if (secret == null || secret.isEmpty) {
         throw const LlmAccountConnectorException();
       }
       headers['Authorization'] =
           'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
+      headers['x-goog-user-project'] =
+          LlmNativeRequestBuilder._requiredGoogleCloudProjectId(
+        account.endpointConfig,
+      );
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
     } else {
       throw const LlmAccountConnectorException();
+    }
+
+    var geminiOAuthRefreshed = false;
+    Future<void> refreshGeminiOAuthToken() async {
+      if (!usesGeminiOAuth ||
+          geminiOAuthRefreshed ||
+          !await refreshCredential(account)) {
+        throw const LlmAccountConnectorException();
+      }
+      final refreshedSecret = account.credentialRef == null
+          ? null
+          : await _readSecureValue(account.credentialRef!);
+      if (refreshedSecret == null || refreshedSecret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      headers['Authorization'] =
+          'Bearer ${LlmNativeRequestBuilder._credentialValue(account, refreshedSecret)}';
+      geminiOAuthRefreshed = true;
+    }
+
+    if (usesGeminiOAuth && secret != null && secret.isNotEmpty) {
+      final credentialBundle = _decodeCredentialBundle(secret);
+      final expiryValue =
+          credentialBundle['expires_at'] ?? credentialBundle['expired'];
+      final expiry = expiryValue is String
+          ? DateTime.tryParse(expiryValue)
+          : expiryValue is num
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  expiryValue.toInt() * 1000,
+                  isUtc: true,
+                )
+              : null;
+      if (expiry != null &&
+          !expiry.isAfter(
+            DateTime.now().toUtc().add(const Duration(seconds: 30)),
+          )) {
+        await refreshGeminiOAuthToken();
+      }
     }
 
     try {
@@ -1599,10 +1671,24 @@ class LlmAccountConnectorService {
                   cursorParameter: pageToken,
                 },
               );
-        final response = await _dio.getUri<Object?>(
-          pageUri,
-          options: Options(headers: headers),
-        );
+        Response<Object?> response;
+        try {
+          response = await _dio.getUri<Object?>(
+            pageUri,
+            options: Options(headers: headers),
+          );
+        } on DioException catch (error) {
+          if (error.response?.statusCode != 401 ||
+              !usesGeminiOAuth ||
+              geminiOAuthRefreshed) {
+            rethrow;
+          }
+          await refreshGeminiOAuthToken();
+          response = await _dio.getUri<Object?>(
+            pageUri,
+            options: Options(headers: headers),
+          );
+        }
         final data = _asJsonMap(response.data);
         final rawModels =
             data?['data'] ?? data?['models'] ?? data?['publisherModels'];
@@ -2578,14 +2664,6 @@ class LlmAccountConnectorService {
   }
 
   static void _validateCredential(LlmAccount account, String secret) {
-    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
-      try {
-        LlmNativeRequestBuilder._credentialValue(account, secret);
-      } catch (_) {
-        throw const LlmAccountConnectorException();
-      }
-      return;
-    }
     if (account.connectorType == 'bedrock' &&
         account.authType == 'aws_credentials') {
       try {
@@ -2852,6 +2930,11 @@ class LlmNativeRequestBuilder {
       case 'gemini':
         if (account.authType == 'api_key') {
           headers['x-goog-api-key'] = secret;
+        } else if (account.authType == 'oauth') {
+          headers['Authorization'] = 'Bearer $secret';
+          headers['x-goog-user-project'] = _requiredGoogleCloudProjectId(
+            config,
+          );
         }
         break;
       case 'gemini-interactions':
@@ -2866,8 +2949,7 @@ class LlmNativeRequestBuilder {
         }
         if (account.authType == 'api_key') {
           headers['x-goog-api-key'] = secret;
-        } else if (account.authType == 'service_account' ||
-            account.authType == 'oauth') {
+        } else if (account.authType == 'service_account') {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;
@@ -3165,12 +3247,7 @@ class LlmNativeRequestBuilder {
             config['legacyOcrFullEndpoint'] == true;
     switch (account.connectorType) {
       case 'codex':
-        baseUrl = _baseUrl(
-          config,
-          account.authType == 'oauth'
-              ? 'https://chatgpt.com/backend-api/codex'
-              : 'https://api.openai.com/v1',
-        );
+        baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
         path = '/responses';
       case 'claude':
         baseUrl = _baseUrl(config, 'https://api.anthropic.com');
@@ -3515,6 +3592,15 @@ class LlmNativeRequestBuilder {
     final value = config[key];
     if (value is! String || value.trim().isEmpty) return null;
     return value.trim();
+  }
+
+  static String _requiredGoogleCloudProjectId(Map<String, dynamic> config) {
+    final projectId = _configString(config, 'googleCloudProjectId');
+    if (projectId == null ||
+        !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$').hasMatch(projectId)) {
+      throw const LlmAccountConnectorException();
+    }
+    return projectId;
   }
 
   static String _joinPath(String base, String suffix) {

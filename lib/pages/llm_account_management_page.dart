@@ -113,6 +113,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
 
   Future<void> _addAccount() async {
     final gateway = await _gatewayFuture;
+    if (!mounted) return;
     final result = await showDialog<_AccountEditResult>(
       context: context,
       builder: (_) => _AccountEditorDialog(
@@ -123,10 +124,15 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (result == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      final saved = await gateway.accountManagement.saveAccount(
-        result.account,
-        secret: result.secret.isEmpty ? null : result.secret,
-      );
+      final saved = result.requiresOAuthAuthorization
+          ? await gateway.oauthAuthorization.authorize(
+              result.account,
+              configuration: result.oauthConfiguration,
+            )
+          : await gateway.accountManagement.saveAccount(
+              result.account,
+              secret: result.secret.isEmpty ? null : result.secret,
+            );
       await widget.onAccountSaved?.call(saved);
       await _reload();
     } catch (_) {
@@ -136,6 +142,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
 
   Future<void> _editAccount(AiGatewayAccount account) async {
     final gateway = await _gatewayFuture;
+    if (!mounted) return;
     final result = await showDialog<_AccountEditResult>(
       context: context,
       builder: (_) => _AccountEditorDialog(
@@ -148,10 +155,15 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (result == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      final saved = await gateway.accountManagement.saveAccount(
-        result.account,
-        secret: result.secret.isEmpty ? null : result.secret,
-      );
+      final saved = result.requiresOAuthAuthorization
+          ? await gateway.oauthAuthorization.authorize(
+              result.account,
+              configuration: result.oauthConfiguration,
+            )
+          : await gateway.accountManagement.saveAccount(
+              result.account,
+              secret: result.secret.isEmpty ? null : result.secret,
+            );
       await widget.onAccountSaved?.call(saved);
       await _reload();
     } catch (_) {
@@ -160,22 +172,38 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _deleteAccount(AiGatewayAccount account) async {
-    final confirmed = await _confirm(
-      title: '删除账号',
-      message: '删除“${account.displayName}”并从模型组中移除该账号？',
-    );
+    final deletionMessage =
+        switch (account.authType == 'oauth' ? account.connectorType : '') {
+      'codex' ||
+      'gemini' =>
+        '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
+      _ => '删除“${account.displayName}”并从模型组中移除该账号？',
+    };
+    final confirmed = await _confirm(title: '删除账号', message: deletionMessage);
     if (!confirmed || !mounted) return;
+    var revocationFailed = false;
     try {
       final gateway = await _gatewayFuture;
-      await gateway.accountManagement.deleteAccount(account.id);
+      if (!mounted) return;
+      if (account.authType == 'oauth' && account.hasCredential) {
+        revocationFailed =
+            !await gateway.oauthAuthorization.deleteAccountAndRevoke(account);
+      } else {
+        await gateway.accountManagement.deleteAccount(account.id);
+      }
     } catch (_) {
-      if (mounted) _showError('账号删除失败。');
+      if (mounted) {
+        _showError('账号删除失败。');
+      }
       return;
     }
     try {
       await widget.onAccountDeleted?.call(account);
     } catch (_) {
       if (mounted) _showError('账号已删除，但旧配置清理失败。');
+    }
+    if (mounted && revocationFailed) {
+      _showError('账号已删除，但 OAuth 撤销失败。请到提供商账户设置中撤销授权。');
     }
     if (mounted) await _reload();
   }
@@ -209,6 +237,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     List<AiGatewayAccount> accounts,
   ) async {
     final gateway = await _gatewayFuture;
+    if (!mounted) return;
     final updated = await showDialog<AiGatewayModelGroup>(
       context: context,
       builder: (_) => _ModelGroupEditorDialog(
@@ -354,7 +383,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
             padding: const EdgeInsets.all(16),
             sliver: SliverList.separated(
               itemCount: data.accounts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) => _AccountCard(
                 account: data.accounts[index],
                 providerCatalog: data.providerCatalog,
@@ -435,7 +464,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
             padding: const EdgeInsets.all(16),
             sliver: SliverList.separated(
               itemCount: data.groups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) => _ModelGroupCard(
                 group: data.groups[index],
                 accounts: data.accounts,
@@ -536,6 +565,7 @@ class _AccountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final connector = providerCatalog.findProvider(account.connectorType);
+    final authLimitation = connector?.authTypeLimitations[account.authType];
     final quotaRows = [
       ..._quotaRows(account.usageByWindow),
       ..._accountQuotaRows(account),
@@ -600,6 +630,14 @@ class _AccountCard extends StatelessWidget {
               '认证方式：${_authLabel(account.authType, connectorType: account.connectorType)}',
             ),
             Text('授权来源：${_authSourceLabel(account, connector)}'),
+            if (authLimitation != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  authLimitation,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             Text('最近错误：${recentError ?? '无记录'}'),
             if (connector?.supportsChatAdapter != true)
               const Padding(
@@ -967,8 +1005,15 @@ String _strategyLabel(AiGatewaySelectionStrategy strategy) =>
 class _AccountEditResult {
   final AiGatewayAccount account;
   final String secret;
+  final Map<String, String> oauthConfiguration;
+  final bool requiresOAuthAuthorization;
 
-  const _AccountEditResult(this.account, this.secret);
+  const _AccountEditResult(
+    this.account,
+    this.secret, {
+    this.oauthConfiguration = const {},
+    this.requiresOAuthAuthorization = false,
+  });
 }
 
 class _AccountEditorDialog extends StatefulWidget {
@@ -995,6 +1040,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _projectId;
   late final TextEditingController _credential;
   late final TextEditingController _models;
+  late final TextEditingController _oauthClientId;
+  late final TextEditingController _oauthClientSecret;
+  late final TextEditingController _googleCloudProjectId;
   late String _connectorType;
   late String _authType;
   late AiGatewayAccountStatus _status;
@@ -1013,21 +1061,40 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
+    final configuredLocation = account?.endpointConfig['location'];
+    final configuredRegion = account?.endpointConfig['region'];
+    final region = account?.connectorType == 'vertex'
+        ? configuredLocation is String
+            ? configuredLocation
+            : configuredRegion is String
+                ? configuredRegion
+                : null
+        : configuredRegion is String
+            ? configuredRegion
+            : null;
     _region = TextEditingController(
-      text: (account?.connectorType == 'vertex'
-              ? account?.endpointConfig['location'] as String? ??
-                  account?.endpointConfig['region'] as String?
-              : account?.endpointConfig['region'] as String?) ??
+      text: region ??
           (account?.connectorType == 'bedrock'
               ? 'us-east-1'
               : account?.connectorType == 'vertex'
                   ? 'us-central1'
                   : ''),
     );
+    final projectId = account?.endpointConfig['projectId'];
     _projectId = TextEditingController(
-      text: account?.endpointConfig['projectId'] as String? ?? '',
+      text: projectId is String ? projectId : '',
     );
     _credential = TextEditingController();
+    final oauthClientId = account?.endpointConfig['clientId'];
+    _oauthClientId = TextEditingController(
+      text: oauthClientId is String ? oauthClientId : '',
+    );
+    _oauthClientSecret = TextEditingController();
+    final googleCloudProjectId =
+        account?.endpointConfig['googleCloudProjectId'];
+    _googleCloudProjectId = TextEditingController(
+      text: googleCloudProjectId is String ? googleCloudProjectId : '',
+    );
     _models = TextEditingController(
       text: account?.models
               .map(
@@ -1054,6 +1121,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _region.dispose();
     _projectId.dispose();
     _credential.dispose();
+    _oauthClientId.dispose();
+    _oauthClientSecret.dispose();
+    _googleCloudProjectId.dispose();
     _models.dispose();
     super.dispose();
   }
@@ -1063,6 +1133,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final connectors = widget.providerCatalog.providers.toList();
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
     final authTypes = connector.supportedAuthTypes.toList()..sort();
+    final oauthLimitation = connector.authTypeLimitations['oauth'];
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
     return AlertDialog(
       title: Text(widget.account == null ? '添加 LLM 账号' : '编辑 LLM 账号'),
@@ -1139,6 +1210,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   for (final type in authTypes)
                     DropdownMenuItem(
                       value: type,
+                      enabled: type != 'oauth' ||
+                          connector.authTypeLimitations[type] == null,
                       child: Text(
                         _authLabel(type, connectorType: _connectorType),
                       ),
@@ -1157,6 +1230,46 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
+              if (_authType == 'oauth' && oauthLimitation != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    oauthLimitation,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              if (_connectorType == 'gemini' && _authType == 'oauth') ...[
+                const SizedBox(height: 8),
+                const Text(
+                  '此连接使用 Gemini Developer API OAuth；需要你管理的 Google Cloud 项目、已启用 Generative Language API 和配置好的 OAuth Desktop 客户端。请求会按此项目计量。它不使用 Code Assist 或 AI Studio 登录。',
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _googleCloudProjectId,
+                  decoration: const InputDecoration(
+                    labelText: 'Google Cloud project ID',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _oauthClientId,
+                  decoration: const InputDecoration(
+                    labelText: 'Google OAuth Desktop client ID',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _oauthClientSecret,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Google OAuth client secret',
+                    helperText: '只保存在平台安全存储中。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               const SizedBox(height: 8),
               TextField(
                 controller: _endpoint,
@@ -1286,6 +1399,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
+        if (widget.account != null && _authType == 'oauth')
+          OutlinedButton(
+            onPressed: () => _save(reconnectOAuth: true),
+            child: const Text('重新授权'),
+          ),
         FilledButton(onPressed: _save, child: const Text('保存')),
       ],
     );
@@ -1323,10 +1441,39 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
   }
 
-  void _save() {
+  void _save({bool reconnectOAuth = false}) {
     final accountName = _name.text.trim();
     if (accountName.isEmpty) {
       setState(() => _error = '请输入账号名称。');
+      return;
+    }
+    final connector = widget.providerCatalog.findProvider(_connectorType)!;
+    final oauthLimitation = connector.authTypeLimitations['oauth'];
+    final previousGoogleClientId = widget.account?.endpointConfig['clientId'];
+    final geminiOAuthClientChanged =
+        widget.account?.connectorType == 'gemini' &&
+            widget.account?.authType == 'oauth' &&
+            _connectorType == 'gemini' &&
+            _authType == 'oauth' &&
+            previousGoogleClientId != _oauthClientId.text.trim();
+    final geminiOAuthClientSecretChanged =
+        widget.account?.connectorType == 'gemini' &&
+            widget.account?.authType == 'oauth' &&
+            _connectorType == 'gemini' &&
+            _authType == 'oauth' &&
+            _oauthClientSecret.text.trim().isNotEmpty;
+    final credentialIdentityChanged = widget.account != null &&
+        (widget.account!.connectorType != _connectorType ||
+            widget.account!.authType != _authType ||
+            geminiOAuthClientChanged ||
+            geminiOAuthClientSecretChanged);
+    if (_authType == 'oauth' &&
+        oauthLimitation != null &&
+        (widget.account == null ||
+            widget.account!.authType != 'oauth' ||
+            widget.account!.connectorType != _connectorType ||
+            reconnectOAuth)) {
+      setState(() => _error = oauthLimitation);
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();
@@ -1407,6 +1554,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final endpointConfig = Map<String, dynamic>.from(
       widget.account?.endpointConfig ?? const <String, dynamic>{},
     );
+    if (_connectorType == 'gemini' &&
+        _authType == 'oauth' &&
+        _oauthClientId.text.trim().isNotEmpty) {
+      endpointConfig['clientId'] = _oauthClientId.text.trim();
+    }
+    if (_connectorType == 'gemini' &&
+        _authType == 'oauth' &&
+        _googleCloudProjectId.text.trim().isNotEmpty) {
+      endpointConfig['googleCloudProjectId'] =
+          _googleCloudProjectId.text.trim();
+    }
     final previousEndpoint = widget.account?.endpointConfig['baseUrl'] ??
         widget.account?.endpointConfig['host'] ??
         widget.account?.endpointConfig['apiBase'];
@@ -1457,18 +1615,49 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             _authType == 'aws_credential_chain'
         ? ''
         : _credential.text.trim();
-    final credentialIdentityChanged = widget.account != null &&
-        (widget.account!.connectorType != _connectorType ||
-            widget.account!.authType != _authType);
+    final requiresOAuthAuthorization = _authType == 'oauth' &&
+        (widget.account == null || reconnectOAuth || credentialIdentityChanged);
+    final oauthConfiguration = <String, String>{
+      if (_oauthClientId.text.trim().isNotEmpty)
+        'clientId': _oauthClientId.text.trim(),
+      if (_oauthClientSecret.text.trim().isNotEmpty)
+        'clientSecret': _oauthClientSecret.text.trim(),
+    };
+    if (requiresOAuthAuthorization &&
+        _connectorType == 'gemini' &&
+        (!RegExp(
+              r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$',
+            ).hasMatch(_googleCloudProjectId.text.trim()) ||
+            oauthConfiguration['clientId'] == null ||
+            ((widget.account == null ||
+                    widget.account!.connectorType != 'gemini' ||
+                    widget.account!.authType != 'oauth' ||
+                    !widget.hasCredential ||
+                    geminiOAuthClientChanged) &&
+                oauthConfiguration['clientSecret'] == null))) {
+      setState(
+        () => _error = '请提供 Google OAuth Desktop client ID 和对应的 client secret。',
+      );
+      return;
+    }
     if (_authType != 'none' &&
         _authType != 'relay' &&
         _authType != 'aws_credential_chain' &&
+        _authType != 'oauth' &&
         secret.isEmpty &&
         (!widget.hasCredential || credentialIdentityChanged)) {
       setState(() => _error = '请输入凭据。');
       return;
     }
-    Navigator.pop(context, _AccountEditResult(account, secret));
+    Navigator.pop(
+      context,
+      _AccountEditResult(
+        account,
+        secret,
+        oauthConfiguration: oauthConfiguration,
+        requiresOAuthAuthorization: requiresOAuthAuthorization,
+      ),
+    );
   }
 }
 

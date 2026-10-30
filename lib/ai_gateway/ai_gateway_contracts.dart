@@ -9,6 +9,7 @@ class AiGatewayProviderDefinition {
   final Set<String> capabilities;
   final bool supportsChatAdapter;
   final String? chatProtocolId;
+  final Map<String, String> authTypeLimitations;
 
   const AiGatewayProviderDefinition({
     required this.id,
@@ -17,6 +18,7 @@ class AiGatewayProviderDefinition {
     this.capabilities = const {},
     this.supportsChatAdapter = false,
     this.chatProtocolId,
+    this.authTypeLimitations = const {},
   });
 }
 
@@ -449,6 +451,27 @@ abstract interface class AiGatewayAuthLifecycle {
   Future<void> revoke(AiGatewayAccount account);
 }
 
+/// Performs provider browser OAuth without exposing token material through the
+/// public Gateway. Implementations commit tokens directly to secure storage.
+abstract interface class AiGatewayOAuthAuthorization {
+  Future<AiGatewayAccount> authorize(
+    AiGatewayAccount account, {
+    Map<String, String> configuration = const {},
+  });
+  Future<void> revoke(AiGatewayAccount account);
+
+  /// Deletes an OAuth account before attempting provider revocation. Returns
+  /// false when local deletion succeeded but provider revocation did not.
+  Future<bool> deleteAccountAndRevoke(AiGatewayAccount account);
+}
+
+class AiGatewayOAuthException implements Exception {
+  const AiGatewayOAuthException();
+
+  @override
+  String toString() => 'OAuth authorization could not be completed.';
+}
+
 /// Capability and model discovery is independent of provider registration.
 abstract interface class AiGatewayModelDiscovery {
   Future<List<AiGatewayUpstreamModel>> discoverModels(
@@ -502,6 +525,7 @@ abstract interface class AiGatewayRouting {
 /// Gateway-owned contracts; infrastructure implementations stay internal.
 abstract interface class AiGatewayFacade implements AiGatewayRouting {
   AiGatewayAccountManagement get accountManagement;
+  AiGatewayOAuthAuthorization get oauthAuthorization;
   AiGatewayProviderCatalog get providerCatalog;
   AiGatewayModelDiscovery get modelDiscovery;
   AiGatewayExecutor get executor;
