@@ -6056,6 +6056,69 @@ void main() {
         );
         expect(secretPluralPersisted, isNot(contains('[redacted] private')));
 
+        const secretPluralSafePrompt = 'Please keep secrets safe';
+        final secretPluralSafeTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-safe',
+          [safePrompt, secretPluralSafePrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralSafeTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralSafePrompt',
+        );
+
+        const secretPluralPronounPrompt = 'Please keep secrets to yourself';
+        final secretPluralPronounTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-pronoun',
+          [safePrompt, secretPluralPronounPrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralPronounTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralPronounPrompt',
+        );
+
+        const secretPluralIdiomPrompt = 'Please keep secrets under wraps';
+        final secretPluralIdiomTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-idiom',
+          [safePrompt, secretPluralIdiomPrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralIdiomTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralIdiomPrompt',
+        );
+
+        final splitSecretPluralTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-split-parts',
+          [safePrompt, 'Please keep', 'secrets private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretPluralTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep\nsecrets private',
+        );
+
+        final splitSecretPluralWordTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-split-word',
+          [safePrompt, 'Please keep secret', 's private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretPluralWordTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep secret\ns private',
+        );
+
         const secretEchoInPrivatePhrase = 'secrets123456789';
         final secretEchoInPrivatePhraseTask = taskFor(
           'legacy-ocr-short-credential-word-private-phrase-echo',
@@ -6077,6 +6140,18 @@ void main() {
         expect(
           secretEchoInPrivatePhrasePersisted,
           isNot(contains(secretEchoInPrivatePhrase)),
+        );
+
+        final splitSecretEchoTask = taskFor(
+          'legacy-ocr-short-credential-word-private-phrase-split-echo',
+          [safePrompt, 'Please keep secret', 's123456789 private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretEchoTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep [redacted]\n private',
         );
 
         const tokenizationKey = 'tokenization';

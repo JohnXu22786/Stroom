@@ -1871,9 +1871,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
         if (_legacyOcrTextContainsCredential(text, credentialValues)) {
           text = _legacyOcrRedactMaskedCredentialEchoes(text, credentialValues);
         }
-        if (!_legacyOcrTextContainsCredential(text, credentialValues)) {
-          textParts.add(text);
-        }
+        textParts.add(text);
       }
     }
   }
@@ -1882,7 +1880,18 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     textParts.join('\u0000'),
     credentialValues,
   );
-  final instruction = redactedMarkedInstruction.replaceAll('\u0000', '\n');
+  final safeTextParts = _legacyOcrTextContainsCredential(
+    redactedMarkedInstruction,
+    credentialValues,
+  )
+      ? redactedMarkedInstruction
+          .split('\u0000')
+          .where(
+            (text) => !_legacyOcrTextContainsCredential(text, credentialValues),
+          )
+          .join('\u0000')
+      : redactedMarkedInstruction;
+  final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
       RegExp(
         r'(?:data:image/|base64,)',
@@ -1892,7 +1901,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       // Preserve text-part boundaries separately so an echoed key split
       // between parts can be identified without removing natural whitespace.
       _legacyOcrTextContainsMaskedCredential(
-        redactedMarkedInstruction,
+        safeTextParts,
         credentialValues,
       )) {
     return null;
@@ -2126,8 +2135,9 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   required bool isNaturalWordContinuation,
   required bool isNaturalSecretPlural,
 }) {
-  final before = text.substring(0, match.start).trimRight();
-  final after = text.substring(match.end).trimLeft();
+  final before =
+      text.substring(0, match.start).replaceAll('\u0000', ' ').trimRight();
+  final after = text.substring(match.end).replaceAll('\u0000', ' ').trimLeft();
   final politeNaturalVerbPrompt = naturalWord.endsWith('ize') &&
       RegExp(r'\bplease$', caseSensitive: false).hasMatch(before) &&
       RegExp(
@@ -2241,9 +2251,14 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
-  final naturalSecretPluralPrivatePrompt = isNaturalSecretPlural &&
+  final naturalSecretPluralPrompt = isNaturalSecretPlural &&
       RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
-      RegExp(r'^private\b', caseSensitive: false).hasMatch(after);
+      (after.isEmpty ||
+          RegExp(
+            r'''^[\p{L}][\p{L}\p{M}\p{N}\s,.'"’\-]*[.!?;:]?$''',
+            unicode: true,
+            caseSensitive: false,
+          ).hasMatch(after));
   final naturalDefinitionQuestion = isNaturalWordContinuation &&
       RegExp(r'\bwhat does$', caseSensitive: false).hasMatch(before) &&
       RegExp(r'^mean\b', caseSensitive: false).hasMatch(after);
@@ -2264,7 +2279,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readNaturalNounInstructionPrompt ||
           naturalImperativePrompt ||
           naturalNounInstructionPrompt ||
-          naturalSecretPluralPrivatePrompt ||
+          naturalSecretPluralPrompt ||
           naturalDefinitionQuestion ||
           naturalNounSentence);
 }
@@ -2330,8 +2345,8 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
           prefix,
           naturalSuffix,
         ),
-        isNaturalSecretPlural:
-            naturalWord == 'secrets' && naturalSuffix.toLowerCase() == 's',
+        isNaturalSecretPlural: naturalWord == 'secrets' &&
+            naturalSuffix.replaceAll('\u0000', '').toLowerCase() == 's',
       );
       final credentialWordEcho = isCredentialWord &&
           (!secretaryWord || hasCredentialUseContext) &&
@@ -2351,7 +2366,12 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
         return match.group(0)!;
       }
       final trailingPunctuation = rawSuffix.substring(suffix.length);
-      return '${match.group(1)}[redacted]$trailingPunctuation';
+      final partBoundaryCount =
+          RegExp(r'\u0000').allMatches('${match.group(2)}$rawSuffix').length;
+      final preservedPartBoundaries =
+          List<String>.filled(partBoundaryCount, '\u0000').join();
+      return '${match.group(1)}[redacted]'
+          '$preservedPartBoundaries$trailingPunctuation';
     });
   }
   return sanitized;
