@@ -471,7 +471,7 @@ class OcrTaskRunner {
             rethrow;
           }
           _checkActive();
-          if (_perImageRequestStages[imageIndex] == 0) {
+          if ((_perImageRequestStages[imageIndex] ?? 0) == 0) {
             _hasPerImageFailureBeforeUpload = true;
           }
           _failedDiagnosticService ??= service;
