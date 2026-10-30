@@ -1890,10 +1890,6 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  final bareActionOnRedactedValue = RegExp(
-    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
-    caseSensitive: false,
-  ).hasMatch(text);
   final safeUseLead = RegExp(
     r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
@@ -1915,7 +1911,7 @@ bool _legacyOcrHasSafeRedactedInstruction(String text) {
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
-  return (safeActionLead && !bareActionOnRedactedValue) ||
+  return safeActionLead ||
       (safeUseLead && safeRequestUseLead) ||
       safeScanContext ||
       safeKeepLead;
@@ -1945,7 +1941,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       credentialValues,
     ),
   );
-  final joinedCredentialCheckText = sourceTextParts.join().replaceAll('\u0000', '');
+  final joinedCredentialCheckText =
+      sourceTextParts.join().replaceAll('\u0000', '');
   if (hasEmbeddedNul &&
       !hasCredentialInOnePart &&
       _legacyOcrTextContainsCredential(
