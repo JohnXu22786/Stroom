@@ -3070,7 +3070,13 @@ class LlmNativeRequestBuilder {
         'xai' ||
         'meta' ||
         'gemini-interactions' ||
-        'openai-compatibility' =>
+        'openai-compatibility' ||
+        'openai-api' ||
+        'moonshot' ||
+        'glm' ||
+        'deepseek' ||
+        'minimax' ||
+        'qwen' =>
           true,
         'vertex' => _usesVertexInteractions(config, nativeFormat),
         _ => false,

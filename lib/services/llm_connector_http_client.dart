@@ -287,6 +287,8 @@ class LlmConnectorHttpClient {
           stream: stream,
           nativeFormat: nativeFormat,
         );
+      } on LlmConnectorHttpException {
+        rethrow;
       } catch (_) {
         throw const LlmConnectorHttpException();
       }

@@ -2349,6 +2349,20 @@ void main() {
           null,
         ),
       ];
+      for (final connector in [
+        'openai-api',
+        'moonshot',
+        'glm',
+        'deepseek',
+        'minimax',
+        'qwen',
+      ]) {
+        cases.add((
+          _account('stream-$connector', connector),
+          '$connector-api-key',
+          null,
+        ));
+      }
 
       for (final (account, credential, nativeFormat) in cases) {
         final request = builder.build(
@@ -2951,6 +2965,50 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('preserves AWS credential resolution error classification', () async {
+      var requestsSent = 0;
+      final credentials = _MemoryCredentials();
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'bedrock-missing-credentials',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+        }),
+      );
+      credentials.values[account.credentialRef!] = 'invalid-json';
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
+        });
+
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          body: const {'messages': []},
+        ),
+        throwsA(
+          isA<LlmConnectorHttpException>().having(
+            (error) => error.code,
+            'code',
+            'aws_credentials_unavailable',
+          ),
+        ),
+      );
+      expect(requestsSent, 0);
+    });
+
     test(
       'signs Bedrock Converse requests and adapts streamed chat output',
       () async {
