@@ -62,28 +62,6 @@ extension _SettingsPageAboutExt on _SettingsPageState {
           children: [
             // Web端不提供更新功能
             if (!kIsWeb) ...[
-              // Pre-release toggle switch - above the check update button
-              _buildListTile(
-                leading: Icon(
-                  Icons.science,
-                  color: updateState.acceptPreRelease
-                      ? Colors.orange
-                      : Colors.grey,
-                ),
-                title: '接收预览版',
-                subtitle: '开启后可检查预览版更新',
-                trailing: Switch(
-                  value: updateState.acceptPreRelease,
-                  onChanged: (value) {
-                    ref
-                        .read(updateProvider.notifier)
-                        .setAcceptPreRelease(value);
-                  },
-                  activeThumbColor: Colors.orange,
-                ),
-                onTap: () {},
-              ),
-              const Divider(height: 1),
               _buildListTile(
                 leading: updateState.isChecking
                     ? const SizedBox(
@@ -115,12 +93,43 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                 onTap: updateState.isChecking ? () {} : () => _checkForUpdate(),
               ),
               const Divider(height: 1),
+              _buildListTile(
+                leading: Icon(
+                  Icons.science,
+                  color: updateState.acceptPreRelease
+                      ? Colors.orange
+                      : Colors.grey,
+                ),
+                title: '接收预览版',
+                subtitle: '开启后可检查预览版更新',
+                trailing: Switch(
+                  value: updateState.acceptPreRelease,
+                  onChanged: (value) {
+                    ref
+                        .read(updateProvider.notifier)
+                        .setAcceptPreRelease(value);
+                  },
+                  activeThumbColor: Colors.orange,
+                ),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
             ],
             _buildListTile(
-              leading: const Icon(Icons.code, color: Colors.teal),
-              title: '开源许可',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showLicenseDialog(),
+              leading: const Icon(Icons.link, color: Colors.blueGrey),
+              title: '项目主页',
+              subtitle: 'https://github.com/JohnXu22786/Stroom',
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
+            ),
+            const Divider(height: 1),
+            _buildListTile(
+              leading: const Icon(Icons.bug_report, color: Colors.deepOrange),
+              title: '问题反馈',
+              subtitle: 'GitHub Issues',
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () =>
+                  _openUrl('https://github.com/JohnXu22786/Stroom/issues'),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -131,11 +140,10 @@ extension _SettingsPageAboutExt on _SettingsPageState {
             ),
             const Divider(height: 1),
             _buildListTile(
-              leading: const Icon(Icons.link, color: Colors.blueGrey),
-              title: '项目主页',
-              subtitle: 'https://github.com/JohnXu22786/Stroom',
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
+              leading: const Icon(Icons.code, color: Colors.teal),
+              title: '开源许可',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showLicenseDialog(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -146,15 +154,6 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               onTap: () => _openUrl(
                 'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',
               ),
-            ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.bug_report, color: Colors.deepOrange),
-              title: '问题反馈',
-              subtitle: 'GitHub Issues',
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () =>
-                  _openUrl('https://github.com/JohnXu22786/Stroom/issues'),
             ),
           ],
         ),
