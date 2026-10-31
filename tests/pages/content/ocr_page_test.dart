@@ -4129,7 +4129,7 @@ void main() {
       },
     );
 
-    testWidgets('does not restore a selection cleared during OCR startup', (
+    testWidgets('keeps image clearing locked during OCR startup', (
       tester,
     ) async {
       final validationStarted = Completer<void>();
@@ -4157,17 +4157,21 @@ void main() {
       await tester.pump();
       await validationStarted.future;
 
+      final clearButton = tester.widget<IconButton>(
+        find.byKey(const Key('ocr_clear_button')),
+      );
+      expect(clearButton.onPressed, isNull);
       await tester.tap(find.byKey(const Key('ocr_clear_button')));
       await tester.pump();
-      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
-      await tester.pump();
+      expect(
+        find.byKey(const Key('ocr_clear_confirmation_dialog')),
+        findsNothing,
+      );
+      expect(find.text('已选 2 张图片'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
       finishValidation.complete();
       await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('已选 2 张图片'), findsNothing);
-      expect(find.text('图片列表已变化，请重新开始识别。'), findsOneWidget);
-      expect(find.text('开始识别'), findsOneWidget);
     });
 
     testWidgets('applies overlapping edits to the same selected image', (
