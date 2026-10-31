@@ -2705,6 +2705,312 @@ Map<String, dynamic>? _unavailableRetryDataFromLegacyRequest(
   );
 }
 
+Iterable<String> _credentialValuesFromOcrRetryData(
+  Map<String, dynamic> retryData,
+) sync* {
+  bool isCredentialField(Object? key) {
+    if (key is! String) return false;
+    final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return normalized == 'key' ||
+        RegExp(
+          r'(?:api|access|private|secret|subscription|client|service|consumer|encryption|signing|publishable|webhook|public|app|account|license|project|organization|org|deployment|database|db)key$',
+        ).hasMatch(normalized) ||
+        normalized.contains('token') ||
+        normalized.contains('secret') ||
+        normalized.contains('authorization') ||
+        normalized.contains('credential') ||
+        normalized == 'password' ||
+        normalized == 'passwd' ||
+        normalized == 'passphrase' ||
+        normalized.contains('cookie') ||
+        normalized == 'signature' ||
+        normalized == 'sig' ||
+        normalized == 'jwt';
+  }
+
+  Iterable<String> valuesFrom(dynamic value) sync* {
+    if (value is Map) {
+      for (final entry in value.entries) {
+        if (isCredentialField(entry.key) &&
+            entry.value is String &&
+            (entry.value as String).trim().isNotEmpty) {
+          yield entry.value as String;
+        }
+        yield* valuesFrom(entry.value);
+      }
+    } else if (value is Iterable) {
+      for (final item in value) {
+        yield* valuesFrom(item);
+      }
+    }
+  }
+
+  yield* valuesFrom(retryData);
+}
+
+Map<String, dynamic> _safeUnsupportedOcrRetryData(
+  String taskId,
+  Map<String, dynamic> malformedRetryData, {
+  Map<String, dynamic>? legacyRetryData,
+  required Iterable<String> credentialValues,
+}) {
+  final unsafeCredentialValues = <String>{
+    ...credentialValues,
+    ..._credentialValuesFromOcrRetryData(malformedRetryData),
+  };
+  final snapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
+  final legacySnapshot = legacyRetryData == null
+      ? null
+      : OcrRetrySnapshot.fromMap(legacyRetryData);
+
+  String? safeReference(String? value) =>
+      value != null && _isSafeOcrModelId(value.trim(), unsafeCredentialValues)
+          ? value
+          : null;
+
+  final configId = safeReference(snapshot.configId) ??
+      safeReference(legacySnapshot?.configId);
+  final modelId =
+      safeReference(snapshot.modelId) ?? safeReference(legacySnapshot?.modelId);
+  final rawInstruction = snapshot.instructionContent;
+  final instructionContent = rawInstruction != null &&
+          !_legacyOcrTextContainsCredential(
+            rawInstruction,
+            unsafeCredentialValues,
+          )
+      ? rawInstruction
+      : legacySnapshot?.instructionContent;
+
+  final rawImages = malformedRetryData['images'];
+  final fallbackImages = legacyRetryData?['images'];
+  final rawImageCount = rawImages is List ? rawImages.length : 0;
+  final fallbackImageCount = fallbackImages is List ? fallbackImages.length : 0;
+  final imageCount = math.max(rawImageCount, fallbackImageCount);
+  final unavailableImages = OcrRetryStorage.unavailableSnapshotForCount(
+    taskId: taskId,
+    imageCount: imageCount,
+  )['images'] as List;
+  final parsedImagesByIndex = <int, OcrRetryImage>{
+    for (var index = 0; index < snapshot.images.length; index++)
+      snapshot.imageEntryIndices[index]: snapshot.images[index],
+  };
+  final images = <Map<String, dynamic>>[];
+  for (var index = 0; index < imageCount; index++) {
+    final rawImage =
+        rawImages is List && index < rawImages.length ? rawImages[index] : null;
+    final fallbackImage =
+        fallbackImages is List && index < fallbackImages.length
+            ? fallbackImages[index]
+            : null;
+    final parsedImage = parsedImagesByIndex[index];
+    final placeholder =
+        Map<String, dynamic>.from(unavailableImages[index] as Map);
+    final image = <String, dynamic>{
+      if (parsedImage?.bytes != null)
+        'bytes': base64Encode(parsedImage!.bytes!),
+      if (parsedImage?.storageRef != null)
+        'storageRef': parsedImage!.storageRef,
+      'format': parsedImage?.format ?? 'jpeg',
+      if (parsedImage?.name != null) 'name': parsedImage!.name,
+    };
+
+    final sourceImage = rawImage is Map ? rawImage : fallbackImage;
+    if (sourceImage is Map) {
+      final storageRef = sourceImage['storageRef'];
+      if (storageRef is String &&
+          OcrRetryImage.isValidStorageReference(storageRef)) {
+        image['storageRef'] = storageRef;
+      }
+      final format = sourceImage['format'];
+      if (format is String &&
+          !_legacyOcrTextContainsCredential(format, unsafeCredentialValues)) {
+        image['format'] = format;
+      }
+      final name = sourceImage['name'];
+      if (name is String &&
+          !_legacyOcrTextContainsCredential(name, unsafeCredentialValues)) {
+        image['name'] = name;
+      }
+    }
+
+    if (parsedImage == null && image['storageRef'] == null) {
+      image['storageRef'] = placeholder['storageRef'];
+    }
+    images.add(image);
+  }
+
+  final rawVersion = malformedRetryData['version'];
+  final retryData = <String, dynamic>{
+    'type': 'ocr',
+    'version': rawVersion is int ? rawVersion : -1,
+    if (configId != null || modelId != null)
+      'modelRef': {
+        if (configId != null) 'configId': configId,
+        if (modelId != null) 'modelId': modelId,
+      },
+    'images': images,
+    if (instructionContent != null) 'instructionContent': instructionContent,
+  };
+
+  final saveFolder = malformedRetryData['saveFolder'];
+  if (saveFolder is String &&
+      !_legacyOcrTextContainsCredential(saveFolder, unsafeCredentialValues)) {
+    retryData['saveFolder'] = saveFolder;
+  }
+  final batchMode = malformedRetryData['batchMode'];
+  if (batchMode == 'joint' || batchMode == 'perImage') {
+    retryData['batchMode'] = batchMode;
+  }
+  final perImageConcurrency = malformedRetryData['perImageConcurrency'];
+  if (perImageConcurrency is int &&
+      perImageConcurrency >= 1 &&
+      perImageConcurrency <= 2) {
+    retryData['perImageConcurrency'] = perImageConcurrency;
+  }
+  final requestSizeBudgetBytes = malformedRetryData['requestSizeBudgetBytes'];
+  if (requestSizeBudgetBytes is int && requestSizeBudgetBytes > 0) {
+    retryData['requestSizeBudgetBytes'] = requestSizeBudgetBytes;
+  }
+  return Map<String, dynamic>.from(
+    _withoutCredentialEchoes(retryData, unsafeCredentialValues) as Map,
+  );
+}
+
+Map<String, dynamic> _unavailableRetryDataFromMalformed(
+  String taskId,
+  Map<String, dynamic> malformedRetryData, {
+  Map<String, dynamic>? legacyRetryData,
+  required Iterable<String> credentialValues,
+}) {
+  final safeCredentialValues = <String>{
+    ...credentialValues,
+    ..._credentialValuesFromOcrRetryData(malformedRetryData),
+  };
+  final malformedSnapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
+  final supportedVersion = malformedSnapshot.isLegacy ||
+      malformedSnapshot.version == 1 ||
+      malformedSnapshot.version == 2 ||
+      malformedSnapshot.version == OcrRetrySnapshot.currentVersion;
+  if (!supportedVersion) {
+    // Safe future-version snapshots must keep following the existing restore
+    // migration path. Rebuild only when the snapshot contains fields or values
+    // that cannot be retained in a task record.
+    bool containsCredential(dynamic value) {
+      if (value is String) {
+        return _legacyOcrTextContainsCredential(value, credentialValues);
+      }
+      if (value is Map) {
+        return value.entries.any(
+          (entry) =>
+              containsCredential(entry.key) || containsCredential(entry.value),
+        );
+      }
+      if (value is Iterable) return value.any(containsCredential);
+      return false;
+    }
+
+    if (malformedRetryData['version'] is int &&
+        !malformedSnapshot.hasUnknownFields &&
+        !containsCredential(malformedRetryData)) {
+      return malformedRetryData;
+    }
+    return _safeUnsupportedOcrRetryData(
+      taskId,
+      malformedRetryData,
+      legacyRetryData: legacyRetryData,
+      credentialValues: safeCredentialValues,
+    );
+  }
+
+  final legacySnapshot = legacyRetryData == null
+      ? null
+      : OcrRetrySnapshot.fromMap(legacyRetryData);
+  final legacyImages = legacyRetryData?['images'];
+  final legacyImageCount = legacyImages is List ? legacyImages.length : 0;
+  final imageCount = malformedSnapshot.imageEntryCount > legacyImageCount
+      ? malformedSnapshot.imageEntryCount
+      : legacyImageCount;
+  final malformedConfigId = malformedSnapshot.configId;
+  final legacyConfigId = legacySnapshot?.configId;
+  final configId = malformedConfigId != null &&
+          _isSafeOcrModelId(malformedConfigId.trim(), safeCredentialValues)
+      ? malformedConfigId
+      : legacyConfigId != null &&
+              _isSafeOcrModelId(legacyConfigId.trim(), safeCredentialValues)
+          ? legacyConfigId
+          : null;
+  final malformedModelId = malformedSnapshot.modelId;
+  final modelId = malformedModelId != null &&
+          _isSafeOcrModelId(malformedModelId.trim(), safeCredentialValues)
+      ? malformedModelId
+      : legacySnapshot?.modelId;
+  final malformedInstruction = malformedSnapshot.instructionContent;
+  final instructionContent = malformedInstruction != null &&
+          !_legacyOcrTextContainsCredential(
+            malformedInstruction,
+            safeCredentialValues,
+          )
+      ? malformedInstruction
+      : legacySnapshot?.instructionContent;
+  final malformedSaveFolder = malformedSnapshot.saveFolder;
+  final retryData = OcrRetryStorage.unavailableSnapshotForCount(
+    taskId: taskId,
+    imageCount: imageCount,
+    configId: configId,
+    modelId: modelId,
+    instructionContent: instructionContent,
+    saveFolder: _legacyOcrTextContainsCredential(
+      malformedSaveFolder,
+      safeCredentialValues,
+    )
+        ? ''
+        : malformedSaveFolder,
+    batchMode: malformedSnapshot.batchMode,
+    perImageConcurrency: malformedSnapshot.perImageConcurrency,
+    requestSizeBudgetBytes: malformedSnapshot.requestSizeBudgetBytes,
+    legacyModelIndex: malformedSnapshot.legacyModelIndex,
+    legacyInstructionIndex: malformedSnapshot.legacyInstructionIndex,
+  );
+  final images = retryData['images'] as List;
+  for (var index = 0; index < malformedSnapshot.images.length; index++) {
+    final image = malformedSnapshot.images[index];
+    final imageIndex = malformedSnapshot.imageEntryIndices[index];
+    images[imageIndex] = {
+      if (image.bytes != null) 'bytes': base64Encode(image.bytes!),
+      if (image.storageRef != null) 'storageRef': image.storageRef,
+      'format': image.format,
+      if (image.name != null) 'name': image.name,
+    };
+  }
+  final rawImages = malformedRetryData['images'];
+  if (rawImages is List) {
+    for (var index = 0; index < rawImages.length; index++) {
+      final rawImage = rawImages[index];
+      if (rawImage is! Map || index >= images.length) continue;
+      final image = Map<String, dynamic>.from(images[index] as Map);
+      final storageRef = rawImage['storageRef'];
+      if (storageRef is String &&
+          OcrRetryImage.isValidStorageReference(storageRef)) {
+        image['storageRef'] = storageRef;
+      }
+      final format = rawImage['format'];
+      if (format is String &&
+          !_legacyOcrTextContainsCredential(format, safeCredentialValues)) {
+        image['format'] = format;
+      }
+      final name = rawImage['name'];
+      if (name is String &&
+          !_legacyOcrTextContainsCredential(name, safeCredentialValues)) {
+        image['name'] = name;
+      }
+      images[index] = image;
+    }
+  }
+  return Map<String, dynamic>.from(
+    _withoutCredentialEchoes(retryData, safeCredentialValues) as Map,
+  );
+}
+
 bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
   final snapshot = OcrRetrySnapshot.fromMap(retryData);
   final supportedVersion = snapshot.isLegacy ||
@@ -2721,6 +3027,40 @@ bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
       (!snapshot.hasInvalidImages || snapshot.images.isNotEmpty);
 }
 
+dynamic _withoutCredentialEchoes(
+  dynamic value,
+  Iterable<String> credentialValues,
+) {
+  if (value is String) {
+    return _legacyOcrTextContainsCredential(value, credentialValues)
+        ? null
+        : value;
+  }
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        if (entry.key is! String ||
+            !_legacyOcrTextContainsCredential(
+              entry.key as String,
+              credentialValues,
+            ))
+          if (entry.value is! String ||
+              !_legacyOcrTextContainsCredential(
+                entry.value as String,
+                credentialValues,
+              ))
+            entry.key: _withoutCredentialEchoes(entry.value, credentialValues),
+    };
+  }
+  if (value is List) {
+    return [
+      for (final item in value)
+        _withoutCredentialEchoes(item, credentialValues),
+    ];
+  }
+  return value;
+}
+
 Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final taskId = map['id'] as String;
   final rawRetryData = map['retryData'];
@@ -2733,19 +3073,40 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
       final retryData = Map<String, dynamic>.from(rawRetryData);
       if (map['type'] != BackgroundTaskType.ocr.name ||
           _retryDataHasSupportedOcrSchema(retryData)) {
-        final modelRef = retryData['modelRef'];
-        if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
-          final modelId = modelRef['modelId'];
-          if (modelId is String &&
-              !_isSafeOcrModelId(
-                modelId.trim(),
-                _legacyOcrCredentialValues(request),
+        if (map['type'] == BackgroundTaskType.ocr.name) {
+          final instructionContent = retryData['instructionContent'];
+          final credentialValues = _legacyOcrCredentialValues(request);
+          if (instructionContent is String &&
+              credentialValues.isNotEmpty &&
+              _legacyOcrTextContainsCredential(
+                instructionContent,
+                credentialValues,
               )) {
-            retryData['modelRef'] = Map<String, dynamic>.from(modelRef)
-              ..remove('modelId');
+            final safeLegacyInstruction = _legacyOcrInstructionContent(request);
+            if (safeLegacyInstruction == null) {
+              retryData.remove('instructionContent');
+            } else {
+              retryData['instructionContent'] = safeLegacyInstruction;
+            }
           }
         }
-        return retryData;
+        final modelRef = retryData['modelRef'];
+        if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
+          final credentialValues = _legacyOcrCredentialValues(request);
+          final safeModelRef = Map<String, dynamic>.from(modelRef);
+          for (final field in ['configId', 'modelId']) {
+            final reference = safeModelRef[field];
+            if (reference is String &&
+                !_isSafeOcrModelId(reference.trim(), credentialValues)) {
+              safeModelRef.remove(field);
+            }
+          }
+          retryData['modelRef'] = safeModelRef;
+        }
+        final credentialValues = _legacyOcrCredentialValues(request);
+        return Map<String, dynamic>.from(
+          _withoutCredentialEchoes(retryData, credentialValues) as Map,
+        );
       }
       malformedRetryData = retryData;
     } catch (_) {
@@ -2754,53 +3115,19 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   }
   if (map['type'] != BackgroundTaskType.ocr.name) return null;
 
-  final unavailableRetryData =
-      _unavailableRetryDataFromLegacyRequest(taskId, request);
-  if (unavailableRetryData != null && malformedRetryData != null) {
-    final malformedSnapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
-    final unavailableSnapshot = OcrRetrySnapshot.fromMap(unavailableRetryData);
-    final unavailableImages = unavailableRetryData['images'] as List;
-    final imageCount =
-        malformedSnapshot.imageEntryCount > unavailableImages.length
-            ? malformedSnapshot.imageEntryCount
-            : unavailableImages.length;
-    final malformedInstruction = malformedSnapshot.instructionContent;
-    final safeMalformedInstruction = malformedInstruction != null &&
-            _legacyOcrTextContainsCredential(
-              malformedInstruction,
-              _legacyOcrCredentialValues(request),
-            )
-        ? null
-        : malformedInstruction;
-    final retryData = OcrRetryStorage.unavailableSnapshotForCount(
-      taskId: taskId,
-      imageCount: imageCount,
-      configId: malformedSnapshot.configId,
-      modelId: malformedSnapshot.modelId ?? unavailableSnapshot.modelId,
-      instructionContent:
-          safeMalformedInstruction ?? unavailableSnapshot.instructionContent,
-      saveFolder: malformedSnapshot.saveFolder,
-      batchMode: malformedSnapshot.batchMode,
-      perImageConcurrency: malformedSnapshot.perImageConcurrency,
-      requestSizeBudgetBytes: malformedSnapshot.requestSizeBudgetBytes,
-      legacyModelIndex: malformedSnapshot.legacyModelIndex,
-      legacyInstructionIndex: malformedSnapshot.legacyInstructionIndex,
+  final unavailableRetryData = _unavailableRetryDataFromLegacyRequest(
+    taskId,
+    request,
+  );
+  if (malformedRetryData != null) {
+    return _unavailableRetryDataFromMalformed(
+      taskId,
+      malformedRetryData,
+      legacyRetryData: unavailableRetryData,
+      credentialValues: _legacyOcrCredentialValues(request),
     );
-    final images = retryData['images'] as List;
-    for (var index = 0; index < malformedSnapshot.images.length; index++) {
-      final image = malformedSnapshot.images[index];
-      final imageIndex = malformedSnapshot.imageEntryIndices[index];
-      images[imageIndex] = {
-        if (image.bytes != null) 'bytes': base64Encode(image.bytes!),
-        if (image.storageRef != null) 'storageRef': image.storageRef,
-        'format': image.format,
-        if (image.name != null) 'name': image.name,
-      };
-    }
-    return retryData;
   }
   return unavailableRetryData ??
-      malformedRetryData ??
       (rawRetryData == null
           ? null
           : OcrRetryStorage.unavailableSnapshotForCount(
