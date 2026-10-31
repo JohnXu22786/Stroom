@@ -80,6 +80,7 @@ Widget _buildTestApp({
   List<OcrPageOutcome> retryPageOutcomes = const [],
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
+  ProviderEntriesNotifier? testProviderEntriesNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
   Future<int?> Function(OcrConfig config, List<SelectedImage> images)?
       testRequestSizePreflight,
@@ -104,10 +105,15 @@ Widget _buildTestApp({
 }) {
   return ProviderScope(
     overrides: [
-      if (entries != null)
+      if (entries != null || testProviderEntriesNotifier != null)
         providerEntriesProvider.overrideWith((ref) {
+          if (testProviderEntriesNotifier != null) {
+            return testProviderEntriesNotifier;
+          }
+          final initialEntries = entries;
+          if (initialEntries == null) return ProviderEntriesNotifier();
           final notifier = ProviderEntriesNotifier();
-          notifier.state = ProviderEntriesState(entries: entries);
+          notifier.state = ProviderEntriesState(entries: initialEntries);
           return notifier;
         }),
       if (backgroundTasksNotifier != null)
@@ -858,6 +864,101 @@ void main() {
   });
 
   group('OcrPage - stable retry context', () {
+    testWidgets('retry reads the current API key after provider key rotation', (
+      tester,
+    ) async {
+      const providerId = 'rotated-key-provider';
+      const configId = 'rotated-key-config';
+      const modelRecordId = 'rotated-key-model-record';
+      const oldApiKey = 'old-provider-api-key';
+      const rotatedApiKey = 'rotated-provider-api-key';
+      final image = _createValidOcrTestImage();
+      ProviderEntry entryWithKey(String apiKey) => ProviderEntry(
+            id: providerId,
+            type: 'ocr',
+            name: 'Rotated Key Provider',
+            configs: [
+              ProviderConfigItem(
+                id: configId,
+                providerName: 'Rotated Key Provider',
+                host: 'https://ocr.example.test/run',
+                key: apiKey,
+                models: [
+                  ModelConfig(
+                    id: modelRecordId,
+                    name: 'Vision Model',
+                    modelId: 'vision-model',
+                  ),
+                ],
+              ),
+            ],
+          );
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(entries: [entryWithKey(oldApiKey)]);
+      final taskNotifier = _InspectableBackgroundTaskNotifier();
+      final adapter = _CapturingOcrAdapter();
+      final retryData = {
+        'type': 'ocr',
+        'version': 1,
+        'modelRef': {'configId': configId, 'modelId': modelRecordId},
+        'instructionContent': 'Please keep secrets private',
+        'images': [
+          {
+            'bytes': base64Encode(image.bytes),
+            'format': image.format,
+            'name': 'retry.png',
+          },
+        ],
+      };
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          backgroundTasksNotifier: taskNotifier,
+          testProviderEntriesNotifier: providerNotifier,
+          retryData: retryData,
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testOcrServiceFactory: (config) => OcrService(
+            config: config,
+            dio: Dio(
+              BaseOptions(
+                headers: {'Authorization': 'Bearer ${config.apiKey}'},
+              ),
+            )..httpClientAdapter = adapter,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await providerNotifier.update(
+        providerId,
+        entryWithKey(rotatedApiKey),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
+
+      expect(
+        adapter.requests.single.headers['Authorization'],
+        'Bearer $rotatedApiKey',
+      );
+      await _pumpUntil(
+        tester,
+        () => taskNotifier.tasksForTest.any(
+          (task) => task.status == TaskStatus.completed,
+        ),
+      );
+      final task = taskNotifier.tasksForTest.single;
+      final persisted = jsonEncode(task.toMap());
+      expect(persisted, contains('Please keep secrets private'));
+      expect(persisted, isNot(contains(oldApiKey)));
+      expect(persisted, isNot(contains(rotatedApiKey)));
+      expect(persisted, isNot(contains('rawRequest')));
+      expect(persisted, isNot(contains('rawResponse')));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
       'image preparation feedback prevents duplicate starts and recovers',
       (tester) async {
