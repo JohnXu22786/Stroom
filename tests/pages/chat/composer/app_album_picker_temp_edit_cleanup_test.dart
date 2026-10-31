@@ -127,10 +127,12 @@ void main() {
     (tester) async {
       final writeStarted = Completer<File>();
       final finishWrite = Completer<void>();
+      var writeFinished = false;
       beforeAppAlbumPickerTempWriteForTesting = (file, bytes) async {
         writeStarted.complete(file);
         await finishWrite.future;
         await file.writeAsBytes(bytes);
+        writeFinished = true;
       };
       appAlbumPickerEditImageForTesting =
           (_, _) async => Uint8List.fromList([10, 20, 30]);
@@ -152,10 +154,8 @@ void main() {
       expect(find.text('应用内相册'), findsNothing);
 
       finishWrite.complete();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
+      await _pumpUntil(tester, () => writeFinished);
+      await _pumpUntil(tester, () => !tempFile.existsSync());
       expect(await tester.runAsync(tempFile.exists), isFalse);
     },
   );
@@ -197,19 +197,14 @@ void main() {
     (tester) async {
       final files = <File>[];
       final writeGates = <Completer<void>>[];
-      final writesFinished = <Future<void>>[];
+      var completedWriteCount = 0;
       beforeAppAlbumPickerTempWriteForTesting = (file, bytes) async {
         files.add(file);
         final gate = Completer<void>();
-        final finished = Completer<void>();
         writeGates.add(gate);
-        writesFinished.add(finished.future);
-        try {
-          await gate.future;
-          await file.writeAsBytes(bytes);
-        } finally {
-          finished.complete();
-        }
+        await gate.future;
+        await file.writeAsBytes(bytes);
+        completedWriteCount++;
       };
       appAlbumPickerEditImageForTesting =
           (_, _) async => Uint8List.fromList([10, 20, 30]);
@@ -232,8 +227,8 @@ void main() {
       for (final gate in writeGates) {
         gate.complete();
       }
-      await tester.runAsync(() => Future.wait(writesFinished));
-      await tester.pump();
+      await _pumpUntil(tester, () => completedWriteCount == files.length);
+      await _pumpUntil(tester, () => files.every((file) => !file.existsSync()));
       expect(files.map((file) => file.existsSync()), everyElement(isFalse));
     },
   );
