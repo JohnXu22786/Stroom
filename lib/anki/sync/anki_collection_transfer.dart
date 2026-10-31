@@ -8,6 +8,7 @@ import '../database/anki_database.dart';
 import '../database/anki_schema.dart';
 import 'anki_sync_protocol_client.dart';
 import 'anki_sync_destination_state.dart';
+import 'anki_full_download_recovery.dart';
 
 /// Full collection replacement helpers. Callers confirm destructive actions,
 /// and each method leaves a recoverable local database backup.
@@ -76,6 +77,7 @@ class AnkiCollectionTransfer {
     },
     'graves': {'usn', 'oid', 'type'},
   };
+  static const _collectionSidecarSuffixes = ['-wal', '-shm', '-journal'];
 
   static Future<String> uploadLocalCollection(
     AnkiSyncProtocolClient client, {
@@ -105,6 +107,7 @@ class AnkiCollectionTransfer {
   static Future<String> downloadAndReplaceLocalCollection(
     AnkiSyncProtocolClient client, {
     String? documentsPath,
+    AnkiFullDownloadRecovery? recovery,
   }) async {
     final collectionPath = await _collectionPath(documentsPath);
     final tempPath = '$collectionPath.sync-download.tmp';
@@ -125,19 +128,52 @@ class AnkiCollectionTransfer {
       await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker(
         basePath: documentsPath,
       );
-      final backupPath = await _createBackup(currentFile);
+      final backupPath = await _createBackup(
+        currentFile,
+        backupPath: recovery?.collectionBackupPath,
+      );
 
       // Keep the old file in place until the validated download is ready to
       // move. If the final rename fails, restore the original path.
       final hadOriginal = await currentFile.exists();
-      if (hadOriginal) await currentFile.rename(displacedPath);
+      await recovery?.markCollectionReplacementStarted();
+      final displacedSidecars = <String>[];
       try {
+        if (hadOriginal) await currentFile.rename(displacedPath);
+        for (final suffix in _collectionSidecarSuffixes) {
+          final sidecar = File('$collectionPath$suffix');
+          if (!await sidecar.exists()) continue;
+          final displacedSidecar = '$displacedPath$suffix';
+          await sidecar.rename(displacedSidecar);
+          displacedSidecars.add(displacedSidecar);
+        }
         await tempFile.rename(collectionPath);
       } catch (_) {
+        if (await currentFile.exists() &&
+            (await File(displacedPath).exists() || !hadOriginal)) {
+          await currentFile.delete();
+        }
         if (hadOriginal && await File(displacedPath).exists()) {
           await File(displacedPath).rename(collectionPath);
         }
+        for (final displacedSidecar in displacedSidecars.reversed) {
+          final sidecar = File(displacedSidecar);
+          if (await sidecar.exists()) {
+            await sidecar.rename(
+              '$collectionPath${displacedSidecar.substring(displacedPath.length)}',
+            );
+          }
+        }
         rethrow;
+      }
+      for (final displacedSidecar in displacedSidecars) {
+        try {
+          final sidecar = File(displacedSidecar);
+          if (await sidecar.exists()) await sidecar.delete();
+        } catch (_) {
+          // The downloaded database is already installed; stale sidecar
+          // backups are harmless and the recovery journal remains authoritative.
+        }
       }
       if (hadOriginal) {
         final displaced = File(displacedPath);
@@ -214,15 +250,18 @@ class AnkiCollectionTransfer {
     return p.join(directoryPath, 'collection.anki2');
   }
 
-  static Future<String> _createBackup(File collection) async {
+  static Future<String> _createBackup(
+    File collection, {
+    String? backupPath,
+  }) async {
     if (!await collection.exists()) {
       // A new install may have no database before the first Anki page opens.
       return '';
     }
-    final backupPath = '${collection.path}.sync-backup-'
+    final path = backupPath ?? '${collection.path}.sync-backup-'
         '${DateTime.now().toUtc().microsecondsSinceEpoch}';
-    await collection.copy(backupPath);
-    return backupPath;
+    await collection.copy(path);
+    return path;
   }
 
   static Future<void> _validateCollection(String path) async {

@@ -486,6 +486,9 @@ void main() {
         await local.close();
         final localFile = File('${documents.path}/collection.anki2');
         final originalBytes = await localFile.readAsBytes();
+        for (final suffix in ['-wal', '-shm', '-journal']) {
+          await File('${localFile.path}$suffix').writeAsBytes([1, 2, 3]);
+        }
 
         await remote.open();
         await remote.col.load();
@@ -520,6 +523,9 @@ void main() {
 
           expect(await File(backupPath).readAsBytes(), originalBytes);
           expect(await localFile.exists(), isTrue);
+          for (final suffix in ['-wal', '-shm', '-journal']) {
+            expect(await File('${localFile.path}$suffix').exists(), isFalse);
+          }
           final installed = AnkiDatabase(basePath: documents.path);
           await installed.open();
           final integrity = await installed.db.rawQuery(

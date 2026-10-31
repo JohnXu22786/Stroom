@@ -10,6 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../database/anki_database.dart';
+import 'anki_full_download_recovery.dart';
 import 'anki_sync_protocol_client.dart';
 
 /// Anki `/msync/` client backed by a small sidecar index. Media sync metadata
@@ -83,19 +84,15 @@ class AnkiMediaSync {
       final localMeta = (await index.query(
         'media_meta',
         where: 'id = 1',
-      ))
-          .first;
+      )).first;
       var lastUsn = _int(localMeta['last_sync_usn']);
       if (lastUsn > remoteUsn) {
         await index.transaction((txn) async {
           await txn.update('media_meta', {'last_sync_usn': 0}, where: 'id = 1');
-          await txn.update(
-              'media_files',
-              {
-                'usn': -1,
-                'sync_required': 1,
-              },
-              where: 'sha1 IS NOT NULL');
+          await txn.update('media_files', {
+            'usn': -1,
+            'sync_required': 1,
+          }, where: 'sha1 IS NOT NULL');
         });
         lastUsn = 0;
       }
@@ -257,12 +254,9 @@ class AnkiMediaSync {
                   }
               }
             }
-            await txn.update(
-                'media_meta',
-                {
-                  'last_sync_usn': nextUsn,
-                },
-                where: 'id = 1');
+            await txn.update('media_meta', {
+              'last_sync_usn': nextUsn,
+            }, where: 'id = 1');
           });
           lastUsn = nextUsn;
         }
@@ -293,9 +287,7 @@ class AnkiMediaSync {
           }
           final length = await file.length();
           if (length == 0 || length > _maxMediaFileBytes) {
-            throw const AnkiSyncException(
-              '待上传媒体文件为空或超过 100 MB，请修复后重试同步',
-            );
+            throw const AnkiSyncException('待上传媒体文件为空或超过 100 MB，请修复后重试同步');
           }
           final bytes = await file.readAsBytes();
           batch.add(AnkiMediaUploadEntry(name, bytes));
@@ -323,16 +315,12 @@ class AnkiMediaSync {
           final current = (await txn.query(
             'media_meta',
             where: 'id = 1',
-          ))
-              .first;
+          )).first;
           final expectedUsn = _int(current['last_sync_usn']) + processed;
           if (expectedUsn == currentUsn) {
-            await txn.update(
-                'media_meta',
-                {
-                  'last_sync_usn': currentUsn,
-                },
-                where: 'id = 1');
+            await txn.update('media_meta', {
+              'last_sync_usn': currentUsn,
+            }, where: 'id = 1');
           }
         });
       }
@@ -357,33 +345,50 @@ class AnkiMediaSync {
     }
   }
 
-  /// Move aside local media and reset this destination's sync cursor before a
-  /// confirmed full collection download. This prevents old local files from
-  /// being treated as new uploads into the downloaded collection.
+  /// Move aside local media and reset media sync cursors before a confirmed
+  /// full collection download. The media directory is shared across sync
+  /// destinations, so keeping any old destination index could turn missing
+  /// local files into deletions on that server's next sync.
   static Future<AnkiMediaDownloadReset> prepareForFullDownload({
     required AnkiSyncProtocolClient client,
     String? documentsPath,
+    AnkiFullDownloadRecovery? recovery,
   }) async {
     final docs =
         documentsPath ?? (await getApplicationDocumentsDirectory()).path;
     final mediaPath = p.join(docs, 'collection.media');
     final folder = Directory(mediaPath);
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    final backupPath = '$mediaPath.pre-sync-$stamp';
+    final backupPath =
+        recovery?.mediaBackupPath ?? '$mediaPath.pre-sync-$stamp';
     final existed = await folder.exists();
-    final indexPath = _indexPath(docs, client.destinationIdentity);
-    final backupIndexPath = '$indexPath.pre-sync-$stamp';
+    final indexPath =
+        recovery?.mediaIndexPath ??
+        _indexPath(docs, client.destinationIdentity);
+    final backupIndexPath =
+        recovery?.mediaIndexBackupPath ?? '$indexPath.pre-sync-$stamp';
     var moved = false;
     try {
+      await recovery?.markMediaResetStarted();
       if (existed) {
+        await recovery?.markMediaMoveStarted();
         await folder.rename(backupPath);
         moved = true;
+        await recovery?.markMediaMoved();
       }
       await Directory(mediaPath).create(recursive: true);
-      for (final suffix in _sqliteSuffixes) {
-        final indexFile = File('$indexPath$suffix');
-        if (await indexFile.exists()) {
-          await indexFile.rename('$backupIndexPath$suffix');
+      final indexPaths = recovery?.mediaIndexPaths ?? [indexPath];
+      for (final rootPath in indexPaths) {
+        for (final suffix in _sqliteSuffixes) {
+          final indexFile = File('$rootPath$suffix');
+          if (await indexFile.exists()) {
+            final targetPath =
+                recovery?.mediaIndexBackupPathFor(indexFile.path) ??
+                '$rootPath.pre-sync-$stamp$suffix';
+            await recovery?.markMediaIndexFileMoveStarted(indexFile.path);
+            await indexFile.rename(targetPath);
+            await recovery?.markMediaIndexFileMoved(indexFile.path);
+          }
         }
       }
       await _deleteSqliteFiles(indexPath);
@@ -394,6 +399,7 @@ class AnkiMediaSync {
         backupIndexPath: backupIndexPath,
       );
     } catch (_) {
+      if (recovery != null) rethrow;
       if (moved) {
         final current = Directory(mediaPath);
         if (await current.exists()) await current.delete(recursive: true);
@@ -483,9 +489,7 @@ class AnkiMediaSync {
         throw const AnkiSyncException('本地媒体文件名不符合 Anki 同步规则，请先重命名后重试同步');
       }
       if (length == 0 || length > _maxMediaFileBytes) {
-        throw const AnkiSyncException(
-          '本地媒体文件为空或超过 100 MB，请修复后重试同步',
-        );
+        throw const AnkiSyncException('本地媒体文件为空或超过 100 MB，请修复后重试同步');
       }
       final bytes = await entity.readAsBytes();
       final hash = sha1.convert(bytes).toString();
@@ -525,15 +529,12 @@ class AnkiMediaSync {
     int usn,
     bool pending,
   ) async {
-    await executor.insert(
-        'media_files',
-        {
-          'fname': filename,
-          'sha1': sha,
-          'usn': usn,
-          'sync_required': pending ? 1 : 0,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await executor.insert('media_files', {
+      'fname': filename,
+      'sha1': sha,
+      'usn': usn,
+      'sync_required': pending ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<Map<String, String>> _writeDownloadedFiles(
@@ -831,7 +832,8 @@ class AnkiMediaSync {
     ).firstMatch(normalized);
     if (deviceName != null) {
       final deviceNameLength = deviceName.group(1)!.length;
-      normalized = '${normalized.substring(0, deviceNameLength)}_'
+      normalized =
+          '${normalized.substring(0, deviceNameLength)}_'
           '${normalized.substring(deviceNameLength)}';
     }
     if (normalized.endsWith(' ') || normalized.endsWith('.')) {
@@ -858,8 +860,9 @@ class AnkiMediaSync {
       return normalizedFilename;
     }
 
-    final collidingFiles =
-        remoteFilename == normalizedFilename ? aliases : caseMatches;
+    final collidingFiles = remoteFilename == normalizedFilename
+        ? aliases
+        : caseMatches;
     final collidingHashes = <String>{};
     for (final file in collidingFiles) {
       collidingHashes.add(sha1.convert(await file.readAsBytes()).toString());
@@ -882,9 +885,11 @@ class AnkiMediaSync {
     final extensionSuffix = extensionBytes.isEmpty ? '' : '.$extensionBytes';
     var collision = 0;
     while (true) {
-      final hashSuffix =
-          collision == 0 ? '-$incomingHash' : '-$incomingHash-$collision';
-      final maxStemBytes = _maxMediaFilenameBytes -
+      final hashSuffix = collision == 0
+          ? '-$incomingHash'
+          : '-$incomingHash-$collision';
+      final maxStemBytes =
+          _maxMediaFilenameBytes -
           utf8.encode(hashSuffix).length -
           utf8.encode(extensionSuffix).length;
       final truncatedStem = _takeUtf8Bytes(
@@ -925,10 +930,12 @@ class AnkiMediaSync {
     if (utf8.encode(filename).length <= maxBytes) return filename;
 
     final extensionIndex = filename.lastIndexOf('.');
-    final stem =
-        extensionIndex < 0 ? filename : filename.substring(0, extensionIndex);
-    final extension =
-        extensionIndex < 0 ? '' : filename.substring(extensionIndex + 1);
+    final stem = extensionIndex < 0
+        ? filename
+        : filename.substring(0, extensionIndex);
+    final extension = extensionIndex < 0
+        ? ''
+        : filename.substring(extensionIndex + 1);
     final truncatedExtension = _takeUtf8Bytes(extension, 10);
     final maxStemBytes = maxBytes - utf8.encode(truncatedExtension).length - 2;
     var truncated = _takeUtf8Bytes(stem, maxStemBytes);

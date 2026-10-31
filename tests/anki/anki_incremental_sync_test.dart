@@ -19,6 +19,7 @@ import 'package:stroom/anki/models/revlog.dart';
 import 'package:stroom/anki/providers/anki_actions.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/anki/sync/anki_incremental_sync.dart';
+import 'package:stroom/anki/sync/anki_sync_destination_state.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 
 void main() {
@@ -43,6 +44,10 @@ void main() {
     client = AnkiSyncProtocolClient.ankiWeb(
       client: fakeHttp,
       hostKey: 'fake-host-key',
+    );
+    await AnkiSyncDestinationState.mark(
+      collection.db,
+      client.destinationIdentity,
     );
   });
 
@@ -529,6 +534,39 @@ void main() {
       otherClient.close();
       otherHttp.close();
     }
+  });
+
+  test('requires an explicit full-transfer choice for a new non-empty server',
+      () async {
+    await collection.db.delete('stroom_sync_destination');
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['existing local collection', 'preserve this data'],
+    );
+    await collection.notes.insert(note);
+    final local = (await collection.db.query('col')).single;
+    fakeHttp.responses.add(_json({
+      'mod': (local['mod'] as int) - 1,
+      'scm': local['scm'],
+      'usn': 0,
+      'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'msg': '',
+      'cont': true,
+      'hostNum': 1,
+      'empty': false,
+      'media_usn': 0,
+    }));
+
+    await expectLater(
+      AnkiIncrementalSync.sync(collection, client),
+      throwsA(isA<AnkiSyncFullTransferRequired>()),
+    );
+
+    expect(await collection.notes.get(note.id), isNotNull);
+    expect(
+      fakeHttp.requests.map((request) => request.url.path),
+      ['/sync/meta'],
+    );
   });
 
   test('migrates legacy deck configs as pending sync changes', () async {

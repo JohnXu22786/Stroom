@@ -42,6 +42,11 @@ class AnkiIncrementalSync {
         '服务器 collection 为空，请先选择完整上传或下载',
       );
     }
+    if (await AnkiSyncDestinationState.read(db) == null) {
+      throw const AnkiSyncFullTransferRequired(
+        '本地 collection 尚未绑定到此同步目标，请先明确选择完整上传或下载',
+      );
+    }
     final hasPending = await _hasPendingChanges(db);
     final needsCollectionSync = localModified != remote.modified ||
         localUsn != remote.usn ||

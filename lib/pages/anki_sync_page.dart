@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../anki/database/anki_database.dart';
 import '../anki/providers/anki_provider.dart';
 import '../anki/sync/anki_collection_transfer.dart';
+import '../anki/sync/anki_full_download_recovery.dart';
 import '../anki/sync/anki_incremental_sync.dart';
 import '../anki/sync/anki_media_sync.dart';
 import '../anki/sync/anki_sync_protocol_client.dart';
@@ -397,8 +399,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       _status = '正在准备下载设置…';
     });
     var backupPath = '';
-    var collectionReplaced = false;
     AnkiMediaDownloadReset? mediaReset;
+    AnkiFullDownloadRecovery? recovery;
     var transferStarted = false;
     try {
       final actionConfig = await _prepareActionConfig(config);
@@ -409,21 +411,30 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       final confirmed = await _confirmDestructiveAction(
         title: '用服务器 collection 替换本地？',
         message: '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。'
-            '\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。若任一步失败，Stroom 会恢复本地 collection 和媒体目录。',
+            '\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。'
+            '若任一步失败或应用中途退出，Stroom 会在下次打开牌组前恢复本地 collection 和媒体。',
         action: '替换本地数据',
       );
       if (confirmed != true) return;
       transferStarted = true;
       setState(() => _status = '正在下载并验证 collection…');
       final client = _clientFor(config);
-      mediaReset = await AnkiMediaSync.prepareForFullDownload(client: client);
       await AnkiDatabase.closeOpenedInstance();
+      recovery = await AnkiFullDownloadRecovery.begin(
+        documentsPath: (await getApplicationDocumentsDirectory()).path,
+        destinationIdentity: client.destinationIdentity,
+      );
+      mediaReset = await AnkiMediaSync.prepareForFullDownload(
+        client: client,
+        recovery: recovery,
+      );
       backupPath =
           await AnkiCollectionTransfer.downloadAndReplaceLocalCollection(
         client,
+        recovery: recovery,
       );
-      collectionReplaced = true;
       final media = await AnkiMediaSync.sync(client);
+      await recovery.commit();
       await mediaReset.commit();
       if (!mounted) return;
       setState(() {
@@ -435,17 +446,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
             '\n请重新检查服务器状态。';
       });
     } catch (error) {
-      if (collectionReplaced) {
-        try {
-          await AnkiCollectionTransfer.restoreLocalCollectionBackup(backupPath);
-        } catch (_) {
-          // Preserve the sync error while retaining the on-disk backup.
-        }
-      }
       try {
-        await mediaReset?.rollback();
+        await recovery?.rollback();
       } catch (_) {
-        // The folder backup remains available for manual recovery.
+        // The durable journal retries rollback before the next collection open.
       }
       if (!mounted) return;
       setState(() => _status = '下载失败：${_safeMessage(error)}');
