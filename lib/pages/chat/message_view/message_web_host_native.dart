@@ -56,11 +56,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
   @override
   Widget build(BuildContext context) => InAppWebView(
         // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
-        // every native platform; all scripts, styles and fonts are self-contained.
-        initialFile: 'assets/vendor/dsh_message_view/index.html',
-        // Local file URLs have no host on WKWebView, so the plugin's origin
-        // allow-list rejects their JavaScript callbacks. The handler below
-        // validates the main-frame URL against this exact bundled document.
+        // native platforms except macOS, whose plugin cannot resolve Flutter
+        // asset URLs from the app bundle. Its data URL keeps the same file
+        // base URL so the trusted-document bridge check stays consistent.
+        initialFile: defaultTargetPlatform == TargetPlatform.macOS
+            ? null
+            : 'assets/vendor/dsh_message_view/index.html',
+        initialData: defaultTargetPlatform == TargetPlatform.macOS
+            ? InAppWebViewInitialData(
+                data: widget.html,
+                baseUrl: WebUri(
+                    'file:///assets/vendor/dsh_message_view/index.html'),
+              )
+            : null,
+        // Leave the plugin origin allow-list unset: WKWebView file URLs have
+        // no host. The handler below validates this exact main-frame URL.
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true,
           transparentBackground: true,

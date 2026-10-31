@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
@@ -139,8 +140,12 @@ class DshMessageViewState extends State<DshMessageView> {
   Widget build(BuildContext context) {
     final builder = widget.hostBuilder;
     if (builder != null) return builder('', _commands, _event);
-    if (!kIsWeb)
+    // flutter_inappwebview_macos cannot resolve Flutter asset paths from its
+    // app bundle. Load the bundled document in Dart and pass it as HTML data
+    // on macOS; the other native hosts use their working file-asset loaders.
+    if (!kIsWeb && defaultTargetPlatform != TargetPlatform.macOS) {
       return MessageWebHost(html: '', commands: _commands, onEvent: _event);
+    }
     return FutureBuilder<String>(
       future: _html ??=
           rootBundle.loadString('assets/vendor/dsh_message_view/index.html'),
