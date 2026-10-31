@@ -29,6 +29,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
   Directory? _macDocumentDirectory;
   Uri? _macDocumentUri;
   bool _macDocumentNavigationStarted = false;
+  bool _macDocumentReady = false;
+  bool _macLoadInProgress = false;
+  bool _macLoadFailed = false;
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
@@ -44,19 +47,33 @@ class _MessageWebHostState extends State<MessageWebHost> {
       url?.scheme == 'file' && url.toString() == _macDocumentUri?.toString();
 
   Future<void> _loadMacDocument(InAppWebViewController controller) async {
+    if (_macLoadInProgress || !mounted || !identical(controller, _controller)) {
+      return;
+    }
+    _macLoadInProgress = true;
+    _macLoadFailed = false;
+    _macDocumentReady = false;
+    setState(() {});
+
+    Directory? createdDirectory;
     try {
-      final directory = await getTemporaryDirectory();
-      final documentDirectory = await directory.createTemp('stroom-message-');
-      final document = File('${documentDirectory.path}/index.html');
-      await document.writeAsString(widget.html, flush: true);
+      var documentDirectory = _macDocumentDirectory;
+      var documentUri = _macDocumentUri;
+      if (documentDirectory == null || documentUri == null) {
+        final directory = await getTemporaryDirectory();
+        documentDirectory = await directory.createTemp('stroom-message-');
+        createdDirectory = documentDirectory;
+        final document = File('${documentDirectory.path}/index.html');
+        await document.writeAsString(widget.html, flush: true);
+        documentUri = document.uri;
+        _macDocumentDirectory = documentDirectory;
+        _macDocumentUri = documentUri;
+      }
 
       if (!mounted || !identical(controller, _controller)) {
-        await documentDirectory.delete(recursive: true);
         return;
       }
 
-      _macDocumentDirectory = documentDirectory;
-      _macDocumentUri = document.uri;
       _macDocumentNavigationStarted = false;
 
       // WKWebView's loadHTMLString/loadData path reports success before it
@@ -76,7 +93,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             );
           }
           await controller.loadUrl(
-            urlRequest: URLRequest(url: WebUri.uri(document.uri)),
+            urlRequest: URLRequest(url: WebUri.uri(documentUri)),
             allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
           if (kDebugMode) {
@@ -102,14 +119,29 @@ class _MessageWebHostState extends State<MessageWebHost> {
       if (mounted &&
           identical(controller, _controller) &&
           !_macDocumentNavigationStarted &&
-          kDebugMode) {
-        debugPrint(
-          '[MessageWebHost][load-timeout] macOS navigation did not start',
-        );
+          !_macDocumentReady) {
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageWebHost][load-timeout] macOS navigation did not start',
+          );
+        }
+        setState(() => _macLoadFailed = true);
       }
     } catch (error) {
       if (kDebugMode) {
         debugPrint('[MessageWebHost][load-error] macOS document setup: $error');
+      }
+      if (createdDirectory != null &&
+          !identical(createdDirectory, _macDocumentDirectory)) {
+        await _deleteMacDocumentDirectory(createdDirectory);
+      }
+      if (mounted && identical(controller, _controller)) {
+        setState(() => _macLoadFailed = true);
+      }
+    } finally {
+      if (mounted && identical(controller, _controller)) {
+        _macLoadInProgress = false;
+        setState(() {});
       }
     }
   }
@@ -154,122 +186,167 @@ class _MessageWebHostState extends State<MessageWebHost> {
   }
 
   @override
-  Widget build(BuildContext context) => InAppWebView(
-        // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
-        // native platforms except macOS, where the document is copied into an
-        // isolated temporary directory and opened as a file URL.
-        initialFile: defaultTargetPlatform == TargetPlatform.macOS
-            ? null
-            : 'assets/vendor/dsh_message_view/index.html',
-        initialData: null,
-        // Leave the plugin origin allow-list unset: WKWebView file URLs have
-        // no host. The handler below validates this exact main-frame URL.
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          transparentBackground: true,
-          disableContextMenu: false,
-          supportZoom: false,
-          useShouldOverrideUrlLoading: true,
-          javaScriptHandlersForMainFrameOnly: true,
-        ),
-        onConsoleMessage: (controller, message) {
-          if (kDebugMode) {
-            debugPrint('[MessageWebHost][console] ${message.message}');
-          }
-        },
-        onReceivedError: (controller, request, error) {
-          if (kDebugMode && request.isForMainFrame == true) {
-            debugPrint(
-              '[MessageWebHost][load-error] ${request.url}: ${error.description}',
-            );
-          }
-        },
-        onWebViewCreated: (controller) {
-          _controller = controller;
-          if (kDebugMode) {
-            debugPrint(
-              '[MessageWebHost][created] platform=$defaultTargetPlatform htmlLength=${widget.html.length}',
-            );
-          }
-          if (defaultTargetPlatform == TargetPlatform.macOS) {
-            _macDocumentNavigationStarted = false;
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await _loadMacDocument(controller);
-            });
-            // Platform-view creation can happen between frames. Schedule the
-            // post-frame load, then retry only until WKWebView starts navigating.
-            WidgetsBinding.instance.ensureVisualUpdate();
-          }
-          controller.addJavaScriptHandler(
-            handlerName: 'StroomMessageView',
-            callback: (JavaScriptHandlerFunctionData data) {
-              final rejection = !mounted
-                  ? 'unmounted'
-                  : !data.isMainFrame
-                      ? 'subframe'
-                      : !_trustedDocument(data.requestUrl)
-                          ? 'untrusted-url:${data.requestUrl}'
-                          : data.args.length != 1 || data.args.first is! Map
-                              ? 'invalid-arguments'
-                              : null;
-              if (rejection != null) {
-                if (kDebugMode) {
-                  debugPrint('[MessageWebHost][handler-rejected] $rejection');
-                }
-                return;
+  Widget build(BuildContext context) => Stack(
+        children: [
+          InAppWebView(
+            // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
+            // native platforms except macOS, where the document is copied into an
+            // isolated temporary directory and opened as a file URL.
+            initialFile: defaultTargetPlatform == TargetPlatform.macOS
+                ? null
+                : 'assets/vendor/dsh_message_view/index.html',
+            initialData: null,
+            // Leave the plugin origin allow-list unset: WKWebView file URLs have
+            // no host. The handler below validates this exact main-frame URL.
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              transparentBackground: true,
+              disableContextMenu: false,
+              supportZoom: false,
+              useShouldOverrideUrlLoading: true,
+              javaScriptHandlersForMainFrameOnly: true,
+            ),
+            onConsoleMessage: (controller, message) {
+              if (kDebugMode) {
+                debugPrint('[MessageWebHost][console] ${message.message}');
               }
+            },
+            onReceivedError: (controller, request, error) {
+              if (kDebugMode && request.isForMainFrame == true) {
+                debugPrint(
+                  '[MessageWebHost][load-error] ${request.url}: ${error.description}',
+                );
+              }
+              if (defaultTargetPlatform == TargetPlatform.macOS &&
+                  request.isForMainFrame == true &&
+                  mounted) {
+                setState(() => _macLoadFailed = true);
+              }
+            },
+            onWebViewCreated: (controller) {
+              _controller = controller;
               if (kDebugMode) {
                 debugPrint(
-                    '[MessageWebHost][handler] ${data.args.first['type']}');
+                  '[MessageWebHost][created] platform=$defaultTargetPlatform htmlLength=${widget.html.length}',
+                );
               }
-              widget.onEvent(Map<String, dynamic>.from(data.args.first as Map));
+              if (defaultTargetPlatform == TargetPlatform.macOS) {
+                _macDocumentNavigationStarted = false;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  await _loadMacDocument(controller);
+                });
+                // Platform-view creation can happen between frames. Schedule the
+                // post-frame load, then retry only until WKWebView starts navigating.
+                WidgetsBinding.instance.ensureVisualUpdate();
+              }
+              controller.addJavaScriptHandler(
+                handlerName: 'StroomMessageView',
+                callback: (JavaScriptHandlerFunctionData data) {
+                  final rejection = !mounted
+                      ? 'unmounted'
+                      : !data.isMainFrame
+                          ? 'subframe'
+                          : !_trustedDocument(data.requestUrl)
+                              ? 'untrusted-url:${data.requestUrl}'
+                              : data.args.length != 1 || data.args.first is! Map
+                                  ? 'invalid-arguments'
+                                  : null;
+                  if (rejection != null) {
+                    if (kDebugMode) {
+                      debugPrint(
+                          '[MessageWebHost][handler-rejected] $rejection');
+                    }
+                    return;
+                  }
+                  if (kDebugMode) {
+                    debugPrint(
+                        '[MessageWebHost][handler] ${data.args.first['type']}');
+                  }
+                  widget.onEvent(
+                      Map<String, dynamic>.from(data.args.first as Map));
+                },
+              );
             },
-          );
-        },
-        onLoadStart: (controller, url) {
-          if (defaultTargetPlatform == TargetPlatform.macOS &&
-              _isMacDocumentUrl(url)) {
-            _macDocumentNavigationStarted = true;
-          }
-          if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
-        },
-        onLoadStop: (controller, url) async {
-          final ready = await controller.evaluateJavascript(
-            source: '!!window.StroomMessageView',
-          );
-          if (kDebugMode) {
-            debugPrint('[MessageWebHost][load-stop] $url ready=$ready');
-          }
-          if (kDebugMode && ready != true) {
-            try {
-              final state = await controller.evaluateJavascript(
-                source: '''
+            onLoadStart: (controller, url) {
+              if (defaultTargetPlatform == TargetPlatform.macOS &&
+                  _isMacDocumentUrl(url)) {
+                _macDocumentNavigationStarted = true;
+              }
+              if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
+            },
+            onLoadStop: (controller, url) async {
+              final ready = await controller.evaluateJavascript(
+                source: '!!window.StroomMessageView',
+              );
+              if (kDebugMode) {
+                debugPrint('[MessageWebHost][load-stop] $url ready=$ready');
+              }
+              if (kDebugMode && ready != true) {
+                try {
+                  final state = await controller.evaluateJavascript(
+                    source: '''
 JSON.stringify({
   url: location.href,
   state: document.readyState,
   renderer: typeof window.StroomMessageView,
   root: document.getElementById("root")?.textContent
 })''',
-              );
-              debugPrint('[MessageWebHost][not-ready] $url: $state');
-            } catch (error) {
-              debugPrint('[MessageWebHost][not-ready] $url: $error');
-            }
-          }
-          if (mounted && ready == true) {
-            _macDocumentNavigationStarted = true;
-            widget.onEvent({'type': 'ready'});
-          }
-        },
-        shouldOverrideUrlLoading: (controller, action) async {
-          final url = action.request.url;
-          final trusted = url != null && _trustedDocument(url);
-          if (kDebugMode) {
-            debugPrint('[MessageWebHost][navigation] $url trusted=$trusted');
-          }
-          return trusted
-              ? NavigationActionPolicy.ALLOW
-              : NavigationActionPolicy.CANCEL;
-        },
+                  );
+                  debugPrint('[MessageWebHost][not-ready] $url: $state');
+                } catch (error) {
+                  debugPrint('[MessageWebHost][not-ready] $url: $error');
+                }
+              }
+              if (defaultTargetPlatform == TargetPlatform.macOS &&
+                  ready != true &&
+                  mounted) {
+                setState(() => _macLoadFailed = true);
+              }
+              if (mounted && ready == true) {
+                _macDocumentNavigationStarted = true;
+                _macDocumentReady = true;
+                if (defaultTargetPlatform == TargetPlatform.macOS) {
+                  setState(() => _macLoadFailed = false);
+                }
+                widget.onEvent({'type': 'ready'});
+              }
+            },
+            shouldOverrideUrlLoading: (controller, action) async {
+              final url = action.request.url;
+              final trusted = url != null && _trustedDocument(url);
+              if (kDebugMode) {
+                debugPrint(
+                    '[MessageWebHost][navigation] $url trusted=$trusted');
+              }
+              return trusted
+                  ? NavigationActionPolicy.ALLOW
+                  : NavigationActionPolicy.CANCEL;
+            },
+          ),
+          if (defaultTargetPlatform == TargetPlatform.macOS && _macLoadFailed)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline),
+                      const SizedBox(height: 8),
+                      const Text('消息内容加载失败'),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _macLoadInProgress || _controller == null
+                            ? null
+                            : () => _loadMacDocument(_controller!),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
 }
