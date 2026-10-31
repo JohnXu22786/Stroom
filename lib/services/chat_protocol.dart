@@ -54,11 +54,13 @@ class NeutralToolCall {
   final String id;
   final String name;
   final String argumentsJson;
+  final String? thoughtSignature;
 
   const NeutralToolCall({
     required this.id,
     required this.name,
     required this.argumentsJson,
+    this.thoughtSignature,
   });
 }
 
@@ -80,6 +82,7 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
       id: tc['id'] as String? ?? '',
       name: fn['name'] as String? ?? 'unknown',
       argumentsJson: fn['arguments'] as String? ?? '{}',
+      thoughtSignature: tc['thoughtSignature'] as String?,
     );
   }
   // Anthropic 形状: {id, name, input}
@@ -87,8 +90,10 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
   return NeutralToolCall(
     id: tc['id'] as String? ?? '',
     name: tc['name'] as String? ?? 'unknown',
-    argumentsJson:
-        input is Map ? jsonEncode(input) : (input?.toString() ?? '{}'),
+    argumentsJson: input is Map
+        ? jsonEncode(input)
+        : (input?.toString() ?? '{}'),
+    thoughtSignature: tc['thoughtSignature'] as String?,
   );
 }
 
@@ -247,7 +252,9 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
       final diskBytes = await AttachmentStorage.readFile(att.storagePath);
       if (diskBytes == null || diskBytes.isEmpty) {
         return const AttachmentReadOutcome(
-            AttachmentReadStatus.unreadable, null);
+          AttachmentReadStatus.unreadable,
+          null,
+        );
       }
       bytes = diskBytes;
     } catch (e) {
@@ -284,10 +291,7 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
       mimeTypeOverride = _detectImagePayloadMimeType(bytes);
       att.compressedCachePersisted = true;
     } else {
-      final compression = await compressImageForSend(
-        bytes,
-        maxBytes: maxBytes,
-      );
+      final compression = await compressImageForSend(bytes, maxBytes: maxBytes);
       if (compression.decodable && compression.compressed != null) {
         bytes = compression.compressed!.bytes;
         mimeTypeOverride = compression.compressed!.mimeType;
@@ -350,8 +354,11 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
   final b64 = base64Encode(bytes);
   // 缓存（压缩后的）base64 供后续复用
   att.base64Data = b64;
-  return AttachmentReadOutcome(AttachmentReadStatus.ok, b64,
-      mimeType: mimeTypeOverride);
+  return AttachmentReadOutcome(
+    AttachmentReadStatus.ok,
+    b64,
+    mimeType: mimeTypeOverride,
+  );
 }
 
 /// 按魔数检测图片载荷的真实格式（PNG/JPEG）。
@@ -591,7 +598,9 @@ ChatProtocol createChatProtocol(String endpointType) {
 ///
 /// 旧配置（没有 endpointType 字段）天然落到 'openai'，即数据迁移的默认路径。
 String effectiveEndpointType(
-    String? modelEndpointType, String? providerEndpointType) {
+  String? modelEndpointType,
+  String? providerEndpointType,
+) {
   if (modelEndpointType != null && modelEndpointType.isNotEmpty) {
     return modelEndpointType;
   }

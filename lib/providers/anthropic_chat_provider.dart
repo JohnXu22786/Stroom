@@ -45,20 +45,22 @@ class AnthropicChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'Anthropic',
-  })  : _baseUrl = baseUrl,
-        _apiKey = apiKey,
-        _name = name,
-        _dio = Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            'anthropic-version': kAnthropicApiVersion,
-            if (apiKey.isNotEmpty) 'x-api-key': apiKey,
-            ...openRouterAppHeaders,
-          },
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 60),
-        ));
+  }) : _baseUrl = baseUrl,
+       _apiKey = apiKey,
+       _name = name,
+       _dio = Dio(
+         BaseOptions(
+           baseUrl: '',
+           headers: {
+             'Content-Type': 'application/json',
+             'anthropic-version': kAnthropicApiVersion,
+             if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+             ...openRouterAppHeaders,
+           },
+           connectTimeout: const Duration(seconds: 10),
+           receiveTimeout: const Duration(seconds: 60),
+         ),
+       );
 
   @override
   String get name => _name;
@@ -94,7 +96,6 @@ class AnthropicChatProvider extends BaseChatProvider {
   /// - 输出 = output_tokens。
   /// - cost：兼容 num 与数字字符串（部分网关）；两端点重复上报
   ///   total_cost 时取较大值而非累加，避免双计。
-  @visibleForTesting
   static void mergeAnthropicUsage(Map<String, dynamic> localUsage, Map usage) {
     final input = usageNumberToDouble(usage['input_tokens'])?.toInt() ?? 0;
     final cacheRead =
@@ -105,7 +106,8 @@ class AnthropicChatProvider extends BaseChatProvider {
     if (inputTotal > 0) localUsage['inputTokens'] = inputTotal;
     final output = usageNumberToDouble(usage['output_tokens'])?.toInt();
     if (output != null) localUsage['outputTokens'] = output;
-    final cost = usageNumberToDouble(usage['total_cost']) ??
+    final cost =
+        usageNumberToDouble(usage['total_cost']) ??
         usageNumberToDouble(usage['cost']);
     if (cost != null) {
       final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
@@ -163,7 +165,7 @@ class AnthropicChatProvider extends BaseChatProvider {
       if (temperature != null && !thinking) 'temperature': temperature,
       'stream': stream,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
-      if (extraParams != null) ...extraParams,
+      ...?extraParams,
     };
   }
 
@@ -179,24 +181,26 @@ class AnthropicChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
-    return _buildBody(messages,
-        system: system,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: stream,
-        tools: tools,
-        extraParams: extraParams);
+    return _buildBody(
+      messages,
+      system: system,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: stream,
+      tools: tools,
+      extraParams: extraParams,
+    );
   }
 
   @override
   Map<String, dynamic> get defaultParams => {
-        // 仅作模型 ID 缺省兜底；当前默认模型建议改为
-        // claude-sonnet-4-* 系列（claude-3-5-sonnet 已下线）。
-        'model': 'claude-3-5-sonnet',
-        'max_tokens': 4096,
-        'temperature': 1.0,
-      };
+    // 仅作模型 ID 缺省兜底；当前默认模型建议改为
+    // claude-sonnet-4-* 系列（claude-3-5-sonnet 已下线）。
+    'model': 'claude-3-5-sonnet',
+    'max_tokens': 4096,
+    'temperature': 1.0,
+  };
 
   // ── 非流式对话 ──────────────────────────────────────────────────
 
@@ -214,15 +218,18 @@ class AnthropicChatProvider extends BaseChatProvider {
   }) async {
     if (_apiKey.isEmpty) throw Exception('API key not configured');
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        system: system,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      system: system,
+      extraParams: extraParams,
+    );
 
     debugPrint(
-        'AnthropicChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
+      'AnthropicChatProvider: POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     try {
       _lastRequestBody = body;
@@ -249,8 +256,9 @@ class AnthropicChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
       // 收集实际 token 计量（非流式响应体 usage 字段）
-      final usage =
-          response.data is Map ? (response.data as Map)['usage'] : null;
+      final usage = response.data is Map
+          ? (response.data as Map)['usage']
+          : null;
       if (usage is Map) {
         _lastUsage = {};
         mergeAnthropicUsage(_lastUsage!, usage);
@@ -281,7 +289,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
         _lastResponseData = <String, dynamic>{
-          'raw': e.response!.data as String
+          'raw': e.response!.data as String,
         };
       }
       final statusCode = e.response?.statusCode ?? 0;
@@ -320,14 +328,16 @@ class AnthropicChatProvider extends BaseChatProvider {
       throw Exception('API key not configured');
     }
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: true,
-        system: system,
-        tools: tools,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: true,
+      system: system,
+      tools: tools,
+      extraParams: extraParams,
+    );
 
     _lastRequestBody = body;
     _lastRequestUrl = _baseUrl;
@@ -344,7 +354,8 @@ class AnthropicChatProvider extends BaseChatProvider {
     _lastUsage = null;
 
     debugPrint(
-        'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
+      'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     final acc = AnthropicStreamAccumulator();
     // 本次请求的 usage（局部收集，per-request 隔离）
@@ -416,11 +427,12 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseData = null;
 
         if (e.response?.data is Map) {
-          _lastResponseData =
-              Map<String, dynamic>.from(e.response!.data as Map);
+          _lastResponseData = Map<String, dynamic>.from(
+            e.response!.data as Map,
+          );
         } else if (e.response?.data is String) {
           _lastResponseData = <String, dynamic>{
-            'raw': e.response!.data as String
+            'raw': e.response!.data as String,
           };
         } else {
           final streamBody = await parseStreamErrorBody(e);
@@ -436,7 +448,8 @@ class AnthropicChatProvider extends BaseChatProvider {
         // 写入，见上方 `_lastResponseData = data`），保留它用于诊断，
         // 否则清空陈旧的成功流数据。错误帧判断用 type 字段（网关
         // 变体可能缺 error 字段，如 {"type":"error"}）。
-        final isErrorFrame = _lastResponseData?['error'] != null ||
+        final isErrorFrame =
+            _lastResponseData?['error'] != null ||
             _lastResponseData?['type'] == 'error';
         if (!isErrorFrame) {
           _lastResponseData = null;

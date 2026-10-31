@@ -64,9 +64,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultHeaders => const {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      };
+    'Content-Type': 'application/json',
+    'Accept': 'text/event-stream',
+  };
 
   @override
   Future<String> chat(
@@ -84,12 +84,18 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     final execution = await runtime.executeForGroupId<String>(
       groupId: groupId,
       localModelId: localModelId,
-      requiredCapabilities: _requiredCapabilities(messages, null),
+      requiredCapabilities: _requiredCapabilities(
+        messages,
+        null,
+        extraParams: extraParams,
+      ),
       supportedConnectorTypes: _supportedConnectorTypes,
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
+        final protocolId = _protocolFor(candidate.account);
         final body = _buildBody(
           messages,
+          protocolId: protocolId,
           upstreamModelId: candidate.upstreamModelId,
           maxTokens: maxTokens,
           temperature: temperature,
@@ -102,12 +108,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             account: candidate.account,
             modelId: candidate.upstreamModelId,
             body: body,
+            nativeFormat: _nativeFormatFor(protocolId),
             cancelToken: cancelToken,
             onRequestSent: progress.markRequestSent,
           );
           _lastResponseStatusCode = response.statusCode;
           _lastResponseHeaders = response.headers;
-          final result = _readCompletion(response.body);
+          final result = _readCompletion(response.body, protocolId);
           _lastResponseData = result.data;
           _lastUsage = result.usage;
           await _recordUsage(
@@ -123,6 +130,54 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           _captureResponseFailure(error);
           rethrow;
         }
+      },
+    );
+    return execution.value;
+  }
+
+  /// Counts Anthropic Messages input tokens through the connected account.
+  /// This uses the provider's distinct count_tokens contract and path; it does
+  /// not route through the generation endpoint.
+  Future<int> countTokens(
+    List<Map<String, dynamic>> messages, {
+    String? system,
+    List<Map<String, dynamic>>? tools,
+    CancelToken? cancelToken,
+  }) async {
+    if (endpointType != 'anthropic') {
+      throw UnsupportedError(
+        'Token counting is only available for Anthropic Messages accounts.',
+      );
+    }
+    final runtime = await _runtime;
+    final execution = await runtime.executeForGroupId<int>(
+      groupId: groupId,
+      localModelId: localModelId,
+      supportedConnectorTypes: const {'claude'},
+      request: (candidate, progress) async {
+        if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
+        final body = _buildBody(
+          messages,
+          protocolId: 'anthropic.messages',
+          operation: 'count_tokens',
+          upstreamModelId: candidate.upstreamModelId,
+          tools: tools,
+          system: system,
+        );
+        final response = await runtime.executor.request(
+          account: candidate.account,
+          modelId: candidate.upstreamModelId,
+          body: body,
+          nativeFormat: 'count_tokens',
+          cancelToken: cancelToken,
+          onRequestSent: progress.markRequestSent,
+        );
+        final data = _jsonMap(response.body);
+        final count = data?['input_tokens'];
+        if (count is! num || count < 0) {
+          throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+        }
+        return count.toInt();
       },
     );
     return execution.value;
@@ -157,7 +212,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           groupId: groupId,
           localModelId: localModelId,
           requiredCapabilities: {
-            ..._requiredCapabilities(messages, tools),
+            ..._requiredCapabilities(messages, tools, extraParams: extraParams),
             'streaming',
           },
           supportedConnectorTypes: _supportedConnectorTypes,
@@ -165,8 +220,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (requestCancelToken.isCancelled) {
               throw requestCancelToken.cancelError!;
             }
+            final protocolId = _protocolFor(candidate.account);
             final body = _buildBody(
               messages,
+              protocolId: protocolId,
               upstreamModelId: candidate.upstreamModelId,
               maxTokens: maxTokens,
               temperature: temperature,
@@ -182,6 +239,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 modelId: candidate.upstreamModelId,
                 body: body,
                 stream: true,
+                nativeFormat: _nativeFormatFor(protocolId),
                 cancelToken: requestCancelToken,
                 onRequestSent: progress.markRequestSent,
               );
@@ -192,6 +250,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 progress,
                 runtime: runtime,
                 accountId: candidate.account.id,
+                protocolId: protocolId,
               );
               await for (final event in eventStream) {
                 if (controller.isClosed) return;
@@ -218,19 +277,66 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return controller.stream;
   }
 
-  Set<String> get _supportedConnectorTypes => endpointType == 'anthropic'
-      ? const {'claude'}
-      : const {'openai-compatibility', 'kimi', 'kimi-ai', 'kimi.ai'};
+  Set<String> get _supportedConnectorTypes => switch (endpointType) {
+    'anthropic' => const {'claude'},
+    'google.gemini.generate_content' => const {'gemini'},
+    'google.gemini.interactions' => const {'gemini-interactions'},
+    'ollama.chat' => const {'ollama'},
+    _ => const {
+      'openai-compatibility',
+      'openai-api',
+      'bedrock',
+      'kimi',
+      'kimi-ai',
+      'kimi.ai',
+      'moonshot',
+      'glm',
+      'deepseek',
+      'minimax',
+      'qwen',
+    },
+  };
+
+  String _protocolFor(AiGatewayAccount account) {
+    if (endpointType == 'anthropic' ||
+        endpointType == 'google.gemini.generate_content' ||
+        endpointType == 'google.gemini.interactions' ||
+        endpointType == 'ollama.chat') {
+      return endpointType == 'anthropic' ? 'anthropic.messages' : endpointType;
+    }
+    final configuredProtocol = account.endpointConfig['chatProtocol'];
+    if (configuredProtocol == 'openai.responses') {
+      if (const {
+        'openai-api',
+        'kimi',
+        'kimi-ai',
+        'kimi.ai',
+      }.contains(account.connectorType)) {
+        return 'openai.responses';
+      }
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.request,
+        code: 'unsupported_protocol',
+      );
+    }
+    return 'openai.chat_completions';
+  }
+
+  String? _nativeFormatFor(String protocolId) =>
+      protocolId == 'openai.responses' ? 'responses' : null;
 
   static Set<String> _requiredCapabilities(
     List<Map<String, dynamic>> messages,
-    List<Map<String, dynamic>>? tools,
-  ) {
+    List<Map<String, dynamic>>? tools, {
+    Map<String, dynamic>? extraParams,
+  }) {
     final required = <String>{};
-    if (tools != null && tools.isNotEmpty) required.add('tools');
+    if (_effectiveTools(tools, extraParams).isNotEmpty) required.add('tools');
     if (_containsContentType(messages, const {
       'image',
       'image_url',
+      'input_image',
+      'output_image',
       'video_url',
       'file',
       'document',
@@ -247,6 +353,20 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return required;
   }
 
+  static List<Map<String, dynamic>> _effectiveTools(
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+  ) {
+    final configured = extraParams?['tools'];
+    if (configured is List) {
+      return configured
+          .whereType<Map>()
+          .map((tool) => Map<String, dynamic>.from(tool))
+          .toList(growable: false);
+    }
+    return tools ?? const <Map<String, dynamic>>[];
+  }
+
   static bool _containsContentType(Object? value, Set<String> types) {
     if (value is Map) {
       if (types.contains(value['type'])) return true;
@@ -260,6 +380,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   Map<String, dynamic> _buildBody(
     List<Map<String, dynamic>> messages, {
+    required String protocolId,
+    String operation = 'generate',
     required String upstreamModelId,
     int? maxTokens,
     double? temperature,
@@ -268,37 +390,63 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String? system,
     Map<String, dynamic>? extraParams,
   }) {
-    if (endpointType == 'anthropic') {
-      final thinking = extraParams?['thinking'];
-      final thinkingType = thinking is Map ? thinking['type'] : null;
-      final extendedThinking = thinkingType is String &&
-          const {
-            'enabled',
-            'adaptive',
-            'on',
-          }.contains(thinkingType.toLowerCase());
-      return {
-        'max_tokens': maxTokens ?? 4096,
-        'messages': messages,
-        if (system != null && system.isNotEmpty) 'system': system,
-        if (temperature != null && !extendedThinking)
-          'temperature': temperature,
-        'stream': stream,
-        if (tools != null && tools.isNotEmpty) 'tools': tools,
-        ...?extraParams,
-        // Custom parameters may contain `model`; routing remains authoritative.
-        'model': upstreamModelId,
-      };
+    final bridge = AiGatewayProtocolBridges.forProtocol(protocolId);
+    if (bridge == null) {
+      throw StateError('No internal protocol bridge for $protocolId.');
     }
-    return {
-      'messages': messages,
-      if (maxTokens != null) 'max_tokens': maxTokens,
-      if (temperature != null) 'temperature': temperature,
-      'stream': stream,
-      if (tools != null && tools.isNotEmpty) 'tools': tools,
-      ...?extraParams,
-      'model': upstreamModelId,
-    };
+    final requestTools = _effectiveTools(tools, extraParams);
+    final previousInteractionValue = extraParams?['previous_interaction_id'];
+    final previousInteractionId =
+        protocolId == 'google.gemini.interactions' &&
+            previousInteractionValue is String
+        ? previousInteractionValue
+        : null;
+    final requestOptions = Map<String, dynamic>.from(extraParams ?? const {});
+    if (previousInteractionId != null) {
+      requestOptions.remove('previous_interaction_id');
+    }
+    final extraTokenLimit =
+        extraParams?['max_tokens'] ?? extraParams?['max_output_tokens'];
+    final requestedMaxTokens =
+        maxTokens ?? (extraTokenLimit is num ? extraTokenLimit.toInt() : null);
+    final requestedSystem = extraParams?['system'] is String
+        ? extraParams!['system'] as String
+        : system;
+    final thinking = extraParams?['thinking'];
+    final thinkingType = thinking is Map ? thinking['type'] : null;
+    final extendedThinking =
+        thinkingType is String &&
+        const {
+          'enabled',
+          'adaptive',
+          'on',
+        }.contains(thinkingType.toLowerCase());
+    if (protocolId == 'anthropic.messages' && extendedThinking) {
+      requestOptions.remove('temperature');
+    }
+    final request = AiGatewayProtocolBridges.buildRequest(
+      protocolId,
+      AiGatewayProtocolRequest(
+        modelId: upstreamModelId,
+        operation: operation,
+        messages: messages
+            .map(AiGatewayProtocolBridges.openAiChatCompletions.toStroom)
+            .toList(growable: false),
+        system: requestedSystem,
+        tools: requestTools,
+        stream: stream,
+        maxOutputTokens: requestedMaxTokens,
+        previousInteractionId: previousInteractionId,
+        temperature: protocolId == 'anthropic.messages' && extendedThinking
+            ? null
+            : temperature,
+        options: requestOptions,
+      ),
+    );
+    if (request == null) {
+      throw StateError('No internal request builder for $protocolId.');
+    }
+    return request.body;
   }
 
   void _captureRequest(
@@ -307,7 +455,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required bool stream,
   }) {
     _lastRequestBody = body;
-    final baseUrl = account.endpointConfig['baseUrl'] ??
+    final baseUrl =
+        account.endpointConfig['baseUrl'] ??
         account.endpointConfig['host'] ??
         account.endpointConfig['apiBase'];
     _lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -335,6 +484,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     AiGatewayRouteProgress progress, {
     required AiGatewayFacade runtime,
     required String accountId,
+    required String protocolId,
   }) async {
     final body = response.body;
     if (body is! Stream<List<int>>) {
@@ -343,10 +493,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     final usage = <String, dynamic>{};
     final toolsByIndex = <int, Map<String, dynamic>>{};
     final anthropicAccumulator = AnthropicStreamAccumulator();
+    final protocolStreamState = AiGatewayProtocolStreamState();
     final parsedEvents = StreamController<AIStreamEvent>();
     unawaited(() async {
       try {
-        await for (final payload in _sseData(body)) {
+        final payloads = protocolId == 'ollama.chat'
+            ? _ndjsonData(body)
+            : _sseData(body);
+        await for (final payload in payloads) {
           final trimmedPayload = payload.trim();
           if (trimmedPayload.isEmpty) continue;
           if (trimmedPayload == '[DONE]') break;
@@ -355,7 +509,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (decoded is! Map) continue;
             final data = Map<String, dynamic>.from(decoded);
             _lastResponseData = data;
-            if (endpointType == 'anthropic') {
+            if (protocolId == 'anthropic.messages') {
               if (data['type'] == 'error') {
                 throw _streamRequestError(data['error']);
               }
@@ -377,7 +531,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               )) {
                 parsedEvents.add(event);
               }
-            } else {
+            } else if (protocolId == 'openai.chat_completions') {
               final apiError = data['error'];
               if (apiError is Map) throw _streamRequestError(apiError);
               OpenAICompatibleChatProvider.throwIfApiError(data);
@@ -391,9 +545,43 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 parsedEvents.add(event);
               }
               _accumulateOpenAIToolCalls(data, toolsByIndex);
+            } else {
+              if (data['error'] is Map) {
+                throw _streamRequestError(data['error']);
+              }
+              for (final event in AiGatewayProtocolStreamBridge.mapEvents(
+                protocolId,
+                data,
+                state: protocolStreamState,
+              )) {
+                switch (event.kind) {
+                  case AiGatewayProtocolStreamEventKind.textDelta:
+                    parsedEvents.add(AIStreamEvent(event.delta ?? ''));
+                  case AiGatewayProtocolStreamEventKind.reasoningDelta:
+                    parsedEvents.add(
+                      AIStreamEvent(event.delta ?? '', isReasoning: true),
+                    );
+                  case AiGatewayProtocolStreamEventKind.toolCallDelta:
+                    _accumulateProtocolToolCall(event, toolsByIndex);
+                  case AiGatewayProtocolStreamEventKind.usage:
+                    final normalized = _normalizeProtocolUsage(
+                      event.usage ?? const {},
+                      protocolId,
+                    );
+                    usage.addAll(normalized);
+                  case AiGatewayProtocolStreamEventKind.lifecycle:
+                  case AiGatewayProtocolStreamEventKind.providerEvent:
+                    break;
+                  case AiGatewayProtocolStreamEventKind.error:
+                    final failedResponse = _jsonMap(event.raw['response']);
+                    throw _streamRequestError(
+                      data['error'] ?? failedResponse?['error'],
+                    );
+                }
+              }
             }
           } catch (error) {
-            if (endpointType != 'anthropic' &&
+            if (protocolId != 'anthropic.messages' &&
                 (error is FormatException || error is TypeError)) {
               continue;
             }
@@ -418,7 +606,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           _lastUsage = Map<String, dynamic>.from(usage);
           parsedEvents.add(AIStreamEvent('', usage: _lastUsage));
         }
-        if (endpointType == 'anthropic') {
+        if (protocolId == 'anthropic.messages') {
           final signature = anthropicAccumulator.thinkingSignatures.length == 1
               ? anthropicAccumulator.thinkingSignatures.single
               : '';
@@ -468,24 +656,28 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return parsedEvents.stream;
   }
 
-  _LlmCompletionResult _readCompletion(Object? raw) {
+  _LlmCompletionResult _readCompletion(Object? raw, String protocolId) {
     final data = _jsonMap(raw);
     if (data == null) {
       throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
     }
     final apiError = data['error'];
     if (apiError is Map) throw _streamRequestError(apiError);
-    if (endpointType == 'anthropic') {
+    if (protocolId == 'anthropic.messages') {
       final blocks = data['content'];
-      final text = blocks is List
-          ? blocks
-              .whereType<Map>()
-              .where((block) => block['type'] == 'text')
-              .map((block) => block['text'])
-              .whereType<String>()
-              .join()
-          : '';
-      if (text.trim().isEmpty) {
+      if (blocks is! List || blocks.isEmpty) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
+      final text = blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'text')
+          .map((block) => block['text'])
+          .whereType<String>()
+          .join();
+      final hasToolUse = blocks.whereType<Map>().any(
+        (block) => block['type'] == 'tool_use',
+      );
+      if (text.trim().isEmpty && !hasToolUse) {
         throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
       }
       final usage = <String, dynamic>{};
@@ -495,21 +687,155 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       }
       return _LlmCompletionResult(data: data, text: text, usage: usage);
     }
-    final choices = data['choices'];
-    if (choices is! List || choices.isEmpty) {
-      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
-    }
-    final first = choices.first;
-    final message = first is Map ? first['message'] : null;
-    final content = message is Map ? message['content'] : null;
-    if (content is! String) {
+    final text = switch (protocolId) {
+      'openai.responses' => _responsesText(data['output']),
+      'google.gemini.generate_content' => _geminiText(data['candidates']),
+      'google.gemini.interactions' => _interactionsText(data['outputs']),
+      'ollama.chat' => (data['message'] as Map?)?['content'] as String?,
+      _ => _openAiChatText(data['choices']),
+    };
+    if (text == null) {
       throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
     }
     return _LlmCompletionResult(
       data: data,
-      text: content,
-      usage: OpenAICompatibleChatProvider.normalizeUsage(data['usage']) ?? {},
+      text: text,
+      usage: _normalizeProtocolUsage(
+        _rawProtocolUsage(data, protocolId),
+        protocolId,
+      ),
     );
+  }
+
+  static String? _openAiChatText(Object? rawChoices) {
+    if (rawChoices is! List || rawChoices.isEmpty) return null;
+    final first = rawChoices.first;
+    final message = first is Map ? first['message'] : null;
+    return message is Map && message['content'] is String
+        ? message['content'] as String
+        : '';
+  }
+
+  static String? _responsesText(Object? rawOutput) {
+    if (rawOutput is! List) return null;
+    return rawOutput.whereType<Map>().expand((item) {
+      final content = item['content'];
+      if (content is List) {
+        return content.whereType<Map>().expand((part) {
+          if (part['type'] == 'output_text') {
+            final text = part['text'];
+            return text is String ? [text] : const <String>[];
+          }
+          if (part['type'] == 'refusal') {
+            final refusal = part['refusal'] ?? part['text'];
+            return refusal is String ? [refusal] : const <String>[];
+          }
+          return const <String>[];
+        });
+      }
+      return const <String>[];
+    }).join();
+  }
+
+  static String? _geminiText(Object? rawCandidates) {
+    if (rawCandidates is! List) return null;
+    return rawCandidates.whereType<Map>().expand((candidate) {
+      final content = candidate['content'];
+      final parts = content is Map ? content['parts'] : null;
+      return parts is List
+          ? parts
+                .whereType<Map>()
+                .where((part) => part['thought'] != true)
+                .map((part) => part['text'])
+                .whereType<String>()
+          : const <String>[];
+    }).join();
+  }
+
+  static String? _interactionsText(Object? rawOutputs) {
+    if (rawOutputs is! List) return null;
+    return rawOutputs.whereType<Map>().expand((output) {
+      if (output['type'] == 'text') {
+        final text = output['text'];
+        return text is String ? [text] : const <String>[];
+      }
+      if (output['type'] != 'model_output') return const <String>[];
+      final content = output['content'];
+      if (content is! List) return const <String>[];
+      return content
+          .whereType<Map>()
+          .where((part) => const {'text', 'output_text'}.contains(part['type']))
+          .map((part) => part['text'])
+          .whereType<String>();
+    }).join();
+  }
+
+  static Map<String, dynamic> _rawProtocolUsage(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) => switch (protocolId) {
+    'google.gemini.generate_content' =>
+      _jsonMap(data['usageMetadata']) ?? const {},
+    'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
+    'ollama.chat' => {
+      if (data['prompt_eval_count'] is num)
+        'prompt_eval_count': data['prompt_eval_count'],
+      if (data['eval_count'] is num) 'eval_count': data['eval_count'],
+    },
+    'openai.responses' => _jsonMap(data['usage']) ?? const {},
+    _ => _jsonMap(data['usage']) ?? const {},
+  };
+
+  static Map<String, dynamic> _normalizeProtocolUsage(
+    Map<String, dynamic> raw,
+    String protocolId,
+  ) {
+    if (protocolId == 'anthropic.messages') {
+      final normalized = <String, dynamic>{};
+      AnthropicChatProvider.mergeAnthropicUsage(normalized, raw);
+      return normalized;
+    }
+    if (protocolId == 'openai.chat_completions') {
+      return OpenAICompatibleChatProvider.normalizeUsage(raw) ?? const {};
+    }
+    final input =
+        raw['input_tokens'] ??
+        raw['promptTokenCount'] ??
+        raw['prompt_eval_count'];
+    final output =
+        raw['output_tokens'] ??
+        raw['candidatesTokenCount'] ??
+        raw['eval_count'];
+    return {
+      if (input is num) 'inputTokens': input,
+      if (output is num) 'outputTokens': output,
+    };
+  }
+
+  static void _accumulateProtocolToolCall(
+    AiGatewayProtocolStreamEvent event,
+    Map<int, Map<String, dynamic>> accumulators,
+  ) {
+    final index =
+        event.toolCallIndex ??
+        (event.toolCallId == null
+            ? accumulators.length
+            : accumulators.keys.firstWhere(
+                (key) => accumulators[key]?['id'] == event.toolCallId,
+                orElse: () => accumulators.length,
+              ));
+    final entry = accumulators.putIfAbsent(index, () => {});
+    if (event.toolCallId != null) entry['id'] = event.toolCallId;
+    final function =
+        entry.putIfAbsent('function', () => <String, dynamic>{})
+            as Map<String, dynamic>;
+    if (event.toolName != null) function['name'] = event.toolName;
+    if (event.thoughtSignature != null) {
+      entry['thoughtSignature'] = event.thoughtSignature;
+    }
+    if (event.delta != null) {
+      function['arguments'] = '${function['arguments'] ?? ''}${event.delta}';
+    }
   }
 
   Future<void> _recordUsage(
@@ -601,6 +927,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (dataLines.isNotEmpty) yield dataLines.join('\n');
   }
 
+  static Stream<String> _ndjsonData(Stream<List<int>> bytes) async* {
+    await for (final line
+        in bytes.transform(utf8.decoder).transform(const LineSplitter())) {
+      final payload = line.trim();
+      if (payload.isNotEmpty) yield payload;
+    }
+  }
+
   static void _accumulateOpenAIToolCalls(
     Map<String, dynamic> data,
     Map<int, Map<String, dynamic>> accumulators,
@@ -617,8 +951,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       if (call['type'] is String) entry['type'] = call['type'];
       final function = call['function'];
       if (function is! Map) continue;
-      final target = entry.putIfAbsent('function', () => <String, dynamic>{})
-          as Map<String, dynamic>;
+      final target =
+          entry.putIfAbsent('function', () => <String, dynamic>{})
+              as Map<String, dynamic>;
       if (function['name'] is String) target['name'] = function['name'];
       if (function['arguments'] is String) {
         target['arguments'] =
@@ -636,6 +971,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           (entry) => {
             'id': entry.value['id'] ?? 'call_${entry.key}',
             'type': entry.value['type'] ?? 'function',
+            if (entry.value['thoughtSignature'] != null)
+              'thoughtSignature': entry.value['thoughtSignature'],
             'function': entry.value['function'] ?? <String, dynamic>{},
           },
         )
@@ -652,8 +989,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static AiGatewayExecutionException _streamRequestError(Object? apiError) {
-    final rawCode =
-        apiError is Map ? apiError['code'] ?? apiError['type'] : null;
+    final rawCode = apiError is Map
+        ? apiError['code'] ?? apiError['type']
+        : null;
     return AiGatewayExecutionException(
       kind: AiGatewayFailureKind.request,
       code: rawCode is String ? rawCode : null,
@@ -664,16 +1002,15 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 AiGatewayConnectorObservation _mergeGatewayObservations(
   AiGatewayConnectorObservation first,
   AiGatewayConnectorObservation second,
-) =>
-    AiGatewayConnectorObservation(
-      requestUsage: second.requestUsage.isKnown
-          ? second.requestUsage
-          : first.requestUsage,
-      remainingQuota: second.remainingQuota.isKnown
-          ? second.remainingQuota
-          : first.remainingQuota,
-      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
-    );
+) => AiGatewayConnectorObservation(
+  requestUsage: second.requestUsage.isKnown
+      ? second.requestUsage
+      : first.requestUsage,
+  remainingQuota: second.remainingQuota.isKnown
+      ? second.remainingQuota
+      : first.remainingQuota,
+  quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+);
 
 class _LlmCompletionResult {
   final Map<String, dynamic> data;

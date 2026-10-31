@@ -110,8 +110,7 @@ class LlmRequestErrorClassifier {
       LlmRequestFailureKind.quotaExhausted ||
       LlmRequestFailureKind.rateLimited ||
       LlmRequestFailureKind.connection ||
-      LlmRequestFailureKind.server =>
-        true,
+      LlmRequestFailureKind.server => true,
       _ => false,
     };
     if (!retryable) {
@@ -128,8 +127,7 @@ class LlmRequestErrorClassifier {
     final defaultDelay = switch (kind) {
       LlmRequestFailureKind.authentication => const Duration(minutes: 5),
       LlmRequestFailureKind.quotaExhausted ||
-      LlmRequestFailureKind.rateLimited =>
-        const Duration(minutes: 1),
+      LlmRequestFailureKind.rateLimited => const Duration(minutes: 1),
       LlmRequestFailureKind.connection => const Duration(seconds: 15),
       LlmRequestFailureKind.server => const Duration(seconds: 30),
       _ => Duration.zero,
@@ -210,8 +208,9 @@ class LlmRequestErrorClassifier {
       final numeric = num.tryParse(value.trim());
       DateTime? parsed;
       if (numeric != null && numeric > 0 && numeric.isFinite) {
-        final millisecondsValue =
-            numeric > 1000000000000 ? numeric : numeric * 1000;
+        final millisecondsValue = numeric > 1000000000000
+            ? numeric
+            : numeric * 1000;
         // DateTime's supported Unix-millisecond range is finite. Ignore
         // malformed provider hints before rounding/converting so parsing an
         // extreme value cannot escape request cleanup and strand a reservation.
@@ -266,10 +265,10 @@ class LlmUsageMeasurement {
   });
 
   Map<String, dynamic> toMap() => {
-        'unit': unit,
-        'value': value,
-        'source': source,
-      };
+    'unit': unit,
+    'value': value,
+    'source': source,
+  };
 
   factory LlmUsageMeasurement.fromMap(Map<String, dynamic> map) {
     final unit = map['unit'];
@@ -302,11 +301,11 @@ class LlmUsageEvent {
   }) : measurements = List.unmodifiable(measurements);
 
   Map<String, dynamic> toMap() => {
-        'accountId': accountId,
-        'groupId': groupId,
-        'occurredAt': occurredAt.toUtc().toIso8601String(),
-        'measurements': measurements.map((item) => item.toMap()).toList(),
-      };
+    'accountId': accountId,
+    'groupId': groupId,
+    'occurredAt': occurredAt.toUtc().toIso8601String(),
+    'measurements': measurements.map((item) => item.toMap()).toList(),
+  };
 
   factory LlmUsageEvent.fromMap(Map<String, dynamic> map) {
     final accountId = map['accountId'];
@@ -346,9 +345,9 @@ class LlmCooldown {
   const LlmCooldown({required this.until, required this.reason});
 
   Map<String, dynamic> toMap() => {
-        'until': until.toUtc().toIso8601String(),
-        'reason': reason.name,
-      };
+    'until': until.toUtc().toIso8601String(),
+    'reason': reason.name,
+  };
 
   factory LlmCooldown.fromMap(Map<String, dynamic> map) {
     final untilValue = map['until'];
@@ -379,24 +378,25 @@ class LlmRoutingRuntimeState {
     required List<LlmUsageEvent> events,
     List<LlmPendingUsage> pendingUsage = const [],
     required Map<String, LlmCooldown> cooldowns,
-  })  : events = List.unmodifiable(events),
-        pendingUsage = List.unmodifiable(pendingUsage),
-        cooldowns = Map.unmodifiable(cooldowns);
+  }) : events = List.unmodifiable(events),
+       pendingUsage = List.unmodifiable(pendingUsage),
+       cooldowns = Map.unmodifiable(cooldowns);
 
   Map<String, dynamic> toMap() => {
-        'version': 1,
-        'trackingStartedAt': trackingStartedAt.toUtc().toIso8601String(),
-        'events': events.map((item) => item.toMap()).toList(),
-        'pendingUsage': pendingUsage.map((item) => item.toMap()).toList(),
-        'cooldowns': {
-          for (final entry in cooldowns.entries) entry.key: entry.value.toMap(),
-        },
-      };
+    'version': 1,
+    'trackingStartedAt': trackingStartedAt.toUtc().toIso8601String(),
+    'events': events.map((item) => item.toMap()).toList(),
+    'pendingUsage': pendingUsage.map((item) => item.toMap()).toList(),
+    'cooldowns': {
+      for (final entry in cooldowns.entries) entry.key: entry.value.toMap(),
+    },
+  };
 
   factory LlmRoutingRuntimeState.fromMap(Map<String, dynamic> map) {
     final startedValue = map['trackingStartedAt'];
-    final started =
-        startedValue is String ? DateTime.tryParse(startedValue) : null;
+    final started = startedValue is String
+        ? DateTime.tryParse(startedValue)
+        : null;
     final events = map['events'];
     final pendingUsage = map['pendingUsage'] ?? const [];
     final cooldowns = map['cooldowns'];
@@ -452,19 +452,20 @@ class LlmPendingUsage {
   });
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'accountId': accountId,
-        'groupId': groupId,
-        'startedAt': startedAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'accountId': accountId,
+    'groupId': groupId,
+    'startedAt': startedAt.toUtc().toIso8601String(),
+  };
 
   factory LlmPendingUsage.fromMap(Map<String, dynamic> map) {
     final id = map['id'];
     final accountId = map['accountId'];
     final groupId = map['groupId'];
     final startedValue = map['startedAt'];
-    final started =
-        startedValue is String ? DateTime.tryParse(startedValue) : null;
+    final started = startedValue is String
+        ? DateTime.tryParse(startedValue)
+        : null;
     if (id is! String ||
         !_routingIdentifierPattern.hasMatch(id) ||
         accountId is! String ||
@@ -504,9 +505,9 @@ class LlmRoutingStateStore {
   var _nextPendingUsageId = 0;
 
   LlmRoutingStateStore({required this.preferences, DateTime Function()? clock})
-      : _memoryCooldowns = _memoryCooldownsByPreferences[preferences] ??=
-            <String, LlmCooldown>{},
-        _clock = clock ?? DateTime.now;
+    : _memoryCooldowns = _memoryCooldownsByPreferences[preferences] ??=
+          <String, LlmCooldown>{},
+      _clock = clock ?? DateTime.now;
 
   Future<LlmRoutingRuntimeState> load() async {
     final lease =
@@ -573,16 +574,18 @@ class LlmRoutingStateStore {
   Future<void> markPendingUsageSent(String id, DateTime sentAt) =>
       _update((state) {
         var found = false;
-        final pendingUsage = state.pendingUsage.map((pending) {
-          if (pending.id != id) return pending;
-          found = true;
-          return LlmPendingUsage(
-            id: pending.id,
-            accountId: pending.accountId,
-            groupId: pending.groupId,
-            startedAt: sentAt.toUtc(),
-          );
-        }).toList(growable: false);
+        final pendingUsage = state.pendingUsage
+            .map((pending) {
+              if (pending.id != id) return pending;
+              found = true;
+              return LlmPendingUsage(
+                id: pending.id,
+                accountId: pending.accountId,
+                groupId: pending.groupId,
+                startedAt: sentAt.toUtc(),
+              );
+            })
+            .toList(growable: false);
         if (!found) throw const LlmRoutingStateException();
         return LlmRoutingRuntimeState(
           trackingStartedAt: state.trackingStartedAt,
@@ -593,17 +596,17 @@ class LlmRoutingStateStore {
       });
 
   Future<void> completePendingUsage(String id) => _update((state) {
-        final pendingUsage = state.pendingUsage
-            .where((pending) => pending.id != id)
-            .toList(growable: false);
-        if (pendingUsage.length == state.pendingUsage.length) return state;
-        return LlmRoutingRuntimeState(
-          trackingStartedAt: state.trackingStartedAt,
-          events: state.events,
-          pendingUsage: pendingUsage,
-          cooldowns: state.cooldowns,
-        );
-      });
+    final pendingUsage = state.pendingUsage
+        .where((pending) => pending.id != id)
+        .toList(growable: false);
+    if (pendingUsage.length == state.pendingUsage.length) return state;
+    return LlmRoutingRuntimeState(
+      trackingStartedAt: state.trackingStartedAt,
+      events: state.events,
+      pendingUsage: pendingUsage,
+      cooldowns: state.cooldowns,
+    );
+  });
 
   Future<void> recordCooldown(String accountId, LlmCooldown cooldown) async {
     final previous = _memoryCooldowns[accountId];
@@ -752,15 +755,15 @@ class LlmRoutingExecution<T> {
     required this.candidate,
     required List<String> attemptedAccountIds,
     required List<LlmRouteDecision> decisions,
-  })  : attemptedAccountIds = List.unmodifiable(attemptedAccountIds),
-        decisions = List.unmodifiable(decisions);
+  }) : attemptedAccountIds = List.unmodifiable(attemptedAccountIds),
+       decisions = List.unmodifiable(decisions);
 }
 
 class LlmRoutingUnavailableException implements Exception {
   final List<LlmRouteDecision> decisions;
 
   LlmRoutingUnavailableException(Iterable<LlmRouteDecision> decisions)
-      : decisions = List.unmodifiable(decisions);
+    : decisions = List.unmodifiable(decisions);
 
   @override
   String toString() => 'No eligible account is available for this model group.';
@@ -1007,11 +1010,12 @@ class LlmRoutingService {
     DateTime Function()? clock,
     LlmConcurrencyReservations? concurrency,
     LlmRoundRobinCursor? roundRobin,
-  })  : stateStore = stateStore ??
-            LlmRoutingStateStore(preferences: accountService.preferences),
-        _clock = clock ?? DateTime.now,
-        concurrency = concurrency ?? LlmConcurrencyReservations.shared,
-        roundRobin = roundRobin ?? LlmRoundRobinCursor();
+  }) : stateStore =
+           stateStore ??
+           LlmRoutingStateStore(preferences: accountService.preferences),
+       _clock = clock ?? DateTime.now,
+       concurrency = concurrency ?? LlmConcurrencyReservations.shared,
+       roundRobin = roundRobin ?? LlmRoundRobinCursor();
 
   Future<LlmRoutingExecution<T>> execute<T>({
     required LlmModelGroup group,
@@ -1019,7 +1023,8 @@ class LlmRoutingService {
     required Future<T> Function(
       LlmRouteCandidate candidate,
       LlmRouteProgress progress,
-    ) request,
+    )
+    request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
   }) async {
@@ -1136,8 +1141,7 @@ class LlmRoutingService {
       final definitiveRejection = switch (requestClassification.kind) {
         LlmRequestFailureKind.authentication ||
         LlmRequestFailureKind.quotaExhausted ||
-        LlmRequestFailureKind.rateLimited =>
-          true,
+        LlmRequestFailureKind.rateLimited => true,
         _ => false,
       };
       final mayHaveBeenProcessed =
@@ -1236,7 +1240,11 @@ class LlmRoutingService {
         continue;
       }
       if (requiredCapabilities.any(
-        (capability) => model.capabilities[capability] != true,
+        (capability) => !_supportsModelCapability(
+          account.connectorType,
+          model.capabilities,
+          capability,
+        ),
       )) {
         decisions.add(
           LlmRouteDecision(
@@ -1301,11 +1309,9 @@ class LlmRoutingService {
       final tier = left.priorityTier.compareTo(right.priorityTier);
       return tier != 0 ? tier : left.memberIndex.compareTo(right.memberIndex);
     });
-    final tiers = candidates
-        .map((candidate) => candidate.priorityTier)
-        .toSet()
-        .toList()
-      ..sort();
+    final tiers =
+        candidates.map((candidate) => candidate.priorityTier).toSet().toList()
+          ..sort();
     for (final tier in tiers) {
       final tierCandidates = candidates
           .where((candidate) => candidate.priorityTier == tier)
@@ -1319,10 +1325,13 @@ class LlmRoutingService {
         estimates: estimates,
         decisions: decisions,
       );
-      final tierAccountIds =
-          tierCandidates.map((candidate) => candidate.account.id).toSet();
+      final tierAccountIds = tierCandidates
+          .map((candidate) => candidate.account.id)
+          .toSet();
       if (ordered.isEmpty &&
-          decisions.skip(decisionStart).any(
+          decisions
+              .skip(decisionStart)
+              .any(
                 (decision) =>
                     tierAccountIds.contains(decision.subjectId) &&
                     decision.reason == 'balance_unknown_or_incomparable',
@@ -1386,7 +1395,8 @@ class LlmRoutingService {
             group.policy.strategy == LlmSelectionStrategy.balanceLower;
         final availableBalances = {
           for (final entry in ranking.values.entries)
-            entry.key: entry.value -
+            entry.key:
+                entry.value -
                 concurrency.reservedUsageForAccount(
                   entry.key.account.id,
                   ranking.unit,
@@ -1397,7 +1407,8 @@ class LlmRoutingService {
           (entry) =>
               _balanceEligibleAfterEstimate(entry.key, ranking, estimates, now),
         );
-        final ranked = [...comparable]..sort((left, right) {
+        final ranked = [...comparable]
+          ..sort((left, right) {
             final balance = availableBalances[left.key]!.compareTo(
               availableBalances[right.key]!,
             );
@@ -1421,9 +1432,10 @@ class LlmRoutingService {
         for (final candidate in candidates) {
           counts[candidate] =
               _requestCount(state, candidate.account.id, group.id, now) +
-                  concurrency.activeForAccount(candidate.account.id);
+              concurrency.activeForAccount(candidate.account.id);
         }
-        final ranked = [...counts.entries]..sort((left, right) {
+        final ranked = [...counts.entries]
+          ..sort((left, right) {
             final count = left.value.compareTo(right.value);
             return count != 0
                 ? count
@@ -1439,7 +1451,8 @@ class LlmRoutingService {
     DateTime now,
   ) {
     for (final window in LlmUsageWindow.values) {
-      final firstPolicy = candidates.first.account.policy.windows[window] ??
+      final firstPolicy =
+          candidates.first.account.policy.windows[window] ??
           const LlmWindowPolicy();
       if (candidates.any(
         (candidate) => !_matchingWindowPolicy(
@@ -1506,7 +1519,8 @@ class LlmRoutingService {
   ) {
     final balance = ranking.values[candidate];
     if (balance == null) return false;
-    final policy = candidate.account.policy.windows[ranking.window] ??
+    final policy =
+        candidate.account.policy.windows[ranking.window] ??
         const LlmWindowPolicy();
     final floor = policy.reserveFloor;
     num minimum = 0;
@@ -1574,16 +1588,15 @@ class LlmRoutingService {
     required LlmRoutingRuntimeState state,
     required Map<String, num> estimates,
     required DateTime now,
-  }) =>
-      _policyFailure(
-        policy: account.policy,
-        group: group,
-        account: account,
-        accounts: {account.id: account},
-        state: state,
-        estimates: estimates,
-        now: now,
-      );
+  }) => _policyFailure(
+    policy: account.policy,
+    group: group,
+    account: account,
+    accounts: {account.id: account},
+    state: state,
+    estimates: estimates,
+    now: now,
+  );
 
   String? _policyFailure({
     required LlmRoutingPolicy policy,
@@ -1625,8 +1638,8 @@ class LlmRoutingService {
         }
         final total = threshold.kind == LlmLimitKind.percentage
             ? (account == null
-                ? _groupQuotaTotal(group, accounts, window, bounds, now, unit)
-                : _accountQuotaTotal(account, window, bounds, now, unit))
+                  ? _groupQuotaTotal(group, accounts, window, bounds, now, unit)
+                  : _accountQuotaTotal(account, window, bounds, now, unit))
             : null;
         if (threshold.kind == LlmLimitKind.percentage &&
             (total == null ||
@@ -1661,8 +1674,8 @@ class LlmRoutingService {
         final threshold = windowPolicy.usageCeiling!;
         final total = threshold.kind == LlmLimitKind.percentage
             ? (account == null
-                ? _groupKnownQuotaTotal(group, accounts, window, bounds, now)
-                : _accountKnownQuotaTotal(account, window, bounds, now))
+                  ? _groupKnownQuotaTotal(group, accounts, window, bounds, now)
+                  : _accountKnownQuotaTotal(account, window, bounds, now))
             : null;
         final unit = threshold.kind == LlmLimitKind.percentage
             ? total?.unit
@@ -1725,13 +1738,14 @@ class LlmRoutingService {
     if (remaining != null) {
       var remainingValue = remaining.value!;
       var observedAt = remaining.observedAt!;
-      final comparableProviderPair = quota != null &&
+      final comparableProviderPair =
+          quota != null &&
           used != null &&
           quota.unit == used.unit &&
           quota.source == used.source &&
           quota.observedAt!.toUtc().isAtSameMomentAs(
-                used.observedAt!.toUtc(),
-              ) &&
+            used.observedAt!.toUtc(),
+          ) &&
           quota.unit == remaining.unit &&
           quota.source == remaining.source;
       if (!comparableProviderPair &&
@@ -1842,8 +1856,8 @@ class LlmRoutingService {
               value.source != first.source ||
               value.observedAt == null ||
               !value.observedAt!.toUtc().isAtSameMomentAs(
-                    first.observedAt!.toUtc(),
-                  ),
+                first.observedAt!.toUtc(),
+              ),
         )) {
       return null;
     }
@@ -1880,8 +1894,8 @@ class LlmRoutingService {
         remaining.unit != used.unit ||
         remaining.source != used.source ||
         !remaining.observedAt!.toUtc().isAtSameMomentAs(
-              used.observedAt!.toUtc(),
-            )) {
+          used.observedAt!.toUtc(),
+        )) {
       return null;
     }
     return _UsageAmount(
@@ -1934,8 +1948,8 @@ class LlmRoutingService {
               value.source != first.source ||
               value.observedAt == null ||
               !value.observedAt!.toUtc().isAtSameMomentAs(
-                    first.observedAt!.toUtc(),
-                  ),
+                first.observedAt!.toUtc(),
+              ),
         )) {
       return null;
     }
@@ -1967,8 +1981,9 @@ class LlmRoutingService {
     final upstreamUsed = state == null || groupId != null
         ? null
         : _freshMetric(state.used, state, bounds, now);
-    LlmMetricObservation? baseline =
-        upstreamUsed?.unit == unit ? upstreamUsed : null;
+    LlmMetricObservation? baseline = upstreamUsed?.unit == unit
+        ? upstreamUsed
+        : null;
     if (baseline == null && state != null && groupId == null) {
       final quota = _freshMetric(state.quota, state, bounds, now);
       final remaining = _freshMetric(state.remaining, state, bounds, now);
@@ -1976,8 +1991,8 @@ class LlmRoutingService {
           remaining?.unit == unit &&
           quota?.source == remaining?.source &&
           quota!.observedAt!.toUtc().isAtSameMomentAs(
-                remaining!.observedAt!.toUtc(),
-              ) &&
+            remaining!.observedAt!.toUtc(),
+          ) &&
           quota.value! >= remaining.value!) {
         baseline = LlmMetricObservation.reported(
           quota.value! - remaining.value!,
@@ -1995,8 +2010,8 @@ class LlmRoutingService {
     }
     if (baseline != null &&
         runtime.trackingStartedAt.toUtc().isAfter(
-              baseline.observedAt!.toUtc(),
-            )) {
+          baseline.observedAt!.toUtc(),
+        )) {
       // Provider usage covers the interval through its snapshot. The local
       // ledger must cover the rest of the interval before adding local usage.
       return null;
@@ -2059,8 +2074,9 @@ class LlmRoutingService {
       if (groupId != null && event.groupId != groupId) continue;
       if (!bounds.contains(event.occurredAt)) continue;
       if (after != null && event.occurredAt.isBefore(after)) continue;
-      final matching =
-          event.measurements.where((item) => item.unit == unit).toList();
+      final matching = event.measurements
+          .where((item) => item.unit == unit)
+          .toList();
       final recordsSentRequest = event.measurements.any(
         (item) => item.unit == 'requests' && item.value > 0,
       );
@@ -2099,8 +2115,9 @@ class LlmRoutingService {
         continue;
       }
       if (after != null && event.occurredAt.isBefore(after)) continue;
-      final matching =
-          event.measurements.where((item) => item.unit == unit).toList();
+      final matching = event.measurements
+          .where((item) => item.unit == unit)
+          .toList();
       final recordsSentRequest = event.measurements.any(
         (item) => item.unit == 'requests' && item.value > 0,
       );
@@ -2122,13 +2139,12 @@ class LlmRoutingService {
     LlmRoutingRuntimeState runtime,
     bool Function(LlmPendingUsage pending) matches, {
     required LlmQuotaWindowBounds bounds,
-  }) =>
-      runtime.pendingUsage.any(
-        (pending) =>
-            matches(pending) &&
-            bounds.contains(pending.startedAt) &&
-            !concurrency.hasActivePendingUsage(pending.id),
-      );
+  }) => runtime.pendingUsage.any(
+    (pending) =>
+        matches(pending) &&
+        bounds.contains(pending.startedAt) &&
+        !concurrency.hasActivePendingUsage(pending.id),
+  );
 
   LlmMetricObservation? _freshMetric(
     LlmMetricObservation metric,
@@ -2205,11 +2221,11 @@ class LlmRoutingService {
   }
 
   _UsageAmount _amount(LlmMetricObservation metric) => _UsageAmount(
-        metric.value!,
-        metric.unit!,
-        metric.source,
-        metric.observedAt,
-      );
+    metric.value!,
+    metric.unit!,
+    metric.source,
+    metric.observedAt,
+  );
 
   num _requestCount(
     LlmRoutingRuntimeState state,
@@ -2274,6 +2290,65 @@ class LlmRoutingService {
     }
     return resolved.toSet().toList(growable: false);
   }
+}
+
+bool _supportsModelCapability(
+  String connectorType,
+  Map<String, dynamic> capabilities,
+  String capability,
+) {
+  if (capabilities.containsKey(capability)) {
+    return capabilities[capability] == true;
+  }
+  final methods = capabilities['supportedGenerationMethods'];
+  final protocol = LlmConnectorRegistry.find(connectorType)?.protocol;
+  if (methods is Iterable &&
+      const {
+        LlmNativeProtocol.geminiGenerateContent,
+        LlmNativeProtocol.geminiInteractions,
+      }.contains(protocol) &&
+      const {'chat', 'streaming'}.contains(capability)) {
+    return capability == 'streaming'
+        ? methods.contains('streamGenerateContent')
+        : methods.contains('generateContent') ||
+              methods.contains('streamGenerateContent');
+  }
+  if (methods is Iterable) {
+    if (capability == 'chat' &&
+        (methods.contains('generateContent') ||
+            methods.contains('streamGenerateContent'))) {
+      return true;
+    }
+    if (capability == 'streaming' &&
+        methods.contains('streamGenerateContent')) {
+      return true;
+    }
+  }
+  final inputModalities = capabilities['inputModalities'];
+  if (inputModalities is Iterable &&
+      capability == 'vision' &&
+      inputModalities.contains('image')) {
+    return true;
+  }
+  if (capability == 'chat' &&
+      LlmConnectorRegistry.chatAdapterEndpointType(connectorType) != null) {
+    return true;
+  }
+  if (capability == 'streaming' &&
+      const {
+        LlmNativeProtocol.openAIResponses,
+        LlmNativeProtocol.anthropicMessages,
+        LlmNativeProtocol.geminiGenerateContent,
+        LlmNativeProtocol.geminiInteractions,
+        LlmNativeProtocol.openAIChatCompletions,
+        LlmNativeProtocol.ollamaChat,
+        LlmNativeProtocol.kimiChatCompletions,
+        LlmNativeProtocol.xaiResponses,
+        LlmNativeProtocol.metaResponses,
+      }.contains(LlmConnectorRegistry.find(connectorType)?.protocol)) {
+    return true;
+  }
+  return false;
 }
 
 class _CandidateSelection {

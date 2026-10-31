@@ -34,6 +34,7 @@ void main() {
           'aistudio',
           'vertex',
           'openai-compatibility',
+          'ollama',
         }),
       );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
@@ -79,15 +80,32 @@ void main() {
         );
       }
 
-      expect(
-        LlmConnectorRegistry.find('gemini')!.authTypes,
-        {'api_key', 'oauth'},
-      );
+      expect(LlmConnectorRegistry.find('gemini')!.authTypes, {
+        'api_key',
+        'oauth',
+      });
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('claude'),
         'anthropic',
       );
       expect(LlmConnectorRegistry.find('bedrock'), isNotNull);
+      expect(LlmConnectorRegistry.chatAdapterEndpointType('bedrock'), 'openai');
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gemini'),
+        'google.gemini.generate_content',
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gemini-interactions'),
+        'google.gemini.interactions',
+      );
+      expect(LlmConnectorRegistry.find('ollama')!.authTypes, {
+        'none',
+        'api_key',
+      });
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('ollama'),
+        'ollama.chat',
+      );
       expect(
         LlmConnectorRegistry.find('vertex')!.authTypes,
         containsAll({'api_key', 'service_account'}),
@@ -103,17 +121,12 @@ void main() {
 
       expect(
         vertex.modelCatalog.every(
-          (id) => !RegExp(
-            r'embedding|rerank',
-            caseSensitive: false,
-          ).hasMatch(id),
+          (id) =>
+              !RegExp(r'embedding|rerank', caseSensitive: false).hasMatch(id),
         ),
         isTrue,
       );
-      expect(
-        vertex.modelCatalog,
-        contains('imagen-4.0-generate-001'),
-      );
+      expect(vertex.modelCatalog, contains('imagen-4.0-generate-001'));
     });
   });
 
@@ -171,9 +184,13 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved = (jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map)['items'] as List;
+        final saved =
+            (jsonDecode(
+                      preferences.values[LlmAccountMigrationService
+                          .accountsPreferenceKey]!,
+                    )
+                    as Map)['items']
+                as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -363,26 +380,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            {
-              'id': 'legacy-anthropic',
-              'connectorType': 'anthropic',
-              'authType': 'api_key',
-              'displayName': 'Legacy Anthropic',
-              'credentialRef': sharedRef,
-              'endpointConfig': {'host': 'https://claude.example.test'},
-            },
-            {
-              'id': 'legacy-openai',
-              'connectorType': 'openai',
-              'authType': 'api_key',
-              'displayName': 'Legacy OpenAI',
-              'credentialRef': 'legacy-openai-credential',
-              'endpointConfig': {'host': 'https://openai.example.test/v1'},
-            },
-          ],
-        });
+              'version': 1,
+              'items': [
+                {
+                  'id': 'legacy-anthropic',
+                  'connectorType': 'anthropic',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy Anthropic',
+                  'credentialRef': sharedRef,
+                  'endpointConfig': {'host': 'https://claude.example.test'},
+                },
+                {
+                  'id': 'legacy-openai',
+                  'connectorType': 'openai',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy OpenAI',
+                  'credentialRef': 'legacy-openai-credential',
+                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
+                },
+              ],
+            });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -439,19 +456,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -492,19 +509,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -913,6 +930,8 @@ void main() {
       expect(captured?.headers['x-goog-api-key'], 'gemini-private-key');
       expect(models.map((model) => model.upstreamModelId), ['gemini-3.1-pro']);
       expect(models.single.displayName, 'Gemini 3.1 Pro');
+      expect(models.single.capabilities['chat'], isTrue);
+      expect(models.single.capabilities['tools'], isTrue);
     });
 
     test(
@@ -1134,86 +1153,91 @@ void main() {
         refreshRemote: true,
       );
 
-      expect(
-        models.map((model) => model.upstreamModelId),
-        ['imagen-4.0-generate-001'],
-      );
+      expect(models.map((model) => model.upstreamModelId), [
+        'imagen-4.0-generate-001',
+      ]);
     });
 
-    test('blocks Vertex model discovery with unsupported generic OAuth',
-        () async {
-      var requestsSent = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requestsSent++;
-          return ResponseBody.fromString('{}', 200);
-        });
-      final preferences = _MemoryPreferences();
-      final discoveryService = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await discoveryService.saveAccount(
-        LlmAccount(
-          id: 'vertex-oauth-discovery',
-          connectorType: 'vertex',
-          authType: 'api_key',
-          displayName: 'Vertex OAuth account',
-          models: const [
-            LlmUpstreamModel(
-              id: 'cached-vertex-model',
-              upstreamModelId: 'gemini-2.5-flash',
-              displayName: 'Gemini 2.5 Flash',
-            ),
-          ],
-          endpointConfig: const {
-            'projectId': 'oauth-project',
-            'location': 'europe-west4',
-          },
-        ),
-        secret: 'vertex-api-key',
-      );
-      final accountsEnvelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map<String, dynamic>;
-      final accountRecord = Map<String, dynamic>.from(
-        (accountsEnvelope['items'] as List).single as Map,
-      )..['authType'] = 'oauth';
-      accountsEnvelope['items'] = [accountRecord];
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
-          jsonEncode(accountsEnvelope);
-      final legacyAccount = (await discoveryService.getAccount(account.id))!;
+    test(
+      'blocks Vertex model discovery with unsupported generic OAuth',
+      () async {
+        var requestsSent = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
+          });
+        final preferences = _MemoryPreferences();
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'vertex-oauth-discovery',
+            connectorType: 'vertex',
+            authType: 'api_key',
+            displayName: 'Vertex OAuth account',
+            models: const [
+              LlmUpstreamModel(
+                id: 'cached-vertex-model',
+                upstreamModelId: 'gemini-2.5-flash',
+                displayName: 'Gemini 2.5 Flash',
+              ),
+            ],
+            endpointConfig: const {
+              'projectId': 'oauth-project',
+              'location': 'europe-west4',
+            },
+          ),
+          secret: 'vertex-api-key',
+        );
+        final accountsEnvelope =
+            jsonDecode(
+                  preferences.values[LlmAccountMigrationService
+                      .accountsPreferenceKey]!,
+                )
+                as Map<String, dynamic>;
+        final accountRecord = Map<String, dynamic>.from(
+          (accountsEnvelope['items'] as List).single as Map,
+        )..['authType'] = 'oauth';
+        accountsEnvelope['items'] = [accountRecord];
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+            jsonEncode(accountsEnvelope);
+        final legacyAccount = (await discoveryService.getAccount(account.id))!;
 
-      await expectLater(
-        discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      await expectLater(
-        discoveryService.discoverModels(legacyAccount),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      accountRecord['models'] = <Map<String, dynamic>>[];
-      accountsEnvelope['items'] = [accountRecord];
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
-          jsonEncode(accountsEnvelope);
-      final legacyAccountWithoutModels =
-          (await discoveryService.getAccount(account.id))!;
-      await expectLater(
-        discoveryService.discoverModels(legacyAccountWithoutModels),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      expect(requestsSent, 0);
-      expect(
-        () => LlmNativeRequestBuilder().build(
-          account: legacyAccount,
-          credential: 'legacy-vertex-oauth',
-          modelId: 'gemini-2.5-flash',
-          body: const {'contents': []},
-        ),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-    });
+        await expectLater(
+          discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        await expectLater(
+          discoveryService.discoverModels(legacyAccount),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        accountRecord['models'] = <Map<String, dynamic>>[];
+        accountsEnvelope['items'] = [accountRecord];
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+            jsonEncode(accountsEnvelope);
+        final legacyAccountWithoutModels = (await discoveryService.getAccount(
+          account.id,
+        ))!;
+        await expectLater(
+          discoveryService.discoverModels(legacyAccountWithoutModels),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(requestsSent, 0);
+        expect(
+          () => LlmNativeRequestBuilder().build(
+            account: legacyAccount,
+            credential: 'legacy-vertex-oauth',
+            modelId: 'gemini-2.5-flash',
+            body: const {'contents': []},
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
 
     test('follows OpenAI and Anthropic model-list cursors', () async {
       for (final connector in ['openai-api', 'claude']) {
@@ -1256,20 +1280,68 @@ void main() {
         expect(requests, hasLength(2), reason: connector);
         expect(requests.first.uri.path, '/v1/models', reason: connector);
         expect(
-          requests[1].uri.queryParameters[
-              connector == 'openai-api' ? 'after' : 'after_id'],
+          requests[1].uri.queryParameters[connector == 'openai-api'
+              ? 'after'
+              : 'after_id'],
           'model-first',
           reason: connector,
         );
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'model-first',
-              'model-second',
-            ],
-            reason: connector);
+        expect(models.map((model) => model.upstreamModelId), [
+          'model-first',
+          'model-second',
+        ], reason: connector);
       }
     });
+
+    test(
+      'discovers tool capability for official OpenAI and Anthropic model catalogs',
+      () async {
+        for (final (connectorType, modelId) in [
+          ('openai-api', 'gpt-4o'),
+          ('openai-api', 'gpt-4.5-preview'),
+          ('claude', 'claude-sonnet-4-6'),
+        ]) {
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'data': [
+                    {'id': modelId},
+                    if (connectorType == 'openai-api')
+                      {
+                        'id': 'catalog-no-tools',
+                        'capabilities': {'tools': false},
+                      },
+                  ],
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final discoveryService = LlmAccountConnectorService(
+            preferences: preferences,
+            credentialStore: credentials,
+            dio: dio,
+          );
+          final account = await discoveryService.saveAccount(
+            _account('tool-discovery-$connectorType', connectorType),
+            secret: 'tool-discovery-key',
+          );
+
+          final models = await discoveryService.discoverModels(
+            account,
+            refreshRemote: true,
+          );
+
+          expect(models.first.capabilities['tools'], isTrue, reason: modelId);
+          if (connectorType == 'openai-api') {
+            expect(models.last.capabilities['tools'], isFalse);
+          }
+        }
+      },
+    );
 
     test(
       'discovers provider API-key models and filters non-chat models',
@@ -1797,6 +1869,51 @@ void main() {
     );
 
     test(
+      'preserves explicit false capabilities from compatible model discovery',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'non-streaming-model',
+                    'capabilities': {'chat': true, 'streaming': false},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'explicit-capabilities',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'Compatible endpoint',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+          secret: 'capability-discovery-key',
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(models.single.capabilities, {'chat': true, 'streaming': false});
+      },
+    );
+
+    test(
       'discovers compatible endpoint models from a full completion URL',
       () async {
         RequestOptions? captured;
@@ -1907,6 +2024,65 @@ void main() {
         expect(models.single.upstreamModelId, 'trusted-model');
       },
     );
+
+    test('discovers Ollama model capabilities from its native API', () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          final body = options.uri.path.endsWith('/tags')
+              ? {
+                  'models': [
+                    {
+                      'name': 'llama3.2',
+                      'details': {'family': 'llama'},
+                    },
+                  ],
+                }
+              : {
+                  'capabilities': ['completion', 'tools'],
+                };
+          return ResponseBody.fromString(
+            jsonEncode(body),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'ollama-discovery',
+          connectorType: 'ollama',
+          authType: 'none',
+          displayName: 'Ollama',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'baseUrl': 'http://localhost:11434'},
+        ),
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(requests.map((request) => request.uri.path), [
+        '/api/tags',
+        '/api/show',
+      ]);
+      expect(models.single.upstreamModelId, 'llama3.2');
+      expect(models.single.capabilities, {
+        'chat': true,
+        'streaming': true,
+        'tools': true,
+      });
+      expect(models.single.config['extensions'], contains('ollama'));
+    });
 
     test(
       'rejects remote HTTP model discovery before sending credentials',
@@ -2077,8 +2253,9 @@ void main() {
           'kimi.ai',
           'xai',
         ]) {
-          final endpoint =
-              connector == 'xai' ? 'https://auth.x.ai/oauth/token' : null;
+          final endpoint = connector == 'xai'
+              ? 'https://auth.x.ai/oauth/token'
+              : null;
           final tokenEndpointFields = <String, String>{};
           if (endpoint != null) {
             tokenEndpointFields['token_endpoint'] = endpoint;
@@ -2480,6 +2657,33 @@ void main() {
         expect(interactions.headers['Api-Revision'], '2026-05-20');
       },
     );
+
+    test('routes OpenAI Responses and Ollama Chat to native endpoints', () {
+      final responses = builder.build(
+        account: _account('openai-responses', 'openai-api'),
+        credential: 'openai-key',
+        modelId: 'gpt-4.1',
+        body: const {'model': 'gpt-4.1', 'input': []},
+        nativeFormat: 'responses',
+      );
+      final ollama = builder.build(
+        account: LlmAccount(
+          id: 'ollama-local',
+          connectorType: 'ollama',
+          authType: 'none',
+          displayName: 'Ollama local',
+          endpointConfig: const {'baseUrl': 'http://localhost:11434'},
+        ),
+        credential: null,
+        modelId: 'llama3.2',
+        body: const {'model': 'llama3.2', 'messages': []},
+      );
+
+      expect(responses.uri.path, '/v1/responses');
+      expect(responses.headers['Authorization'], 'Bearer openai-key');
+      expect(ollama.uri.toString(), 'http://localhost:11434/api/chat');
+      expect(ollama.headers['Authorization'], isNull);
+    });
 
     test('uses Vertex project and location in its native generate path', () {
       final request = builder.build(
@@ -3104,20 +3308,21 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-            'max_tokens': 100,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+                'max_tokens': 100,
+              },
+            );
 
         final preferencesJson = preferences.values.values.join();
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
@@ -3359,8 +3564,7 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route',
-        () async {
+    test('executes each pinned HTTP connector through its native route', () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -3575,11 +3779,13 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims = jsonDecode(
-          utf8.decode(
-            base64Url.decode(base64Url.normalize(assertionParts[1])),
-          ),
-        ) as Map;
+        final claims =
+            jsonDecode(
+                  utf8.decode(
+                    base64Url.decode(base64Url.normalize(assertionParts[1])),
+                  ),
+                )
+                as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -3710,15 +3916,16 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -3786,15 +3993,16 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -3804,8 +4012,9 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end =
-              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
+          final end = offset + 32768 < bytes.length
+              ? offset + 32768
+              : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -3844,15 +4053,16 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -3894,15 +4104,16 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -3946,15 +4157,16 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -4195,11 +4407,11 @@ void main() {
         final cancelToken = CancelToken();
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          cancelToken: cancelToken,
-        );
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              cancelToken: cancelToken,
+            );
 
         await refreshStarted.future;
         cancelToken.cancel('caller cancelled');
@@ -4290,11 +4502,11 @@ void main() {
         );
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'private-model',
-          body: const {'model': 'private-model', 'messages': []},
-          stream: true,
-        );
+              account: account,
+              modelId: 'private-model',
+              body: const {'model': 'private-model', 'messages': []},
+              stream: true,
+            );
 
         try {
           await expectLater(
@@ -4319,22 +4531,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-        'version': 1,
-        'items': [
-          {
-            'id': 'legacy-anthropic-quota',
-            'connectorType': 'anthropic',
-            'authType': 'api_key',
-            'displayName': 'Legacy Anthropic',
-          },
-          {
-            'id': 'legacy-openai-quota',
-            'connectorType': 'openai',
-            'authType': 'api_key',
-            'displayName': 'Legacy OpenAI',
-          },
-        ],
-      });
+            'version': 1,
+            'items': [
+              {
+                'id': 'legacy-anthropic-quota',
+                'connectorType': 'anthropic',
+                'authType': 'api_key',
+                'displayName': 'Legacy Anthropic',
+              },
+              {
+                'id': 'legacy-openai-quota',
+                'connectorType': 'openai',
+                'authType': 'api_key',
+                'displayName': 'Legacy OpenAI',
+              },
+            ],
+          });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -4686,15 +4898,9 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation(
-          'gemini',
-          {
-            'usageMetadata': {
-              'promptTokenCount': 12,
-              'candidatesTokenCount': 8
-            },
-          },
-          observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation('gemini', {
+        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
+      }, observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -4780,22 +4986,22 @@ void main() {
 }
 
 Uint8List _bedrockTestStream() => Uint8List.fromList([
-      ..._bedrockEvent('messageStart', {
-        'messageStart': {'role': 'assistant'},
-      }),
-      ..._bedrockEvent('contentBlockDelta', {
-        'contentBlockIndex': 0,
-        'delta': {'text': 'Bedrock answer'},
-      }),
-      ..._bedrockEvent('messageStop', {
-        'messageStop': {'stopReason': 'end_turn'},
-      }),
-      ..._bedrockEvent('metadata', {
-        'metadata': {
-          'usage': {'inputTokens': 7, 'outputTokens': 3},
-        },
-      }),
-    ]);
+  ..._bedrockEvent('messageStart', {
+    'messageStart': {'role': 'assistant'},
+  }),
+  ..._bedrockEvent('contentBlockDelta', {
+    'contentBlockIndex': 0,
+    'delta': {'text': 'Bedrock answer'},
+  }),
+  ..._bedrockEvent('messageStop', {
+    'messageStop': {'stopReason': 'end_turn'},
+  }),
+  ..._bedrockEvent('metadata', {
+    'metadata': {
+      'usage': {'inputTokens': 7, 'outputTokens': 3},
+    },
+  }),
+]);
 
 Uint8List _bedrockEvent(String name, Map<String, dynamic> payload) {
   final encodedName = utf8.encode(':event-type');
@@ -4892,13 +5098,12 @@ LlmAccount _account(
   String id,
   String connector, {
   String authType = 'api_key',
-}) =>
-    LlmAccount(
-      id: id,
-      connectorType: connector,
-      authType: authType,
-      displayName: connector,
-    );
+}) => LlmAccount(
+  id: id,
+  connectorType: connector,
+  authType: authType,
+  displayName: connector,
+);
 
 const _vertexServiceAccount = {
   'type': 'service_account',
@@ -4997,8 +5202,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}
