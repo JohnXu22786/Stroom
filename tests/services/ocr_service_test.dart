@@ -155,7 +155,8 @@ void main() {
         expect(service.receiveTimeout, const Duration(minutes: 60));
       });
 
-      test('injected Dio sends configured auth and keeps caller options', () async {
+      test('injected Dio sends configured auth and keeps caller options',
+          () async {
         final requests = <RequestOptions>[];
         final dio = Dio(BaseOptions(headers: {'X-Client-Option': 'kept'}))
           ..interceptors.add(
