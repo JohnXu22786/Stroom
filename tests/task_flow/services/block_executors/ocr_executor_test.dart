@@ -220,7 +220,7 @@ void main() {
     expect(requested, isFalse);
     expect(readAttempted, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, contains('20.00 MiB'));
+    expect(background.state.single.error, 'OCR 错误详情已隐藏');
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
@@ -259,14 +259,14 @@ void main() {
       throwsA(isA<BlockExecutionException>().having(
         (error) => error.message,
         'message',
-        contains('1.00 MiB'),
+        contains('OCR 输入图片超过OCR 请求大小预算'),
       )),
     );
 
     expect(requested, isFalse);
     expect(readAttempted, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, contains('1.00 MiB'));
+    expect(background.state.single.error, 'OCR 错误详情已隐藏');
   });
 
   test('OCR rejects input that grows past the bounded read ceiling', () async {
@@ -293,13 +293,13 @@ void main() {
       throwsA(isA<BlockExecutionException>().having(
         (error) => error.message,
         'message',
-        contains('1.00 MiB'),
+        contains('OCR 输入图片超过OCR 请求大小预算'),
       )),
     );
 
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, contains('1.00 MiB'));
+    expect(background.state.single.error, 'OCR 错误详情已隐藏');
   });
 
   test('OCR provider key echoes are removed from all failure surfaces',
