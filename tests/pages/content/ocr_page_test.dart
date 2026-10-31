@@ -2626,6 +2626,89 @@ void main() {
       expect(find.text('默认（仅发送图片）'), findsOneWidget);
     });
 
+    testWidgets(
+      'stays visible when provider changes move the selected model to a lower index',
+      (tester) async {
+        const configId = 'stable-config';
+        const selectedModelId = 'stable-selected-model';
+        ProviderEntry entryWithModels(List<ModelConfig> models) =>
+            ProviderEntry(
+              id: 'stable-provider',
+              type: 'ocr',
+              name: 'Stable Provider',
+              configs: [
+                ProviderConfigItem(
+                  id: configId,
+                  providerName: 'Stable Provider',
+                  host: 'https://stable-provider.test/ocr',
+                  key: 'test-key',
+                  models: models,
+                ),
+              ],
+            );
+        final providerNotifier = ProviderEntriesNotifier()
+          ..state = ProviderEntriesState(
+            entries: [
+              entryWithModels(const [
+                ModelConfig(
+                  id: 'first-model',
+                  name: 'First Model',
+                  modelId: 'first-model',
+                ),
+                ModelConfig(
+                  id: 'middle-model',
+                  name: 'Middle Model',
+                  modelId: 'middle-model',
+                ),
+                ModelConfig(
+                  id: selectedModelId,
+                  name: 'Selected Model',
+                  modelId: 'selected-model',
+                ),
+              ]),
+            ],
+          );
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            testProviderEntriesNotifier: providerNotifier,
+            ocrInstructions: const [
+              OcrInstruction(name: 'Test instruction', content: 'test prompt'),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('First Model | Stable Provider').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Selected Model | Stable Provider').last);
+        await tester.pumpAndSettle();
+
+        providerNotifier.state = ProviderEntriesState(
+          entries: [
+            entryWithModels(const [
+              ModelConfig(
+                id: selectedModelId,
+                name: 'Selected Model',
+                modelId: 'selected-model',
+              ),
+            ]),
+          ],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selected Model | Stable Provider'), findsOneWidget);
+        expect(find.text('识别指令'), findsOneWidget);
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        expect(find.text('Test instruction'), findsWidgets);
+        await tester.tap(find.text('Test instruction').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Test instruction'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('shows generic instruction names in the dropdown', (
       tester,
     ) async {
