@@ -2732,8 +2732,8 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
       imageCount: imageCount,
       configId: malformedSnapshot.configId,
       modelId: malformedSnapshot.modelId ?? unavailableSnapshot.modelId,
-      instructionContent: safeMalformedInstruction ??
-          unavailableSnapshot.instructionContent,
+      instructionContent:
+          safeMalformedInstruction ?? unavailableSnapshot.instructionContent,
       saveFolder: malformedSnapshot.saveFolder,
       batchMode: malformedSnapshot.batchMode,
       perImageConcurrency: malformedSnapshot.perImageConcurrency,
