@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path_provider/path_provider.dart';
 
 class MessageWebHost extends StatefulWidget {
   final String html;
@@ -23,73 +26,99 @@ class MessageWebHost extends StatefulWidget {
 class _MessageWebHostState extends State<MessageWebHost> {
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
+  Directory? _macDocumentDirectory;
+  Uri? _macDocumentUri;
   bool _macDocumentNavigationStarted = false;
-
-  static const _macDocumentUrl =
-      'https://stroom.invalid/assets/vendor/dsh_message_view/index.html';
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      // WKWebView can report about:blank while loading HTML supplied as data.
       return uri.toString() == 'about:blank' ||
-          (uri.scheme == 'https' &&
-              uri.host == 'stroom.invalid' &&
-              uri.path.endsWith('/assets/vendor/dsh_message_view/index.html'));
+          (uri.scheme == 'file' &&
+              uri.toString() == _macDocumentUri?.toString());
     }
     return uri.scheme == 'file' &&
         uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
   }
 
   bool _isMacDocumentUrl(WebUri? url) =>
-      url?.scheme == 'https' &&
-      url?.host == 'stroom.invalid' &&
-      url?.path.endsWith('/assets/vendor/dsh_message_view/index.html') == true;
+      url?.scheme == 'file' && url.toString() == _macDocumentUri?.toString();
 
   Future<void> _loadMacDocument(InAppWebViewController controller) async {
-    for (var attempt = 0; attempt < 5; attempt++) {
-      if (!mounted ||
-          !identical(controller, _controller) ||
-          _macDocumentNavigationStarted) {
+    try {
+      final directory = await getTemporaryDirectory();
+      final documentDirectory = await directory.createTemp('stroom-message-');
+      final document = File('${documentDirectory.path}/index.html');
+      await document.writeAsString(widget.html, flush: true);
+
+      if (!mounted || !identical(controller, _controller)) {
+        await documentDirectory.delete(recursive: true);
         return;
       }
 
-      try {
-        if (kDebugMode) {
-          debugPrint(
-            '[MessageWebHost][load-data-start] macOS attempt=${attempt + 1}',
-          );
+      _macDocumentDirectory = documentDirectory;
+      _macDocumentUri = document.uri;
+      _macDocumentNavigationStarted = false;
+
+      // WKWebView's loadHTMLString/loadData path reports success before it
+      // necessarily starts a navigation when Flutter has just attached the
+      // platform view. A private, isolated file gives WebKit a real URL and
+      // avoids transferring the 9 MB bundled page over the method channel.
+      for (var attempt = 0; attempt < 8; attempt++) {
+        if (!mounted ||
+            !identical(controller, _controller) ||
+            _macDocumentNavigationStarted) {
+          return;
         }
-        await controller.loadData(
-          data: widget.html,
-          baseUrl: WebUri(_macDocumentUrl),
-        );
-        if (kDebugMode) {
-          debugPrint(
-            '[MessageWebHost][load-data-sent] macOS attempt=${attempt + 1}',
+        try {
+          if (kDebugMode) {
+            debugPrint(
+              '[MessageWebHost][load-file-start] macOS attempt=${attempt + 1}',
+            );
+          }
+          await controller.loadUrl(
+            urlRequest: URLRequest(url: WebUri.uri(document.uri)),
+            allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
+          if (kDebugMode) {
+            debugPrint(
+              '[MessageWebHost][load-file-sent] macOS attempt=${attempt + 1}',
+            );
+          }
+        } catch (error) {
+          if (kDebugMode) {
+            debugPrint(
+              '[MessageWebHost][load-error] macOS attempt=${attempt + 1}: $error',
+            );
+          }
         }
-      } catch (error) {
-        if (kDebugMode) {
-          debugPrint(
-            '[MessageWebHost][load-error] macOS attempt=${attempt + 1}: $error',
+
+        if (attempt < 7 && !_macDocumentNavigationStarted) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 250 << attempt.clamp(0, 4)),
           );
         }
       }
 
-      if (attempt < 4 && !_macDocumentNavigationStarted) {
-        await Future<void>.delayed(
-          Duration(milliseconds: 250 << attempt.clamp(0, 3)),
+      if (mounted &&
+          identical(controller, _controller) &&
+          !_macDocumentNavigationStarted &&
+          kDebugMode) {
+        debugPrint(
+          '[MessageWebHost][load-timeout] macOS navigation did not start',
         );
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[MessageWebHost][load-error] macOS document setup: $error');
       }
     }
+  }
 
-    if (mounted &&
-        identical(controller, _controller) &&
-        !_macDocumentNavigationStarted &&
-        kDebugMode) {
-      debugPrint(
-        '[MessageWebHost][load-timeout] macOS navigation did not start',
-      );
+  Future<void> _deleteMacDocumentDirectory(Directory directory) async {
+    try {
+      await directory.delete(recursive: true);
+    } catch (_) {
+      // The OS may already have removed the temporary files.
     }
   }
 
@@ -117,15 +146,18 @@ class _MessageWebHostState extends State<MessageWebHost> {
   void dispose() {
     widget.commands.removeListener(_send);
     _controller = null;
+    final documentDirectory = _macDocumentDirectory;
+    if (documentDirectory != null) {
+      unawaited(_deleteMacDocumentDirectory(documentDirectory));
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => InAppWebView(
         // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
-        // native platforms except macOS, whose plugin cannot resolve Flutter
-        // asset URLs from the app bundle. Give the in-memory HTML a reserved,
-        // non-routable origin so the main-frame guard can validate it below.
+        // native platforms except macOS, where the document is copied into an
+        // isolated temporary directory and opened as a file URL.
         initialFile: defaultTargetPlatform == TargetPlatform.macOS
             ? null
             : 'assets/vendor/dsh_message_view/index.html',
