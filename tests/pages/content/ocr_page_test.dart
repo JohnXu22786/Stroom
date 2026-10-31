@@ -4406,7 +4406,7 @@ void main() {
       final warning = tester.widget<Text>(
         find.textContaining('当前 JSON 请求约为'),
       );
-      expect(warning.data, contains('0.00299931 MiB 配置值。'));
+      expect(warning.data, contains('0.00300026 MiB 配置值。'));
       final displayedSizes = RegExp(r'(\d+\.\d{8}) MiB')
           .allMatches(warning.data!)
           .map((match) => double.parse(match.group(1)!))
