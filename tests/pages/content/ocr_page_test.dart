@@ -713,9 +713,7 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           entries: [_createOcrEntry(withModels: true)],
-          testImages: [_createTestImage()],
-          testImagePayloadPreparer: (bytes) async =>
-              prepareOcrImagePayloadSync(bytes),
+          testImages: [_createValidOcrTestImage()],
           testRequestSizePreflight: (config, _) {
             preflightConfig = config;
             preflightStarted.complete();
@@ -733,7 +731,7 @@ void main() {
 
       await tester.tap(find.text('开始识别'));
       await tester.pump();
-      await preflightStarted.future;
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
 
       final modelSelector = tester
           .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
