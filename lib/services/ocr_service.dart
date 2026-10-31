@@ -774,6 +774,9 @@ OcrService createOcrServiceFromConfig({
       model: model,
       typeConfig: typeConfig,
       customParams: customParams,
+      requestSizeBudgetBytes: effectiveOcrRequestSizeBudgetBytes(
+        providerValue: typeConfig['requestSizeBudgetBytes'],
+      ),
     ),
   );
 }

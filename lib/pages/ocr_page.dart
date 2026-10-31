@@ -363,9 +363,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _retryRequestSizeBudgetBytes = snapshot.requestSizeBudgetBytes;
     _retryRequestSizeBudgetHasStableModelReference =
         (snapshot.version == null ||
-            snapshot.version! <= OcrRetrySnapshot.currentVersion) &&
-        snapshot.configId != null &&
-        snapshot.modelId != null;
+                snapshot.version! <= OcrRetrySnapshot.currentVersion) &&
+            snapshot.configId != null &&
+            snapshot.modelId != null;
     _retryImageCountUnknown = snapshot.imageEntryCount == 0;
     _saveFolder = snapshot.saveFolder;
 
@@ -549,8 +549,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text('原图 / 高细节'),
-                    Text('保留更多细节，图片和请求更大',
-                        style: TextStyle(fontSize: 12)),
+                    Text('保留更多细节，图片和请求更大', style: TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -2410,39 +2409,39 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-          title: const Text('OCR 请求大小超过配置值'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '当前 JSON 请求约为 ' +
-                    ocrRequestSizeBudgetMib(encodedBytes) +
-                    ' MiB，超过 ' +
-                    ocrRequestSizeBudgetMib(budgetBytes) +
-                    ' MiB 配置值。',
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '可在供应商默认设置或模型覆盖值中调整请求大小，也可以切换图片画质。'
-                '更改画质后，请清空并重新导入图片。',
-              ),
-            ],
-          ),
-          actions: [
-            if (canSwitchToPerImage)
-              TextButton(
-                key: const Key('ocr_switch_to_per_image'),
-                onPressed: () {
-                  Navigator.pop(dialogContext, true);
-                },
-                child: const Text('改用逐张识别'),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('知道了'),
+        title: const Text('OCR 请求大小超过配置值'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '当前 JSON 请求约为 ' +
+                  ocrRequestSizeBudgetMib(encodedBytes) +
+                  ' MiB，超过 ' +
+                  ocrRequestSizeBudgetMib(budgetBytes) +
+                  ' MiB 配置值。',
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '可在供应商默认设置或模型覆盖值中调整请求大小，也可以切换图片画质。'
+              '更改画质后，请清空并重新导入图片。',
             ),
           ],
+        ),
+        actions: [
+          if (canSwitchToPerImage)
+            TextButton(
+              key: const Key('ocr_switch_to_per_image'),
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('改用逐张识别'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -2602,8 +2601,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _selectedModelIndex = requestModelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
-    final requestSizeBudgetBytes = _retryRequestSizeBudgetBytes ??
-        selectedOption.requestSizeBudgetBytes;
+    final requestSizeBudgetBytes =
+        _retryRequestSizeBudgetBytes ?? selectedOption.requestSizeBudgetBytes;
     var effectiveConfig = OcrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
