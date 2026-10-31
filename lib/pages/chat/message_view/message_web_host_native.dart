@@ -32,6 +32,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
   bool _macDocumentReady = false;
   bool _macLoadInProgress = false;
   bool _macLoadFailed = false;
+  int _macLoadGeneration = 0;
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
@@ -51,6 +52,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
       return;
     }
     _macLoadInProgress = true;
+    _macLoadGeneration++;
     _macLoadFailed = false;
     _macDocumentReady = false;
     setState(() {});
@@ -63,6 +65,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
         final directory = await getTemporaryDirectory();
         documentDirectory = await directory.createTemp('stroom-message-');
         createdDirectory = documentDirectory;
+        if (!mounted || !identical(controller, _controller)) {
+          await _deleteMacDocumentDirectory(documentDirectory);
+          return;
+        }
         final document = File('${documentDirectory.path}/index.html');
         await document.writeAsString(widget.html, flush: true);
         documentUri = document.uri;
@@ -71,6 +77,13 @@ class _MessageWebHostState extends State<MessageWebHost> {
       }
 
       if (!mounted || !identical(controller, _controller)) {
+        if (createdDirectory != null) {
+          await _deleteMacDocumentDirectory(createdDirectory);
+          if (identical(createdDirectory, _macDocumentDirectory)) {
+            _macDocumentDirectory = null;
+            _macDocumentUri = null;
+          }
+        }
         return;
       }
 
@@ -151,6 +164,19 @@ class _MessageWebHostState extends State<MessageWebHost> {
       await directory.delete(recursive: true);
     } catch (_) {
       // The OS may already have removed the temporary files.
+    }
+  }
+
+  Future<void> _failMacLoadIfUnready(
+    InAppWebViewController controller,
+    int generation,
+  ) async {
+    await Future<void>.delayed(const Duration(seconds: 5));
+    if (mounted &&
+        identical(controller, _controller) &&
+        generation == _macLoadGeneration &&
+        !_macDocumentReady) {
+      setState(() => _macLoadFailed = true);
     }
   }
 
@@ -262,8 +288,17 @@ class _MessageWebHostState extends State<MessageWebHost> {
                     debugPrint(
                         '[MessageWebHost][handler] ${data.args.first['type']}');
                   }
-                  widget.onEvent(
-                      Map<String, dynamic>.from(data.args.first as Map));
+                  final event =
+                      Map<String, dynamic>.from(data.args.first as Map);
+                  if (defaultTargetPlatform == TargetPlatform.macOS &&
+                      event['type'] == 'ready') {
+                    _macDocumentNavigationStarted = true;
+                    _macDocumentReady = true;
+                    if (_macLoadFailed) {
+                      setState(() => _macLoadFailed = false);
+                    }
+                  }
+                  widget.onEvent(event);
                 },
               );
             },
@@ -298,9 +333,11 @@ JSON.stringify({
                 }
               }
               if (defaultTargetPlatform == TargetPlatform.macOS &&
-                  ready != true &&
-                  mounted) {
-                setState(() => _macLoadFailed = true);
+                  ready != true) {
+                unawaited(_failMacLoadIfUnready(
+                  controller,
+                  _macLoadGeneration,
+                ));
               }
               if (mounted && ready == true) {
                 _macDocumentNavigationStarted = true;
