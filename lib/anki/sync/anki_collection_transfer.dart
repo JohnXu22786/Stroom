@@ -258,8 +258,9 @@ class AnkiCollectionTransfer {
       // A new install may have no database before the first Anki page opens.
       return '';
     }
-    final path = backupPath ?? '${collection.path}.sync-backup-'
-        '${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    final path = backupPath ??
+        '${collection.path}.sync-backup-'
+            '${DateTime.now().toUtc().microsecondsSinceEpoch}';
     await collection.copy(path);
     return path;
   }

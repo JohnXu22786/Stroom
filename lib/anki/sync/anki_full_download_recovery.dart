@@ -29,15 +29,14 @@ class AnkiFullDownloadRecovery {
   String get mediaIndexPath => _plan['mediaIndexPath'] as String;
   String get mediaIndexBackupPath => _plan['mediaIndexBackupPath'] as String;
   List<String> get mediaIndexPaths => {
-    for (final entry in _plan['mediaIndexFiles'] as List)
-      (entry as Map)['rootPath'] as String,
-  }.toList();
+        for (final entry in _plan['mediaIndexFiles'] as List)
+          (entry as Map)['rootPath'] as String,
+      }.toList();
 
   String mediaIndexBackupPathFor(String path) =>
       (_plan['mediaIndexFiles'] as List).cast<Map>().firstWhere(
             (entry) => entry['path'] == path,
-          )['backupPath']
-          as String;
+          )['backupPath'] as String;
 
   static Future<AnkiFullDownloadRecovery> begin({
     required String documentsPath,
@@ -101,9 +100,8 @@ class AnkiFullDownloadRecovery {
         'documentsPath': documentsPath,
         'collectionPath': collectionPath,
         'collectionExisted': collectionExists,
-        'collectionBackupPath': collectionExists
-            ? '$collectionPath.sync-backup-$stamp'
-            : null,
+        'collectionBackupPath':
+            collectionExists ? '$collectionPath.sync-backup-$stamp' : null,
         'collectionSidecars': collectionSidecars,
         'mediaPath': mediaPath,
         'mediaExisted': await Directory(mediaPath).exists(),
@@ -143,16 +141,16 @@ class AnkiFullDownloadRecovery {
   Future<void> markMediaIndexFileMoveStarted(String path) async {
     final indexFiles = _plan['mediaIndexFiles'] as List;
     final entry = indexFiles.cast<Map>().firstWhere(
-      (item) => item['path'] == path,
-    );
+          (item) => item['path'] == path,
+        );
     await _createMarker(entry['moveStartedMarker'] as String);
   }
 
   Future<void> markMediaIndexFileMoved(String path) async {
     final indexFiles = _plan['mediaIndexFiles'] as List;
     final entry = indexFiles.cast<Map>().firstWhere(
-      (item) => item['path'] == path,
-    );
+          (item) => item['path'] == path,
+        );
     await _createMarker(entry['movedMarker'] as String);
   }
 
@@ -214,8 +212,8 @@ class AnkiFullDownloadRecovery {
     Map<String, dynamic> plan,
     String journalPath,
   ) async {
-    final mediaStarted = await File(plan['mediaStartedMarker'] as String)
-        .exists();
+    final mediaStarted =
+        await File(plan['mediaStartedMarker'] as String).exists();
     if (mediaStarted) await _restoreMedia(plan);
 
     final collectionStarted = await File(
@@ -239,8 +237,8 @@ class AnkiFullDownloadRecovery {
       await _deleteMarker(plan['mediaMovedMarker'] as String);
       await backup.rename(mediaPath);
     } else if (plan['mediaExisted'] == true) {
-      final moveStarted = await File(plan['mediaMoveStartedMarker'] as String)
-          .exists();
+      final moveStarted =
+          await File(plan['mediaMoveStartedMarker'] as String).exists();
       if (await File(plan['mediaMovedMarker'] as String).exists() ||
           (moveStarted && !await media.exists())) {
         throw const FileSystemException('Anki 全量下载的本地媒体备份丢失，已阻止打开不完整数据');
@@ -267,8 +265,8 @@ class AnkiFullDownloadRecovery {
         await _deleteMarker(entry['movedMarker'] as String);
         await backupFile.rename(path);
       } else if (entry['existed'] == true) {
-        final moveStarted = await File(entry['moveStartedMarker'] as String)
-            .exists();
+        final moveStarted =
+            await File(entry['moveStartedMarker'] as String).exists();
         if (await File(entry['movedMarker'] as String).exists() ||
             (moveStarted && !await file.exists())) {
           throw const FileSystemException('Anki 全量下载的本地媒体索引备份丢失，已阻止打开不一致数据');

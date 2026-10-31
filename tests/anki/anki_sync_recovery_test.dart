@@ -20,7 +20,8 @@ void main() {
     sqflite.databaseFactory = databaseFactoryFfi;
   });
 
-  test('startup restores collection and media after an interrupted download', () async {
+  test('startup restores collection and media after an interrupted download',
+      () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_recovery_',
     );
@@ -319,7 +320,9 @@ void main() {
     },
   );
 
-  test('detects a missing media backup after a move is interrupted before its completion marker', () async {
+  test(
+      'detects a missing media backup after a move is interrupted before its completion marker',
+      () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_recovery_media_move_gap_',
     );
@@ -400,7 +403,9 @@ void main() {
     },
   );
 
-  test('detects a missing media index after a move is interrupted before its completion marker', () async {
+  test(
+      'detects a missing media index after a move is interrupted before its completion marker',
+      () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_recovery_index_move_gap_',
     );
