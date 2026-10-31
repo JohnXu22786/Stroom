@@ -819,7 +819,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// generic instruction list happens here, on the OCR page.
   Widget _buildInstructionSelector(ColorScheme cs) {
     final modelOptions = _getOcrModelOptions(ref);
-    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
+    final selectedModelIndex = _selectedModelOptionIndex(modelOptions);
+    if (selectedModelIndex == null || modelOptions.isEmpty) {
       return const SizedBox.shrink();
     }
     final instructions = ref.watch(ocrInstructionsProvider);
