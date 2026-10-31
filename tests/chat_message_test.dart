@@ -15,6 +15,38 @@ void main() {
     expect(updated.toMap()['role'], 'assistant');
   });
 
+  test('ordered assistant content parts survive persistence roundtrip', () {
+    final message = ChatMessage(
+      role: 'assistant',
+      content: 'before after',
+      attachments: [
+        Attachment(
+          id: 'generated-file',
+          fileName: 'output.png',
+          mimeType: 'image/png',
+          fileType: 'image',
+          hash: 'output-hash',
+          storagePath: 'attachments/output.png',
+          fileSize: 3,
+        ),
+      ],
+      contentParts: const [
+        {'type': 'text', 'text': 'before'},
+        {'type': 'attachment', 'attachmentId': 'generated-file'},
+        {'type': 'text', 'text': 'after'},
+      ],
+    );
+
+    final restored = ChatMessage.fromMap(message.toMap());
+
+    expect(restored.contentParts, [
+      {'type': 'text', 'text': 'before'},
+      {'type': 'attachment', 'attachmentId': 'generated-file'},
+      {'type': 'text', 'text': 'after'},
+    ]);
+    expect(restored.attachments.single.id, 'generated-file');
+  });
+
   group('ChatMessage rawRequest/rawResponse', () {
     test('toMap includes rawRequest and rawResponse when set', () {
       final msg = ChatMessage(

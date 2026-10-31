@@ -21,6 +21,7 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'conversation_media_storage.dart';
 import '../ai_gateway/ai_gateway.dart';
 
 // ============================================================================
@@ -90,10 +91,28 @@ class ChatStreamManager {
     required String fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
+    bool hasMediaAttachments = false,
   }) {
     return fullReply.isNotEmpty ||
         reasoningSections.any((s) => s.isNotEmpty) ||
-        hasAccumulatedToolCalls;
+        hasAccumulatedToolCalls ||
+        hasMediaAttachments;
+  }
+
+  /// Replaces the existing streaming assistant snapshot when refreshing a
+  /// periodic partial save, preserving its position in conversation history.
+  @visibleForTesting
+  static void upsertPartialAssistantMessage(
+    List<ChatMessage> history,
+    ChatMessage partialMessage,
+  ) {
+    final index =
+        history.indexWhere((message) => message.id == partialMessage.id);
+    if (index < 0) {
+      history.add(partialMessage);
+    } else {
+      history[index] = partialMessage;
+    }
   }
 
   ChatStreamManager([Ref? ref])

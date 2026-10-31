@@ -21,6 +21,48 @@ void chatServiceStreamingGroup1() {
       );
     });
 
+    test('sendStreamWithTools emits stored provider media attachments',
+        () async {
+      final attachment = Attachment(
+        id: 'generated-audio',
+        fileName: 'audio.mp3',
+        mimeType: 'audio/mpeg',
+        fileType: 'audio',
+        hash: 'audio-hash',
+        storagePath: 'attachments/audio.mp3',
+        fileSize: 4,
+      );
+      provider.mediaAttachments = [attachment];
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      final events = await service
+          .sendStreamWithTools('Generate audio', history: []).toList();
+
+      final mediaEvent = events.whereType<MediaAttachmentsEvent>().single;
+      expect(mediaEvent.attachments.single.storagePath, attachment.storagePath);
+    });
+
+    test('non-streaming send exposes streamed provider media attachments',
+        () async {
+      final attachment = Attachment(
+        id: 'generated-image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'image-hash',
+        storagePath: 'attachments/image.png',
+        fileSize: 3,
+      );
+      provider.mediaAttachments = [attachment];
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      final text = await service.send('Generate an image', history: []);
+
+      expect(text, isEmpty);
+      expect(service.lastMediaAttachments.single.storagePath,
+          attachment.storagePath);
+    });
+
     test('sendStream passes reasoning=true and default reasoningEffort',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);

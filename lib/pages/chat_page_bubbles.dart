@@ -50,9 +50,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
 
     // Blank line before original error
     if (errorWidgets.isNotEmpty && originalErrorText.isNotEmpty) {
-      errorWidgets.add(
-        const SizedBox(height: 8),
-      );
+      errorWidgets.add(const SizedBox(height: 8));
     }
 
     // Original error (DIO Exception etc.)
@@ -69,13 +67,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-        vertical: 2,
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:
-            (isDark ? Colors.red[900] : Colors.red[50])!.withValues(alpha: 0.7),
+        color: (isDark ? Colors.red[900] : Colors.red[50])!.withValues(
+          alpha: 0.7,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -106,9 +103,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
           if (chatMsg != null &&
               (chatMsg.rawRequest != null || chatMsg.rawResponse != null))
             Padding(
-              padding: const EdgeInsets.only(
-                top: 8,
-              ),
+              padding: const EdgeInsets.only(top: 8),
               child: TextButton.icon(
                 icon: Icon(
                   Icons.preview,
@@ -122,16 +117,26 @@ extension _ChatPageBubblesExt on _ChatPageState {
                     color: isDark ? Colors.red[300] : Colors.red[700],
                   ),
                 ),
-                onPressed: () => _showErrorDetailDialog(
-                  context,
-                  message.id,
-                ),
+                onPressed: () => _showErrorDetailDialog(context, message.id),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          if (chatMsg?.attachments.isNotEmpty == true)
+            Padding(
+              key: const ValueKey('assistant-error-attachment-area'),
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: chatMsg!.attachments.length,
+                  itemBuilder: (ctx, i) =>
+                      _buildMessageAttachmentPreview(chatMsg.attachments[i]),
                 ),
               ),
             ),
@@ -172,49 +177,49 @@ extension _ChatPageBubblesExt on _ChatPageState {
     for (final seg in mergeConsecutiveTextSegments(segments)) {
       switch (seg) {
         case TextSegment s:
-          widgets.add(Padding(
-            padding: const EdgeInsets.only(
-              bottom: 4,
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: hasSearchMatch
+                  ? MarkdownWidget(
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: buildSearchMarkdownGenerator(
+                        query: _searchQuery,
+                        messageFirstMatchIndex: messageFirstMatchIndex,
+                        occurrenceOffset: occurrenceOffset,
+                        currentMatchIndex: _currentMatchIndex,
+                      ),
+                    )
+                  : MarkdownWidget(
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      // Per-segment streaming config: each segment
+                      // is parsed by its OWN MarkdownWidget, so the
+                      // fence-completion check must run against that
+                      // segment's text.
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: markdownGenerator,
+                    ),
             ),
-            child: hasSearchMatch
-                ? MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
-                    ),
-                    markdownGenerator: buildSearchMarkdownGenerator(
-                      query: _searchQuery,
-                      messageFirstMatchIndex: messageFirstMatchIndex,
-                      occurrenceOffset: occurrenceOffset,
-                      currentMatchIndex: _currentMatchIndex,
-                    ),
-                  )
-                : MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    // Per-segment streaming config: each segment
-                    // is parsed by its OWN MarkdownWidget, so the
-                    // fence-completion check must run against that
-                    // segment's text.
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
-                    ),
-                    markdownGenerator: markdownGenerator,
-                  ),
-          ));
+          );
           // Count occurrences the highlight generator can actually paint
           // (matches inside code/math render as dedicated widgets and never
           // become highlightable text), so the offset stays aligned with the
@@ -235,19 +240,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   ? _reasoningContents[messageId]![s.sectionIndex]
                   : '';
           if (text.isEmpty) continue;
-          widgets.add(Padding(
-            padding: const EdgeInsets.only(
-              bottom: 4,
-            ),
-            child: ReasoningSection(
-              sections: ReasoningSectionData(
-                texts: [text],
-                streaming: s.isStreaming,
-                sectionIndices: [s.sectionIndex],
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: [text],
+                  streaming: s.isStreaming,
+                  sectionIndices: [s.sectionIndex],
+                ),
+                messageId: messageId,
               ),
-              messageId: messageId,
             ),
-          ));
+          );
       }
     }
     return widgets;
@@ -260,20 +265,18 @@ extension _ChatPageBubblesExt on _ChatPageState {
     required bool isStreaming,
     required String? activeId,
   }) {
+    final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
+    final attachments = chatMsg?.attachments ?? const <Attachment>[];
     final reasoningSections = _reasoningContents[message.id];
     final segments = _chatSegments[message.id];
     final isWaitingForFirstToken = message.id == _streamingMsgId &&
         message.text.isEmpty &&
         isStreaming &&
         activeId != null &&
-        !ref.read(
-          streamingHasFirstTokenProvider(activeId),
-        );
+        !ref.read(streamingHasFirstTokenProvider(activeId));
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
-        _searchMatches.any(
-          (m) => m.messageId == message.id,
-        );
+        _searchMatches.any((m) => m.messageId == message.id);
 
     // Per-message markdown config: only the message that is currently
     // being generated uses the streaming config (mermaid blocks show the
@@ -299,9 +302,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
     );
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-        vertical: 2,
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.grey[100],
@@ -317,15 +318,29 @@ extension _ChatPageBubblesExt on _ChatPageState {
           if (isWaitingForFirstToken &&
               (reasoningSections == null || reasoningSections.isEmpty))
             const Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: 8,
-              ),
+              padding: EdgeInsets.symmetric(vertical: 8),
               child: JumpingDotsProgressIndicator(
                 color: Colors.grey,
                 fontSize: 14,
               ),
             )
-          else if (segments != null && segments.isNotEmpty)
+          else if (chatMsg?.contentParts?.isNotEmpty == true) ...[
+            ..._buildOrderedAssistantContent(
+              message: message,
+              chatMsg: chatMsg!,
+              isDark: isDark,
+              hasSearchMatch: hasSearchMatch,
+            ),
+            ..._buildOrderedAssistantExtras(
+              messageId: message.id,
+              chatMsg: chatMsg,
+              segments: segments,
+              reasoningSections: reasoningSections,
+              isDark: isDark,
+              isStreaming: isStreaming,
+              hasSearchMatch: hasSearchMatch,
+            ),
+          ] else if (segments != null && segments.isNotEmpty)
             ..._buildSegmentWidgets(
               messageId: message.id,
               segments: segments,
@@ -371,9 +386,133 @@ extension _ChatPageBubblesExt on _ChatPageState {
               config: markdownConfig,
               markdownGenerator: markdownGenerator,
             ),
+          if (attachments.isNotEmpty &&
+              chatMsg?.contentParts?.isNotEmpty != true)
+            Padding(
+              key: const ValueKey('assistant-message-attachment-area'),
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: attachments.length,
+                  itemBuilder: (ctx, i) =>
+                      _buildMessageAttachmentPreview(attachments[i]),
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildOrderedAssistantContent({
+    required TextMessage message,
+    required ChatMessage chatMsg,
+    required bool isDark,
+    required bool hasSearchMatch,
+  }) {
+    final attachmentsById = {
+      for (final attachment in chatMsg.attachments) attachment.id: attachment,
+    };
+    var occurrenceOffset = 0;
+    final messageFirstMatchIndex = hasSearchMatch
+        ? _searchMatches.indexWhere((m) => m.messageId == message.id)
+        : 0;
+    Widget buildPart(Map<String, dynamic> part, int index) {
+      if (part['type'] == 'text' && part['text'] is String) {
+        final text = part['text'] as String;
+        final widget = MarkdownWidget(
+          key: ValueKey('assistant-content-text-$index'),
+          data: text,
+          selectable: true,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          config: buildMessageMarkdownConfig(
+            isDark: isDark,
+            conversationIsStreaming: false,
+            streamingMsgId: _streamingMsgId,
+            messageId: message.id,
+            streamingText: text,
+          ),
+          markdownGenerator: hasSearchMatch
+              ? buildSearchMarkdownGenerator(
+                  query: _searchQuery,
+                  messageFirstMatchIndex: messageFirstMatchIndex,
+                  occurrenceOffset: occurrenceOffset,
+                  currentMatchIndex: _currentMatchIndex,
+                )
+              : markdownGenerator,
+        );
+        if (hasSearchMatch) {
+          occurrenceOffset += countOccurrences(
+            stripSearchIrrelevantMarkdown(text),
+            _searchQuery.toLowerCase(),
+          );
+        }
+        return widget;
+      }
+      if (part['type'] == 'attachment') {
+        final attachment = attachmentsById[part['attachmentId']];
+        if (attachment == null) return const SizedBox.shrink();
+        return Padding(
+          key: ValueKey('assistant-content-attachment-${attachment.id}'),
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: SizedBox(
+            height: 120,
+            child: _buildMessageAttachmentPreview(attachment),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    return [
+      for (var index = 0; index < chatMsg.contentParts!.length; index++)
+        buildPart(chatMsg.contentParts![index], index),
+    ];
+  }
+
+  List<Widget> _buildOrderedAssistantExtras({
+    required String messageId,
+    required ChatMessage chatMsg,
+    required List<MessageSegment>? segments,
+    required List<String>? reasoningSections,
+    required bool isDark,
+    required bool isStreaming,
+    required bool hasSearchMatch,
+  }) {
+    if (segments != null && segments.isNotEmpty) {
+      return _buildSegmentWidgets(
+        messageId: messageId,
+        segments: segments.where((segment) => segment is! TextSegment).toList(),
+        isDark: isDark,
+        isStreaming: isStreaming,
+        hasSearchMatch: hasSearchMatch,
+      );
+    }
+
+    final extras = <Widget>[
+      for (final toolCall in chatMsg.toolCalls ?? const [])
+        ToolCallCard(data: toolCall),
+    ];
+    final reasoning = reasoningSections?.isNotEmpty == true
+        ? reasoningSections!
+        : chatMsg.reasoningSections?.isNotEmpty == true
+            ? chatMsg.reasoningSections!
+            : chatMsg.reasoningContent == null
+                ? const <String>[]
+                : [chatMsg.reasoningContent!];
+    if (reasoning.isNotEmpty) {
+      extras.add(
+        ReasoningSection(
+          sections: ReasoningSectionData(texts: reasoning, streaming: false),
+          messageId: messageId,
+        ),
+      );
+    }
+    return extras;
   }
 
   /// Bubble for a user message with optional attachment previews.
@@ -391,9 +530,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
     final hasText = message.text.trim().isNotEmpty;
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
-        _searchMatches.any(
-          (m) => m.messageId == message.id,
-        );
+        _searchMatches.any((m) => m.messageId == message.id);
     return Column(
       crossAxisAlignment: hasAttachments && isSentByMe
           ? CrossAxisAlignment.end
@@ -401,16 +538,9 @@ extension _ChatPageBubblesExt on _ChatPageState {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (hasSearchMatch && hasText)
-          _buildHighlightedText(
-            message.text,
-            message.id,
-          )
+          _buildHighlightedText(message.text, message.id)
         else if (hasText)
-          SimpleTextMessage(
-            message: message,
-            index: index,
-            showTime: false,
-          ),
+          SimpleTextMessage(message: message, index: index, showTime: false),
         if (hasAttachments)
           Padding(
             key: const ValueKey('user-message-attachment-area'),
@@ -435,9 +565,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 itemCount: chatMsg!.attachments.length,
                 itemBuilder: (ctx, i) {
                   final att = chatMsg.attachments[i];
-                  return _buildMessageAttachmentPreview(
-                    att,
-                  );
+                  return _buildMessageAttachmentPreview(att);
                 },
               ),
             ),

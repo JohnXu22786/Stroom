@@ -5,6 +5,657 @@ import 'package:stroom/services/chat_protocol.dart';
 
 void main() {
   group('AI Gateway protocol bridges', () {
+    test('OpenAI mixed media parts keep canonical types and order', () {
+      final source = <String, dynamic>{
+        'role': 'user',
+        'content': [
+          {'type': 'text', 'text': 'Listen and inspect.'},
+          {
+            'type': 'input_audio',
+            'input_audio': {'data': 'AQID', 'format': 'wav'},
+          },
+          {
+            'type': 'video_url',
+            'video_url': {
+              'url': 'data:video/mp4;base64,BAUG',
+              'timestamp': '00:00:01.250',
+            },
+          },
+          {
+            'type': 'file',
+            'file': {
+              'filename': 'notes.txt',
+              'file_data': 'data:text/plain;base64,bm90ZXM=',
+            },
+          },
+          {
+            'type': 'transcription',
+            'text': 'Hello there.',
+            'segments': [
+              {'start': 0.0, 'end': 0.5, 'text': 'Hello'},
+              {'start': 0.6, 'end': 1.0, 'text': 'there.'},
+            ],
+          },
+        ],
+      };
+
+      final bridge = AiGatewayProtocolBridges.openAiChatCompletions;
+      final neutral = bridge.toStroom(source);
+
+      expect(neutral.content.map((part) => part.type), [
+        'text',
+        'audio',
+        'video',
+        'file',
+        'transcription',
+      ]);
+      expect(neutral.content[2].data['timestamp'], '00:00:01.250');
+      expect(neutral.content.map((part) => part.data['source']), [
+        source['content'][0],
+        source['content'][1],
+        source['content'][2],
+        source['content'][3],
+        source['content'][4],
+      ]);
+      expect(bridge.fromStroom(neutral), source);
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'google.gemini.generate_content',
+          AiGatewayProtocolRequest(modelId: 'gemini', messages: [neutral]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('OpenAI input_file references serialize as Anthropic documents', () {
+      final source = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_file',
+            'filename': 'report.pdf',
+            'file_url': 'https://files.example/report.pdf',
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'anthropic.messages',
+        AiGatewayProtocolRequest(modelId: 'claude', messages: [source]),
+      );
+
+      expect(request?.body['messages'], [
+        {
+          'role': 'user',
+          'content': [
+            {
+              'type': 'document',
+              'source': {
+                'type': 'url',
+                'url': 'https://files.example/report.pdf',
+              },
+              'title': 'report.pdf',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini preserves Anthropic PDF documents', () {
+      final anthropic = AiGatewayProtocolBridges.anthropicMessages;
+      final fromBase64 = anthropic.toStroom({
+        'role': 'user',
+        'content': [
+          {
+            'type': 'document',
+            'title': 'report.pdf',
+            'source': {
+              'type': 'base64',
+              'media_type': 'application/pdf',
+              'data': 'cGRm',
+            },
+          },
+        ],
+      });
+      final fromUrl = anthropic.toStroom({
+        'role': 'user',
+        'content': [
+          {
+            'type': 'document',
+            'source': {
+              'type': 'url',
+              'url': 'https://files.example/report.pdf',
+            },
+          },
+        ],
+      });
+
+      final inlineRequest = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [fromBase64]),
+      );
+      final urlRequest = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [fromUrl]),
+      );
+
+      expect(inlineRequest?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'application/pdf', 'data': 'cGRm'},
+            },
+          ],
+        },
+      ]);
+      expect(urlRequest?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'fileData': {
+                'fileUri': 'https://files.example/report.pdf',
+                'mimeType': 'application/pdf',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Anthropic rejects non-PDF input_file documents clearly', () {
+      final source = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_file',
+            'filename': 'notes.txt',
+            'file_data': 'data:text/plain;base64,bm90ZXM=',
+          },
+        ],
+      });
+
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'anthropic.messages',
+          AiGatewayProtocolRequest(modelId: 'claude', messages: [source]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('Anthropic rejects invalid retained document source maps', () {
+      for (final source in [
+        {
+          'type': 'base64',
+          'media_type': 'text/plain',
+          'data': 'bm90ZXM=',
+        },
+        {
+          'type': 'base64',
+          'media_type': 'application/pdf',
+          'data': '',
+        },
+        {
+          'type': 'base64',
+          'media_type': 'application/pdf',
+          'data': '%%%invalid-base64%%%',
+        },
+        {
+          'type': 'url',
+          'url': 'http://files.example/report.pdf',
+        },
+      ]) {
+        final message = StroomMessage(
+          id: 'invalid-retained-document',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2026),
+          content: [
+            StroomContentPart(
+              type: 'file',
+              data: {
+                'source': {'type': 'document', 'source': source},
+              },
+            ),
+          ],
+        );
+
+        expect(
+          () => AiGatewayProtocolBridges.buildRequest(
+            'anthropic.messages',
+            AiGatewayProtocolRequest(modelId: 'claude', messages: [message]),
+          ),
+          throwsUnsupportedError,
+        );
+      }
+    });
+
+    test('Anthropic rejects malformed PDF data URL payloads', () {
+      final message = StroomMessage(
+        id: 'invalid-pdf-data-url',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.file(
+            reference: 'data:application/pdf;base64,%%%invalid-base64%%%',
+            fileName: 'report.pdf',
+            mimeType: 'application/pdf',
+          ),
+        ],
+      );
+
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'anthropic.messages',
+          AiGatewayProtocolRequest(modelId: 'claude', messages: [message]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('Anthropic and Gemini reuse externalized PDF references', () {
+      final message = StroomMessage(
+        id: 'externalized-pdf-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'file',
+            data: {
+              'source': {
+                'type': 'document',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'application/pdf',
+                  'data': {'stroomMediaReference': true},
+                },
+              },
+              'reference': 'data:application/pdf;base64,cGRm',
+              'mimeType': 'application/pdf',
+              'fileName': 'report.pdf',
+            },
+          ),
+        ],
+      );
+
+      final anthropic = AiGatewayProtocolBridges.buildRequest(
+        'anthropic.messages',
+        AiGatewayProtocolRequest(modelId: 'claude', messages: [message]),
+      );
+      final gemini = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(anthropic?.body['messages'], [
+        {
+          'role': 'user',
+          'content': [
+            {
+              'type': 'document',
+              'source': {
+                'type': 'base64',
+                'media_type': 'application/pdf',
+                'data': 'cGRm',
+              },
+              'title': 'report.pdf',
+            },
+          ],
+        },
+      ]);
+      expect(gemini?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'application/pdf', 'data': 'cGRm'},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini ignores externalized inline-data markers', () {
+      final message = StroomMessage(
+        id: 'externalized-image-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'inlineData': {
+                'mimeType': 'image/png',
+                'data': {'stroomMediaReference': true},
+              },
+              'source': {
+                'inlineData': {
+                  'mimeType': 'image/png',
+                  'data': {'stroomMediaReference': true},
+                },
+              },
+              'reference': 'data:image/png;base64,AQID',
+              'mimeType': 'image/png',
+            },
+          ),
+        ],
+      );
+
+      final result = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(
+        result?.body['contents'][0]['parts'][0]['inlineData'],
+        {'mimeType': 'image/png', 'data': 'AQID'},
+      );
+    });
+
+    test('Gemini infers MIME for OpenAI image URL source extensions', () {
+      final message = AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+        'role': 'user',
+        'content': [
+          {
+            'type': 'image_url',
+            'image_url': {'url': 'https://cdn.example/photo.png'},
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini-flash', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'fileData': {
+                'fileUri': 'https://cdn.example/photo.png',
+                'mimeType': 'image/png',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    test(
+      'Gemini serializes ordered media references with their MIME types',
+      () {
+        final message = StroomMessage(
+          id: 'mixed-media',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2026),
+          content: [
+            StroomContentPart.text('Summarize these.'),
+            StroomContentPart.image(
+              reference: 'https://media.example/image.png',
+              mimeType: 'image/png',
+            ),
+            StroomContentPart.audio(
+              reference: 'https://media.example/audio.wav',
+              mimeType: 'audio/wav',
+            ),
+            StroomContentPart.video(
+              reference: 'https://media.example/clip.mp4',
+              mimeType: 'video/mp4',
+            ),
+            StroomContentPart.file(
+              reference: 'https://media.example/notes.pdf',
+              fileName: 'notes.pdf',
+              mimeType: 'application/pdf',
+            ),
+            StroomContentPart.transcription(text: 'Hello there.'),
+          ],
+        );
+
+        final request = AiGatewayProtocolBridges.buildRequest(
+          'google.gemini.generate_content',
+          AiGatewayProtocolRequest(
+            modelId: 'gemini-flash',
+            messages: [message],
+          ),
+        );
+
+        expect(request?.body['contents'], [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': 'Summarize these.'},
+              {
+                'fileData': {
+                  'fileUri': 'https://media.example/image.png',
+                  'mimeType': 'image/png',
+                },
+              },
+              {
+                'fileData': {
+                  'fileUri': 'https://media.example/audio.wav',
+                  'mimeType': 'audio/wav',
+                },
+              },
+              {
+                'fileData': {
+                  'fileUri': 'https://media.example/clip.mp4',
+                  'mimeType': 'video/mp4',
+                },
+              },
+              {
+                'fileData': {
+                  'fileUri': 'https://media.example/notes.pdf',
+                  'mimeType': 'application/pdf',
+                },
+              },
+              {'text': 'Hello there.'},
+            ],
+          },
+        ]);
+
+        final timestampedTranscript = StroomMessage(
+          id: 'timestamped-transcript',
+          role: 'user',
+          sequence: 1,
+          createdAt: DateTime.utc(2026),
+          content: [
+            StroomContentPart.transcription(
+              text: 'Hello.',
+              segments: [
+                {'start': 0.0, 'end': 0.5, 'text': 'Hello.'},
+              ],
+            ),
+          ],
+        );
+        expect(
+          () => AiGatewayProtocolBridges.buildRequest(
+            'google.gemini.generate_content',
+            AiGatewayProtocolRequest(
+              modelId: 'gemini-flash',
+              messages: [timestampedTranscript],
+            ),
+          ),
+          throwsUnsupportedError,
+        );
+      },
+    );
+
+    test(
+        'Gemini converts OpenAI image data URL source extensions to inline data',
+        () {
+      final message = StroomMessage(
+        id: 'openai-image-data-url',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'source': {
+                'type': 'image_url',
+                'image_url': {'url': 'data:image/png;base64,aGVsbG8='},
+              },
+            },
+          ),
+        ],
+      );
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini-flash', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'image/png', 'data': 'aGVsbG8='},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini rejects malformed base64 data URL references', () {
+      final message = StroomMessage(
+        id: 'openai-image-invalid-data-url',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'source': {
+                'type': 'image_url',
+                'image_url': {'url': 'data:image/png;base64,%%%invalid%%%'},
+              },
+            },
+          ),
+        ],
+      );
+
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'google.gemini.generate_content',
+          AiGatewayProtocolRequest(
+              modelId: 'gemini-flash', messages: [message]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('Gemini rejects data URL MIME mismatches for media parts', () {
+      final message = StroomMessage(
+        id: 'openai-image-pdf-data-url',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:application/pdf;base64,cGRm',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'google.gemini.generate_content',
+          AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('Gemini preserves parameterized base64 image data URLs', () {
+      final message = StroomMessage(
+        id: 'parameterized-image-data-url',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;charset=utf-8;base64,aGVsbG8=',
+          ),
+        ],
+      );
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini-flash', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'image/png', 'data': 'aGVsbG8='},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini response media parts use canonical modality types', () {
+      final source = <String, dynamic>{
+        'candidates': [
+          {
+            'content': {
+              'role': 'model',
+              'parts': [
+                {'text': 'Here are the media.'},
+                {
+                  'inlineData': {'mimeType': 'image/png', 'data': 'AQ=='},
+                },
+                {
+                  'inlineData': {'mimeType': 'audio/wav', 'data': 'Ag=='},
+                },
+                {
+                  'fileData': {
+                    'mimeType': 'video/mp4',
+                    'fileUri': 'gs://bucket/clip.mp4',
+                  },
+                  'videoMetadata': {'startOffset': '1s'},
+                },
+                {
+                  'fileData': {
+                    'mimeType': 'application/pdf',
+                    'fileUri': 'gs://bucket/report.pdf',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      final bridge = AiGatewayProtocolBridges.geminiGenerateContent;
+      final neutral = bridge.toStroom(source);
+
+      expect(neutral.content.map((part) => part.type), [
+        'text',
+        'image',
+        'audio',
+        'video',
+        'file',
+      ]);
+      expect(neutral.content[3].data['videoMetadata'], {'startOffset': '1s'});
+      expect(bridge.fromStroom(neutral), source);
+    });
+
     test('rejects content parts with no target protocol representation', () {
       final unsupported = StroomMessage(
         id: 'unsupported-content',
@@ -115,6 +766,43 @@ void main() {
       });
       expect(message.content.single.type, 'text');
       expect(message.content.single.data['text'], 'Visible answer');
+    });
+
+    test('Responses serializes images parsed from Chat Completions', () {
+      final chatMessage =
+          AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+        'role': 'user',
+        'content': [
+          {'type': 'text', 'text': 'Describe this.'},
+          {
+            'type': 'image_url',
+            'image_url': {
+              'url': 'https://media.example/photo.png',
+              'detail': 'high',
+            },
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'openai.responses',
+        AiGatewayProtocolRequest(modelId: 'gpt-6', messages: [chatMessage]),
+      );
+
+      expect(request?.body['input'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [
+            {'type': 'input_text', 'text': 'Describe this.'},
+            {
+              'type': 'input_image',
+              'image_url': 'https://media.example/photo.png',
+              'detail': 'high',
+            },
+          ],
+        },
+      ]);
     });
 
     test('edited Responses function items retain unknown fields', () {
@@ -1455,6 +2143,212 @@ void main() {
         );
       },
     );
+
+    test('Gemini preserves video metadata alongside inline video bytes', () {
+      final message = StroomMessage(
+        id: 'gemini-inline-video-metadata',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'video',
+            data: {
+              'inlineData': {'mimeType': 'video/mp4', 'data': 'AQID'},
+              'videoMetadata': {'frameTimestamp': '1.25s', 'frameIndex': 3},
+            },
+          ),
+        ],
+      );
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'video/mp4', 'data': 'AQID'},
+              'videoMetadata': {'frameTimestamp': '1.25s', 'frameIndex': 3},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini preserves video metadata alongside file references', () {
+      final message = StroomMessage(
+        id: 'gemini-video-reference-metadata',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'video',
+            data: {
+              'fileData': {
+                'fileUri': 'gs://bucket/clip.mp4',
+                'mimeType': 'video/mp4',
+              },
+              'videoMetadata': {'frameTimestamp': '2.5s', 'frameIndex': 5},
+            },
+          ),
+        ],
+      );
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'fileData': {
+                'fileUri': 'gs://bucket/clip.mp4',
+                'mimeType': 'video/mp4',
+              },
+              'videoMetadata': {'frameTimestamp': '2.5s', 'frameIndex': 5},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini maps OpenAI Responses input_file references and data', () {
+      final source = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_file',
+            'filename': 'report.pdf',
+            'file_url': 'https://files.example/report.pdf',
+          },
+          {
+            'type': 'input_file',
+            'filename': 'inline.pdf',
+            'file_data': 'data:application/pdf;base64,cGRm',
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini-flash', messages: [source]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'fileData': {
+                'fileUri': 'https://files.example/report.pdf',
+                'mimeType': 'application/pdf',
+              },
+            },
+            {
+              'inlineData': {
+                'mimeType': 'application/pdf',
+                'data': 'cGRm',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini maps Responses input_audio format-only MIME', () {
+      final message = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_audio',
+            'input_audio': {'format': 'wav', 'data': 'YWJj'},
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'audio/wav', 'data': 'YWJj'},
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('Gemini rejects malformed plain input_audio base64', () {
+      final message = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_audio',
+            'input_audio': {'format': 'wav', 'data': '%%%invalid-base64%%%'},
+          },
+        ],
+      });
+
+      expect(
+        () => AiGatewayProtocolBridges.buildRequest(
+          'google.gemini.generate_content',
+          AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('Gemini maps audio and output_audio format-only MIME', () {
+      final message = AiGatewayProtocolBridges.openAiResponses.toStroom({
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'audio',
+            'audio': {'format': 'wav', 'data': 'YWJj'},
+          },
+          {
+            'type': 'output_audio',
+            'output_audio': {'format': 'mp3', 'data': 'ZGVm'},
+          },
+        ],
+      });
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.generate_content',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(request?.body['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'audio/wav', 'data': 'YWJj'},
+            },
+            {
+              'inlineData': {'mimeType': 'audio/mpeg', 'data': 'ZGVm'},
+            },
+          ],
+        },
+      ]);
+    });
 
     test('request builders translate function tools to native schemas', () {
       final function = {

@@ -25,6 +25,7 @@ extension ChatServiceStreamingExt on ChatService {
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
+    _lastMediaAttachments = const [];
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -77,6 +78,9 @@ extension ChatServiceStreamingExt on ChatService {
         )
             .listen(
           (event) {
+            if (event.mediaAttachments?.isNotEmpty == true) {
+              _captureMediaAttachments(event.mediaAttachments!);
+            }
             if (event.isReasoning) {
               _reasoningBuffer += event.text;
             } else if (event.usage != null) {
@@ -139,6 +143,7 @@ extension ChatServiceStreamingExt on ChatService {
     _contentBuffer = '';
     _lastReasoningLength = 0;
     _thinkingSignature = '';
+    _lastMediaAttachments = const [];
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -250,7 +255,15 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
-              if (event.isReasoning) {
+              if (event.mediaAttachments?.isNotEmpty == true) {
+                _captureMediaAttachments(event.mediaAttachments!);
+                controller.add(
+                  MediaAttachmentsEvent(
+                    event.mediaAttachments!,
+                    contentOrder: event.contentOrder,
+                  ),
+                );
+              } else if (event.isReasoning) {
                 _reasoningBuffer += event.text;
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
@@ -261,7 +274,9 @@ extension ChatServiceStreamingExt on ChatService {
                 // Accumulate visible content for tool call chain
                 // preservation per DeepSeek spec.
                 _contentBuffer += event.text;
-                controller.add(TextEvent(event.text));
+                controller.add(
+                  TextEvent(event.text, contentOrder: event.contentOrder),
+                );
               }
             },
             onDone: () {

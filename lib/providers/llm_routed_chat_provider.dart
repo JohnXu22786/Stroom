@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 
+import '../models/chat_message.dart';
 import '../models/ai_stream_event.dart';
 import '../ai_gateway/ai_gateway.dart';
+import '../services/attachment_storage.dart';
 import 'anthropic_chat_provider.dart';
 import 'chat_api_provider.dart';
+import '../services/conversation_media_storage.dart';
 
 /// ChatAdapter provider that keeps the application's existing chat protocol
 /// while selecting an eligible account from the model's stable M1 group.
@@ -15,6 +20,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   final String groupId;
   final String localModelId;
   final String endpointType;
+  final ConversationMediaWriter? _saveMediaFile;
+  List<Attachment> _lastMediaAttachments = const [];
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -28,7 +35,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required this.groupId,
     required this.localModelId,
     required this.endpointType,
-  }) : _runtime = runtime;
+    ConversationMediaWriter? saveMediaFile,
+  })  : _runtime = runtime,
+        _saveMediaFile = saveMediaFile;
 
   @override
   String get name => 'Stroom account routing';
@@ -57,6 +66,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   @override
   Map<String, dynamic>? get lastUsage => _lastUsage;
 
+  /// Media returned by the most recent non-streaming [chat] call.
+  @override
+  List<Attachment> get lastMediaAttachments =>
+      List.unmodifiable(_lastMediaAttachments);
+
   @override
   Map<String, dynamic> get defaultParams => endpointType == 'anthropic'
       ? const {'model': 'claude-sonnet-4', 'max_tokens': 4096}
@@ -80,6 +94,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
+    _lastMediaAttachments = const [];
     final runtime = await _runtime;
     final execution = await runtime.executeForGroupId<String>(
       groupId: groupId,
@@ -93,7 +108,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
         final protocolId = _protocolFor(candidate.account);
-        final body = _buildBody(
+        final body = await _buildBody(
           messages,
           protocolId: protocolId,
           upstreamModelId: candidate.upstreamModelId,
@@ -116,6 +131,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           _lastResponseHeaders = response.headers;
           final result = _readCompletion(response.body, protocolId);
           _lastResponseData = result.data;
+          _lastMediaAttachments = await _storeStreamMedia(
+            result.data,
+            protocolId,
+          );
           _lastUsage = result.usage;
           await _recordUsage(
             progress,
@@ -156,7 +175,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       supportedConnectorTypes: const {'claude'},
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
-        final body = _buildBody(
+        final body = await _buildBody(
           messages,
           protocolId: 'anthropic.messages',
           operation: 'count_tokens',
@@ -221,7 +240,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               throw requestCancelToken.cancelError!;
             }
             final protocolId = _protocolFor(candidate.account);
-            final body = _buildBody(
+            final body = await _buildBody(
               messages,
               protocolId: protocolId,
               upstreamModelId: candidate.upstreamModelId,
@@ -331,26 +350,63 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
   }) {
     final required = <String>{};
+    final outputModalities = _requestedOutputModalities(extraParams);
     if (_effectiveTools(tools, extraParams).isNotEmpty) required.add('tools');
     if (_containsContentType(messages, const {
-      'image',
-      'image_url',
-      'input_image',
-      'output_image',
-      'video_url',
-      'file',
-      'document',
-    })) {
+          'image',
+          'image_url',
+          'input_image',
+          'output_image',
+          'video_url',
+          'video_frame',
+          'input_video',
+          'file',
+          'input_file',
+          'document',
+        }) ||
+        outputModalities.any(const {'image', 'video'}.contains)) {
       required.add('vision');
     }
     if (_containsContentType(messages, const {
-      'input_audio',
-      'audio',
-      'audio_url',
-    })) {
+          'input_audio',
+          'output_audio',
+          'audio',
+          'audio_url',
+          'audio_transcription',
+          'text_audio',
+        }) ||
+        outputModalities.contains('audio')) {
       required.add('audio');
     }
     return required;
+  }
+
+  static Set<String> _requestedOutputModalities(
+    Map<String, dynamic>? extraParams,
+  ) {
+    final modalities = <String>{};
+    void addFrom(Map? options) {
+      if (options == null) return;
+      for (final key in const {
+        'modalities',
+        'output_modalities',
+        'outputModalities',
+        'response_modalities',
+        'responseModalities',
+      }) {
+        final value = options[key];
+        final values = value is Iterable ? value : [value];
+        for (final item in values) {
+          if (item is String) modalities.add(item.toLowerCase());
+        }
+      }
+      if (options['audio'] is Map) modalities.add('audio');
+    }
+
+    addFrom(extraParams);
+    final generationConfig = extraParams?['generationConfig'];
+    if (generationConfig is Map) addFrom(generationConfig);
+    return modalities;
   }
 
   static List<Map<String, dynamic>> _effectiveTools(
@@ -378,7 +434,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return false;
   }
 
-  Map<String, dynamic> _buildBody(
+  Future<Map<String, dynamic>> _buildBody(
     List<Map<String, dynamic>> messages, {
     required String protocolId,
     String operation = 'generate',
@@ -389,7 +445,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     String? system,
     Map<String, dynamic>? extraParams,
-  }) {
+  }) async {
     final bridge = AiGatewayProtocolBridges.forProtocol(protocolId);
     if (bridge == null) {
       throw StateError('No internal protocol bridge for $protocolId.');
@@ -422,12 +478,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (protocolId == 'anthropic.messages' && extendedThinking) {
       requestOptions.remove('temperature');
     }
+    final resolvedMessages = await resolveConversationMediaReferences(messages);
     final request = AiGatewayProtocolBridges.buildRequest(
       protocolId,
       AiGatewayProtocolRequest(
         modelId: upstreamModelId,
         operation: operation,
-        messages: messages
+        messages: resolvedMessages
             .map(AiGatewayProtocolBridges.openAiChatCompletions.toStroom)
             .toList(growable: false),
         system: requestedSystem,
@@ -489,9 +546,102 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final usage = <String, dynamic>{};
     final toolsByIndex = <int, Map<String, dynamic>>{};
+    final mediaOutputs = <Object>[];
+    final seenResponseMediaIds = <String>{};
+    final responseAudioByItem = <String, _BufferedStreamAudio>{};
+    final chatCompletionAudio = <int, _BufferedStreamAudio>{};
     final anthropicAccumulator = AnthropicStreamAccumulator();
     final protocolStreamState = AiGatewayProtocolStreamState();
     final parsedEvents = StreamController<AIStreamEvent>();
+    final emittedMediaAttachments = Set<Attachment>.identity();
+    var nextContentOrder = 0;
+
+    AIStreamEvent orderedEvent(AIStreamEvent event) {
+      if (event.text.isEmpty ||
+          event.isReasoning ||
+          event.contentOrder != null) {
+        return event;
+      }
+      return AIStreamEvent(
+        event.text,
+        isReasoning: event.isReasoning,
+        toolCalls: event.toolCalls,
+        thinkingSignature: event.thinkingSignature,
+        usage: event.usage,
+        mediaAttachments: event.mediaAttachments,
+        contentOrder: nextContentOrder++,
+      );
+    }
+
+    Attachment atContentOrder(Attachment attachment, int contentOrder) =>
+        attachment.copyWith(
+          extraFields: {
+            ...attachment.extraFields,
+            'stroom.contentOrder': contentOrder,
+          },
+        );
+
+    Future<void> flushAudio() async {
+      for (final output in mediaOutputs.whereType<_BufferedStreamAudio>()) {
+        if (output.attachment != null || output.bytes.length == 0) continue;
+        final attachment = await _saveMediaAttachment(
+          'audio',
+          output.mimeType,
+          output.bytes.toBytes(),
+          protocolId,
+          output.metadata,
+        );
+        output.attachment = atContentOrder(attachment, output.contentOrder);
+      }
+    }
+
+    void emitMedia() {
+      final attachments = <Attachment>[];
+      for (final output in mediaOutputs) {
+        if (output is Attachment) {
+          attachments.add(output);
+        } else if (output is _BufferedStreamAudio &&
+            output.attachment != null) {
+          attachments.add(output.attachment!);
+        }
+      }
+      final pending = attachments.where(emittedMediaAttachments.add).toList()
+        ..sort((left, right) =>
+            (left.extraFields['stroom.contentOrder'] as int? ?? 1 << 30)
+                .compareTo(
+              right.extraFields['stroom.contentOrder'] as int? ?? 1 << 30,
+            ));
+      if (pending.isNotEmpty) {
+        parsedEvents.add(
+          AIStreamEvent(
+            '',
+            mediaAttachments: pending,
+            contentOrder: pending
+                .map((attachment) =>
+                    attachment.extraFields['stroom.contentOrder'] as int?)
+                .whereType<int>()
+                .firstOrNull,
+          ),
+        );
+      }
+    }
+
+    void queueMedia(List<Attachment> media) {
+      for (final attachment in media) {
+        final source = _jsonMap(
+          attachment.extraFields['stroom.mediaSource'],
+        );
+        final metadata = _jsonMap(source?['metadata']);
+        final mediaId = _stringValue(metadata?['id']);
+        if (mediaId != null) seenResponseMediaIds.add(mediaId);
+      }
+      mediaOutputs.addAll([
+        for (final attachment in media)
+          atContentOrder(attachment, nextContentOrder++),
+      ]);
+      emitMedia();
+    }
+
     unawaited(() async {
       try {
         final payloads =
@@ -505,6 +655,133 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (decoded is! Map) continue;
             final data = Map<String, dynamic>.from(decoded);
             _lastResponseData = data;
+            var geminiContentPartsHandled = false;
+            if (protocolId == 'google.gemini.generate_content' &&
+                data['candidates'] is List) {
+              for (final candidate
+                  in (data['candidates'] as List).whereType<Map>().take(1)) {
+                final content = _jsonMap(candidate['content']);
+                final parts = content?['parts'];
+                if (parts is! List) continue;
+                geminiContentPartsHandled = true;
+                for (final rawPart in parts.whereType<Map>()) {
+                  final part = Map<String, dynamic>.from(rawPart);
+                  if (part['text'] is String) {
+                    parsedEvents.add(
+                      AIStreamEvent(
+                        part['text'] as String,
+                        isReasoning: part['thought'] == true,
+                        contentOrder:
+                            part['thought'] == true ? null : nextContentOrder++,
+                      ),
+                    );
+                  } else if (part['inlineData'] is Map) {
+                    final media = await _storeStreamMedia(
+                      part,
+                      protocolId,
+                      excludedImageGenerationIds: seenResponseMediaIds,
+                    );
+                    queueMedia(media);
+                  } else if (part['fileData'] is Map) {
+                    final fileData = _jsonMap(part['fileData'])!;
+                    final reference = _stringValue(fileData['fileUri']);
+                    if (reference != null && reference.isNotEmpty) {
+                      final mimeType = _stringValue(fileData['mimeType']) ??
+                          'application/octet-stream';
+                      final mediaType = _mediaTypeFromMime(mimeType);
+                      final uri = Uri.tryParse(reference);
+                      final pathSegments = uri?.pathSegments
+                              .where((segment) => segment.isNotEmpty)
+                              .toList(growable: false) ??
+                          const <String>[];
+                      queueMedia([
+                        Attachment(
+                          fileName: pathSegments.isNotEmpty
+                              ? pathSegments.last
+                              : _mediaFileName(mediaType, mimeType),
+                          mimeType: mimeType,
+                          fileType: mediaType,
+                          hash: '',
+                          storagePath: reference,
+                          fileSize: 0,
+                          extraFields: {
+                            'stroom.mediaReference': reference,
+                            'stroom.mediaSource': {
+                              'protocol': protocolId,
+                              'metadata': sanitizeConversationMediaJson(
+                                _mediaMetadata(part, const {'fileData'}),
+                              ),
+                            },
+                          },
+                        ),
+                      ]);
+                    }
+                  }
+                }
+              }
+            }
+            final eventType = _stringValue(data['type']);
+            final audioDelta = protocolId == 'openai.responses' &&
+                    const {
+                      'response.output_audio.delta',
+                      'response.audio.delta',
+                    }.contains(eventType)
+                ? _stringValue(data['delta'])
+                : null;
+            if (audioDelta != null) {
+              final itemId = _stringValue(data['item_id']);
+              final outputIndex = _stringValue(data['output_index']);
+              final contentIndex = _stringValue(data['content_index']) ?? '0';
+              final audioKey =
+                  '${itemId ?? outputIndex ?? 'default'}:$contentIndex';
+              final responseAudio = responseAudioByItem[audioKey];
+              final bytes = _decodeBase64Payload(audioDelta);
+              if (bytes != null) {
+                final output = responseAudioByItem.putIfAbsent(audioKey, () {
+                  final created = _BufferedStreamAudio(nextContentOrder++);
+                  mediaOutputs.add(created);
+                  return created;
+                });
+                output.bytes.add(bytes);
+              }
+              final format = _stringValue(data['format']);
+              final output = responseAudioByItem[audioKey] ?? responseAudio;
+              if (format != null && output != null) {
+                output.mimeType = _audioMimeFromFormat(format);
+              }
+              output?.metadata.addAll(
+                _mediaMetadata(data, const {'delta'}),
+              );
+            }
+            if (protocolId == 'openai.chat_completions') {
+              for (final audio in _chatCompletionAudioDeltas(data)) {
+                final bytes = _decodeBase64Payload(audio.data);
+                if (bytes == null) continue;
+                final output = chatCompletionAudio.putIfAbsent(
+                  audio.choiceIndex,
+                  () {
+                    final output = _BufferedStreamAudio(nextContentOrder++);
+                    output.metadata['choiceIndex'] = audio.choiceIndex;
+                    mediaOutputs.add(output);
+                    return output;
+                  },
+                );
+                output.bytes.add(bytes);
+                if (audio.format != null) {
+                  output.mimeType = _audioMimeFromFormat(audio.format);
+                }
+                output.metadata.addAll(audio.metadata);
+              }
+            }
+            final media = audioDelta == null && !geminiContentPartsHandled
+                ? await _storeStreamMedia(
+                    data,
+                    protocolId,
+                    accumulateAudio: protocolId == 'openai.chat_completions',
+                    excludedImageGenerationIds: seenResponseMediaIds,
+                  )
+                : const <Attachment>[];
+            if (media.isNotEmpty) queueMedia(media);
             if (protocolId == 'anthropic.messages') {
               if (data['type'] == 'error') {
                 throw _streamRequestError(data['error']);
@@ -525,7 +802,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 data,
                 anthropicAccumulator,
               )) {
-                parsedEvents.add(event);
+                parsedEvents.add(orderedEvent(event));
               }
             } else if (protocolId == 'openai.chat_completions') {
               final apiError = data['error'];
@@ -538,7 +815,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               for (final event in OpenAICompatibleChatProvider.parseStreamEvent(
                 data,
               )) {
-                parsedEvents.add(event);
+                parsedEvents.add(orderedEvent(event));
               }
               _accumulateOpenAIToolCalls(data, toolsByIndex);
             } else {
@@ -552,8 +829,17 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               )) {
                 switch (event.kind) {
                   case AiGatewayProtocolStreamEventKind.textDelta:
-                    parsedEvents.add(AIStreamEvent(event.delta ?? ''));
+                    if (geminiContentPartsHandled) break;
+                    parsedEvents.add(
+                      AIStreamEvent(
+                        event.delta ?? '',
+                        contentOrder: (event.delta ?? '').isEmpty
+                            ? null
+                            : nextContentOrder++,
+                      ),
+                    );
                   case AiGatewayProtocolStreamEventKind.reasoningDelta:
+                    if (geminiContentPartsHandled) break;
                     parsedEvents.add(
                       AIStreamEvent(event.delta ?? '', isReasoning: true),
                     );
@@ -584,6 +870,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             rethrow;
           }
         }
+        await flushAudio();
         final connectorObservation = await response.completedObservation;
         final usageObservation = connectorObservation == null
             ? response.observation
@@ -615,8 +902,19 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           final toolEvent = _buildOpenAIToolCallEvent(toolsByIndex);
           if (toolEvent != null) parsedEvents.add(toolEvent);
         }
+        emitMedia();
         await parsedEvents.close();
       } catch (error, stack) {
+        try {
+          await flushAudio();
+        } catch (_) {
+          try {
+            await flushAudio();
+          } catch (_) {
+            // Keep the original stream error if persisting partial media fails.
+          }
+        }
+        emitMedia();
         var observation = response.observation;
         try {
           final connectorObservation = await response.completedObservation;
@@ -701,6 +999,260 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         protocolId,
       ),
     );
+  }
+
+  Future<List<Attachment>> _storeStreamMedia(
+    Map<String, dynamic> frame,
+    String protocolId, {
+    bool accumulateAudio = false,
+    Set<String> excludedImageGenerationIds = const {},
+  }) async {
+    final payloads = <_StreamMediaPayload>[];
+    final imageGenerationIds = <String>{};
+    final seen = Set<Object>.identity();
+    void visit(Object? value, {String? hint}) {
+      if (value is Map) {
+        if (!seen.add(value)) return;
+        final map = Map<String, dynamic>.from(value);
+        final type = _stringValue(map['type']) ?? hint;
+        final inline = map['inlineData'] ?? map['inline_data'];
+        if (inline is Map && inline['data'] is String) {
+          payloads.add(
+            _StreamMediaPayload(
+              _mediaTypeFromMime(_stringValue(inline['mimeType']) ?? ''),
+              _stringValue(inline['mimeType']) ?? 'application/octet-stream',
+              inline['data'] as String,
+              _mediaMetadata(map, const {'inlineData', 'inline_data'}),
+            ),
+          );
+          return;
+        }
+        if (map['type'] == 'image_generation_call' && map['result'] is String) {
+          final id = _stringValue(map['id']);
+          if (id != null &&
+              (excludedImageGenerationIds.contains(id) ||
+                  !imageGenerationIds.add(id))) {
+            return;
+          }
+          payloads.add(
+            _StreamMediaPayload(
+              'image',
+              _stringValue(map['mime_type']) ?? 'image/png',
+              map['result'] as String,
+              _mediaMetadata(map, const {'result'}),
+            ),
+          );
+          return;
+        }
+        if (map['type'] == 'response.image_generation_call.partial_image' &&
+            map['partial_image_b64'] is String) {
+          payloads.add(
+            _StreamMediaPayload(
+              'image',
+              _stringValue(map['mime_type']) ?? 'image/png',
+              map['partial_image_b64'] as String,
+              _mediaMetadata(map, const {'partial_image_b64'}),
+            ),
+          );
+          return;
+        }
+        if (const {'audio', 'input_audio', 'output_audio'}.contains(type) &&
+            map['data'] is String) {
+          if (accumulateAudio) return;
+          final mimeType = _stringValue(map['mime_type'] ?? map['mimeType']) ??
+              _audioMimeFromFormat(_stringValue(map['format']));
+          payloads.add(
+            _StreamMediaPayload(
+              'audio',
+              mimeType,
+              map['data'] as String,
+              _mediaMetadata(map, const {'data'}),
+            ),
+          );
+          return;
+        }
+        final imageUrl = map['image_url'];
+        final imageReference = imageUrl is Map ? imageUrl['url'] : imageUrl;
+        if (imageReference is String && imageReference.startsWith('data:')) {
+          final parsed = _decodeMediaDataUri(imageReference);
+          if (parsed != null) {
+            payloads.add(
+              _StreamMediaPayload(
+                'image',
+                parsed.$1,
+                base64Encode(parsed.$2),
+                _mediaMetadata(map, const {'image_url'}),
+              ),
+            );
+            return;
+          }
+        }
+        final images = map['images'];
+        if (images is List) {
+          for (final image in images.whereType<String>()) {
+            payloads.add(
+              _StreamMediaPayload('image', 'image/png', image, const {}),
+            );
+          }
+        }
+        for (final entry in map.entries) {
+          if (const {
+            'data',
+            'result',
+            'images',
+            'inlineData',
+            'inline_data',
+            'image_url',
+          }.contains(entry.key)) {
+            continue;
+          }
+          visit(entry.value, hint: entry.key);
+        }
+      } else if (value is List) {
+        for (final item in value) {
+          visit(item, hint: hint);
+        }
+      }
+    }
+
+    visit(frame);
+    final attachments = <Attachment>[];
+    for (final payload in payloads) {
+      final decodedUri = _decodeMediaDataUri(payload.data);
+      final bytes = decodedUri == null
+          ? _decodeBase64Payload(payload.data)
+          : decodedUri.$2;
+      if (bytes == null || bytes.isEmpty) continue;
+      final mimeType = decodedUri?.$1 ?? payload.mimeType;
+      attachments.add(
+        await _saveMediaAttachment(
+          payload.type,
+          mimeType,
+          bytes,
+          protocolId,
+          payload.metadata,
+        ),
+      );
+    }
+    return attachments;
+  }
+
+  List<_StreamAudioDelta> _chatCompletionAudioDeltas(
+    Map<String, dynamic> frame,
+  ) {
+    final deltas = <_StreamAudioDelta>[];
+    final choices = frame['choices'];
+    if (choices is! List) return deltas;
+    for (final (choiceIndex, choice) in choices.indexed) {
+      if (choice is! Map) continue;
+      final delta = choice['delta'];
+      final audio = delta is Map ? delta['audio'] : null;
+      if (audio is! Map || audio['data'] is! String) continue;
+      deltas.add(
+        _StreamAudioDelta(
+          choiceIndex:
+              choice['index'] is int ? choice['index'] as int : choiceIndex,
+          data: audio['data'] as String,
+          format: _stringValue(audio['format']),
+          metadata: _mediaMetadata(
+            Map<String, dynamic>.from(audio),
+            const {'data'},
+          ),
+        ),
+      );
+    }
+    return deltas;
+  }
+
+  Future<Attachment> _saveMediaAttachment(
+    String type,
+    String mimeType,
+    Uint8List bytes,
+    String protocolId,
+    Map<String, dynamic> metadata,
+  ) async {
+    final fileName = _mediaFileName(type, mimeType);
+    final path = await (_saveMediaFile ?? AttachmentStorage.saveFile)(
+      fileName,
+      bytes,
+      stableId: const Uuid().v4(),
+    );
+    return Attachment(
+      fileName: fileName,
+      mimeType: mimeType,
+      fileType: type,
+      hash: AttachmentStorage.computeHash(bytes),
+      storagePath: path,
+      fileSize: bytes.length,
+      extraFields: {
+        'stroom.mediaSource': {
+          'protocol': protocolId,
+          'metadata': sanitizeConversationMediaJson(metadata),
+        },
+      },
+    );
+  }
+
+  static Map<String, dynamic> _mediaMetadata(
+    Map<String, dynamic> source,
+    Set<String> removed,
+  ) =>
+      {
+        for (final entry in source.entries)
+          if (!removed.contains(entry.key) &&
+              !const {'data', 'result', 'inlineData', 'inline_data'}
+                  .contains(entry.key))
+            entry.key: entry.value,
+      };
+
+  static String _mediaTypeFromMime(String mimeType) =>
+      mimeType.startsWith('audio/')
+          ? 'audio'
+          : mimeType.startsWith('video/')
+              ? 'video'
+              : mimeType.startsWith('image/')
+                  ? 'image'
+                  : 'file';
+
+  static String _audioMimeFromFormat(String? format) => switch (format) {
+        'mp3' => 'audio/mpeg',
+        'wav' => 'audio/wav',
+        'ogg' => 'audio/ogg',
+        'pcm16' || 'pcm' => 'audio/pcm',
+        _ => 'audio/octet-stream',
+      };
+
+  static String _mediaFileName(String type, String mimeType) {
+    final extension = switch (mimeType) {
+      'image/jpeg' => 'jpg',
+      'image/png' => 'png',
+      'audio/mpeg' => 'mp3',
+      'audio/wav' => 'wav',
+      'audio/ogg' => 'ogg',
+      'audio/pcm' => 'pcm',
+      'video/mp4' => 'mp4',
+      'application/pdf' => 'pdf',
+      _ => 'bin',
+    };
+    return '$type.$extension';
+  }
+
+  static Uint8List? _decodeBase64Payload(String value) {
+    try {
+      return Uint8List.fromList(base64Decode(value));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static (String, Uint8List)? _decodeMediaDataUri(String value) {
+    final match = RegExp(
+      r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+      dotAll: true,
+    ).firstMatch(value);
+    if (match == null) return null;
+    final bytes = _decodeBase64Payload(match.group(2)!);
+    return bytes == null ? null : (match.group(1)!, bytes);
   }
 
   static String? _openAiChatText(Object? rawChoices) {
@@ -1014,4 +1566,44 @@ class _LlmCompletionResult {
     required this.text,
     required this.usage,
   });
+}
+
+String? _stringValue(Object? value) => value is String ? value : null;
+
+class _StreamMediaPayload {
+  final String type;
+  final String mimeType;
+  final String data;
+  final Map<String, dynamic> metadata;
+
+  const _StreamMediaPayload(
+    this.type,
+    this.mimeType,
+    this.data,
+    this.metadata,
+  );
+}
+
+class _StreamAudioDelta {
+  final int choiceIndex;
+  final String data;
+  final String? format;
+  final Map<String, dynamic> metadata;
+
+  const _StreamAudioDelta({
+    required this.choiceIndex,
+    required this.data,
+    required this.format,
+    required this.metadata,
+  });
+}
+
+class _BufferedStreamAudio {
+  final int contentOrder;
+  final BytesBuilder bytes = BytesBuilder(copy: false);
+  final Map<String, dynamic> metadata = {};
+  String mimeType = 'audio/pcm';
+  Attachment? attachment;
+
+  _BufferedStreamAudio(this.contentOrder);
 }

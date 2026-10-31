@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../models/ai_stream_event.dart';
+import '../models/chat_message.dart';
 
 // ============================================================================
 // OpenRouter-format app identification headers
@@ -95,6 +96,7 @@ abstract class BaseChatProvider {
   Map<String, List<String>>? get lastResponseHeaders => null;
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
+  List<Attachment> get lastMediaAttachments => const [];
 
   /// 最近一次请求的实际 token 计量（来自 API 返回的 usage 字段）。
   ///

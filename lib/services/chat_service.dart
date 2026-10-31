@@ -196,6 +196,7 @@ class ChatService {
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
+  List<Attachment> _lastMediaAttachments = const [];
 
   /// Construct an instance backed by a real provider and model config.
   /// Optionally accepts [providerConfig] for provider-level params to merge.
@@ -246,6 +247,19 @@ class ChatService {
       _lastResponseStatusCode ?? _provider?.lastResponseStatusCode;
   Map<String, List<String>>? get lastResponseHeaders =>
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
+  List<Attachment> get lastMediaAttachments => _lastMediaAttachments.isNotEmpty
+      ? List.unmodifiable(_lastMediaAttachments)
+      : _provider?.lastMediaAttachments ?? const [];
+
+  void _captureMediaAttachments(List<Attachment> attachments) {
+    final byId = {
+      for (final attachment in _lastMediaAttachments) attachment.id: attachment
+    };
+    for (final attachment in attachments) {
+      byId[attachment.id] = attachment;
+    }
+    _lastMediaAttachments = List.unmodifiable(byId.values);
+  }
 
   /// 发送一次性系统提示词请求（标题生成 / 上下文压缩等内部任务用）。
   ///

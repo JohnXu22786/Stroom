@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';

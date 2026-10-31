@@ -548,7 +548,7 @@ void main() {
       );
     });
 
-    test('Responses output maps non-assistant roles and reports partial', () {
+    test('Responses preserves user role for serialized input messages', () {
       final message = StroomMessage(
         id: 'responses-user-output',
         role: 'user',
@@ -560,9 +560,11 @@ void main() {
       final result = OpenAiResponsesBridge().serializeMessage(message);
       final output = result.targetPayload!['output'] as List;
 
-      expect(output.single['role'], 'assistant');
-      expect(result.fidelity, MappingFidelity.partial);
-      expect(result.details, contains(contains('role')));
+      expect(output.single['role'], 'user');
+      expect(output.single['content'], [
+        {'type': 'input_text', 'text': 'input'},
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
     });
 
     test('Responses reports lost tool-result error state', () {
@@ -638,6 +640,436 @@ void main() {
       expect(result.fidelity, MappingFidelity.exact);
     });
 
+    test('Responses serializes neutral image references in content order', () {
+      final message = StroomMessage(
+        id: 'responses-image-content',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.text('before'),
+          StroomContentPart.image(
+            reference: 'https://cdn.example/photo.png',
+            detail: 'high',
+          ),
+          StroomContentPart.text('after'),
+        ],
+      );
+
+      final result = OpenAiResponsesBridge().serializeMessage(message);
+      final output = result.targetPayload!['output'] as List;
+      final userMessage = output.single as Map;
+
+      expect(userMessage['role'], 'user');
+      expect(userMessage['content'], [
+        {'type': 'input_text', 'text': 'before'},
+        {
+          'type': 'input_image',
+          'image_url': 'https://cdn.example/photo.png',
+          'detail': 'high',
+        },
+        {'type': 'input_text', 'text': 'after'},
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
+    });
+
+    test('Responses serializes neutral PDF file references in content order',
+        () {
+      final message = StroomMessage(
+        id: 'responses-pdf-content',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.text('before'),
+          StroomContentPart.file(
+            reference: 'data:application/pdf;base64,cGRm',
+            fileName: 'report.pdf',
+            mimeType: 'application/pdf',
+          ),
+          StroomContentPart.text('after'),
+        ],
+      );
+
+      final result = OpenAiResponsesBridge().serializeMessage(message);
+      final output = result.targetPayload!['output'] as List;
+      final userMessage = output.single as Map;
+
+      expect(userMessage['content'], [
+        {'type': 'input_text', 'text': 'before'},
+        {
+          'type': 'input_file',
+          'file_data': 'cGRm',
+          'filename': 'report.pdf',
+        },
+        {'type': 'input_text', 'text': 'after'},
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
+    });
+
+    test('Responses reports unsupported neutral files as partial', () {
+      final message = StroomMessage(
+        id: 'responses-unsupported-file',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.file(
+            reference: 'http://cdn.example/report.pdf',
+            fileName: 'report.pdf',
+            mimeType: 'application/pdf',
+          ),
+        ],
+      );
+
+      final result = OpenAiResponsesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['output'], isEmpty);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('file semantics exactly'));
+    });
+
+    test('Responses reports omitted images in mixed image content', () {
+      final message = StroomMessage(
+        id: 'responses-mixed-image-support',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.image(
+            reference: 'https://cdn.example/photo.png',
+            mimeType: 'image/png',
+          ),
+          StroomContentPart(type: 'image', data: const {}),
+        ],
+      );
+
+      final result = OpenAiResponsesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['output'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [
+            {
+              'type': 'input_image',
+              'image_url': 'https://cdn.example/photo.png',
+            },
+          ],
+        },
+      ]);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+    });
+
+    test('Responses rejects unsupported neutral image reference schemes', () {
+      final message = StroomMessage(
+        id: 'responses-unsupported-image-references',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.image(
+            reference: 'http://cdn.example/photo.png',
+            mimeType: 'image/png',
+          ),
+          StroomContentPart.image(
+            reference: 'attachments/photo.png',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final result = OpenAiResponsesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['output'], isEmpty);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+    });
+
+    test('Anthropic serializes neutral image references as image blocks', () {
+      final message = StroomMessage(
+        id: 'anthropic-image-content',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.text('before'),
+          StroomContentPart.image(
+            reference: 'https://cdn.example/photo.png',
+            mimeType: 'image/png',
+          ),
+          StroomContentPart.text('after'),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], [
+        {'type': 'text', 'text': 'before'},
+        {
+          'type': 'image',
+          'source': {'type': 'url', 'url': 'https://cdn.example/photo.png'},
+        },
+        {'type': 'text', 'text': 'after'},
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
+    });
+
+    test('Anthropic reports source-less images as partial mappings', () {
+      final message = StroomMessage(
+        id: 'anthropic-image-without-source',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.text('before'),
+          StroomContentPart(type: 'image', data: const {}),
+          StroomContentPart.text('after'),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], [
+        {'type': 'text', 'text': 'before'},
+        {'type': 'text', 'text': 'after'},
+      ]);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+    });
+
+    test('Anthropic maps data URL images to base64 image sources', () {
+      final message = StroomMessage(
+        id: 'anthropic-inline-image-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;charset=utf-8;base64,aGVsbG8=',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], [
+        {
+          'type': 'image',
+          'source': {
+            'type': 'base64',
+            'media_type': 'image/png',
+            'data': 'aGVsbG8=',
+          },
+        },
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
+    });
+
+    test('Anthropic reports malformed retained image base64 as partial', () {
+      final message = StroomMessage(
+        id: 'anthropic-invalid-retained-image',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'source': {
+                'type': 'base64',
+                'media_type': 'image/png',
+                'data': '%%%invalid-base64%%%',
+              },
+            },
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], isEmpty);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+    });
+
+    test('Anthropic reports malformed image and PDF data URLs as partial', () {
+      final message = StroomMessage(
+        id: 'anthropic-invalid-media-data-urls',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;base64,%%%invalid-base64%%%',
+            mimeType: 'image/png',
+          ),
+          StroomContentPart.file(
+            reference: 'data:application/pdf;base64,%%%invalid-base64%%%',
+            fileName: 'invalid.pdf',
+            mimeType: 'application/pdf',
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], isEmpty);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+      expect(result.details.join(' '), contains('file semantics exactly'));
+    });
+
+    test('Anthropic reports unsupported image MIME types as partial', () {
+      final message = StroomMessage(
+        id: 'anthropic-non-image-mime',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'source': {
+                'type': 'base64',
+                'media_type': 'application/pdf',
+                'data': 'cGRm',
+              },
+            },
+          ),
+          StroomContentPart.image(
+            reference: 'data:application/pdf;base64,cGRm',
+            mimeType: 'application/pdf',
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], isEmpty);
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('image semantics exactly'));
+    });
+
+    test('Anthropic serializes eligible PDF files and reports fidelity', () {
+      final message = StroomMessage(
+        id: 'anthropic-pdf-files',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.text('Review both documents.'),
+          StroomContentPart.file(
+            reference: 'data:application/pdf;base64,cGRm',
+            fileName: 'inline.pdf',
+            mimeType: 'application/pdf',
+          ),
+          StroomContentPart.file(
+            reference: 'https://cdn.example/remote.pdf',
+            fileName: 'remote.pdf',
+            mimeType: 'application/pdf',
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.targetPayload!['content'], [
+        {'type': 'text', 'text': 'Review both documents.'},
+        {
+          'type': 'document',
+          'source': {
+            'type': 'base64',
+            'media_type': 'application/pdf',
+            'data': 'cGRm',
+          },
+          'title': 'inline.pdf',
+        },
+        {
+          'type': 'document',
+          'source': {'type': 'url', 'url': 'https://cdn.example/remote.pdf'},
+          'title': 'remote.pdf',
+        },
+      ]);
+      expect(result.fidelity, MappingFidelity.exact);
+    });
+
+    test('Anthropic reports unsupported files as partial mappings', () {
+      final message = StroomMessage(
+        id: 'anthropic-unsupported-file',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart.file(
+            reference: 'https://cdn.example/notes.txt',
+            fileName: 'notes.txt',
+            mimeType: 'text/plain',
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('file semantics exactly'));
+      expect(result.targetPayload!['content'], isEmpty);
+    });
+
+    test('Anthropic rejects invalid retained document sources', () {
+      final message = StroomMessage(
+        id: 'anthropic-invalid-retained-documents',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [
+          StroomContentPart(
+            type: 'file',
+            data: {
+              'source': {
+                'type': 'document',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'text/plain',
+                  'data': 'bm90IGEgcGRm',
+                },
+              },
+            },
+          ),
+          StroomContentPart(
+            type: 'file',
+            data: {
+              'source': {
+                'type': 'document',
+                'source': {'type': 'url', 'url': 'http://cdn.example/file.pdf'},
+              },
+            },
+          ),
+          StroomContentPart(
+            type: 'file',
+            data: {
+              'source': {
+                'type': 'document',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'application/pdf',
+                  'data': '%%%invalid-base64%%%',
+                },
+              },
+            },
+          ),
+        ],
+      );
+
+      final result = AnthropicMessagesBridge().serializeMessage(message);
+
+      expect(result.fidelity, MappingFidelity.partial);
+      expect(result.details.join(' '), contains('file semantics exactly'));
+      expect(result.targetPayload!['content'], isEmpty);
+    });
+
     test('Chat image_url parts normalize and survive edited serialization', () {
       final source = OpenAiChatCompletionsBridge();
       final original = {
@@ -677,7 +1109,7 @@ void main() {
       expect(
         parsed.content[1].extraFields['openai.chat_completions.image_url'],
         {
-          'future_image_config': {'keep': true}
+          'future_image_config': {'keep': true},
         },
       );
       final translated = source.serializeMessage(edited);
@@ -695,10 +1127,7 @@ void main() {
         {'type': 'text', 'text': 'after'},
       ]);
       expect(translated.fidelity, MappingFidelity.partial);
-      expect(
-        translated.details,
-        isNot(contains(contains('image_url'))),
-      );
+      expect(translated.details, isNot(contains(contains('image_url'))));
       expect(translated.sourceExtension?.data['wireMessage'], original);
     });
 
@@ -1185,6 +1614,360 @@ void main() {
       expect(translated.fidelity, MappingFidelity.exact);
     });
 
+    test('Gemini preserves video metadata on referenced media parts', () {
+      final message = StroomMessage(
+        id: 'gemini-video-reference-metadata',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'video',
+            data: {
+              'reference': 'https://cdn.example/remote.mp4',
+              'mimeType': 'video/mp4',
+              'videoMetadata': {'fps': 24},
+            },
+          ),
+          StroomContentPart(
+            type: 'video',
+            data: {
+              'reference': 'data:video/mp4;base64,AQID',
+              'mimeType': 'video/mp4',
+              'videoMetadata': {'fps': 30},
+            },
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final parts = (translated.targetPayload!['contents'] as List)
+          .single['parts'] as List;
+
+      expect(parts[0]['fileData']['fileUri'], 'https://cdn.example/remote.mp4');
+      expect(parts[0]['videoMetadata'], {'fps': 24});
+      expect(parts[1]['inlineData']['data'], 'AQID');
+      expect(parts[1]['videoMetadata'], {'fps': 30});
+    });
+
+    test('Gemini reports unsupported media reference schemes as partial', () {
+      final message = StroomMessage(
+        id: 'gemini-http-media-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'http://cdn.example/photo.png',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final parts = (translated.targetPayload!['contents'] as List)
+          .single['parts'] as List;
+
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(translated.details, contains(contains('image')));
+      expect(parts, isEmpty);
+    });
+
+    test('Gemini serializes data URL file references as inlineData', () {
+      final message = StroomMessage(
+        id: 'gemini-inline-file-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.file(
+            reference: 'data:application/pdf;base64,cGRm',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final contents = translated.targetPayload!['contents'] as List;
+      final messagePayload = contents.single as Map;
+      final parts = messagePayload['parts'] as List;
+
+      expect(parts, [
+        {
+          'inlineData': {
+            'mimeType': 'application/pdf',
+            'data': 'cGRm',
+          },
+        },
+      ]);
+      expect(translated.fidelity, MappingFidelity.exact);
+    });
+
+    test('Gemini preserves parameters in base64 data URL references', () {
+      final message = StroomMessage(
+        id: 'gemini-parameterized-inline-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;charset=utf-8;base64,aGVsbG8=',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+
+      expect(translated.targetPayload!['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'inlineData': {'mimeType': 'image/png', 'data': 'aGVsbG8='},
+            },
+          ],
+        },
+      ]);
+      expect(translated.fidelity, MappingFidelity.exact);
+    });
+
+    test('Gemini reports malformed data URL references as partial', () {
+      final message = StroomMessage(
+        id: 'gemini-malformed-data-url-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;base64,%%%invalid%%%',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final parts = (translated.targetPayload!['contents'] as List)
+          .single['parts'] as List;
+
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(translated.details, contains(contains('image')));
+      expect(parts, isEmpty);
+    });
+
+    test('Gemini reports empty data URL references as partial', () {
+      final message = StroomMessage(
+        id: 'gemini-empty-data-url-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:image/png;base64,',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final parts = (translated.targetPayload!['contents'] as List)
+          .single['parts'] as List;
+
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(translated.details, contains(contains('image')));
+      expect(parts, isEmpty);
+    });
+
+    test('Gemini reports invalid inlineData as partial mappings', () {
+      for (final inlineData in [
+        {'mimeType': 'image/png', 'data': ''},
+        {'mimeType': 'image/png', 'data': '%%%invalid-base64%%%'},
+        {'mimeType': 'application/pdf', 'data': 'cGRm'},
+      ]) {
+        final message = StroomMessage(
+          id: 'gemini-invalid-inline-data',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2026),
+          content: [
+            StroomContentPart(
+              type: 'image',
+              data: {'inlineData': inlineData},
+            ),
+          ],
+        );
+
+        final translated = GeminiBridge().serializeMessage(message);
+        final parts = (translated.targetPayload!['contents'] as List)
+            .single['parts'] as List;
+
+        expect(translated.fidelity, MappingFidelity.partial);
+        expect(translated.details, contains(contains('image')));
+        expect(parts, isEmpty);
+      }
+    });
+
+    test('Gemini reports reference MIME mismatches as partial', () {
+      final message = StroomMessage(
+        id: 'gemini-image-pdf-reference',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'data:application/pdf;base64,cGRm',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+      final parts = (translated.targetPayload!['contents'] as List)
+          .single['parts'] as List;
+
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(translated.details, contains(contains('image')));
+      expect(parts, isEmpty);
+    });
+
+    test('Gemini reports video frame timestamp loss as partial mapping', () {
+      final message = StroomMessage(
+        id: 'gemini-video-timestamp',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'video',
+            data: {
+              'reference': 'gs://bucket/frame.mp4',
+              'mimeType': 'video/mp4',
+              'timestamp': DateTime.utc(2026, 1, 1, 0, 0, 1).toIso8601String(),
+              'videoMetadata': {'fps': 24},
+            },
+          ),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(translated.details, contains(contains('video')));
+      final contents = translated.targetPayload!['contents'] as List;
+      final parts = (contents.single as Map)['parts'] as List;
+      expect(parts.single, {
+        'fileData': {
+          'fileUri': 'gs://bucket/frame.mp4',
+          'mimeType': 'video/mp4',
+        },
+        'videoMetadata': {'fps': 24},
+      });
+    });
+
+    test('Gemini serializes transcription text and reports timed segments', () {
+      final message = StroomMessage(
+        id: 'gemini-transcription',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.transcription(text: 'recognized words'),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+
+      expect(translated.targetPayload!['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': 'recognized words'},
+          ],
+        },
+      ]);
+      expect(translated.fidelity, MappingFidelity.exact);
+
+      final timed = GeminiBridge().serializeMessage(
+        StroomMessage(
+          id: 'gemini-timed-transcription',
+          role: 'user',
+          sequence: 1,
+          createdAt: DateTime.utc(2026),
+          content: [
+            StroomContentPart.transcription(
+              text: 'recognized words',
+              segments: [
+                {'text': 'recognized words', 'start': 0.0, 'end': 1.0},
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(timed.targetPayload!['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': 'recognized words'},
+          ],
+        },
+      ]);
+      expect(timed.fidelity, MappingFidelity.partial);
+      expect(timed.details, contains(contains('transcription')));
+    });
+
+    test(
+      'Gemini parses multimodal inline and referenced parts by MIME type',
+      () {
+        final source = <String, dynamic>{
+          'candidates': [
+            {
+              'content': {
+                'role': 'model',
+                'parts': [
+                  {'text': 'Media follows.'},
+                  {
+                    'inlineData': {'mimeType': 'image/png', 'data': 'AQ=='},
+                  },
+                  {
+                    'inlineData': {'mimeType': 'audio/wav', 'data': 'Ag=='},
+                  },
+                  {
+                    'fileData': {
+                      'mimeType': 'video/mp4',
+                      'fileUri': 'gs://bucket/clip.mp4',
+                    },
+                    'videoMetadata': {'startOffset': '1s'},
+                  },
+                  {
+                    'fileData': {
+                      'mimeType': 'application/pdf',
+                      'fileUri': 'gs://bucket/report.pdf',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        };
+        final neutral = GeminiBridge().parseMessage(
+          source,
+          id: 'gemini-media',
+          sequence: 0,
+        );
+
+        expect(neutral.content.map((part) => part.type), [
+          'text',
+          'image',
+          'audio',
+          'video',
+          'file',
+        ]);
+        expect(neutral.content[3].data['videoMetadata'], {'startOffset': '1s'});
+        expect(GeminiBridge().serializeMessage(neutral).targetPayload, source);
+      },
+    );
+
     test('Gemini omits unsupported canonical part shapes', () {
       final message = StroomMessage(
         id: 'gemini-unsupported-structured-output',
@@ -1218,7 +2001,7 @@ void main() {
           StroomContentPart(
             type: 'inline_media',
             data: {
-              'futureShape': {'opaque': true}
+              'futureShape': {'opaque': true},
             },
           ),
         ],
@@ -1231,6 +2014,43 @@ void main() {
       expect(result.fidelity, MappingFidelity.partial);
       expect(result.details, contains(contains('inline_media')));
       expect(parts, isEmpty);
+    });
+
+    test('Gemini reports omitted images in mixed image content', () {
+      final message = StroomMessage(
+        id: 'gemini-mixed-image-support',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart.image(
+            reference: 'https://cdn.example/photo.png',
+            mimeType: 'image/png',
+          ),
+          StroomContentPart(type: 'image', data: const {}),
+        ],
+      );
+
+      final translated = GeminiBridge().serializeMessage(message);
+
+      expect(translated.targetPayload!['contents'], [
+        {
+          'role': 'user',
+          'parts': [
+            {
+              'fileData': {
+                'mimeType': 'image/png',
+                'fileUri': 'https://cdn.example/photo.png',
+              },
+            },
+          ],
+        },
+      ]);
+      expect(translated.fidelity, MappingFidelity.partial);
+      expect(
+        translated.details.join(' '),
+        contains('image semantics exactly'),
+      );
     });
 
     test('Gemini candidate content extras report partial mapping fidelity', () {
@@ -1350,27 +2170,29 @@ void main() {
       expect(result.targetPayload?['tool_call_id'], 'call_1');
     });
 
-    test('Chat tool messages stringify structured results and report partial',
-        () {
-      final message = StroomMessage(
-        id: 'chat-structured-tool-result',
-        role: 'tool',
-        sequence: 0,
-        createdAt: DateTime.utc(2025),
-        content: [
-          StroomContentPart.toolResult(
-            toolCallId: 'call_1',
-            result: {'matches': 1},
-          ),
-        ],
-      );
+    test(
+      'Chat tool messages stringify structured results and report partial',
+      () {
+        final message = StroomMessage(
+          id: 'chat-structured-tool-result',
+          role: 'tool',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          content: [
+            StroomContentPart.toolResult(
+              toolCallId: 'call_1',
+              result: {'matches': 1},
+            ),
+          ],
+        );
 
-      final result = OpenAiChatCompletionsBridge().serializeMessage(message);
+        final result = OpenAiChatCompletionsBridge().serializeMessage(message);
 
-      expect(result.targetPayload!['content'], '{"matches":1}');
-      expect(result.fidelity, MappingFidelity.partial);
-      expect(result.details, contains(contains('structured')));
-    });
+        expect(result.targetPayload!['content'], '{"matches":1}');
+        expect(result.fidelity, MappingFidelity.partial);
+        expect(result.details, contains(contains('structured')));
+      },
+    );
 
     test('Chat Completions reports interleaved content order loss', () {
       final source = GeminiBridge();
@@ -1603,49 +2425,51 @@ void main() {
       expect(translated.targetPayload?['content'], isA<List>());
     });
 
-    test('same-protocol mapping selects its extension among multiple formats',
-        () {
-      final anthropic = AnthropicMessagesBridge().parseMessage(
-        {
-          'role': 'assistant',
-          'content': [
-            {'type': 'text', 'text': 'hello'},
-          ],
-        },
-        id: 'multi-protocol-extension',
-        sequence: 0,
-      );
-      final responses = OpenAiResponsesBridge().parseMessage(
-        {
+    test(
+      'same-protocol mapping selects its extension among multiple formats',
+      () {
+        final anthropic = AnthropicMessagesBridge().parseMessage(
+          {
+            'role': 'assistant',
+            'content': [
+              {'type': 'text', 'text': 'hello'},
+            ],
+          },
+          id: 'multi-protocol-extension',
+          sequence: 0,
+        );
+        final responses = OpenAiResponsesBridge().parseMessage(
+          {
+            'type': 'message',
+            'role': 'assistant',
+            'content': [
+              {'type': 'output_text', 'text': 'hello'},
+            ],
+          },
+          id: 'multi-protocol-extension',
+          sequence: 0,
+        );
+        final restored = StroomMessage.fromMap(
+          responses.toMap()
+            ..['extensions'] = {
+              'anthropic.messages': anthropic.extensions['anthropic.messages'],
+              'openai.responses': responses.extensions['openai.responses'],
+            },
+        );
+
+        final result = OpenAiResponsesBridge().serializeMessage(restored);
+
+        expect(result.fidelity, MappingFidelity.exact);
+        expect(result.sourceProtocolId, 'openai.responses');
+        expect(result.targetPayload, {
           'type': 'message',
           'role': 'assistant',
           'content': [
             {'type': 'output_text', 'text': 'hello'},
           ],
-        },
-        id: 'multi-protocol-extension',
-        sequence: 0,
-      );
-      final restored = StroomMessage.fromMap(
-        responses.toMap()
-          ..['extensions'] = {
-            'anthropic.messages': anthropic.extensions['anthropic.messages'],
-            'openai.responses': responses.extensions['openai.responses'],
-          },
-      );
-
-      final result = OpenAiResponsesBridge().serializeMessage(restored);
-
-      expect(result.fidelity, MappingFidelity.exact);
-      expect(result.sourceProtocolId, 'openai.responses');
-      expect(result.targetPayload, {
-        'type': 'message',
-        'role': 'assistant',
-        'content': [
-          {'type': 'output_text', 'text': 'hello'},
-        ],
-      });
-    });
+        });
+      },
+    );
 
     test(
       'Anthropic thinking maps to Responses with signature loss reported',

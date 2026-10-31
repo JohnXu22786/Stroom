@@ -14,6 +14,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       fullReply: s.fullReply,
       reasoningSections: s.reasoningSections,
       hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
+      hasMediaAttachments: s.mediaAttachments.isNotEmpty,
     )) {
       return;
     }
@@ -35,16 +36,21 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
         fullReply: s.fullReply,
         reasoningSections: s.reasoningSections,
         hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
+        hasMediaAttachments: s.mediaAttachments.isNotEmpty,
       )) {
-        final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
-        if (!exists) {
-          // reasoningContent 用全量累计（sections 拼接），与 finalize
-          // 的消息构造保持一致（reasoningBuffer 只含最后一轮）。
-          final fullReasoning = s.reasoningSections.join('\n');
-          partialHistory.add(ChatMessage(
+        // reasoningContent 用全量累计（sections 拼接），与 finalize
+        // 的消息构造保持一致（reasoningBuffer 只含最后一轮）。
+        final fullReasoning = s.reasoningSections.join('\n');
+        ChatStreamManager.upsertPartialAssistantMessage(
+          partialHistory,
+          ChatMessage(
             role: 'assistant',
             content: s.fullReply,
             id: s.streamingMsgId ?? '',
+            attachments: s.mediaAttachments
+                .map((attachment) =>
+                    attachment.copyWith(conversationId: s.convId))
+                .toList(growable: false),
             reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
             toolCalls: s.accumulatedToolCalls.isNotEmpty
                 ? List<ToolCallData>.from(s.accumulatedToolCalls)
@@ -55,11 +61,14 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
             textSections: s.textChunks.any((c) => c.isNotEmpty)
                 ? List<String>.from(s.textChunks)
                 : null,
+            contentParts: s.mediaAttachments.isNotEmpty
+                ? _orderedAssistantContentParts(s)
+                : null,
             toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
                 ? List<int>.from(s.toolCallRoundStarts)
                 : null,
-          ));
-        }
+          ),
+        );
       }
       ref.read(conversationsProvider.notifier).updateMessages(
             s.convId,

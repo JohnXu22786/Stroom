@@ -362,7 +362,12 @@ class AiGatewayRoutingException implements Exception {
       : decisions = List.unmodifiable(decisions);
 
   @override
-  String toString() => 'No eligible account is available for this model group.';
+  String toString() => decisions.isNotEmpty &&
+          decisions.every(
+            (decision) => decision.reason == 'capability_mismatch',
+          )
+      ? 'No connected account and model support the capabilities required for this request.'
+      : 'No eligible account is available for this model group.';
 }
 
 class AiGatewayUsageMeasurement {

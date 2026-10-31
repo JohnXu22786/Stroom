@@ -1,4 +1,5 @@
 import 'tool_call.dart';
+import 'chat_message.dart';
 
 sealed class ChatEvent {
   const ChatEvent();
@@ -6,7 +7,14 @@ sealed class ChatEvent {
 
 class TextEvent extends ChatEvent {
   final String text;
-  TextEvent(this.text);
+  final int? contentOrder;
+  TextEvent(this.text, {this.contentOrder});
+}
+
+class MediaAttachmentsEvent extends ChatEvent {
+  final List<Attachment> attachments;
+  final int? contentOrder;
+  const MediaAttachmentsEvent(this.attachments, {this.contentOrder});
 }
 
 class ToolCallStartEvent extends ChatEvent {
