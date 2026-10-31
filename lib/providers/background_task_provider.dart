@@ -913,7 +913,7 @@ bool _legacyOcrHasCredentialUseContext(
       matchedPrefix == null ? -1 : match.start + matchedPrefix.start;
   final maskPrefixIsEmbedded = absolutePrefixStart > 0 &&
       RegExp(
-        r'[\p{L}\p{M}\p{N}._/+~-]',
+        r'[\p{L}\p{M}\p{N}_/+~-]',
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
   final shortNaturalWordEcho =
