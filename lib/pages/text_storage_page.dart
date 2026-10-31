@@ -14,7 +14,6 @@ import '../utils/file_picker_utils.dart';
 import '../utils/text_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
-import '../utils/user_visible_export_archive.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
@@ -147,9 +146,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
           }
           continue;
         }
@@ -241,9 +239,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
       return;
     }
 
@@ -285,9 +282,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final content = await TextManifest.readText(file.storagePath);
       if (content == null || content.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -480,12 +476,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(textFolderListProvider)
-                  .where((folder) => names.any(
-                        (name) =>
-                            folder == name || folder.startsWith('$name/'),
-                      )),
+              ...ref.read(textFolderListProvider).where(
+                    (folder) => names.any(
+                      (name) => folder == name || folder.startsWith('$name/'),
+                    ),
+                  ),
             },
           ),
           initialDirectory: SystemPickDirectories.documents(),
@@ -520,15 +515,19 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref.read(textFolderListProvider).where((folder) => names.any(
-              (name) => folder == name || folder.startsWith('$name/'),
-            )),
+        ...ref.read(textFolderListProvider).where(
+              (folder) => names.any(
+                (name) => folder == name || folder.startsWith('$name/'),
+              ),
+            ),
       };
       final folderFiles = records
-          .where((record) => names.any(
-                (name) =>
-                    record.folder == name || record.folder.startsWith('$name/'),
-              ))
+          .where(
+            (record) => names.any(
+              (name) =>
+                  record.folder == name || record.folder.startsWith('$name/'),
+            ),
+          )
           .toList();
       validateUserVisibleExportPaths(
         files: folderFiles.map(
@@ -541,19 +540,19 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       }
 
       for (final file in folderFiles) {
-          final content = await TextManifest.readText(file.storagePath);
-          if (content == null) continue;
+        final content = await TextManifest.readText(file.storagePath);
+        if (content == null) continue;
 
-          final exportName = '${file.name}.${file.format}';
-          final relativePath = p.posix.join(file.folder, exportName);
-          if (!exportPaths.add(relativePath)) {
-            throw StateError('导出路径重复: $relativePath');
-          }
-          final fileDir = p.join(outputDir, file.folder);
-          await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsString(content);
-          exportedCount++;
+        final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
+        final fileDir = p.join(outputDir, file.folder);
+        await Directory(fileDir).create(recursive: true);
+        final outputPath = p.join(fileDir, exportName);
+        await File(outputPath).writeAsString(content);
+        exportedCount++;
       }
 
       if (mounted) {

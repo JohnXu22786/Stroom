@@ -23,7 +23,6 @@ import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/thumbnail_utils.dart';
-import '../utils/user_visible_export_archive.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -403,9 +402,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final filePath = await VideoManifest.readFilePath(file.storagePath);
     if (filePath == null || filePath.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法加载视频文件')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法加载视频文件')));
       }
       return;
     }
@@ -434,9 +432,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       final data = await VideoManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -628,12 +625,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(videoFolderListProvider)
-                  .where((folder) => names.any(
-                        (name) =>
-                            folder == name || folder.startsWith('$name/'),
-                      )),
+              ...ref.read(videoFolderListProvider).where(
+                    (folder) => names.any(
+                      (name) => folder == name || folder.startsWith('$name/'),
+                    ),
+                  ),
             },
           ),
           initialDirectory: SystemPickDirectories.videos(),
@@ -668,15 +664,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref.read(videoFolderListProvider).where((folder) => names.any(
-              (name) => folder == name || folder.startsWith('$name/'),
-            )),
+        ...ref.read(videoFolderListProvider).where(
+              (folder) => names.any(
+                (name) => folder == name || folder.startsWith('$name/'),
+              ),
+            ),
       };
       final folderFiles = records
-          .where((record) => names.any(
-                (name) =>
-                    record.folder == name || record.folder.startsWith('$name/'),
-              ))
+          .where(
+            (record) => names.any(
+              (name) =>
+                  record.folder == name || record.folder.startsWith('$name/'),
+            ),
+          )
           .toList();
       validateUserVisibleExportPaths(
         files: folderFiles.map(
@@ -689,19 +689,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       }
 
       for (final file in folderFiles) {
-          final data = await VideoManifest.readFile(file.storagePath);
-          if (data == null) continue;
+        final data = await VideoManifest.readFile(file.storagePath);
+        if (data == null) continue;
 
-          final exportName = '${file.name}.${file.format}';
-          final relativePath = p.posix.join(file.folder, exportName);
-          if (!exportPaths.add(relativePath)) {
-            throw StateError('导出路径重复: $relativePath');
-          }
-          final fileDir = p.join(outputDir, file.folder);
-          await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
-          exportedCount++;
+        final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
+        final fileDir = p.join(outputDir, file.folder);
+        await Directory(fileDir).create(recursive: true);
+        final outputPath = p.join(fileDir, exportName);
+        await File(outputPath).writeAsBytes(data);
+        exportedCount++;
       }
 
       if (mounted) {

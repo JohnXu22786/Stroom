@@ -13,7 +13,6 @@ import '../utils/file_manifest.dart';
 import '../utils/file_picker_utils.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
-import '../utils/user_visible_export_archive.dart';
 import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/audio_playback.dart';
@@ -223,9 +222,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       var data = await FileManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -254,16 +252,14 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         );
         if (outputUri != null && mounted) {
           final outputPath = filePickerLocationLabel(outputUri);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('已导出到: $outputPath')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('已导出到: $outputPath')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('导出失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('导出失败: $e')));
       }
     }
   }
@@ -415,12 +411,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       for (final file in selectedFiles) {
         selectedPaths.add(await _userVisibleExportPath(file));
       }
-      validateUserVisibleExportPaths(
-        files: selectedPaths,
-      );
+      validateUserVisibleExportPaths(files: selectedPaths);
 
       for (final file in selectedFiles) {
-
         var data = await FileManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -558,9 +551,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref.read(folderListProvider).where((folder) => names.any(
-                    (name) => folder == name || folder.startsWith('$name/'),
-                  )),
+              ...ref.read(folderListProvider).where(
+                    (folder) => names.any(
+                      (name) => folder == name || folder.startsWith('$name/'),
+                    ),
+                  ),
             },
           ),
           initialDirectory: SystemPickDirectories.music(),
@@ -595,15 +590,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref.read(folderListProvider).where((folder) => names.any(
-              (name) => folder == name || folder.startsWith('$name/'),
-            )),
+        ...ref.read(folderListProvider).where(
+              (folder) => names.any(
+                (name) => folder == name || folder.startsWith('$name/'),
+              ),
+            ),
       };
       final folderFiles = records
-          .where((record) => names.any(
-                (name) =>
-                    record.folder == name || record.folder.startsWith('$name/'),
-              ))
+          .where(
+            (record) => names.any(
+              (name) =>
+                  record.folder == name || record.folder.startsWith('$name/'),
+            ),
+          )
           .toList();
       final folderExportPaths = <String>[];
       for (final file in folderFiles) {
@@ -618,28 +617,28 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       }
 
       for (final file in folderFiles) {
-          var data = await FileManifest.readFile(file.storagePath);
-          if (data == null) continue;
+        var data = await FileManifest.readFile(file.storagePath);
+        if (data == null) continue;
 
-          var exportFormat = file.format;
-          final fixed = ensureValidAudioFormat(
-            data,
-            requestedFormat: exportFormat,
-            sampleRate: 24000,
-          );
-          data = fixed.$1;
-          exportFormat = fixed.$2;
+        var exportFormat = file.format;
+        final fixed = ensureValidAudioFormat(
+          data,
+          requestedFormat: exportFormat,
+          sampleRate: 24000,
+        );
+        data = fixed.$1;
+        exportFormat = fixed.$2;
 
-          final exportName = '${file.name}.$exportFormat';
-          final relativePath = p.posix.join(file.folder, exportName);
-          if (!exportPaths.add(relativePath)) {
-            throw StateError('导出路径重复: $relativePath');
-          }
-          final fileDir = p.join(outputDir, file.folder);
-          await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
-          exportedCount++;
+        final exportName = '${file.name}.$exportFormat';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
+        final fileDir = p.join(outputDir, file.folder);
+        await Directory(fileDir).create(recursive: true);
+        final outputPath = p.join(fileDir, exportName);
+        await File(outputPath).writeAsBytes(data);
+        exportedCount++;
       }
 
       if (mounted) {
