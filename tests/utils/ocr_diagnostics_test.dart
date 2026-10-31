@@ -130,6 +130,42 @@ void main() {
         isNot(contains(credential)));
   });
 
+  test('response body authToken excludes echoed IDs and retains safe IDs', () {
+    const token = 'opaque-response-body-auth-token-197';
+    const safeRequestId = 'req-safe-after-auth-token-197';
+    final echoedRequestId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 401,
+      'data': {
+        'authToken': token,
+        'requestId': token,
+      },
+    })!;
+    final echoedId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 401,
+      'data': {
+        'authToken': token,
+        'id': token,
+      },
+    })!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 429,
+      'data': {
+        'authToken': token,
+        'requestId': token,
+        'id': safeRequestId,
+      },
+    })!;
+
+    expect(echoedRequestId, {'statusCode': 401});
+    expect(echoedId, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode([echoedRequestId, echoedId, safeResponse]),
+        isNot(contains(token)));
+  });
+
   test('request body API keys exclude echoed response IDs but keep safe IDs',
       () {
     const apiKey = 'opaque-body-api-key-194';
