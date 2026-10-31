@@ -824,16 +824,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: _hasReusablePageResults
-                        ? null
-                        : (idx) {
-                            if (idx == null || idx >= modelOptions.length)
-                              return;
-                            setState(() {
-                              _selectModelOption(modelOptions[idx], idx);
-                              _errorMessage = null;
-                            });
-                          },
+                    onChanged:
+                        _ocrStarting || _isProcessing || _hasReusablePageResults
+                            ? null
+                            : (idx) {
+                                if (idx == null || idx >= modelOptions.length)
+                                  return;
+                                setState(() {
+                                  _selectModelOption(modelOptions[idx], idx);
+                                  _errorMessage = null;
+                                });
+                              },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
                       final modelName = opt.model.name.isNotEmpty
