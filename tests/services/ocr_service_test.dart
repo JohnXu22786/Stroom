@@ -2143,6 +2143,51 @@ void main() {
       );
 
       test(
+        'customParams secretAccessKey echoes are excluded from diagnostics',
+        () async {
+          const credential = 'opaque-custom-secret-access-key-198';
+          const safeRequestId = 'req-safe-custom-credential-198';
+          final dio = _mockDioWithSuccess({
+            'request_id': credential,
+            'id': safeRequestId,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'test-key',
+              host: 'https://api.test.com/v1',
+              customParams: [
+                const CustomParam(
+                  paramName: 'secretAccessKey',
+                  defaultValue: credential,
+                  type: 'string',
+                ),
+              ],
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(service.diagnosticRequest['requestId'], isNull);
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(credential)));
+        },
+      );
+
+      test(
         'success diagnostics skip excluded header value before a safe value',
         () async {
           final dio = _mockDioWithSuccess(
