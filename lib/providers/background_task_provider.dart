@@ -969,7 +969,6 @@ bool _legacyOcrHasCredentialUseContext(
   ).hasMatch(before);
   // A label's authenticity is a safe property description, not its secret value.
   final reportedValueContext = !shortNaturalWordEcho &&
-      naturalWord != 'authenticity' &&
       _legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
       suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '').length >= 4 &&
       RegExp(
@@ -2676,7 +2675,8 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
           !isCredentialWord &&
           !hasCredentialUseContext;
       final naturalWordEcho = (prefix.length >= 8 ||
-              _legacyOcrCanRedactShortNaturalWordEcho(naturalWord)) &&
+              _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) ||
+              (naturalWord == 'authenticity' && hasCredentialUseContext)) &&
           _legacyOcrHasNaturalWordContinuation(prefix, naturalSuffix) &&
           !ordinaryNounInflection &&
           !ordinaryNaturalPromptContext;
