@@ -63,6 +63,95 @@ void main() {
       }
     });
 
+    test('rejects compressed images above the OCR pixel allocation limit',
+        () async {
+      final oversized = Uint8List.fromList(
+        img.encodeJpg(img.Image(width: 10, height: 10)),
+      );
+      var frameHeader = -1;
+      for (var i = 0; i + 8 < oversized.length; i++) {
+        if (oversized[i] == 0xff &&
+            const [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb]
+                .contains(oversized[i + 1])) {
+          frameHeader = i;
+          break;
+        }
+      }
+      expect(frameHeader, isNonNegative);
+
+      void setUint16(int offset, int value) {
+        oversized[offset] = value >> 8;
+        oversized[offset + 1] = value & 0xff;
+      }
+
+      setUint16(frameHeader + 5, 10_000);
+      setUint16(frameHeader + 7, 10_000);
+
+      await expectLater(
+        prepareOcrImagePayload(oversized),
+        throwsA(isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('分辨率过大'),
+        )),
+      );
+    });
+
+    test('preflights EXIF JPEG to PNG expansion against request budget', () {
+      final exif = img.ExifData()..imageIfd.orientation = 6;
+      final bytes = Uint8List.fromList(
+        img.injectJpgExif(
+          img.encodeJpg(img.Image(width: 10, height: 10)),
+          exif,
+        )!,
+      );
+      var frameHeader = -1;
+      for (var i = 0; i + 8 < bytes.length; i++) {
+        if (bytes[i] == 0xff &&
+            const [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb]
+                .contains(bytes[i + 1])) {
+          frameHeader = i;
+          break;
+        }
+      }
+      expect(frameHeader, isNonNegative);
+
+      void setUint16(int offset, int value) {
+        bytes[offset] = value >> 8;
+        bytes[offset + 1] = value & 0xff;
+      }
+
+      setUint16(frameHeader + 5, 3000);
+      setUint16(frameHeader + 7, 3000);
+
+      expect(
+        () => prepareOcrImagePayloadSync(
+          bytes,
+          maxReencodedPngBytes: 1024,
+        ),
+        throwsA(isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('PNG 会超过'),
+        )),
+      );
+
+      final webp = img.encodeWebP(
+        img.Image(width: 10, height: 10)..exif = exif,
+      );
+      expect(
+        () => prepareOcrImagePayloadSync(
+          webp,
+          maxReencodedPngBytes: 1024,
+        ),
+        throwsA(isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('PNG 会超过'),
+        )),
+      );
+    });
+
     test('bakes EXIF orientation into lossless PNG pixels', () async {
       final jpeg = img.encodeJpg(img.Image(width: 2, height: 3), quality: 90);
       final exif = img.ExifData()..imageIfd.orientation = 6;

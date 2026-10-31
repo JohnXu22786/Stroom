@@ -261,6 +261,22 @@ class OcrService {
     return _encodedBodyLength(body);
   }
 
+  /// Largest raw image length whose base64 data URI can fit the configured
+  /// request budget, including this request's actual JSON envelope.
+  int maxRawImageBytesWithinRequestBudget({String imageFormat = 'jpeg'}) {
+    final contents = <Map<String, dynamic>>[
+      _buildImageContent('data:image/$imageFormat;base64,'),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+    final baseRequestBytes = _encodedBodyLength(_buildRequestBody(contents));
+    final base64BudgetBytes = config.requestSizeBudgetBytes - baseRequestBytes;
+    if (base64BudgetBytes < 4) return 0;
+    return (base64BudgetBytes ~/ 4) * 3;
+  }
+
   /// Close the underlying client when this service owns its lifetime.
   void close({bool force = false}) => _dio.close(force: force);
 

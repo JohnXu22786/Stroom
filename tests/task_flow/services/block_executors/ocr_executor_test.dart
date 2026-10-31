@@ -91,7 +91,10 @@ void main() {
     background.dispose();
   });
 
-  ProviderEntriesState providerForOcr({String key = 'test-key'}) =>
+  ProviderEntriesState providerForOcr({
+    String key = 'test-key',
+    int? requestSizeBudgetBytes,
+  }) =>
       ProviderEntriesState(entries: [
         ProviderEntry(name: 'OCR', type: 'ocr', configs: [
           ProviderConfigItem(
@@ -99,7 +102,14 @@ void main() {
             host: 'https://example.invalid/recognition',
             key: key,
             models: [
-              ModelConfig(id: 'model', name: 'Test', modelId: 'test'),
+              ModelConfig(
+                id: 'model',
+                name: 'Test',
+                modelId: 'test',
+                typeConfig: requestSizeBudgetBytes == null
+                    ? const {}
+                    : {'requestSizeBudgetBytes': requestSizeBudgetBytes},
+              ),
             ],
           ),
         ]),
@@ -169,6 +179,126 @@ void main() {
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.error, contains('损坏'));
+  });
+
+  test('OCR rejects files above the flow image limit before reading',
+      () async {
+    final source = File('${directory.path}/oversized.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    var requested = false;
+    var readAttempted = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        readInputBytes: (_, _) async {
+          readAttempted = true;
+          throw StateError('oversized file should not be read');
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('20.00 MiB'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(readAttempted, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.error, contains('20.00 MiB'));
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+  });
+
+  test('OCR applies the selected model request budget before reading', () async {
+    final source = File('${directory.path}/over_budget.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(800 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    var requested = false;
+    var readAttempted = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        readInputBytes: (_, _) async {
+          readAttempted = true;
+          throw StateError('over-budget file should not be read');
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('1.00 MiB'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(readAttempted, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.error, contains('1.00 MiB'));
+  });
+
+  test('OCR rejects input that grows past the bounded read ceiling', () async {
+    final source = await File('${directory.path}/growing.png').writeAsBytes([0]);
+    var requested = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024),
+        readInputBytes: (_, maxBytes) async => Uint8List(maxBytes + 1),
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('1.00 MiB'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.error, contains('1.00 MiB'));
   });
 
   test('OCR provider key echoes are removed from all failure surfaces',
