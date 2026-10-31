@@ -902,7 +902,6 @@ bool _legacyOcrHasCredentialUseContext(
       ).hasMatch(after) ||
       _legacyOcrNaturalSourcePhrasePattern.hasMatch(after) ||
       explicitCredentialTarget ||
-      requestTargetAfterConsumedConnector ||
       credentialHeaderTarget;
   final naturalWord =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
@@ -930,6 +929,9 @@ bool _legacyOcrHasCredentialUseContext(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
+      useVerb &&
+      requestTargetAfterConsumedConnector;
   final bareSecretBasedUseContext = useVerb &&
       prefix.toLowerCase() == 'secret' &&
       suffix.toLowerCase() == '-based' &&
@@ -995,6 +997,7 @@ bool _legacyOcrHasCredentialUseContext(
               maskPrefixIsEmbedded) &&
           RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
+      tokenRequestEchoContext ||
       bareSecretBasedUseContext ||
       assignmentContext ||
       setToCredentialContext ||
