@@ -109,7 +109,10 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// previous conversation doesn't affect the new one.
   void _registerActiveConversationListener() {
     ref.listen(activeConversationIdProvider, (prev, next) {
-      if (next != prev) _conversationLoadGeneration++;
+      if (next != prev) {
+        _conversationLoadGeneration++;
+        _clearNextRequestAccountId();
+      }
       if (next == null && next != prev) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && ref.read(activeConversationIdProvider) == null) {

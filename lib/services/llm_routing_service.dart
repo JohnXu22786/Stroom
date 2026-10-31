@@ -373,24 +373,28 @@ class LlmRoutingRuntimeState {
   final List<LlmUsageEvent> events;
   final List<LlmPendingUsage> pendingUsage;
   final Map<String, LlmCooldown> cooldowns;
+  final Map<String, LlmAccountAffinity> affinities;
 
   LlmRoutingRuntimeState({
     required this.trackingStartedAt,
     required List<LlmUsageEvent> events,
     List<LlmPendingUsage> pendingUsage = const [],
     required Map<String, LlmCooldown> cooldowns,
+    Map<String, LlmAccountAffinity> affinities = const {},
   })  : events = List.unmodifiable(events),
         pendingUsage = List.unmodifiable(pendingUsage),
-        cooldowns = Map.unmodifiable(cooldowns);
+        cooldowns = Map.unmodifiable(cooldowns),
+        affinities = Map.unmodifiable(affinities);
 
   Map<String, dynamic> toMap() => {
-        'version': 1,
+        'version': 2,
         'trackingStartedAt': trackingStartedAt.toUtc().toIso8601String(),
         'events': events.map((item) => item.toMap()).toList(),
         'pendingUsage': pendingUsage.map((item) => item.toMap()).toList(),
         'cooldowns': {
           for (final entry in cooldowns.entries) entry.key: entry.value.toMap(),
         },
+        'affinities': affinities.values.map((item) => item.toMap()).toList(),
       };
 
   factory LlmRoutingRuntimeState.fromMap(Map<String, dynamic> map) {
@@ -400,11 +404,15 @@ class LlmRoutingRuntimeState {
     final events = map['events'];
     final pendingUsage = map['pendingUsage'] ?? const [];
     final cooldowns = map['cooldowns'];
-    if (map['version'] != 1 ||
+    final version = map['version'];
+    final affinities = map['affinities'] ?? const [];
+    if ((version != 1 && version != 2) ||
         started == null ||
         events is! List ||
         pendingUsage is! List ||
-        cooldowns is! Map) {
+        cooldowns is! Map ||
+        affinities is! List ||
+        (version == 2 && !map.containsKey('affinities'))) {
       throw const LlmRoutingStateException();
     }
     final parsedEvents = <LlmUsageEvent>[];
@@ -429,11 +437,94 @@ class LlmRoutingRuntimeState {
         Map<String, dynamic>.from(entry.value as Map),
       );
     }
+    final parsedAffinities = <String, LlmAccountAffinity>{};
+    for (final item in affinities) {
+      if (item is! Map) throw const LlmRoutingStateException();
+      final affinity = LlmAccountAffinity.fromMap(
+        Map<String, dynamic>.from(item),
+      );
+      final key = LlmAccountAffinity.keyFor(
+        affinity.conversationId,
+        affinity.groupId,
+        affinity.localModelId,
+      );
+      if (parsedAffinities.containsKey(key)) {
+        throw const LlmRoutingStateException();
+      }
+      parsedAffinities[key] = affinity;
+    }
     return LlmRoutingRuntimeState(
       trackingStartedAt: started.toUtc(),
       events: parsedEvents,
       pendingUsage: parsedPendingUsage,
       cooldowns: parsedCooldowns,
+      affinities: parsedAffinities,
+    );
+  }
+}
+
+/// Soft per-conversation route preference. It contains no conversation
+/// content and is stored only in Gateway routing state.
+class LlmAccountAffinity {
+  final String conversationId;
+  final String groupId;
+  final String localModelId;
+  final String accountId;
+  final String providerId;
+  final DateTime succeededAt;
+
+  const LlmAccountAffinity({
+    required this.conversationId,
+    required this.groupId,
+    required this.localModelId,
+    required this.accountId,
+    required this.providerId,
+    required this.succeededAt,
+  });
+
+  static String keyFor(String conversationId, String groupId, String modelId) =>
+      jsonEncode([conversationId, groupId, modelId]);
+
+  Map<String, dynamic> toMap() => {
+        'conversationId': conversationId,
+        'groupId': groupId,
+        'localModelId': localModelId,
+        'accountId': accountId,
+        'providerId': providerId,
+        'succeededAt': succeededAt.toUtc().toIso8601String(),
+      };
+
+  factory LlmAccountAffinity.fromMap(Map<String, dynamic> map) {
+    final conversationId = map['conversationId'];
+    final groupId = map['groupId'];
+    final localModelId = map['localModelId'];
+    final accountId = map['accountId'];
+    final providerId = map['providerId'];
+    final succeededAtValue = map['succeededAt'];
+    final succeededAt =
+        succeededAtValue is String ? DateTime.tryParse(succeededAtValue) : null;
+    if (conversationId is! String ||
+        !_routingStateIdentityPattern.hasMatch(conversationId) ||
+        groupId is! String ||
+        !_routingStateIdentityPattern.hasMatch(groupId) ||
+        localModelId is! String ||
+        localModelId.trim().isEmpty ||
+        localModelId.length > 1024 ||
+        localModelId.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
+        accountId is! String ||
+        !_routingStateIdentityPattern.hasMatch(accountId) ||
+        providerId is! String ||
+        !_routingIdentifierPattern.hasMatch(providerId) ||
+        succeededAt == null) {
+      throw const LlmRoutingStateException();
+    }
+    return LlmAccountAffinity(
+      conversationId: conversationId,
+      groupId: groupId,
+      localModelId: localModelId,
+      accountId: accountId,
+      providerId: providerId,
+      succeededAt: succeededAt.toUtc(),
     );
   }
 }
@@ -495,6 +586,7 @@ class LlmRoutingStateException implements Exception {
 class LlmRoutingStateStore {
   static const preferenceKey = 'llm_routing_runtime_v1';
   static const _retention = Duration(days: 62);
+  static const affinityTtl = Duration(hours: 1);
   static final _memoryCooldownsByPreferences =
       Expando<Map<String, LlmCooldown>>('llm routing cooldowns');
 
@@ -534,9 +626,57 @@ class LlmRoutingStateStore {
         events: events,
         pendingUsage: state.pendingUsage,
         cooldowns: state.cooldowns,
+        affinities: state.affinities,
       );
     });
   }
+
+  Future<void> recordAffinity(LlmAccountAffinity affinity) async {
+    final validated = LlmAccountAffinity.fromMap(affinity.toMap());
+    await _update((state) {
+      final affinities = Map<String, LlmAccountAffinity>.from(state.affinities)
+        ..[LlmAccountAffinity.keyFor(
+          validated.conversationId,
+          validated.groupId,
+          validated.localModelId,
+        )] = validated;
+      return LlmRoutingRuntimeState(
+        trackingStartedAt: state.trackingStartedAt,
+        events: state.events,
+        pendingUsage: state.pendingUsage,
+        cooldowns: state.cooldowns,
+        affinities: affinities,
+      );
+    });
+  }
+
+  Future<void> clearAffinity({
+    required String conversationId,
+    required String groupId,
+    required String localModelId,
+    String? accountId,
+  }) =>
+      _update((state) {
+        final key = LlmAccountAffinity.keyFor(
+          conversationId,
+          groupId,
+          localModelId,
+        );
+        final current = state.affinities[key];
+        if (current == null ||
+            (accountId != null && current.accountId != accountId)) {
+          return state;
+        }
+        final affinities =
+            Map<String, LlmAccountAffinity>.from(state.affinities)..remove(key);
+        return LlmRoutingRuntimeState(
+          trackingStartedAt: state.trackingStartedAt,
+          events: state.events,
+          pendingUsage: state.pendingUsage,
+          cooldowns: state.cooldowns,
+          affinities: affinities,
+        );
+      });
 
   Future<String> beginPendingUsage({
     required String accountId,
@@ -565,6 +705,7 @@ class LlmRoutingStateStore {
           ),
         ],
         cooldowns: state.cooldowns,
+        affinities: state.affinities,
       );
     });
     return id;
@@ -589,6 +730,7 @@ class LlmRoutingStateStore {
           events: state.events,
           pendingUsage: pendingUsage,
           cooldowns: state.cooldowns,
+          affinities: state.affinities,
         );
       });
 
@@ -602,6 +744,7 @@ class LlmRoutingStateStore {
           events: state.events,
           pendingUsage: pendingUsage,
           cooldowns: state.cooldowns,
+          affinities: state.affinities,
         );
       });
 
@@ -618,6 +761,7 @@ class LlmRoutingStateStore {
         events: state.events,
         pendingUsage: state.pendingUsage,
         cooldowns: {...state.cooldowns, accountId: cooldown},
+        affinities: state.affinities,
       );
     });
   }
@@ -634,6 +778,7 @@ class LlmRoutingStateStore {
           events: state.events,
           pendingUsage: state.pendingUsage,
           cooldowns: cooldowns,
+          affinities: state.affinities,
         );
       });
     } catch (_) {
@@ -709,6 +854,12 @@ class LlmRoutingStateStore {
           .where((pending) => !pending.startedAt.isBefore(cutoff))
           .toList(growable: false),
       cooldowns: cooldowns,
+      affinities: {
+        for (final entry in state.affinities.entries)
+          if (now.difference(entry.value.succeededAt) <= affinityTtl &&
+              !entry.value.succeededAt.isAfter(now))
+            entry.key: entry.value,
+      },
     );
   }
 
@@ -1013,6 +1164,25 @@ class LlmRoutingService {
         concurrency = concurrency ?? LlmConcurrencyReservations.shared,
         roundRobin = roundRobin ?? LlmRoundRobinCursor();
 
+  Future<void> _clearAffinityBestEffort({
+    required String conversationId,
+    required String groupId,
+    required String localModelId,
+    String? accountId,
+  }) async {
+    try {
+      await stateStore.clearAffinity(
+        conversationId: conversationId,
+        groupId: groupId,
+        localModelId: localModelId,
+        accountId: accountId,
+      );
+    } catch (_) {
+      // Routing can still honor an explicit choice or continue fallback when
+      // the non-canonical session-affinity state cannot be updated.
+    }
+  }
+
   Future<LlmRoutingExecution<T>> execute<T>({
     required LlmModelGroup group,
     required String requestedModelId,
@@ -1022,12 +1192,36 @@ class LlmRoutingService {
     ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
+    String? conversationId,
+    String? selectedAccountId,
+    bool selectedAccountIsIneligible = false,
   }) async {
     if (!_routingStateIdentityPattern.hasMatch(group.id) ||
         requestedModelId.trim().isEmpty) {
       throw LlmRoutingUnavailableException(const []);
     }
     final estimates = _validatedEstimates(estimatedUsage);
+    final sessionId = conversationId != null &&
+            _routingStateIdentityPattern.hasMatch(conversationId)
+        ? conversationId
+        : null;
+    if (selectedAccountId != null &&
+        !group.members.any((member) => member.accountId == selectedAccountId) &&
+        !selectedAccountIsIneligible) {
+      throw LlmRoutingUnavailableException([
+        LlmRouteDecision(
+          subjectId: selectedAccountId,
+          reason: 'selected_account_outside_group',
+        ),
+      ]);
+    }
+    if (sessionId != null && selectedAccountId != null) {
+      await _clearAffinityBestEffort(
+        conversationId: sessionId,
+        groupId: group.id,
+        localModelId: requestedModelId,
+      );
+    }
     final accounts = await accountService.listAccounts();
     final accountById = {for (final account in accounts) account.id: account};
     final attempted = <String>{};
@@ -1037,7 +1231,7 @@ class LlmRoutingService {
     while (true) {
       final selection = await concurrency.runAtomically(() async {
         final state = await stateStore.load();
-        final selected = _selectNext(
+        final selected = await _selectNext(
           group: group,
           requestedModelId: requestedModelId,
           requiredCapabilities: requiredCapabilities,
@@ -1047,6 +1241,8 @@ class LlmRoutingService {
           providerScope: providerScope,
           estimates: estimates,
           decisions: decisions,
+          conversationId: sessionId,
+          selectedAccountId: selectedAccountId,
         );
         if (selected == null) return null;
         try {
@@ -1118,6 +1314,29 @@ class LlmRoutingService {
         }
       });
       if (succeeded) {
+        if (sessionId != null) {
+          try {
+            await stateStore.recordAffinity(
+              LlmAccountAffinity(
+                conversationId: sessionId,
+                groupId: group.id,
+                localModelId: candidate.localModelId,
+                accountId: candidate.account.id,
+                providerId: LlmConnectorRegistry.canonicalId(
+                  candidate.account.connectorType,
+                ),
+                succeededAt: _clock().toUtc(),
+              ),
+            );
+          } catch (_) {
+            decisions.add(
+              LlmRouteDecision(
+                subjectId: candidate.account.id,
+                reason: 'session_affinity_persistence_failed',
+              ),
+            );
+          }
+        }
         return LlmRoutingExecution<T>(
           value: value as T,
           candidate: candidate,
@@ -1127,6 +1346,14 @@ class LlmRoutingService {
       }
 
       final requestClassification = classification!;
+      if (sessionId != null) {
+        await _clearAffinityBestEffort(
+          conversationId: sessionId,
+          groupId: group.id,
+          localModelId: candidate.localModelId,
+          accountId: selectedAccountId == null ? candidate.account.id : null,
+        );
+      }
       decisions.add(
         LlmRouteDecision(
           subjectId: candidate.account.id,
@@ -1151,7 +1378,7 @@ class LlmRoutingService {
     }
   }
 
-  _CandidateSelection? _selectNext({
+  Future<_CandidateSelection?> _selectNext({
     required LlmModelGroup group,
     required String requestedModelId,
     required Set<String> requiredCapabilities,
@@ -1161,7 +1388,9 @@ class LlmRoutingService {
     required String? providerScope,
     required Map<String, num> estimates,
     required List<LlmRouteDecision> decisions,
-  }) {
+    required String? conversationId,
+    required String? selectedAccountId,
+  }) async {
     final now = _clock().toUtc();
     final String? groupFailure;
     try {
@@ -1300,18 +1529,103 @@ class LlmRoutingService {
       );
     }
 
+    final affinity = conversationId == null
+        ? null
+        : state.affinities[LlmAccountAffinity.keyFor(
+            conversationId,
+            group.id,
+            requestedModelId,
+          )];
+    final affinityCandidate = affinity == null
+        ? null
+        : candidates
+            .where(
+              (candidate) =>
+                  candidate.account.id == affinity.accountId &&
+                  LlmConnectorRegistry.canonicalId(
+                        candidate.account.connectorType,
+                      ) ==
+                      affinity.providerId,
+            )
+            .firstOrNull;
+    if (affinity != null && affinityCandidate == null) {
+      await _clearAffinityBestEffort(
+        conversationId: affinity.conversationId,
+        groupId: group.id,
+        localModelId: requestedModelId,
+        accountId: affinity.accountId,
+      );
+    }
     if (candidates.isEmpty) return null;
     candidates.sort((left, right) {
       final tier = left.priorityTier.compareTo(right.priorityTier);
       return tier != 0 ? tier : left.memberIndex.compareTo(right.memberIndex);
     });
-    final tiers = candidates
+    if (selectedAccountId != null) {
+      final selected = candidates
+          .where((candidate) => candidate.account.id == selectedAccountId)
+          .firstOrNull;
+      if (selected != null) {
+        final reservation = concurrency.tryReserve(
+          accountId: selected.account.id,
+          groupId: group.id,
+          accountLimit: selected.account.policy.concurrencyLimit,
+          groupLimit: group.policy.concurrencyLimit,
+          estimatedUsage: estimates,
+        );
+        if (reservation != null) {
+          decisions.add(
+            LlmRouteDecision(
+              subjectId: selected.account.id,
+              reason: 'explicit_account_selection',
+            ),
+          );
+          return _CandidateSelection(selected, reservation, '');
+        }
+        decisions.add(
+          LlmRouteDecision(
+            subjectId: selected.account.id,
+            reason: 'concurrency_limit',
+          ),
+        );
+      }
+    }
+    var policyCandidates = candidates;
+    if (selectedAccountId == null && affinityCandidate != null) {
+      final preferred = affinityCandidate;
+      final reservation = concurrency.tryReserve(
+        accountId: preferred.account.id,
+        groupId: group.id,
+        accountLimit: preferred.account.policy.concurrencyLimit,
+        groupLimit: group.policy.concurrencyLimit,
+        estimatedUsage: estimates,
+      );
+      if (reservation != null) {
+        decisions.add(
+          LlmRouteDecision(
+            subjectId: preferred.account.id,
+            reason: 'session_affinity',
+          ),
+        );
+        return _CandidateSelection(preferred, reservation, '');
+      }
+      decisions.add(
+        LlmRouteDecision(
+          subjectId: preferred.account.id,
+          reason: 'concurrency_limit',
+        ),
+      );
+      policyCandidates = candidates
+          .where((candidate) => candidate.account.id != preferred.account.id)
+          .toList(growable: false);
+    }
+    final tiers = policyCandidates
         .map((candidate) => candidate.priorityTier)
         .toSet()
         .toList()
       ..sort();
     for (final tier in tiers) {
-      final tierCandidates = candidates
+      final tierCandidates = policyCandidates
           .where((candidate) => candidate.priorityTier == tier)
           .toList(growable: false);
       final decisionStart = decisions.length;

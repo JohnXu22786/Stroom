@@ -30,6 +30,7 @@ import '../models/tool_call.dart' show ToolCallData;
 import '../models/assistant.dart' show Assistant;
 import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
+import '../services/chat_protocol.dart' show effectiveEndpointType;
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
@@ -160,6 +161,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The manager owns the adapter lifecycle, not the page.
   ChatAdapter get _adapter => ref.read(chatStreamManagerProvider).adapter;
   int _selectedModelIndex = 0;
+  String? _nextRequestAccountId;
+  String? _nextRequestAccountName;
+  String? _nextRequestAccountConversationId;
 
   /// Saved model display name order for drag-sort persistence.
   List<String>? _savedModelOrder;

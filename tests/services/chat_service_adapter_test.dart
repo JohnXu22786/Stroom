@@ -133,6 +133,56 @@ void main() {
       );
     });
 
+    test('conversation service carries an explicit account override', () {
+      final runtime = Completer<LlmChatRoutingRuntime>().future;
+      final runtimeAdapter = ChatAdapter(routingRuntime: runtime);
+      addTearDown(runtimeAdapter.dispose);
+      final routedEntries = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'group-entry',
+            type: 'llm',
+            name: 'Group',
+            configs: [
+              ProviderConfigItem(
+                id: 'group-config',
+                providerName: 'Group',
+                legacyFields: {kLlmModelGroupConfigField: 'group-id'},
+                models: [
+                  ModelConfig(
+                    name: 'Model',
+                    modelId: 'local-model',
+                    legacyFields: {
+                      kLlmModelCapabilitiesConfigField: {'streaming': true},
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      runtimeAdapter.configure(routedEntries);
+
+      final service = runtimeAdapter.getOrCreateService(
+        'conversation-a',
+        selectedAccountId: 'account-b',
+      );
+
+      expect(service?.provider, isA<LlmRoutedChatProvider>());
+      expect(
+        (service!.provider as LlmRoutedChatProvider).selectedAccountId,
+        'account-b',
+      );
+
+      runtimeAdapter.getOrCreateService('conversation-a');
+
+      expect(
+        (service.provider as LlmRoutedChatProvider).selectedAccountId,
+        'account-b',
+      );
+    });
+
     test('configure sets adapter to first config, first model (0,0)', () {
       adapter.configure(entriesState);
 

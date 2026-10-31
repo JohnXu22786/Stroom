@@ -147,6 +147,15 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   onTap: _showModelPanel,
                 ),
               ),
+              if (widget.onAccountOverrideTap != null)
+                _SettingsChip(
+                  icon: Icons.account_circle_outlined,
+                  label: widget.accountOverrideName ?? '账号',
+                  color: widget.accountOverrideName == null
+                      ? Colors.grey
+                      : toolAccentColor,
+                  onTap: widget.onAccountOverrideTap!,
+                ),
               _SettingsChip(
                 icon: Icons.build_outlined,
                 label: '工具',

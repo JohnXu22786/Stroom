@@ -532,6 +532,8 @@ abstract interface class AiGatewayRouting {
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
+    String? conversationId,
+    String? selectedAccountId,
   });
 }
 

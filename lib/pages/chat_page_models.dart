@@ -117,7 +117,12 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final model = models[modelIdx];
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
-    setState(() => _selectedModelIndex = idx);
+    setState(() {
+      _selectedModelIndex = idx;
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+    });
     // Persist the choice for THIS conversation so the user's switch survives
     // re-entry, without affecting other conversations. 同时记录绝对身份
     // （模型ID + 供应商名）：显示名重命名后该记录仍能解析回同一模型。
@@ -140,6 +145,92 @@ extension _ChatPageModelsExt on _ChatPageState {
         debugPrint('_onModelSelectionChanged save index failed: $e');
       }
     });
+  }
+
+  Future<void> _chooseAccountOverride() async {
+    final conversationId = ref.read(activeConversationIdProvider);
+    final selectedModelIdentity = _selectedRoutedModelIdentity();
+    if (selectedModelIdentity == null) return;
+    final accounts = await _adapter.routedAccountChoicesForSelectedModel();
+    if (!mounted ||
+        accounts.isEmpty ||
+        ref.read(activeConversationIdProvider) != conversationId ||
+        _selectedRoutedModelIdentity() != selectedModelIdentity) {
+      return;
+    }
+    final selectedAccountId = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('本轮使用账号'),
+        content: SizedBox(
+          width: 420,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              ListTile(
+                title: const Text('按模型组策略路由'),
+                onTap: () => Navigator.of(dialogContext).pop(''),
+              ),
+              for (final account in accounts)
+                ListTile(
+                  title: Text(account.displayName),
+                  subtitle: Text(account.connectorType),
+                  onTap: () => Navigator.of(dialogContext).pop(account.id),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+    if (selectedAccountId == null ||
+        !mounted ||
+        ref.read(activeConversationIdProvider) != conversationId ||
+        _selectedRoutedModelIdentity() != selectedModelIdentity) {
+      return;
+    }
+    final selectedAccount = accounts
+        .where((account) => account.id == selectedAccountId)
+        .firstOrNull;
+    setState(() {
+      _nextRequestAccountId = selectedAccount?.id;
+      _nextRequestAccountName = selectedAccount?.displayName;
+      _nextRequestAccountConversationId =
+          selectedAccount == null ? null : conversationId;
+    });
+  }
+
+  (String, String, String)? _selectedRoutedModelIdentity() {
+    final entriesState = ref.read(providerEntriesProvider);
+    final model = _adapter
+        .availableModels(entriesState)
+        .where(
+          (item) =>
+              item.configIndex == _adapter.currentConfigIndex &&
+              item.modelIndex == _adapter.currentModelIndex,
+        )
+        .firstOrNull;
+    final groupId = model?.modelGroupId;
+    if (model == null || groupId == null) return null;
+    final llmEntry =
+        entriesState.entries.where((entry) => entry.type == 'llm').firstOrNull;
+    if (llmEntry == null ||
+        model.configIndex >= llmEntry.configs.length ||
+        model.modelIndex >= llmEntry.configs[model.configIndex].models.length) {
+      return null;
+    }
+    final config = llmEntry.configs[model.configIndex];
+    final modelConfig = config.models[model.modelIndex];
+    return (
+      groupId,
+      model.modelId,
+      effectiveEndpointType(modelConfig.endpointType, config.endpointType),
+    );
   }
 
   /// Called when models are reordered by drag-and-drop in the model panel.
@@ -177,7 +268,11 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final model = resolved;
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
-    setState(() => _selectedModelIndex = displayIdx);
+    setState(() {
+      _selectedModelIndex = displayIdx;
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+    });
     // Restore per-model settings for this model
     SharedPreferences.getInstance().then((prefs) {
       try {
@@ -439,6 +534,9 @@ extension _ChatPageModelsExt on _ChatPageState {
       modelNames: _getModelNames(),
       selectedModelIndex: _selectedModelIndex,
       onModelSelected: _onModelSelected,
+      onAccountOverrideTap:
+          _adapter.hasSelectedRoutedModel ? _chooseAccountOverride : null,
+      accountOverrideName: _nextRequestAccountName,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
       editingMessageId: _editingMessageId,

@@ -262,6 +262,7 @@ class ChatStreamManager {
     String? streamingMsgId,
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
+    String? selectedAccountId,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -360,6 +361,7 @@ class ChatStreamManager {
       convId,
       assistant: assistant,
       entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+      selectedAccountId: selectedAccountId,
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──

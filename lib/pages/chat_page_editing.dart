@@ -293,6 +293,7 @@ extension _ChatPageEditingExt on _ChatPageState {
         userMsg.content,
         capturedConvId: conversationId,
         historyOverride: historyForRetry,
+        selectedAccountId: _takeNextRequestAccountId(conversationId),
       );
       await _syncHistoryFromProvider(capturedConvId: conversationId);
     } finally {

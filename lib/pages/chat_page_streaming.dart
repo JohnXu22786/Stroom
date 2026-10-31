@@ -21,6 +21,46 @@ Future<bool> removeMessagesWhilePageOwned({
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageStreamingExt on _ChatPageState {
+  String? _takeNextRequestAccountId(String? conversationId) {
+    final accountId = _nextRequestAccountId;
+    if (accountId == null) {
+      _clearNextRequestAccountId();
+      return null;
+    }
+    final selectedConversationId = _nextRequestAccountConversationId;
+    if (mounted) {
+      setState(() {
+        _nextRequestAccountId = null;
+        _nextRequestAccountName = null;
+        _nextRequestAccountConversationId = null;
+      });
+    } else {
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+    }
+    return selectedConversationId == conversationId ? accountId : null;
+  }
+
+  void _clearNextRequestAccountId() {
+    if (_nextRequestAccountId == null &&
+        _nextRequestAccountName == null &&
+        _nextRequestAccountConversationId == null) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _nextRequestAccountId = null;
+        _nextRequestAccountName = null;
+        _nextRequestAccountConversationId = null;
+      });
+    } else {
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+    }
+  }
+
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
   /// generation and came back). Uses per-conversation state from the manager
@@ -239,6 +279,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     String text, {
     String? capturedConvId,
     List<ChatMessage>? historyOverride,
+    String? selectedAccountId,
   }) async {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
@@ -343,6 +384,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
       streamingMsgId: aiMsgId,
+      selectedAccountId: selectedAccountId,
     );
 
     if (!mounted) return;

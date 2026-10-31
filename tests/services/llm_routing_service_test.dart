@@ -11,6 +11,288 @@ import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
   group('LlmRoutingService quota eligibility', () {
+    test('reuses the last successful account for one conversation', () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        strategy: LlmSelectionStrategy.roundRobin,
+      );
+
+      final first = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      final nextTurn = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      final otherConversation = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-b',
+      );
+
+      expect(nextTurn.value, first.value);
+      expect(otherConversation.value, isNot(first.value));
+      expect(
+        nextTurn.decisions,
+        contains(
+          isA<LlmRouteDecision>().having(
+            (decision) => decision.reason,
+            'reason',
+            'session_affinity',
+          ),
+        ),
+      );
+    });
+
+    test('invalid conversation identity skips affinity but still routes',
+        () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex')],
+      );
+
+      final result = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation with space',
+      );
+
+      expect(result.value, 'first');
+    });
+
+    test('affinity keeps a successful fallback account across priority tiers',
+        () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        groupMembers: [
+          ('first', 'codex-model', 0),
+          ('second', 'codex-model', 1),
+        ],
+      );
+
+      final fallbackTurn = await rig.route((candidate, progress) async {
+        if (candidate.account.id == 'first') {
+          throw const LlmRouteRequestException(statusCode: 401);
+        }
+        return candidate.account.id;
+      }, conversationId: 'conversation-a');
+      rig.advance(const Duration(minutes: 6));
+      final nextTurn = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      expect(fallbackTurn.value, 'second');
+      expect(nextTurn.value, 'second');
+      expect(
+        nextTurn.decisions.map((decision) => decision.reason),
+        contains('session_affinity'),
+      );
+    });
+
+    test('explicit account selection replaces conversation affinity', () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        strategy: LlmSelectionStrategy.roundRobin,
+      );
+      await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      final manuallySelected = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+        selectedAccountId: 'second',
+      );
+      final nextTurn = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      expect(manuallySelected.value, 'second');
+      expect(nextTurn.value, 'second');
+    });
+
+    test('explicit selection still routes when clearing affinity fails',
+        () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+      );
+      await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      rig.preferences.failNextRoutingStateWrite();
+
+      final selected = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+        selectedAccountId: 'second',
+      );
+
+      expect(selected.value, 'second');
+    });
+
+    test('unavailable explicit choice clears the previous account binding',
+        () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        strategy: LlmSelectionStrategy.roundRobin,
+      );
+      await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      _setAccountStatus(rig.preferences, 'first', LlmAccountStatus.paused);
+      _setAccountStatus(rig.preferences, 'second', LlmAccountStatus.paused);
+
+      await expectLater(
+        rig.route(
+          (candidate, progress) async => candidate.account.id,
+          conversationId: 'conversation-a',
+          selectedAccountId: 'second',
+        ),
+        throwsA(isA<LlmRoutingUnavailableException>()),
+      );
+      _setAccountStatus(rig.preferences, 'first', LlmAccountStatus.ready);
+
+      final nextTurn = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      expect(nextTurn.value, 'first');
+      expect(
+        nextTurn.decisions.map((decision) => decision.reason),
+        isNot(contains('session_affinity')),
+      );
+    });
+
+    test('ineligible affinity clears after fallback request failure', () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        strategy: LlmSelectionStrategy.roundRobin,
+      );
+      await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      _setAccountStatus(rig.preferences, 'first', LlmAccountStatus.paused);
+
+      await expectLater(
+        rig.route(
+          (candidate, progress) async {
+            throw const LlmRouteRequestException(statusCode: 401);
+          },
+          conversationId: 'conversation-a',
+        ),
+        throwsA(isA<LlmRoutingUnavailableException>()),
+      );
+      _setAccountStatus(rig.preferences, 'first', LlmAccountStatus.ready);
+
+      final afterRecovery = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      expect(
+        afterRecovery.decisions.map((decision) => decision.reason),
+        isNot(contains('session_affinity')),
+      );
+    });
+
+    test('affinity persistence failure does not discard a successful response',
+        () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex')],
+      );
+      rig.preferences.failRoutingStateWriteAfter(2);
+
+      final result = await rig.route(
+        (candidate, progress) async => 'completed response',
+        conversationId: 'conversation-a',
+      );
+
+      expect(result.value, 'completed response');
+      expect((await rig.stateStore.load()).affinities, isEmpty);
+    });
+
+    test(
+      'failed sticky account rebinds in group and persists across runtime restart',
+      () async {
+        final rig = _Rig(
+          now: DateTime.utc(2026, 10, 18, 12),
+          accounts: [_account('first', 'codex'), _account('second', 'codex')],
+          strategy: LlmSelectionStrategy.roundRobin,
+        );
+        await rig.route(
+          (candidate, progress) async => candidate.account.id,
+          conversationId: 'conversation-a',
+        );
+
+        final fallback = await rig.route((candidate, progress) async {
+          if (candidate.account.id == 'first') {
+            throw const LlmRouteRequestException(statusCode: 401);
+          }
+          return candidate.account.id;
+        }, conversationId: 'conversation-a');
+        final restartedService = LlmRoutingService(
+          accountService: rig.accounts,
+          stateStore: LlmRoutingStateStore(
+            preferences: rig.preferences,
+            clock: () => rig.now,
+          ),
+          clock: () => rig.now,
+          concurrency: LlmConcurrencyReservations(),
+          roundRobin: LlmRoundRobinCursor(),
+        );
+        final afterRestart = await restartedService.execute(
+          group: rig.group,
+          requestedModelId: 'chat-model',
+          conversationId: 'conversation-a',
+          request: (candidate, progress) async => candidate.account.id,
+        );
+
+        expect(fallback.value, 'second');
+        expect(
+          fallback.decisions.map((decision) => decision.reason),
+          contains('request_authentication'),
+        );
+        expect(afterRestart.value, 'second');
+      },
+    );
+
+    test('expired affinity is ignored', () async {
+      final rig = _Rig(
+        now: DateTime.utc(2026, 10, 18, 12),
+        accounts: [_account('first', 'codex'), _account('second', 'codex')],
+        strategy: LlmSelectionStrategy.roundRobin,
+      );
+      await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+      rig.advance(const Duration(hours: 2));
+
+      final result = await rig.route(
+        (candidate, progress) async => candidate.account.id,
+        conversationId: 'conversation-a',
+      );
+
+      expect(result.value, 'second');
+      expect(
+        result.decisions.map((decision) => decision.reason),
+        isNot(contains('session_affinity')),
+      );
+    });
+
     test(
       'unknown and stale balances do not satisfy reserves or balance policy',
       () async {
@@ -2898,6 +3180,23 @@ void main() {
   });
 }
 
+void _setAccountStatus(
+  _MemoryPreferences preferences,
+  String accountId,
+  LlmAccountStatus status,
+) {
+  final encoded = preferences
+      .values[LlmAccountMigrationService.accountsPreferenceKey] as String;
+  final envelope = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
+  envelope['items'] = (envelope['items'] as List).map((item) {
+    final account = Map<String, dynamic>.from(item as Map);
+    if (account['id'] == accountId) account['status'] = status.name;
+    return account;
+  }).toList();
+  preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+      jsonEncode(envelope);
+}
+
 class _Rig {
   DateTime now;
   final _MemoryPreferences preferences = _MemoryPreferences();
@@ -2959,11 +3258,15 @@ class _Rig {
     Future<T> Function(LlmRouteCandidate candidate, LlmRouteProgress progress)
         request, {
     Map<String, num> estimatedUsage = const {'requests': 1},
+    String? conversationId,
+    String? selectedAccountId,
   }) =>
       service.execute(
         group: group,
         requestedModelId: 'chat-model',
         estimatedUsage: estimatedUsage,
+        conversationId: conversationId,
+        selectedAccountId: selectedAccountId,
         request: request,
       );
 

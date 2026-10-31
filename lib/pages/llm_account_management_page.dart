@@ -799,7 +799,7 @@ class _ModelGroupCard extends StatelessWidget {
               Text(
                 diagnostic.selectedAccountId == null
                     ? '没有账号可处理 ${diagnostic.localModelId}'
-                    : '尝试账号：${accountNames[diagnostic.selectedAccountId] ?? diagnostic.selectedAccountId}',
+                    : '${diagnostic.requestSucceeded ? '本轮使用账号' : '最后尝试账号'}：${accountNames[diagnostic.selectedAccountId] ?? diagnostic.selectedAccountId}',
               ),
               for (final decision in diagnostic.decisions)
                 Text(

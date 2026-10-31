@@ -169,6 +169,41 @@ class ChatAdapter {
 
   bool get isConfigured => _cachedProvider != null;
 
+  bool get hasSelectedRoutedModel =>
+      _cachedProviderConfig != null &&
+      isLlmModelGroupProviderConfig(_cachedProviderConfig!);
+
+  /// Accounts in the selected model group that map the selected local model.
+  Future<List<AiGatewayAccount>> routedAccountChoicesForSelectedModel() async {
+    final config = _cachedProviderConfig;
+    final model = _cachedModelConfig;
+    final runtime = _routingRuntime;
+    if (config == null ||
+        model == null ||
+        runtime == null ||
+        !isLlmModelGroupProviderConfig(config)) {
+      return const [];
+    }
+    final groupId = llmModelGroupIdForConfig(config)!;
+    final gateway = await runtime;
+    final groups = await gateway.accountManagement.listModelGroups();
+    final group = groups.where((item) => item.id == groupId).firstOrNull;
+    if (group == null) return const [];
+    final accounts = await gateway.accountManagement.listAccounts();
+    final accountsById = {for (final account in accounts) account.id: account};
+    final supportedConnectors =
+        llmRoutedChatSupportedConnectorTypes(_cachedEndpointType);
+    return [
+      for (final member in group.members)
+        if ((member.localModelId ?? group.id) == model.id &&
+            accountsById[member.accountId] != null &&
+            supportedConnectors.contains(
+              accountsById[member.accountId]!.connectorType,
+            ))
+          accountsById[member.accountId]!,
+    ];
+  }
+
   /// Whether the current model has reasoning parameters configured.
   /// A model with only an empty toggle (all fields empty) has no reasoning
   /// params configured, so the chat page should not show the reasoning toggle.
@@ -262,7 +297,12 @@ class ChatAdapter {
     Assistant? assistant,
     ProviderEntriesState? entriesState,
     Map<String, String>? modelReference,
+    String? selectedAccountId,
   }) {
+    if (selectedAccountId != null) {
+      _activeServices[convId]
+          ?.selectRoutedAccountForNextRequest(selectedAccountId);
+    }
     if (modelReference != null) {
       final selected = entriesState == null
           ? null
@@ -277,7 +317,8 @@ class ChatAdapter {
       return _activeServices.putIfAbsent(
         convId,
         () => _buildService(
-          _providerForModel(config, model, endpointType),
+          _providerForModel(config, model, endpointType,
+              conversationId: convId, selectedAccountId: selectedAccountId),
           model,
           config,
           endpointType,
@@ -315,7 +356,13 @@ class ChatAdapter {
           modelConfig.endpointType,
           config.endpointType,
         );
-        final provider = _providerForModel(config, modelConfig, endpointType);
+        final provider = _providerForModel(
+          config,
+          modelConfig,
+          endpointType,
+          conversationId: convId,
+          selectedAccountId: selectedAccountId,
+        );
         return _activeServices.putIfAbsent(convId, () {
           return _buildService(
             provider,
@@ -339,8 +386,18 @@ class ChatAdapter {
     if (existing != null) return existing;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _activeServices.putIfAbsent(convId, () {
+      final provider = _cachedProviderConfig == null ||
+              !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
+          ? _cachedProvider!
+          : _providerForModel(
+              _cachedProviderConfig!,
+              _cachedModelConfig!,
+              _cachedEndpointType,
+              conversationId: convId,
+              selectedAccountId: selectedAccountId,
+            );
       final svc = _buildService(
-        _cachedProvider!,
+        provider,
         _cachedModelConfig!,
         _cachedProviderConfig,
         _cachedEndpointType,
@@ -504,10 +561,23 @@ class ChatAdapter {
   /// cancelService 不会移除它，导致模型切换被旧配置 service 吞掉
   /// （"UI 显示模型 B、请求走模型 A"）。用后即弃，随 GC 回收。
   /// 返回 null 表示 adapter 尚未配置当前模型。
-  ChatService? createTransientService() {
+  ChatService? createTransientService({
+    String? conversationId,
+    String? selectedAccountId,
+  }) {
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
+    final provider = _cachedProviderConfig == null ||
+            !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
+        ? _cachedProvider!
+        : _providerForModel(
+            _cachedProviderConfig!,
+            _cachedModelConfig!,
+            _cachedEndpointType,
+            conversationId: conversationId,
+            selectedAccountId: selectedAccountId,
+          );
     return _buildTransientService(
-      _cachedProvider!,
+      provider,
       _cachedModelConfig!,
       _cachedProviderConfig,
       _cachedEndpointType,
@@ -531,6 +601,7 @@ class ChatAdapter {
     String? providerName,
     String? modelDisplayName,
     String? convId,
+    String? selectedAccountId,
   }) {
     final hasConfiguredReference = (modelId != null && modelId.isNotEmpty) ||
         (modelDisplayName != null && modelDisplayName.isNotEmpty);
@@ -547,10 +618,19 @@ class ChatAdapter {
         modelConfig.endpointType,
         config.endpointType,
       );
-      final provider = _providerForModel(config, modelConfig, endpointType);
+      final provider = _providerForModel(
+        config,
+        modelConfig,
+        endpointType,
+        conversationId: convId,
+        selectedAccountId: selectedAccountId,
+      );
       svc = _buildTransientService(provider, modelConfig, config, endpointType);
     } else if (!hasConfiguredReference) {
-      svc = createTransientService();
+      svc = createTransientService(
+        conversationId: convId,
+        selectedAccountId: selectedAccountId,
+      );
     } else {
       return null;
     }
@@ -751,8 +831,10 @@ class ChatAdapter {
   BaseChatProvider _providerForModel(
     ProviderConfigItem config,
     ModelConfig model,
-    String endpointType,
-  ) {
+    String endpointType, {
+    String? conversationId,
+    String? selectedAccountId,
+  }) {
     final routingRuntime = _routingRuntime;
     if (routingRuntime != null && isLlmModelGroupProviderConfig(config)) {
       return LlmRoutedChatProvider(
@@ -761,6 +843,8 @@ class ChatAdapter {
             stableLlmModelGroupId(config.id, model.id),
         localModelId: model.id,
         endpointType: endpointType,
+        conversationId: conversationId,
+        selectedAccountId: selectedAccountId,
       );
     }
     return createChatProviderFromConfig(
