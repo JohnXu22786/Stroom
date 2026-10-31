@@ -109,18 +109,28 @@ class _MessageWebHostState extends State<MessageWebHost> {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               if (!mounted || !identical(controller, _controller)) return;
               try {
+                if (kDebugMode) {
+                  debugPrint('[MessageWebHost][load-data-start] macOS');
+                }
                 await controller.loadData(
                   data: widget.html,
                   baseUrl: WebUri(
                     'https://stroom.invalid/assets/vendor/dsh_message_view/index.html',
                   ),
                 );
+                if (kDebugMode) {
+                  debugPrint('[MessageWebHost][load-data-sent] macOS');
+                }
               } catch (error) {
                 if (kDebugMode) {
                   debugPrint('[MessageWebHost][load-error] $error');
                 }
               }
             });
+            // A platform view can be created between Flutter frames. Make
+            // sure the post-frame load callback runs even when the enclosing
+            // page has no other state change to schedule a frame.
+            WidgetsBinding.instance.ensureVisualUpdate();
           }
           controller.addJavaScriptHandler(
             handlerName: 'StroomMessageView',
