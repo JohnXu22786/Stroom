@@ -29,6 +29,7 @@ import '../utils/text_manifest.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/message_block.dart' show ErrorBlock;
 import '../models/tool_call.dart' show ToolCallData;
 import '../models/assistant.dart' show Assistant;
 import '../services/app_log_service.dart';
