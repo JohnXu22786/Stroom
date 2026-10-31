@@ -2165,6 +2165,81 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a line-broken documentation credential echo',
+      () {
+        const apiKey = 'documentationABCDEF';
+        const instruction = 'The image contains documentation\nABCDEF.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-newline-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, 'The image contains [redacted].');
+        expect(persisted, contains('The image contains [redacted].'));
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted.replaceAll(r'\n', ''), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a documentation prompt under a prefix-only mask',
+      () {
+        const instruction = 'The image contains documentation';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-natural-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, instruction);
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a short masked prefix embedded in an echoed key',
       () {
         const apiKey = 'xsecretQwrtyPSDF89';

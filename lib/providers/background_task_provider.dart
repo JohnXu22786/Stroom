@@ -1186,12 +1186,26 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
   String prefix, {
   String? text,
 }) {
-  return _legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
-          (text != null &&
-              _legacyOcrHasCredentialUseContextAcrossLineBreak(text, prefix))
-      ? r'(?:[\r\n]+[ \t]*)?'
-      : '';
+  if (_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
+      (text != null &&
+          _legacyOcrHasCredentialUseContextAcrossLineBreak(text, prefix))) {
+    return r'(?:[\r\n]+[ \t]*)?';
+  }
+  if (text != null &&
+      _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(text, prefix)) {
+    return r'(?:[\r\n]+[ \t]*(?=[A-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
+  }
+  return '';
 }
+
+bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
+  String text,
+  String prefix,
+) =>
+    prefix.toLowerCase() == 'documentation' &&
+    RegExp(
+      r'\bdocumentation[\r\n]+[ \t]*[A-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
+    ).hasMatch(text);
 
 const _legacyOcrNaturalCarefulInstructionActions = {
   'add',
