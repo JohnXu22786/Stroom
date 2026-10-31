@@ -39,7 +39,7 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 - 前端源码与锁定依赖：`tools/message_renderer/`。运行 `npm ci`，然后 `npm test` 会重新打包资源并执行行为检查。应用构建直接使用已提交的资源，不需要启动 Node 服务。
 - WebView 固定为官方 `flutter_inappwebview 6.2.0-beta.3`，该预发布版本新增 Linux 实现；Linux 要求 WPE WebKit **2.0 API，版本至少 2.40**。Ubuntu 22.04 的 1.0 API 包无法编译此插件，Ubuntu 24.04 官方仓库没有 WPE。Linux CI、发布和夜间构建使用 Debian 13（trixie）官方容器与 `libwpewebkit-2.0-dev`、`libwpebackend-fdo-1.0-dev`、`libepoxy-dev`、`libsecret-1-dev`。预编译 Linux 包的系统基线因此为 Debian 13；没有声称兼容旧 Ubuntu。插件无条件调用的网页主题色 API 到 WPE 2.50 才出现：仅在较旧 WPE 上给这个可选接口返回“无主题色”，消息区继续使用 Flutter 提供的主题；2.50 及更新版本保留原生实现。WPE 动态库、子进程和资源保持使用系统包，不复制不完整的 WebKit 库到应用 bundle。运行前在 Debian 13 安装 `libwpewebkit-2.0-1`、`libwpebackend-fdo-1.0-1`、`libepoxy0`、`libsecret-1-0`（以及应用原有 GTK、mpv、托盘依赖）。其他发行版需要匹配 API 的 WPE 运行库，并在自身环境重新编译。
 - 默认使用新的 Web 消息区。`--dart-define=STROOM_NATIVE_MESSAGES=true` 可临时回到原 Flutter 消息显示；数据仍使用 v2。已有 Flutter 气泡组件回归测试通过这个显式构建参数运行，新消息区另有直接测试打包 HTML 的 JS 检查和 Flutter 桥接检查。
-- CI 增加 DSH 前端行为、资源重建一致性、Linux 与 Web 构建检查。其他平台沿用现有原生构建配置。
+- CI 覆盖 Android、iOS、Windows、macOS、Linux 和 Web 六个平台；各平台先构建应用，再运行消息文档与 Flutter 桥接 smoke test。Android 和 iOS 使用模拟器，桌面端使用对应原生 runner，Web 使用 Chromium 驱动集成测试。另有 DSH 前端行为与资源重建一致性检查。
 
 ### 已执行的针对性检查
 
@@ -50,7 +50,7 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 - Flutter 桥接：增量发送、会话代际切换、旧操作拒绝；代码操作的源范围、围栏闭合、引用/列表和缩进代码。
 - 停止生成：先冻结正文、推理及工具块，保存未完成时仍保留回答；最终结果按消息 ID 合并，避免重复消息或覆盖后续操作。
 
-目前这些属于自动行为检查；六个平台的实际设备滚动、键盘、文件选择、WebView 可用性与全屏预览还需要运行验证，不能以 JS 或组件测试代替。交付时记录远程 CI 结果和审查状态。
+六个平台的构建与消息桥接由远程 CI 分别验证。模拟器和桌面 smoke test 不等同于实体设备上的完整交互验收；滚动、键盘、文件选择及全屏预览仍需按实际设备做更广泛的手工验收，不能用 JS 或组件测试代替。
 
 - 为兼容 macOS 11 WebKit，补齐 `Array.at` / `Object.hasOwn`，代码高亮使用内嵌 Oniguruma WASM，资源无需联网。旧版 WebKit 的 CSP 需要允许该编译过程；模型内容仍经过 AST 绘制，不能进入脚本或消息操作桥接。
 
@@ -70,5 +70,4 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 ### Current work snapshot (2026-10-31)
 
 - The conversation message UI branch is `feat/dsh-message-renderer`, targeting `v0.7`; GitHub PR #800 remains a draft and is not merged.
-- GitHub's latest reported checks are from 2026-10-14 and pass, but they predate the current six-platform WebView smoke-test workflow changes.
-- PR CI now covers native message-view smoke tests on Android, iOS, Windows, macOS, Linux, and Web. The updated workflow has not run yet; the results, final visual review, and merge are pending.
+- PR CI now covers build and message-view smoke tests on Android, iOS, Windows, macOS, Linux, and Web. The current workflow run is being used to verify the six targets; record its final result and any follow-up fixes here before merging PR #800.

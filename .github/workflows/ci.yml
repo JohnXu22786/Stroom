@@ -126,7 +126,18 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build apk --debug
+      - name: Build Android APK
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/android-build.log"
+          flutter build apk --debug 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          if [ "$result" -ne 0 ]; then
+            details="$(tail -n 30 "$log" | tr '\r\n' ' ' | sed 's/%/%25/g')"
+            printf '::error title=Android build details::%s\n' "$details"
+          fi
+          exit "$result"
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -159,7 +170,18 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build macos --release
+      - name: Build macOS app
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/macos-build.log"
+          flutter build macos --release 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          if [ "$result" -ne 0 ]; then
+            details="$(tail -n 30 "$log" | tr '\r\n' ' ' | sed 's/%/%25/g')"
+            printf '::error title=macOS build details::%s\n' "$details"
+          fi
+          exit "$result"
       - run: flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded
 
   message-platform-ios:
