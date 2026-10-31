@@ -245,6 +245,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
               }
               if (defaultTargetPlatform == TargetPlatform.macOS &&
                   request.isForMainFrame == true &&
+                  _macDocumentUri != null &&
+                  request.url.toString() == _macDocumentUri.toString() &&
+                  !_macDocumentReady &&
                   mounted) {
                 setState(() => _macLoadFailed = true);
               }
