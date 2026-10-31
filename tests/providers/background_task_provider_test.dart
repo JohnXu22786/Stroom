@@ -1581,6 +1581,102 @@ void main() {
     );
 
     test(
+      'malformed OCR retry data omits credential-valued config references',
+      () {
+        const apiKey = 'config-reference-api-key-7391';
+        final task = BackgroundTask.fromMap({
+          'id': 'malformed-retry-config-credential',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {'configId': apiKey, 'modelId': 'vision-model'},
+            'images': [],
+            'instructionContent': 'Read the document carefully',
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the document carefully'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(task.title, 'Failed OCR task');
+        expect(task.status, TaskStatus.failed);
+        expect(snapshot.configId, isNull);
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.instructionContent, 'Read the document carefully');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'supported OCR retry data omits credential-valued config references',
+      () {
+        const apiKey = 'supported-config-reference-api-key-4812';
+        final task = BackgroundTask.fromMap({
+          'id': 'supported-retry-config-credential',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'modelRef': {'configId': apiKey, 'modelId': 'vision-model'},
+            'images': [],
+            'instructionContent': 'Read the document carefully',
+            'saveFolder': '',
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the document carefully'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.configId, isNull);
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.instructionContent, 'Read the document carefully');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR migration omits model IDs matching an auth credential',
       () {
         const apiKey = 'opaque-provider-secret-value-92';

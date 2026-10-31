@@ -2720,6 +2720,15 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
   final imageCount = malformedSnapshot.imageEntryCount > legacyImageCount
       ? malformedSnapshot.imageEntryCount
       : legacyImageCount;
+  final malformedConfigId = malformedSnapshot.configId;
+  final legacyConfigId = legacySnapshot?.configId;
+  final configId = malformedConfigId != null &&
+          _isSafeOcrModelId(malformedConfigId.trim(), credentialValues)
+      ? malformedConfigId
+      : legacyConfigId != null &&
+              _isSafeOcrModelId(legacyConfigId.trim(), credentialValues)
+          ? legacyConfigId
+          : null;
   final malformedModelId = malformedSnapshot.modelId;
   final modelId = malformedModelId != null &&
           _isSafeOcrModelId(malformedModelId.trim(), credentialValues)
@@ -2736,7 +2745,7 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
   final retryData = OcrRetryStorage.unavailableSnapshotForCount(
     taskId: taskId,
     imageCount: imageCount,
-    configId: malformedSnapshot.configId ?? legacySnapshot?.configId,
+    configId: configId,
     modelId: modelId,
     instructionContent: instructionContent,
     saveFolder: malformedSnapshot.saveFolder,
@@ -2762,8 +2771,7 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
 
 bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
   final snapshot = OcrRetrySnapshot.fromMap(retryData);
-  final supportedVersion =
-      snapshot.isLegacy ||
+  final supportedVersion = snapshot.isLegacy ||
       snapshot.version == 1 ||
       snapshot.version == 2 ||
       snapshot.version == OcrRetrySnapshot.currentVersion;
@@ -2808,15 +2816,16 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
         }
         final modelRef = retryData['modelRef'];
         if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
-          final modelId = modelRef['modelId'];
-          if (modelId is String &&
-              !_isSafeOcrModelId(
-                modelId.trim(),
-                _legacyOcrCredentialValues(request),
-              )) {
-            retryData['modelRef'] = Map<String, dynamic>.from(modelRef)
-              ..remove('modelId');
+          final credentialValues = _legacyOcrCredentialValues(request);
+          final safeModelRef = Map<String, dynamic>.from(modelRef);
+          for (final field in ['configId', 'modelId']) {
+            final reference = safeModelRef[field];
+            if (reference is String &&
+                !_isSafeOcrModelId(reference.trim(), credentialValues)) {
+              safeModelRef.remove(field);
+            }
           }
+          retryData['modelRef'] = safeModelRef;
         }
         return retryData;
       }
