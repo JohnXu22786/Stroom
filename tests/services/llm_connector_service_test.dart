@@ -52,6 +52,7 @@ void main() {
         'openai-api',
         'claude',
         'gemini',
+        'aistudio',
         'moonshot',
         'glm',
         'deepseek',
@@ -84,6 +85,18 @@ void main() {
         'api_key',
         'oauth',
       });
+      expect(LlmConnectorRegistry.find('aistudio')!.authTypes, {
+        'api_key',
+        'oauth',
+      });
+      expect(
+        LlmConnectorRegistry.find('aistudio')!.protocol,
+        LlmNativeProtocol.geminiGenerateContent,
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('aistudio'),
+        'google.gemini.generate_content',
+      );
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('claude'),
         'anthropic',
@@ -930,6 +943,55 @@ void main() {
       expect(models.single.capabilities['tools'], isTrue);
     });
 
+    test('discovers AI Studio models using its stored API key', () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'models': [
+                {
+                  'name': 'models/gemini-3.1-pro',
+                  'displayName': 'Gemini 3.1 Pro',
+                  'supportedGenerationMethods': [
+                    'generateContent',
+                    'streamGenerateContent',
+                  ],
+                },
+                {
+                  'name': 'models/text-embedding-004',
+                  'supportedGenerationMethods': ['embedContent'],
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account('aistudio-discovery', 'aistudio'),
+        secret: 'aistudio-discovery-key',
+      );
+
+      final models = await accounts.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(captured?.uri.path, '/v1beta/models');
+      expect(captured?.headers['x-goog-api-key'], 'aistudio-discovery-key');
+      expect(models.map((model) => model.upstreamModelId), ['gemini-3.1-pro']);
+      expect(models.single.capabilities['streaming'], isTrue);
+    });
+
     test(
       'rejects malformed Vertex service-account JSON before persistence',
       () async {
@@ -1681,6 +1743,64 @@ void main() {
         );
       },
     );
+
+    test('refreshes AI Studio OAuth before model discovery', () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.host == 'oauth2.googleapis.com') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'access_token': 'fresh-aistudio-access',
+                'refresh_token': 'rotated-aistudio-refresh',
+                'expires_in': 3600,
+              }),
+              200,
+            );
+          }
+          return ResponseBody.fromString(jsonEncode({'models': []}), 200);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'aistudio-discovery-expired-oauth',
+          connectorType: 'aistudio',
+          authType: 'oauth',
+          displayName: 'Google AI Studio',
+          endpointConfig: const {'googleCloudProjectId': 'my-cloud-project'},
+        ),
+        secret: jsonEncode({
+          'access_token': 'expired-aistudio-access',
+          'refresh_token': 'aistudio-refresh-token',
+          'client_id': 'desktop-client.apps.googleusercontent.com',
+          'client_secret': 'secure-client-secret',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(minutes: 1))
+              .toIso8601String(),
+          'oauth_contract': 'google-gemini-developer-api-v1',
+        }),
+      );
+
+      await service.discoverModels(account, refreshRemote: true);
+
+      expect(requests, hasLength(2));
+      expect(requests.first.uri.host, 'oauth2.googleapis.com');
+      expect(requests.last.uri.host, 'generativelanguage.googleapis.com');
+      expect(
+        requests.last.headers['Authorization'],
+        'Bearer fresh-aistudio-access',
+      );
+      expect(
+        requests.last.headers['x-goog-user-project'],
+        'my-cloud-project',
+      );
+    });
 
     test(
       'retries Gemini OAuth model discovery after an unauthorized response',
@@ -3002,33 +3122,74 @@ void main() {
       );
     });
 
-    test(
-      'prepares Google AI Studio relay requests for the native Google API',
-      () {
-        final request = builder.build(
-          account: _account('aistudio-1', 'aistudio', authType: 'relay'),
-          credential: null,
+    test('prepares API-key AI Studio requests for Generative Language HTTP',
+        () {
+      const content = {
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': 'summarize this image'},
+              {
+                'inlineData': {
+                  'mimeType': 'image/png',
+                  'data': 'aW1hZ2U=',
+                },
+              },
+            ],
+          },
+        ],
+      };
+      final request = builder.build(
+        account: _account('aistudio-api-key', 'aistudio'),
+        credential: 'aistudio-private-key',
+        modelId: 'gemini-3.1-pro',
+        body: content,
+      );
+
+      expect(
+        request.uri.toString(),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
+      );
+      expect(request.headers['x-goog-api-key'], 'aistudio-private-key');
+      expect(request.body, content);
+      expect(request.toString(), isNot(contains('aistudio-private-key')));
+    });
+
+    test('prepares AI Studio OAuth requests with project attribution', () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'aistudio-oauth',
+          connectorType: 'aistudio',
+          authType: 'oauth',
+          displayName: 'Google AI Studio',
+          endpointConfig: const {'googleCloudProjectId': 'stroom-project'},
+        ),
+        credential: jsonEncode({'access_token': 'aistudio-oauth-token'}),
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+        stream: true,
+      );
+
+      expect(request.uri.path, contains(':streamGenerateContent'));
+      expect(request.uri.queryParameters['alt'], 'sse');
+      expect(request.headers['Authorization'], 'Bearer aistudio-oauth-token');
+      expect(request.headers['x-goog-user-project'], 'stroom-project');
+      expect(request.toString(), isNot(contains('aistudio-oauth-token')));
+    });
+
+    test('rejects AI Studio OAuth without Cloud project attribution', () {
+      expect(
+        () => builder.build(
+          account: _account('aistudio-oauth-no-project', 'aistudio',
+              authType: 'oauth'),
+          credential: jsonEncode({'access_token': 'aistudio-oauth-token'}),
           modelId: 'gemini-3.1-pro',
           body: const {'contents': []},
-        );
-
-        expect(
-          request.uri.toString(),
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
-        );
-        expect(request.transport, LlmNativeTransport.websocketRelay);
-        expect(request.headers.containsKey('Authorization'), isFalse);
-
-        final streaming = builder.build(
-          account: _account('aistudio-stream', 'aistudio', authType: 'relay'),
-          credential: null,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
-        expect(streaming.uri.queryParameters['alt'], 'sse');
-      },
-    );
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
 
     test('preserves endpoint query values and generated stream parameters', () {
       final request = builder.build(
@@ -3812,28 +3973,211 @@ void main() {
       },
     );
 
-    test(
-      'reports AI Studio relay unavailable when no connection is injected',
-      () async {
-        final accounts = LlmAccountConnectorService(
-          preferences: _MemoryPreferences(),
-          credentialStore: _MemoryCredentials(),
-        );
-        final account = await accounts.saveAccount(
-          _account('aistudio-no-relay', 'aistudio', authType: 'relay'),
-        );
-        final client = LlmConnectorHttpClient(accountService: accounts);
+    test('executes AI Studio HTTP requests with the stored API key', () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({'candidates': []}),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('aistudio-http', 'aistudio'),
+        secret: 'aistudio-test-api-key',
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+      );
 
-        await expectLater(
-          client.request(
-            account: account,
-            modelId: 'gemini-3.1-pro',
-            body: const {'contents': []},
-          ),
-          throwsA(isA<LlmConnectorTransportUnavailable>()),
+      expect(
+        captured?.uri.toString(),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
+      );
+      expect(captured?.headers['x-goog-api-key'], 'aistudio-test-api-key');
+      expect(captured?.headers['Authorization'], isNull);
+      expect(response.body, {'candidates': []});
+    });
+
+    test('executes AI Studio OAuth requests with project attribution',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({'candidates': []}),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'aistudio-http-oauth',
+          connectorType: 'aistudio',
+          authType: 'oauth',
+          displayName: 'Google AI Studio',
+          endpointConfig: const {'googleCloudProjectId': 'stroom-project'},
+        ),
+        secret: jsonEncode({
+          'access_token': 'aistudio-test-oauth-token',
+          'refresh_token': 'aistudio-test-refresh-token',
+          'client_id': 'configured-client.apps.googleusercontent.com',
+          'client_secret': 'aistudio-test-client-secret',
+        }),
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+      );
+
+      expect(
+        captured?.uri.toString(),
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
+      );
+      expect(
+        captured?.headers['Authorization'],
+        'Bearer aistudio-test-oauth-token',
+      );
+      expect(captured?.headers['x-goog-user-project'], 'stroom-project');
+      expect(captured?.uri.queryParameters, isEmpty);
+      expect(response.body, {'candidates': []});
+    });
+
+    test('blocks stored legacy AI Studio relay accounts before network use',
+        () async {
+      var requestsSent = 0;
+      final preferences = _MemoryPreferences()
+        ..values[LlmAccountMigrationService.accountsPreferenceKey] =
+            jsonEncode({
+          'version': 1,
+          'items': [
+            {
+              'id': 'legacy-aistudio-relay',
+              'connectorType': 'aistudio',
+              'authType': 'relay',
+              'displayName': 'Legacy AI Studio session',
+            },
+          ],
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = (await accounts.listAccounts()).single;
+      final client = LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
+          }),
+      );
+
+      await expectLater(
+        client.request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {'contents': []},
+        ),
+        throwsA(isA<LlmConnectorAuthenticationRequired>()),
+      );
+      expect(requestsSent, 0);
+    });
+
+    test('streams AI Studio SSE chunks and redacts upstream errors', () async {
+      final source = StreamController<Uint8List>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          expect(options.uri.queryParameters['alt'], 'sse');
+          expect(options.headers['x-goog-api-key'], 'aistudio-test-key');
+          return ResponseBody(source.stream, 200);
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('aistudio-stream', 'aistudio'),
+        secret: 'aistudio-test-key',
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+        stream: true,
+      );
+      final event = utf8.encode('data: {"candidates":[]}\n\n');
+      source.add(Uint8List.fromList(event));
+      await source.close();
+      expect(
+        utf8.decode(
+          (await (response.body as Stream<List<int>>).toList()).single,
+        ),
+        'data: {"candidates":[]}\n\n',
+      );
+
+      final errorDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'error': {
+                'code': 'RESOURCE_EXHAUSTED',
+                'message': 'aistudio-test-key rejected',
+              },
+            }),
+            429,
+            headers: const {
+              'retry-after': ['3'],
+              'x-secret-diagnostic': ['must-not-be-forwarded'],
+            },
+          );
+        });
+      try {
+        await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: errorDio,
+        ).request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {'contents': []},
         );
-      },
-    );
+        fail('Expected the upstream status error.');
+      } on LlmConnectorHttpException catch (error) {
+        expect(error.statusCode, 429);
+        expect(error.code, 'RESOURCE_EXHAUSTED');
+        expect(error.headers, {'retry-after': '3'});
+        expect(error.toString(), isNot(contains('aistudio-test-key')));
+        expect(error.toString(), isNot(contains('rejected')));
+        expect(error.toString(), isNot(contains('must-not-be-forwarded')));
+      }
+    });
 
     test('executes the native request and returns request usage', () async {
       RequestOptions? captured;

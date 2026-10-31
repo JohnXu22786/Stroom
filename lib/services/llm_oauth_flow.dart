@@ -19,6 +19,8 @@ class LlmOAuthProviderPolicy {
   static const _policies = <String, LlmOAuthProviderPolicy>{
     'codex': LlmOAuthProviderPolicy._(providerId: 'codex', supported: true),
     'gemini': LlmOAuthProviderPolicy._(providerId: 'gemini', supported: true),
+    'aistudio':
+        LlmOAuthProviderPolicy._(providerId: 'aistudio', supported: true),
     'claude': LlmOAuthProviderPolicy._(
       providerId: 'claude',
       supported: false,

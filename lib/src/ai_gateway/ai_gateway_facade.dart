@@ -559,7 +559,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
     LlmOAuthLoopback? listener;
     try {
       final isOpenAi = account.connectorType == 'codex';
-      final isGemini = account.connectorType == 'gemini';
+      final isGemini = account.connectorType == 'gemini' ||
+          account.connectorType == 'aistudio';
       if (!isOpenAi && !isGemini) {
         throw const AiGatewayOAuthException();
       }
@@ -733,7 +734,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           'token': refreshToken,
           'token_type_hint': 'refresh_token',
         };
-      } else if (account.connectorType == 'gemini') {
+      } else if (account.connectorType == 'gemini' ||
+          account.connectorType == 'aistudio') {
         revocationEndpoint = Uri.parse('https://oauth2.googleapis.com/revoke');
         body = {'token': refreshToken};
       } else {
@@ -1204,10 +1206,6 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
     } on LlmConnectorAuthenticationRequired {
       throw AiGatewayExecutionException(
         kind: AiGatewayFailureKind.authenticationRequired,
-      );
-    } on LlmConnectorTransportUnavailable {
-      throw AiGatewayExecutionException(
-        kind: AiGatewayFailureKind.transportUnavailable,
       );
     }
   }
