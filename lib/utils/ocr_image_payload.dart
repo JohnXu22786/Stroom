@@ -217,8 +217,7 @@ OcrImagePayload prepareOcrImagePayloadSync(
     );
   }
 
-  final orientation = encodedOrientation ??
-      decoded.exif.imageIfd.orientation;
+  final orientation = encodedOrientation ?? decoded.exif.imageIfd.orientation;
   if (orientation != null && orientation != 1) {
     try {
       // The JPEG decoder already applies EXIF orientation while decoding.

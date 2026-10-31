@@ -181,8 +181,7 @@ void main() {
     expect(background.state.single.error, contains('损坏'));
   });
 
-  test('OCR rejects files above the flow image limit before reading',
-      () async {
+  test('OCR rejects files above the flow image limit before reading', () async {
     final source = File('${directory.path}/oversized.png');
     final handle = await source.open(mode: FileMode.write);
     await handle.setPosition(20 * 1024 * 1024);
@@ -228,7 +227,8 @@ void main() {
     );
   });
 
-  test('OCR applies the selected model request budget before reading', () async {
+  test('OCR applies the selected model request budget before reading',
+      () async {
     final source = File('${directory.path}/over_budget.png');
     final handle = await source.open(mode: FileMode.write);
     await handle.setPosition(800 * 1024);
@@ -270,7 +270,8 @@ void main() {
   });
 
   test('OCR rejects input that grows past the bounded read ceiling', () async {
-    final source = await File('${directory.path}/growing.png').writeAsBytes([0]);
+    final source =
+        await File('${directory.path}/growing.png').writeAsBytes([0]);
     var requested = false;
 
     await expectLater(

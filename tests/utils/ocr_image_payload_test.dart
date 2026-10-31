@@ -84,8 +84,8 @@ void main() {
         oversized[offset + 1] = value & 0xff;
       }
 
-      setUint16(frameHeader + 5, 10_000);
-      setUint16(frameHeader + 7, 10_000);
+      setUint16(frameHeader + 5, 10000);
+      setUint16(frameHeader + 7, 10000);
 
       await expectLater(
         prepareOcrImagePayload(oversized),

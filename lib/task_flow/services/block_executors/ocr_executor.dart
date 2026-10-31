@@ -201,7 +201,8 @@ Future<String> executeOcrBlock({
     if (inputLength > maxInputBytes) {
       throw oversizedInputException();
     }
-    imageBytes = await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
+    imageBytes =
+        await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
     if (imageBytes.length > maxInputBytes) {
       throw oversizedInputException();
     }
