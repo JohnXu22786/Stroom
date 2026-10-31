@@ -12776,7 +12776,7 @@ void main() {
         );
 
         final credentialTask = taskFor(
-          'legacy-ocr-reported-authorization-credential-echo',
+          'legacy-ocr-reported-credential-echo',
           'The label reports authorization',
         );
         final credentialPersisted = jsonEncode(credentialTask.toMap());
