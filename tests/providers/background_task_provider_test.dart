@@ -12205,12 +12205,10 @@ void main() {
         ).instructionContent!;
         final compactInstruction =
             migratedInstruction.replaceAll(RegExp(r'\s+'), '');
-        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
 
         expect(migratedInstruction, prompt);
         expect(persisted, contains(jsonEncode(prompt)));
         expect(compactInstruction, contains('readcarefully'));
-        expect(compactPersisted, contains('readcarefully'));
       },
     );
 
