@@ -215,8 +215,25 @@ jobs:
         run: |
           set +e
           log="$RUNNER_TEMP/macos-message-smoke.log"
-          flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
-          result=${PIPESTATUS[0]}
+          set -o pipefail
+          flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log" &
+          test_pid=$!
+          for _ in $(seq 1 400); do
+            if grep -q 'Failed to foreground app; open returned 1' "$log" 2>/dev/null; then
+              app="$(find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' -print -quit)"
+              if [ -n "$app" ]; then
+                for _ in $(seq 1 8); do
+                  open "$app" && break
+                  sleep 0.1
+                done
+              fi
+              break
+            fi
+            kill -0 "$test_pid" 2>/dev/null || break
+            sleep 0.05
+          done
+          wait "$test_pid"
+          result=$?
           exit "$result"
       - name: Summarize macOS smoke failure
         if: failure()
