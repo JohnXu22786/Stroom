@@ -1,8 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
@@ -18,18 +17,22 @@ class DshMessageView extends StatefulWidget {
   final bool historyLoaded;
   final void Function(Map<String, dynamic>) onEvent;
   @visibleForTesting
-  final Widget Function(String, ValueNotifier<Map<String, dynamic>?>,
-      void Function(Map<String, dynamic>))? hostBuilder;
+  final Widget Function(
+    String,
+    ValueNotifier<Map<String, dynamic>?>,
+    void Function(Map<String, dynamic>),
+  )? hostBuilder;
 
-  const DshMessageView(
-      {super.key,
-      required this.conversationId,
-      required this.messages,
-      required this.theme,
-      required this.hasOlder,
-      this.historyLoaded = true,
-      required this.onEvent,
-      this.hostBuilder});
+  const DshMessageView({
+    super.key,
+    required this.conversationId,
+    required this.messages,
+    required this.theme,
+    required this.hasOlder,
+    this.historyLoaded = true,
+    required this.onEvent,
+    this.hostBuilder,
+  });
 
   @override
   State<DshMessageView> createState() => DshMessageViewState();
@@ -147,14 +150,18 @@ class DshMessageViewState extends State<DshMessageView> {
       return MessageWebHost(html: '', commands: _commands, onEvent: _event);
     }
     return FutureBuilder<String>(
-      future: _html ??=
-          rootBundle.loadString('assets/vendor/dsh_message_view/index.html'),
+      future: _html ??= rootBundle.loadString(
+        'assets/vendor/dsh_message_view/index.html',
+      ),
       builder: (context, snapshot) {
         if (snapshot.hasError) return const Center(child: Text('消息界面加载失败'));
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         return MessageWebHost(
-            html: snapshot.data!, commands: _commands, onEvent: _event);
+          html: snapshot.data!,
+          commands: _commands,
+          onEvent: _event,
+        );
       },
     );
   }

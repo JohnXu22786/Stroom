@@ -9,11 +9,12 @@ class MessageWebHost extends StatefulWidget {
   final ValueNotifier<Map<String, dynamic>?> commands;
   final void Function(Map<String, dynamic>) onEvent;
 
-  const MessageWebHost(
-      {super.key,
-      required this.html,
-      required this.commands,
-      required this.onEvent});
+  const MessageWebHost({
+    super.key,
+    required this.html,
+    required this.commands,
+    required this.onEvent,
+  });
 
   @override
   State<MessageWebHost> createState() => _MessageWebHostState();
@@ -40,7 +41,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
     _pending = _pending.then((_) async {
       if (!mounted || !identical(controller, _controller)) return;
       await controller.evaluateJavascript(
-          source: 'window.StroomMessageView?.receive(${jsonEncode(command)});');
+        source: 'window.StroomMessageView?.receive(${jsonEncode(command)});',
+      );
     }).catchError((Object error) {
       if (mounted) debugPrint('[MessageWebHost] $error');
     });
@@ -66,7 +68,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
             ? InAppWebViewInitialData(
                 data: widget.html,
                 baseUrl: WebUri(
-                    'file:///assets/vendor/dsh_message_view/index.html'),
+                  'file:///assets/vendor/dsh_message_view/index.html',
+                ),
               )
             : null,
         // Leave the plugin origin allow-list unset: WKWebView file URLs have
@@ -95,38 +98,38 @@ class _MessageWebHostState extends State<MessageWebHost> {
           _controller = controller;
           if (kDebugMode) debugPrint('[MessageWebHost][created]');
           controller.addJavaScriptHandler(
-              handlerName: 'StroomMessageView',
-              callback: (JavaScriptHandlerFunctionData data) {
-                final rejection = !mounted
-                    ? 'unmounted'
-                    : !data.isMainFrame
-                        ? 'subframe'
-                        : !_trustedDocument(data.requestUrl)
-                            ? 'untrusted-url:${data.requestUrl}'
-                            : data.args.length != 1 || data.args.first is! Map
-                                ? 'invalid-arguments'
-                                : null;
-                if (rejection != null) {
-                  if (kDebugMode) {
-                    debugPrint('[MessageWebHost][handler-rejected] $rejection');
-                  }
-                  return;
-                }
+            handlerName: 'StroomMessageView',
+            callback: (JavaScriptHandlerFunctionData data) {
+              final rejection = !mounted
+                  ? 'unmounted'
+                  : !data.isMainFrame
+                      ? 'subframe'
+                      : !_trustedDocument(data.requestUrl)
+                          ? 'untrusted-url:${data.requestUrl}'
+                          : data.args.length != 1 || data.args.first is! Map
+                              ? 'invalid-arguments'
+                              : null;
+              if (rejection != null) {
                 if (kDebugMode) {
-                  debugPrint(
-                    '[MessageWebHost][handler] ${data.args.first['type']}',
-                  );
+                  debugPrint('[MessageWebHost][handler-rejected] $rejection');
                 }
-                widget
-                    .onEvent(Map<String, dynamic>.from(data.args.first as Map));
-              });
+                return;
+              }
+              if (kDebugMode) {
+                debugPrint(
+                    '[MessageWebHost][handler] ${data.args.first['type']}');
+              }
+              widget.onEvent(Map<String, dynamic>.from(data.args.first as Map));
+            },
+          );
         },
         onLoadStart: (controller, url) {
           if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
         },
         onLoadStop: (controller, url) async {
           final ready = await controller.evaluateJavascript(
-              source: '!!window.StroomMessageView');
+            source: '!!window.StroomMessageView',
+          );
           if (kDebugMode) {
             debugPrint('[MessageWebHost][load-stop] $url ready=$ready');
           }
