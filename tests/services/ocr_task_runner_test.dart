@@ -1374,8 +1374,10 @@ void main() {
 
     final records = await TextManifest.loadRecordsUncached();
     expect(
-      records.where((record) => record.hash ==
-          computeTextHash(Uint8List.fromList(utf8.encode('owned partial text')))),
+      records.where((record) =>
+          record.hash ==
+          computeTextHash(
+              Uint8List.fromList(utf8.encode('owned partial text')))),
       hasLength(1),
     );
     expect(notifier.state.single.status, TaskStatus.completed);
