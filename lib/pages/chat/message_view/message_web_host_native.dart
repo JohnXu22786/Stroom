@@ -116,12 +116,13 @@ class _MessageWebHostState extends State<MessageWebHost> {
             );
             try {
               final currentUrl = await controller.getUrl();
-              final ready = await controller.evaluateJavascript(
-                source: '!!window.StroomMessageView',
+              final state = await controller.evaluateJavascript(
+                source:
+                    'JSON.stringify({url:location.href,state:document.readyState,renderer:typeof window.StroomMessageView})',
               );
               debugPrint(
                 '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
-                'url=$currentUrl ready=$ready',
+                'url=$currentUrl state=$state',
               );
             } catch (error) {
               debugPrint(
@@ -330,12 +331,15 @@ class _MessageWebHostState extends State<MessageWebHost> {
             },
             onLoadStop: (controller, url) async {
               final ready = await controller.evaluateJavascript(
-                source: '!!window.StroomMessageView',
+                source: 'JSON.stringify(!!window.StroomMessageView)',
               );
+              final rendererReady = ready == 'true';
               if (kDebugMode) {
-                debugPrint('[MessageWebHost][load-stop] $url ready=$ready');
+                debugPrint(
+                  '[MessageWebHost][load-stop] $url ready=$rendererReady',
+                );
               }
-              if (kDebugMode && ready != true) {
+              if (kDebugMode && !rendererReady) {
                 try {
                   final state = await controller.evaluateJavascript(
                     source: '''
@@ -352,13 +356,13 @@ JSON.stringify({
                 }
               }
               if (defaultTargetPlatform == TargetPlatform.macOS &&
-                  ready != true) {
+                  !rendererReady) {
                 unawaited(_failMacLoadIfUnready(
                   controller,
                   _macLoadGeneration,
                 ));
               }
-              if (mounted && ready == true) {
+              if (mounted && rendererReady) {
                 _macDocumentNavigationStarted = true;
                 _macDocumentReady = true;
                 if (defaultTargetPlatform == TargetPlatform.macOS) {
