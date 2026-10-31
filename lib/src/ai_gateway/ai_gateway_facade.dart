@@ -1001,6 +1001,123 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
       ))
           .map(_gatewayModel)
           .toList(growable: false);
+
+  @override
+  Future<List<AiGatewayUpstreamModel>> discoverGroupModels({
+    required String groupId,
+    required String localModelId,
+    Set<String> requiredCapabilities = const {},
+    bool refreshRemote = false,
+  }) async {
+    final groups = await _accounts.listModelGroups();
+    final group = groups.where((item) => item.id == groupId).firstOrNull;
+    if (group == null) return const [];
+    final accounts = {
+      for (final account in await _accounts.listAccounts()) account.id: account,
+    };
+    final models = <AiGatewayUpstreamModel>[];
+    for (final member in group.members.where(
+      (item) => (item.localModelId ?? group.id) == localModelId,
+    )) {
+      final account = accounts[member.accountId];
+      if (account == null || account.status != LlmAccountStatus.ready) continue;
+      final definition = LlmConnectorRegistry.find(account.connectorType);
+      if (definition == null ||
+          LlmConnectorRegistry.chatAdapterEndpointType(account.connectorType) ==
+              null) {
+        continue;
+      }
+      final discovered = await _accounts.discoverModels(
+        account,
+        refreshRemote: refreshRemote,
+      );
+      final model = discovered
+          .where((item) => item.upstreamModelId == member.upstreamModelId)
+          .firstOrNull;
+      if (model == null ||
+          !_hasRequiredModelCapabilities(
+            model.capabilities,
+            requiredCapabilities,
+            definition.protocol,
+          )) {
+        continue;
+      }
+      models.add(_gatewayModel(model));
+    }
+    return List.unmodifiable(models);
+  }
+}
+
+bool _hasRequiredModelCapabilities(
+  Map<String, dynamic> capabilities,
+  Set<String> required,
+  LlmNativeProtocol protocol,
+) {
+  const streamingProtocols = {
+    LlmNativeProtocol.openAIResponses,
+    LlmNativeProtocol.anthropicMessages,
+    LlmNativeProtocol.geminiGenerateContent,
+    LlmNativeProtocol.geminiInteractions,
+    LlmNativeProtocol.openAIChatCompletions,
+    LlmNativeProtocol.ollamaChat,
+    LlmNativeProtocol.kimiChatCompletions,
+    LlmNativeProtocol.xaiResponses,
+    LlmNativeProtocol.metaResponses,
+  };
+  for (final capability in required) {
+    final explicitlyEnabled = capabilities[capability] == true;
+    final explicitlyDisabled =
+        capabilities.containsKey(capability) && !explicitlyEnabled;
+    final methods = capabilities['supportedGenerationMethods'];
+    final inputModalities = capabilities['inputModalities'];
+    final methodSupported = methods is Iterable &&
+        switch (capability) {
+          'chat' => methods.contains('generateContent') ||
+              methods.contains('streamGenerateContent'),
+          'streaming' => methods.contains('streamGenerateContent'),
+          _ => false,
+        };
+    final modalitySupported = inputModalities is Iterable &&
+        switch (capability) {
+          'vision' => inputModalities.contains('image'),
+          'audio' => inputModalities.contains('audio'),
+          _ => false,
+        };
+    final protocolObserved = capability == 'chat' &&
+            const {
+              LlmNativeProtocol.openAIResponses,
+              LlmNativeProtocol.anthropicMessages,
+              LlmNativeProtocol.geminiGenerateContent,
+              LlmNativeProtocol.geminiInteractions,
+              LlmNativeProtocol.openAIChatCompletions,
+              LlmNativeProtocol.ollamaChat,
+              LlmNativeProtocol.kimiChatCompletions,
+              LlmNativeProtocol.xaiResponses,
+              LlmNativeProtocol.metaResponses,
+              LlmNativeProtocol.bedrockConverse,
+            }.contains(protocol) ||
+        capability == 'streaming' && streamingProtocols.contains(protocol);
+    final geminiMethodListOverridesProtocol = !explicitlyEnabled &&
+        methods is Iterable &&
+        const {
+          LlmNativeProtocol.geminiGenerateContent,
+          LlmNativeProtocol.geminiInteractions,
+        }.contains(protocol) &&
+        (capability == 'chat'
+            ? !(methods.contains('generateContent') ||
+                methods.contains('streamGenerateContent'))
+            : capability == 'streaming' &&
+                !methods.contains('streamGenerateContent'));
+    if (explicitlyDisabled ||
+        geminiMethodListOverridesProtocol ||
+        !explicitlyEnabled &&
+            !methodSupported &&
+            !modalitySupported &&
+            !protocolObserved) {
+      return false;
+    }
+  }
+  return true;
 }
 
 class _LlmGatewayExecutor implements AiGatewayExecutor {

@@ -38,16 +38,18 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
-        _dio = Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-            ...openRouterAppHeaders,
-          },
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 60),
-        ));
+        _dio = Dio(
+          BaseOptions(
+            baseUrl: '',
+            headers: {
+              'Content-Type': 'application/json',
+              if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+              ...openRouterAppHeaders,
+            },
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 60),
+          ),
+        );
 
   @override
   String get name => _name;
@@ -83,13 +85,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   /// 计费（cost）纯粹采用 API 返回的值（如 OpenRouter 的 usage.total_cost），
   /// 不自作主张按价格统计（缓存/推理 token 等计价要素太多，自统计不准）。
   /// 数值字段兼容 num 与数字字符串（部分网关返回字符串）。
-  @visibleForTesting
   static Map<String, dynamic>? normalizeUsage(dynamic usage) {
     if (usage is! Map) return null;
-    final inputD =
-        usageNumberToDouble(usage['prompt_tokens'] ?? usage['input_tokens']);
+    final inputD = usageNumberToDouble(
+      usage['prompt_tokens'] ?? usage['input_tokens'],
+    );
     final outputD = usageNumberToDouble(
-        usage['completion_tokens'] ?? usage['output_tokens']);
+      usage['completion_tokens'] ?? usage['output_tokens'],
+    );
     // API 返回的计费（美元）；OpenRouter 为 usage.total_cost，
     // 部分兼容端点用 usage.cost；total_cost 存在但不可解析时回退 cost
     final costD = usageNumberToDouble(usage['total_cost']) ??
@@ -103,7 +106,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   /// 检查流式 chunk 是否携带 API 错误（choices 空 + error 字段）。
   /// 有错误时抛出（对齐 Anthropic 行为，防止截断回复被当作成功）。
-  @visibleForTesting
   static void throwIfApiError(Map<String, dynamic> data) {
     final apiError = data['error'];
     if (apiError is Map) {
@@ -131,13 +133,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
-    return _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: stream,
-        tools: tools,
-        extraParams: extraParams);
+    return _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: stream,
+      tools: tools,
+      extraParams: extraParams,
+    );
   }
 
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
@@ -160,7 +164,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   ///
   /// Extracted as a static method for testability — allows direct unit testing
   /// of the SSE parsing logic without mocking HTTP/SSE infrastructure.
-  @visibleForTesting
   static List<AIStreamEvent> parseStreamEvent(Map<String, dynamic> data) {
     final events = <AIStreamEvent>[];
     final choices = data['choices'] as List?;
@@ -254,14 +257,17 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   }) async {
     if (_apiKey.isEmpty) throw Exception('API key not configured');
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      extraParams: extraParams,
+    );
 
     debugPrint(
-        'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
+      'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     try {
       _lastRequestBody = body;
@@ -287,7 +293,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
       _lastUsage = normalizeUsage(
-          response.data is Map ? (response.data as Map)['usage'] : null);
+        response.data is Map ? (response.data as Map)['usage'] : null,
+      );
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
@@ -324,13 +331,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       throw Exception('API key not configured');
     }
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: true,
-        tools: tools,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: true,
+      tools: tools,
+      extraParams: extraParams,
+    );
 
     _lastRequestBody = body;
     _lastRequestUrl = _baseUrl;
@@ -346,7 +355,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastUsage = null;
 
     debugPrint(
-        'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
+      'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
     // 本次请求的 usage（局部收集，per-request 隔离——
@@ -374,7 +384,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         // but be defensive in case a future implementation forgets the prefix.
         if (!event.startsWith('data: ')) {
           debugPrint(
-              'chat_api_provider: skipping unexpected SSE event (no data: prefix)');
+            'chat_api_provider: skipping unexpected SSE event (no data: prefix)',
+          );
           continue;
         }
         final dataStr = event.substring('data: '.length).trim();
@@ -412,7 +423,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           // （FormatException/TypeError，如代理式多余行）跳过继续。
           if (e is! FormatException && e is! TypeError) rethrow;
           debugPrint(
-              'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
+            'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e',
+          );
         }
       }
     } catch (e) {

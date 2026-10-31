@@ -34,6 +34,7 @@ void main() {
           'aistudio',
           'vertex',
           'openai-compatibility',
+          'ollama',
         }),
       );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
@@ -79,15 +80,32 @@ void main() {
         );
       }
 
-      expect(
-        LlmConnectorRegistry.find('gemini')!.authTypes,
-        {'api_key', 'oauth'},
-      );
+      expect(LlmConnectorRegistry.find('gemini')!.authTypes, {
+        'api_key',
+        'oauth',
+      });
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('claude'),
         'anthropic',
       );
       expect(LlmConnectorRegistry.find('bedrock'), isNotNull);
+      expect(LlmConnectorRegistry.chatAdapterEndpointType('bedrock'), 'openai');
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gemini'),
+        'google.gemini.generate_content',
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gemini-interactions'),
+        'google.gemini.interactions',
+      );
+      expect(LlmConnectorRegistry.find('ollama')!.authTypes, {
+        'none',
+        'api_key',
+      });
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('ollama'),
+        'ollama.chat',
+      );
       expect(
         LlmConnectorRegistry.find('vertex')!.authTypes,
         containsAll({'api_key', 'service_account'}),
@@ -103,17 +121,12 @@ void main() {
 
       expect(
         vertex.modelCatalog.every(
-          (id) => !RegExp(
-            r'embedding|rerank',
-            caseSensitive: false,
-          ).hasMatch(id),
+          (id) =>
+              !RegExp(r'embedding|rerank', caseSensitive: false).hasMatch(id),
         ),
         isTrue,
       );
-      expect(
-        vertex.modelCatalog,
-        contains('imagen-4.0-generate-001'),
-      );
+      expect(vertex.modelCatalog, contains('imagen-4.0-generate-001'));
     });
   });
 
@@ -913,6 +926,8 @@ void main() {
       expect(captured?.headers['x-goog-api-key'], 'gemini-private-key');
       expect(models.map((model) => model.upstreamModelId), ['gemini-3.1-pro']);
       expect(models.single.displayName, 'Gemini 3.1 Pro');
+      expect(models.single.capabilities['chat'], isTrue);
+      expect(models.single.capabilities['tools'], isTrue);
     });
 
     test(
@@ -1134,86 +1149,88 @@ void main() {
         refreshRemote: true,
       );
 
-      expect(
-        models.map((model) => model.upstreamModelId),
-        ['imagen-4.0-generate-001'],
-      );
+      expect(models.map((model) => model.upstreamModelId), [
+        'imagen-4.0-generate-001',
+      ]);
     });
 
-    test('blocks Vertex model discovery with unsupported generic OAuth',
-        () async {
-      var requestsSent = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requestsSent++;
-          return ResponseBody.fromString('{}', 200);
-        });
-      final preferences = _MemoryPreferences();
-      final discoveryService = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await discoveryService.saveAccount(
-        LlmAccount(
-          id: 'vertex-oauth-discovery',
-          connectorType: 'vertex',
-          authType: 'api_key',
-          displayName: 'Vertex OAuth account',
-          models: const [
-            LlmUpstreamModel(
-              id: 'cached-vertex-model',
-              upstreamModelId: 'gemini-2.5-flash',
-              displayName: 'Gemini 2.5 Flash',
-            ),
-          ],
-          endpointConfig: const {
-            'projectId': 'oauth-project',
-            'location': 'europe-west4',
-          },
-        ),
-        secret: 'vertex-api-key',
-      );
-      final accountsEnvelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map<String, dynamic>;
-      final accountRecord = Map<String, dynamic>.from(
-        (accountsEnvelope['items'] as List).single as Map,
-      )..['authType'] = 'oauth';
-      accountsEnvelope['items'] = [accountRecord];
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
-          jsonEncode(accountsEnvelope);
-      final legacyAccount = (await discoveryService.getAccount(account.id))!;
+    test(
+      'blocks Vertex model discovery with unsupported generic OAuth',
+      () async {
+        var requestsSent = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
+          });
+        final preferences = _MemoryPreferences();
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'vertex-oauth-discovery',
+            connectorType: 'vertex',
+            authType: 'api_key',
+            displayName: 'Vertex OAuth account',
+            models: const [
+              LlmUpstreamModel(
+                id: 'cached-vertex-model',
+                upstreamModelId: 'gemini-2.5-flash',
+                displayName: 'Gemini 2.5 Flash',
+              ),
+            ],
+            endpointConfig: const {
+              'projectId': 'oauth-project',
+              'location': 'europe-west4',
+            },
+          ),
+          secret: 'vertex-api-key',
+        );
+        final accountsEnvelope = jsonDecode(
+          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+        ) as Map<String, dynamic>;
+        final accountRecord = Map<String, dynamic>.from(
+          (accountsEnvelope['items'] as List).single as Map,
+        )..['authType'] = 'oauth';
+        accountsEnvelope['items'] = [accountRecord];
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+            jsonEncode(accountsEnvelope);
+        final legacyAccount = (await discoveryService.getAccount(account.id))!;
 
-      await expectLater(
-        discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      await expectLater(
-        discoveryService.discoverModels(legacyAccount),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      accountRecord['models'] = <Map<String, dynamic>>[];
-      accountsEnvelope['items'] = [accountRecord];
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
-          jsonEncode(accountsEnvelope);
-      final legacyAccountWithoutModels =
-          (await discoveryService.getAccount(account.id))!;
-      await expectLater(
-        discoveryService.discoverModels(legacyAccountWithoutModels),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      expect(requestsSent, 0);
-      expect(
-        () => LlmNativeRequestBuilder().build(
-          account: legacyAccount,
-          credential: 'legacy-vertex-oauth',
-          modelId: 'gemini-2.5-flash',
-          body: const {'contents': []},
-        ),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-    });
+        await expectLater(
+          discoveryService.saveAccount(legacyAccount, secret: 'legacy-token'),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        await expectLater(
+          discoveryService.discoverModels(legacyAccount),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        accountRecord['models'] = <Map<String, dynamic>>[];
+        accountsEnvelope['items'] = [accountRecord];
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+            jsonEncode(accountsEnvelope);
+        final legacyAccountWithoutModels = (await discoveryService.getAccount(
+          account.id,
+        ))!;
+        await expectLater(
+          discoveryService.discoverModels(legacyAccountWithoutModels),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(requestsSent, 0);
+        expect(
+          () => LlmNativeRequestBuilder().build(
+            account: legacyAccount,
+            credential: 'legacy-vertex-oauth',
+            modelId: 'gemini-2.5-flash',
+            body: const {'contents': []},
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
 
     test('follows OpenAI and Anthropic model-list cursors', () async {
       for (final connector in ['openai-api', 'claude']) {
@@ -1270,6 +1287,56 @@ void main() {
             reason: connector);
       }
     });
+
+    test(
+      'discovers tool capability for official OpenAI and Anthropic model catalogs',
+      () async {
+        for (final (connectorType, modelId) in [
+          ('openai-api', 'gpt-4o'),
+          ('openai-api', 'gpt-4.5-preview'),
+          ('claude', 'claude-sonnet-4-6'),
+        ]) {
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'data': [
+                    {'id': modelId},
+                    if (connectorType == 'openai-api')
+                      {
+                        'id': 'catalog-no-tools',
+                        'capabilities': {'tools': false},
+                      },
+                  ],
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final discoveryService = LlmAccountConnectorService(
+            preferences: preferences,
+            credentialStore: credentials,
+            dio: dio,
+          );
+          final account = await discoveryService.saveAccount(
+            _account('tool-discovery-$connectorType', connectorType),
+            secret: 'tool-discovery-key',
+          );
+
+          final models = await discoveryService.discoverModels(
+            account,
+            refreshRemote: true,
+          );
+
+          expect(models.first.capabilities['tools'], isTrue, reason: modelId);
+          if (connectorType == 'openai-api') {
+            expect(models.last.capabilities['tools'], isFalse);
+          }
+        }
+      },
+    );
 
     test(
       'discovers provider API-key models and filters non-chat models',
@@ -1797,6 +1864,51 @@ void main() {
     );
 
     test(
+      'preserves explicit false capabilities from compatible model discovery',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'non-streaming-model',
+                    'capabilities': {'chat': true, 'streaming': false},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: 'explicit-capabilities',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'Compatible endpoint',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+          secret: 'capability-discovery-key',
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(models.single.capabilities, {'chat': true, 'streaming': false});
+      },
+    );
+
+    test(
       'discovers compatible endpoint models from a full completion URL',
       () async {
         RequestOptions? captured;
@@ -1907,6 +2019,65 @@ void main() {
         expect(models.single.upstreamModelId, 'trusted-model');
       },
     );
+
+    test('discovers Ollama model capabilities from its native API', () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          final body = options.uri.path.endsWith('/tags')
+              ? {
+                  'models': [
+                    {
+                      'name': 'llama3.2',
+                      'details': {'family': 'llama'},
+                    },
+                  ],
+                }
+              : {
+                  'capabilities': ['completion', 'tools'],
+                };
+          return ResponseBody.fromString(
+            jsonEncode(body),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'ollama-discovery',
+          connectorType: 'ollama',
+          authType: 'none',
+          displayName: 'Ollama',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'baseUrl': 'http://localhost:11434'},
+        ),
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(requests.map((request) => request.uri.path), [
+        '/api/tags',
+        '/api/show',
+      ]);
+      expect(models.single.upstreamModelId, 'llama3.2');
+      expect(models.single.capabilities, {
+        'chat': true,
+        'streaming': true,
+        'tools': true,
+      });
+      expect(models.single.config['extensions'], contains('ollama'));
+    });
 
     test(
       'rejects remote HTTP model discovery before sending credentials',
@@ -2480,6 +2651,33 @@ void main() {
         expect(interactions.headers['Api-Revision'], '2026-05-20');
       },
     );
+
+    test('routes OpenAI Responses and Ollama Chat to native endpoints', () {
+      final responses = builder.build(
+        account: _account('openai-responses', 'openai-api'),
+        credential: 'openai-key',
+        modelId: 'gpt-4.1',
+        body: const {'model': 'gpt-4.1', 'input': []},
+        nativeFormat: 'responses',
+      );
+      final ollama = builder.build(
+        account: LlmAccount(
+          id: 'ollama-local',
+          connectorType: 'ollama',
+          authType: 'none',
+          displayName: 'Ollama local',
+          endpointConfig: const {'baseUrl': 'http://localhost:11434'},
+        ),
+        credential: null,
+        modelId: 'llama3.2',
+        body: const {'model': 'llama3.2', 'messages': []},
+      );
+
+      expect(responses.uri.path, '/v1/responses');
+      expect(responses.headers['Authorization'], 'Bearer openai-key');
+      expect(ollama.uri.toString(), 'http://localhost:11434/api/chat');
+      expect(ollama.headers['Authorization'], isNull);
+    });
 
     test('uses Vertex project and location in its native generate path', () {
       final request = builder.build(

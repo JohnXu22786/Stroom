@@ -3,21 +3,113 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
-import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
-  for (final (connectorType, endpointType, upstreamModelId) in [
-    ('openai-compatibility', 'openai', 'gpt-routed'),
-    ('claude', 'anthropic', 'claude-routed'),
+  for (final (
+        connectorType,
+        endpointType,
+        upstreamModelId,
+        expectedRequestField,
+        expectedResponse,
+        endpointConfig,
+      ) in [
+    (
+      'openai-compatibility',
+      'openai',
+      'gpt-routed',
+      'messages',
+      {
+        'choices': [
+          {
+            'message': {'content': 'ok'},
+          },
+        ],
+      },
+      const <String, dynamic>{},
+    ),
+    (
+      'claude',
+      'anthropic',
+      'claude-routed',
+      'messages',
+      {
+        'content': [
+          {'type': 'text', 'text': 'ok'},
+        ],
+      },
+      const <String, dynamic>{},
+    ),
+    (
+      'gemini',
+      'google.gemini.generate_content',
+      'gemini-routed',
+      'contents',
+      {
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {'text': 'private reasoning', 'thought': true},
+                {'text': 'ok'},
+              ],
+            },
+          },
+        ],
+      },
+      const <String, dynamic>{},
+    ),
+    (
+      'gemini-interactions',
+      'google.gemini.interactions',
+      'interaction-routed',
+      'input',
+      {
+        'outputs': [
+          {
+            'type': 'model_output',
+            'content': [
+              {'type': 'text', 'text': 'ok'},
+            ],
+          },
+        ],
+      },
+      const <String, dynamic>{},
+    ),
+    (
+      'ollama',
+      'ollama.chat',
+      'llama-routed',
+      'messages',
+      {
+        'message': {'content': 'ok'},
+      },
+      const <String, dynamic>{'baseUrl': 'http://localhost:11434'},
+    ),
+    (
+      'openai-api',
+      'openai',
+      'gpt-response-routed',
+      'input',
+      {
+        'output': [
+          {
+            'type': 'message',
+            'content': [
+              {'type': 'output_text', 'text': 'ok'},
+            ],
+          },
+        ],
+      },
+      const <String, dynamic>{'chatProtocol': 'openai.responses'},
+    ),
   ]) {
     test(
       '$endpointType request keeps the routed model over extraParams',
@@ -31,9 +123,17 @@ void main() {
           LlmAccount(
             id: 'account-$endpointType',
             connectorType: connectorType,
-            authType: connectorType == 'claude' ? 'api_key' : 'none',
+            authType: const {
+              'claude',
+              'gemini',
+              'gemini-interactions',
+              'openai-api',
+            }.contains(connectorType)
+                ? 'api_key'
+                : 'none',
             displayName: 'Test account',
             status: LlmAccountStatus.ready,
+            endpointConfig: endpointConfig,
             models: [
               LlmUpstreamModel(
                 id: 'local-model',
@@ -42,7 +142,14 @@ void main() {
               ),
             ],
           ),
-          secret: connectorType == 'claude' ? 'test-api-key' : null,
+          secret: const {
+            'claude',
+            'gemini',
+            'gemini-interactions',
+            'openai-api',
+          }.contains(connectorType)
+              ? 'test-api-key'
+              : null,
         );
         await accounts.saveModelGroup(
           LlmModelGroup(
@@ -59,8 +166,9 @@ void main() {
         );
         final connector = _FakeConnectorClient(
           accounts,
+          responseBody: expectedResponse,
           responseHeaders: const {
-            'x-request-id': ['request-123']
+            'x-request-id': ['request-123'],
           },
         );
         final runtime = LlmChatRoutingRuntime(
@@ -79,14 +187,58 @@ void main() {
           endpointType: endpointType,
         );
 
-        await provider.chat(
-          const [
-            {'role': 'user', 'content': 'hello'},
-          ],
-          extraParams: const {'model': 'caller-selected-model'},
+        final answer = await provider.chat(
+          connectorType == 'gemini-interactions'
+              ? const [
+                  {'role': 'user', 'content': 'previous turn'},
+                  {'role': 'assistant', 'content': 'previous response'},
+                  {'role': 'user', 'content': 'continue'},
+                ]
+              : const [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+          temperature: 0.3,
+          extraParams: {
+            'model': 'caller-selected-model',
+            if (connectorType == 'claude') ...{
+              'thinking': {'type': 'enabled', 'budget_tokens': 1024},
+              'temperature': 0.7,
+            },
+            if (connectorType == 'gemini-interactions')
+              'previous_interaction_id': 'interaction-previous',
+            if (endpointConfig['chatProtocol'] == 'openai.responses')
+              'max_output_tokens': 42,
+            if (connectorType == 'ollama') 'options': {'num_ctx': 8192},
+          },
         );
 
-        expect(connector.requestBody?['model'], upstreamModelId);
+        expect(answer, 'ok');
+        if (expectedRequestField != 'contents') {
+          expect(connector.requestBody?['model'], upstreamModelId);
+        }
+        expect(connector.requestedModelIds, [upstreamModelId]);
+        if (endpointType == 'openai' && connectorType == 'openai-api') {
+          expect(connector.lastNativeFormat, 'responses');
+        }
+        expect(connector.requestBody?[expectedRequestField], isNotNull);
+        if (connectorType == 'gemini-interactions') {
+          expect(
+            connector.requestBody?['previous_interaction_id'],
+            'interaction-previous',
+          );
+          expect(connector.requestBody?['input'], [
+            {'type': 'text', 'text': 'continue'},
+          ]);
+        }
+        if (connectorType == 'claude') {
+          expect(connector.requestBody?.containsKey('temperature'), isFalse);
+        }
+        if (endpointConfig['chatProtocol'] == 'openai.responses') {
+          expect(connector.requestBody?['max_output_tokens'], 42);
+        }
+        if (connectorType == 'ollama') {
+          expect((connector.requestBody?['options'] as Map?)?['num_ctx'], 8192);
+        }
         expect(provider.lastResponseHeaders, {
           'x-request-id': ['request-123'],
         });
@@ -94,8 +246,7 @@ void main() {
     );
   }
 
-  test('routed HTTP failures preserve response metadata for diagnostics',
-      () async {
+  test('Anthropic routed request converts OpenAI tool history', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -103,39 +254,562 @@ void main() {
     );
     await accounts.saveAccount(
       LlmAccount(
-        id: 'diagnostic-account',
-        connectorType: 'openai-compatibility',
-        authType: 'none',
-        displayName: 'Diagnostic account',
+        id: 'tool-history-account',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Tool history account',
         status: LlmAccountStatus.ready,
         models: const [
           LlmUpstreamModel(
-            id: 'diagnostic-model',
-            upstreamModelId: 'gpt-diagnostic',
-            displayName: 'Diagnostic model',
+            id: 'tool-history-model',
+            upstreamModelId: 'claude-tool-history',
+            displayName: 'Claude tools',
+            capabilities: {'tools': true},
           ),
         ],
       ),
+      secret: 'test-api-key',
     );
     await accounts.saveModelGroup(
       LlmModelGroup(
-        id: 'diagnostic-group',
-        displayName: 'Diagnostic group',
+        id: 'tool-history-group',
+        displayName: 'Tool history group',
         members: const [
           LlmModelGroupMember(
-            accountId: 'diagnostic-account',
-            localModelId: 'diagnostic-model',
-            upstreamModelId: 'gpt-diagnostic',
+            accountId: 'tool-history-account',
+            localModelId: 'tool-history-model',
+            upstreamModelId: 'claude-tool-history',
           ),
         ],
       ),
     );
     final connector = _FakeConnectorClient(
       accounts,
-      firstRequestError: const _HttpExceptionWithHeaders(
-        statusCode: 429,
-        code: 'rate_limited',
-        headers: {'retry-after': '3'},
+      responseBody: const {
+        'content': [
+          {'type': 'text', 'text': 'It is 18 degrees.'},
+        ],
+      },
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'tool-history-group',
+      localModelId: 'tool-history-model',
+      endpointType: 'anthropic',
+    );
+
+    await provider.chat(const [
+      {
+        'role': 'assistant',
+        'content': null,
+        'tool_calls': [
+          {
+            'id': 'call-1',
+            'type': 'function',
+            'function': {'name': 'lookup', 'arguments': '{"city":"Paris"}'},
+          },
+        ],
+      },
+      {
+        'role': 'tool',
+        'tool_call_id': 'call-1',
+        'content': '{"temperature":18}',
+      },
+    ]);
+
+    expect(connector.requestBody?['messages'], [
+      {
+        'role': 'assistant',
+        'content': [
+          {
+            'type': 'tool_use',
+            'id': 'call-1',
+            'name': 'lookup',
+            'input': {'city': 'Paris'},
+          },
+        ],
+      },
+      {
+        'role': 'user',
+        'content': [
+          {
+            'type': 'tool_result',
+            'tool_use_id': 'call-1',
+            'content': '{"temperature":18}',
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('Anthropic tool-only completion is successful and retained', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'tool-only-account',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Tool-only account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'tool-only-model',
+            upstreamModelId: 'claude-tool-only',
+            displayName: 'Claude tools',
+            capabilities: {'tools': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'tool-only-group',
+        displayName: 'Tool-only group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'tool-only-account',
+            localModelId: 'tool-only-model',
+            upstreamModelId: 'claude-tool-only',
+          ),
+        ],
+      ),
+    );
+    final toolCall = const {
+      'type': 'tool_use',
+      'id': 'tool-call-1',
+      'name': 'lookup',
+      'input': {'city': 'Paris'},
+    };
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'content': [toolCall],
+        'stop_reason': 'tool_use',
+      },
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'tool-only-group',
+      localModelId: 'tool-only-model',
+      endpointType: 'anthropic',
+    );
+
+    final result = await provider.chat(
+      const [
+        {'role': 'user', 'content': 'Look up Paris weather.'},
+      ],
+      extraParams: const {
+        'tools': [
+          {
+            'type': 'function',
+            'function': {'name': 'lookup'},
+          },
+        ],
+      },
+    );
+
+    expect(result, isEmpty);
+    expect(provider.lastResponseData?['content'], [toolCall]);
+    expect(provider.lastResponseData?['stop_reason'], 'tool_use');
+    expect(connector.requestedAccountIds, ['tool-only-account']);
+  });
+
+  test(
+    'Responses nonstreaming refusal content is returned to the caller',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'responses-refusal',
+          connectorType: 'openai-api',
+          authType: 'api_key',
+          displayName: 'Responses refusal',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'chatProtocol': 'openai.responses'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'responses-refusal-model',
+              upstreamModelId: 'gpt-4o',
+              displayName: 'GPT-4o',
+            ),
+          ],
+        ),
+        secret: 'responses-key',
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'responses-refusal-group',
+          displayName: 'Responses refusal group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'responses-refusal',
+              localModelId: 'responses-refusal-model',
+              upstreamModelId: 'gpt-4o',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'output': [
+            {
+              'type': 'message',
+              'content': [
+                {
+                  'type': 'refusal',
+                  'refusal': 'I cannot help with that request.',
+                },
+              ],
+            },
+          ],
+        },
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'responses-refusal-group',
+        localModelId: 'responses-refusal-model',
+        endpointType: 'openai',
+      );
+
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'do this'},
+        ]),
+        'I cannot help with that request.',
+      );
+    },
+  );
+
+  test('extraParams tools require a tool-capable account', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'no-tools-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'No tools account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'no-tools-model',
+            upstreamModelId: 'gpt-no-tools',
+            displayName: 'No tools model',
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'no-tools-group',
+        displayName: 'No tools group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'no-tools-account',
+            localModelId: 'no-tools-model',
+            upstreamModelId: 'gpt-no-tools',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(accounts);
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'no-tools-group',
+      localModelId: 'no-tools-model',
+      endpointType: 'openai',
+    );
+
+    await expectLater(
+      provider.chat(
+        const [
+          {'role': 'user', 'content': 'hello'},
+        ],
+        extraParams: const {
+          'tools': [
+            {
+              'type': 'function',
+              'function': {'name': 'lookup'},
+            },
+          ],
+        },
+      ),
+      throwsA(isA<AiGatewayRoutingException>()),
+    );
+    expect(connector.requestedAccountIds, isEmpty);
+  });
+
+  test(
+    'routes OpenAI-compatible named providers through the ChatAdapter',
+    () async {
+      for (final connectorType in [
+        'moonshot',
+        'glm',
+        'deepseek',
+        'minimax',
+        'qwen',
+      ]) {
+        final preferences = _MemoryPreferences();
+        final accounts = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentialStore(),
+        );
+        final accountId = 'account-$connectorType';
+        const localModelId = 'local-compatible-model';
+        final upstreamModelId = '$connectorType-chat';
+        await accounts.saveAccount(
+          LlmAccount(
+            id: accountId,
+            connectorType: connectorType,
+            authType: 'api_key',
+            displayName: connectorType,
+            status: LlmAccountStatus.ready,
+            models: [
+              LlmUpstreamModel(
+                id: localModelId,
+                upstreamModelId: upstreamModelId,
+                displayName: upstreamModelId,
+              ),
+            ],
+          ),
+          secret: 'provider-key',
+        );
+        await accounts.saveModelGroup(
+          LlmModelGroup(
+            id: 'group-$connectorType',
+            displayName: connectorType,
+            members: [
+              LlmModelGroupMember(
+                accountId: accountId,
+                localModelId: localModelId,
+                upstreamModelId: upstreamModelId,
+              ),
+            ],
+          ),
+        );
+        final connector = _FakeConnectorClient(
+          accounts,
+          responseBody: {
+            'choices': [
+              {
+                'message': {'content': 'ok'},
+              },
+            ],
+          },
+        );
+        final provider = LlmRoutedChatProvider(
+          runtime: Future.value(
+            LlmChatRoutingRuntime(
+              accountService: accounts,
+              routingService: LlmRoutingService(
+                accountService: accounts,
+                stateStore: LlmRoutingStateStore(preferences: preferences),
+                concurrency: LlmConcurrencyReservations(),
+              ),
+              connectorClient: connector,
+            ),
+          ),
+          groupId: 'group-$connectorType',
+          localModelId: localModelId,
+          endpointType: 'openai',
+        );
+
+        expect(
+          await provider.chat(const [
+            {'role': 'user', 'content': 'hello'},
+          ]),
+          'ok',
+          reason: connectorType,
+        );
+        expect(
+            connector.requestedAccountIds,
+            [
+              accountId,
+            ],
+            reason: connectorType);
+      }
+    },
+  );
+
+  test(
+    'routes Bedrock ChatAdapter accounts through the native chat executor',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'bedrock-routed-account',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock ChatAdapter',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'region': 'us-east-1'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'bedrock-routed-model',
+              upstreamModelId: 'anthropic.claude-3-5-sonnet',
+              displayName: 'Bedrock Claude',
+            ),
+          ],
+        ),
+        secret: jsonEncode({
+          'accessKeyId': 'AKIDEXAMPLE',
+          'secretAccessKey': 'private-aws-secret',
+        }),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'bedrock-routed-group',
+          displayName: 'Bedrock group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'bedrock-routed-account',
+              localModelId: 'bedrock-routed-model',
+              upstreamModelId: 'anthropic.claude-3-5-sonnet',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: const {
+          'choices': [
+            {
+              'message': {'content': 'Bedrock answer'},
+            },
+          ],
+        },
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'bedrock-routed-group',
+        localModelId: 'bedrock-routed-model',
+        endpointType: 'openai',
+      );
+
+      final result = await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]);
+
+      expect(result, 'Bedrock answer');
+      expect(connector.requestedAccountIds, ['bedrock-routed-account']);
+      expect(connector.requestedModelIds, ['anthropic.claude-3-5-sonnet']);
+      expect(connector.requestBody?['messages'], [
+        {'role': 'user', 'content': 'hello'},
+      ]);
+    },
+  );
+
+  test('Ollama streaming decodes newline-delimited JSON responses', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'ollama-stream-account',
+        connectorType: 'ollama',
+        authType: 'none',
+        displayName: 'Ollama stream account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'baseUrl': 'http://localhost:11434'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'ollama-stream-model',
+            upstreamModelId: 'llama3',
+            displayName: 'Ollama stream model',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'ollama-stream-group',
+        displayName: 'Ollama stream group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'ollama-stream-account',
+            localModelId: 'ollama-stream-model',
+            upstreamModelId: 'llama3',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.value(
+        utf8.encode(
+          '{"message":{"role":"assistant","thinking":"private thought","content":"streamed"},"done":false}\n'
+          '{"done":true,"prompt_eval_count":2,"eval_count":3}\n',
+        ),
       ),
     );
     final provider = LlmRoutedChatProvider(
@@ -150,23 +824,184 @@ void main() {
           connectorClient: connector,
         ),
       ),
-      groupId: 'diagnostic-group',
-      localModelId: 'diagnostic-model',
-      endpointType: 'openai',
+      groupId: 'ollama-stream-group',
+      localModelId: 'ollama-stream-model',
+      endpointType: 'ollama.chat',
     );
 
-    await expectLater(
-      provider.chat(const [
-        {'role': 'user', 'content': 'hello'},
-      ]),
-      throwsA(isA<AiGatewayRoutingException>()),
-    );
+    final events = await provider.chatStream(const [
+      {'role': 'user', 'content': 'hello'},
+    ]).toList();
 
-    expect(provider.lastResponseStatusCode, 429);
-    expect(provider.lastResponseHeaders, {
-      'retry-after': ['3']
-    });
+    expect(
+      events
+          .where((event) => !event.isReasoning)
+          .map((event) => event.text)
+          .join(),
+      'streamed',
+    );
+    expect(
+      events.where((event) => event.isReasoning).map((event) => event.text),
+      ['private thought'],
+    );
+    expect(events.any((event) => event.usage != null), isTrue);
   });
+
+  test(
+    'Anthropic token counting uses its dedicated request contract',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'count-account',
+          connectorType: 'claude',
+          authType: 'api_key',
+          displayName: 'Anthropic token counter',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'count-model',
+              upstreamModelId: 'claude-count',
+              displayName: 'Claude count model',
+            ),
+          ],
+        ),
+        secret: 'test-api-key',
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'count-group',
+          displayName: 'Anthropic count group',
+          members: [
+            LlmModelGroupMember(
+              accountId: 'count-account',
+              localModelId: 'count-model',
+              upstreamModelId: 'claude-count',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: const {'input_tokens': 19},
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'count-group',
+        localModelId: 'count-model',
+        endpointType: 'anthropic',
+      );
+
+      expect(
+        await provider.countTokens(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        19,
+      );
+      expect(connector.lastNativeFormat, 'count_tokens');
+      expect(connector.requestBody, {
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': 'hello'},
+            ],
+          },
+        ],
+        'model': 'claude-count',
+      });
+    },
+  );
+
+  test(
+    'routed HTTP failures preserve response metadata for diagnostics',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'diagnostic-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Diagnostic account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'diagnostic-model',
+              upstreamModelId: 'gpt-diagnostic',
+              displayName: 'Diagnostic model',
+            ),
+          ],
+        ),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'diagnostic-group',
+          displayName: 'Diagnostic group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'diagnostic-account',
+              localModelId: 'diagnostic-model',
+              upstreamModelId: 'gpt-diagnostic',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        firstRequestError: const _HttpExceptionWithHeaders(
+          statusCode: 429,
+          code: 'rate_limited',
+          headers: {'retry-after': '3'},
+        ),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'diagnostic-group',
+        localModelId: 'diagnostic-model',
+        endpointType: 'openai',
+      );
+
+      await expectLater(
+        provider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        throwsA(isA<AiGatewayRoutingException>()),
+      );
+
+      expect(provider.lastResponseStatusCode, 429);
+      expect(provider.lastResponseHeaders, {
+        'retry-after': ['3'],
+      });
+    },
+  );
 
   for (final (connectorType, endpointType, errorStream) in [
     (
@@ -270,6 +1105,96 @@ void main() {
       },
     );
   }
+
+  test(
+    'Responses response.failed stream event falls back within its group',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      for (final suffix in ['a', 'b']) {
+        await accounts.saveAccount(
+          LlmAccount(
+            id: 'responses-$suffix',
+            connectorType: 'openai-api',
+            authType: 'api_key',
+            displayName: 'Responses $suffix',
+            status: LlmAccountStatus.ready,
+            endpointConfig: const {'chatProtocol': 'openai.responses'},
+            models: [
+              LlmUpstreamModel(
+                id: 'responses-model',
+                upstreamModelId: 'responses-$suffix-upstream',
+                displayName: 'Responses $suffix',
+                capabilities: const {'streaming': true},
+              ),
+            ],
+          ),
+          secret: 'test-api-key',
+        );
+      }
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'responses-stream-fallback',
+          displayName: 'Responses stream fallback',
+          policy: LlmRoutingPolicy(fallbackScope: LlmFallbackScope.modelGroup),
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'responses-a',
+              localModelId: 'responses-model',
+              upstreamModelId: 'responses-a-upstream',
+            ),
+            LlmModelGroupMember(
+              accountId: 'responses-b',
+              localModelId: 'responses-model',
+              upstreamModelId: 'responses-b-upstream',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        streamBodies: [
+          Stream<List<int>>.value(
+            utf8.encode(
+              'data: {"type":"response.failed","response":{"error":{"code":"rate_limit_exceeded"}}}\n\n',
+            ),
+          ),
+          Stream<List<int>>.value(
+            utf8.encode(
+              'data: {"type":"response.output_text.delta","delta":"fallback"}\n\n'
+              'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1}}}\n\n',
+            ),
+          ),
+        ],
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'responses-stream-fallback',
+        localModelId: 'responses-model',
+        endpointType: 'openai',
+      );
+
+      final events = await provider.chatStream(const [
+        {'role': 'user', 'content': 'hello'},
+      ]).toList();
+
+      expect(connector.requestedAccountIds, ['responses-a', 'responses-b']);
+      expect(events.map((event) => event.text).join(), 'fallback');
+    },
+  );
 
   test(
     'non-stream OpenAI rate-limit error falls back within its group',
@@ -523,73 +1448,75 @@ void main() {
     }
   });
 
-  test('cancelling chat stream stops its request without a caller token',
-      () async {
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    await accounts.saveAccount(
-      LlmAccount(
-        id: 'cancel-account',
-        connectorType: 'openai-compatibility',
-        authType: 'none',
-        displayName: 'Cancel account',
-        status: LlmAccountStatus.ready,
-        models: const [
-          LlmUpstreamModel(
-            id: 'cancel-model',
-            upstreamModelId: 'gpt-cancel',
-            displayName: 'Cancel model',
-            capabilities: {'streaming': true},
-          ),
-        ],
-      ),
-    );
-    await accounts.saveModelGroup(
-      LlmModelGroup(
-        id: 'cancel-group',
-        displayName: 'Cancel group',
-        members: [
-          LlmModelGroupMember(
-            accountId: 'cancel-account',
-            localModelId: 'cancel-model',
-            upstreamModelId: 'gpt-cancel',
-          ),
-        ],
-      ),
-    );
-    final connector = _FakeConnectorClient(
-      accounts,
-      streamBody: const Stream<List<int>>.empty(),
-    );
-    final provider = LlmRoutedChatProvider(
-      runtime: Future.value(
-        LlmChatRoutingRuntime(
-          accountService: accounts,
-          routingService: LlmRoutingService(
-            accountService: accounts,
-            stateStore: LlmRoutingStateStore(preferences: preferences),
-            concurrency: LlmConcurrencyReservations(),
-          ),
-          connectorClient: connector,
+  test(
+    'cancelling chat stream stops its request without a caller token',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'cancel-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Cancel account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'cancel-model',
+              upstreamModelId: 'gpt-cancel',
+              displayName: 'Cancel model',
+              capabilities: {'streaming': true},
+            ),
+          ],
         ),
-      ),
-      groupId: 'cancel-group',
-      localModelId: 'cancel-model',
-      endpointType: 'openai',
-    );
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'cancel-group',
+          displayName: 'Cancel group',
+          members: [
+            LlmModelGroupMember(
+              accountId: 'cancel-account',
+              localModelId: 'cancel-model',
+              upstreamModelId: 'gpt-cancel',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        streamBody: const Stream<List<int>>.empty(),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'cancel-group',
+        localModelId: 'cancel-model',
+        endpointType: 'openai',
+      );
 
-    final subscription = provider.chatStream(const [
-      {'role': 'user', 'content': 'hello'},
-    ]).listen((_) {});
-    await connector.requestStarted.future;
-    await subscription.cancel();
+      final subscription = provider.chatStream(const [
+        {'role': 'user', 'content': 'hello'},
+      ]).listen((_) {});
+      await connector.requestStarted.future;
+      await subscription.cancel();
 
-    expect(connector.lastCancelToken, isNotNull);
-    expect(connector.lastCancelToken!.isCancelled, isTrue);
-  });
+      expect(connector.lastCancelToken, isNotNull);
+      expect(connector.lastCancelToken!.isCancelled, isTrue);
+    },
+  );
 
   test(
     'chat falls back after a connection error before request dispatch',
@@ -1042,8 +1969,65 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-stream');
   });
 
-  test('streaming chat skips malformed OpenAI frames and keeps valid output',
-      () async {
+  test(
+    'Gemini generateContent-only models are not routed for streaming',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'gemini-nonstream-account',
+          connectorType: 'gemini',
+          authType: 'api_key',
+          displayName: 'Gemini nonstream account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'gemini-nonstream-model',
+              upstreamModelId: 'gemini-text-only',
+              displayName: 'Gemini text only',
+              capabilities: {
+                'supportedGenerationMethods': ['generateContent'],
+              },
+            ),
+          ],
+        ),
+        secret: 'test-api-key',
+      );
+      final group = LlmModelGroup(
+        id: 'gemini-nonstream-group',
+        displayName: 'Gemini nonstream group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-nonstream-account',
+            localModelId: 'gemini-nonstream-model',
+            upstreamModelId: 'gemini-text-only',
+          ),
+        ],
+      );
+      await accounts.saveModelGroup(group);
+      final routing = LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      );
+
+      await expectLater(
+        routing.execute<String>(
+          group: group,
+          requestedModelId: 'gemini-nonstream-model',
+          requiredCapabilities: const {'chat', 'streaming'},
+          request: (candidate, progress) async => candidate.upstreamModelId,
+        ),
+        throwsA(isA<LlmRoutingUnavailableException>()),
+      );
+    },
+  );
+
+  test('Gemini streamed tool calls retain thought signatures', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -1051,30 +2035,31 @@ void main() {
     );
     await accounts.saveAccount(
       LlmAccount(
-        id: 'malformed-stream-account',
-        connectorType: 'openai-compatibility',
-        authType: 'none',
-        displayName: 'Malformed stream account',
+        id: 'gemini-signature-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini signature account',
         status: LlmAccountStatus.ready,
         models: const [
           LlmUpstreamModel(
-            id: 'malformed-stream-model',
-            upstreamModelId: 'gpt-malformed-stream',
-            displayName: 'Malformed stream model',
+            id: 'gemini-signature-model',
+            upstreamModelId: 'gemini-2.5-pro',
+            displayName: 'Gemini 2.5 Pro',
             capabilities: {'streaming': true},
           ),
         ],
       ),
+      secret: 'test-api-key',
     );
     await accounts.saveModelGroup(
       LlmModelGroup(
-        id: 'malformed-stream-group',
-        displayName: 'Malformed stream group',
+        id: 'gemini-signature-group',
+        displayName: 'Gemini signature group',
         members: const [
           LlmModelGroupMember(
-            accountId: 'malformed-stream-account',
-            localModelId: 'malformed-stream-model',
-            upstreamModelId: 'gpt-malformed-stream',
+            accountId: 'gemini-signature-account',
+            localModelId: 'gemini-signature-model',
+            upstreamModelId: 'gemini-2.5-pro',
           ),
         ],
       ),
@@ -1083,9 +2068,7 @@ void main() {
       accounts,
       streamBody: Stream<List<int>>.value(
         utf8.encode(
-          'data: {malformed json}\n\n'
-          'data: {"choices":[{"delta":{"content":"survives"},"finish_reason":null}]}\n\n'
-          'data: [DONE]\n\n',
+          'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"weather"}},"thoughtSignature":"opaque-signature"}]}}]}\n\n',
         ),
       ),
     );
@@ -1101,19 +2084,113 @@ void main() {
           connectorClient: connector,
         ),
       ),
-      groupId: 'malformed-stream-group',
-      localModelId: 'malformed-stream-model',
-      endpointType: 'openai',
+      groupId: 'gemini-signature-group',
+      localModelId: 'gemini-signature-model',
+      endpointType: 'google.gemini.generate_content',
     );
 
     final events = await provider.chatStream(const [
-      {'role': 'user', 'content': 'hello'},
+      {'role': 'user', 'content': 'Look up the weather.'},
     ]).toList();
 
-    expect(events.map((event) => event.text).join(), 'survives');
+    expect(
+      events.single.toolCalls?.single['thoughtSignature'],
+      'opaque-signature',
+    );
   });
 
+  test(
+    'streaming chat skips malformed OpenAI frames and keeps valid output',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'malformed-stream-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Malformed stream account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'malformed-stream-model',
+              upstreamModelId: 'gpt-malformed-stream',
+              displayName: 'Malformed stream model',
+              capabilities: {'streaming': true},
+            ),
+          ],
+        ),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'malformed-stream-group',
+          displayName: 'Malformed stream group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'malformed-stream-account',
+              localModelId: 'malformed-stream-model',
+              upstreamModelId: 'gpt-malformed-stream',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        streamBody: Stream<List<int>>.value(
+          utf8.encode(
+            'data: {malformed json}\n\n'
+            'data: {"choices":[{"delta":{"content":"survives"},"finish_reason":null}]}\n\n'
+            'data: [DONE]\n\n',
+          ),
+        ),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'malformed-stream-group',
+        localModelId: 'malformed-stream-model',
+        endpointType: 'openai',
+      );
+
+      final events = await provider.chatStream(const [
+        {'role': 'user', 'content': 'hello'},
+      ]).toList();
+
+      expect(events.map((event) => event.text).join(), 'survives');
+    },
+  );
+
   for (final (contentType, connectorType, endpointType, contentBlock) in [
+    (
+      'input_image',
+      'openai-compatibility',
+      'openai',
+      <String, dynamic>{
+        'type': 'input_image',
+        'image_url': 'https://example.test/input.png',
+      },
+    ),
+    (
+      'output_image',
+      'openai-compatibility',
+      'openai',
+      <String, dynamic>{
+        'type': 'output_image',
+        'image_url': 'https://example.test/output.png',
+      },
+    ),
     (
       'video_url',
       'openai-compatibility',
@@ -1602,8 +2679,10 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   final LlmConnectorHttpException? firstRequestError;
   Map<String, dynamic>? requestBody;
   final requestedAccountIds = <String>[];
+  final requestedModelIds = <String>[];
   final requestStarted = Completer<void>();
   CancelToken? lastCancelToken;
+  String? lastNativeFormat;
 
   @override
   Future<LlmConnectorResponse> request({
@@ -1620,6 +2699,8 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     Duration? receiveTimeout,
   }) async {
     requestedAccountIds.add(account.id);
+    requestedModelIds.add(modelId);
+    lastNativeFormat = nativeFormat;
     lastCancelToken = cancelToken;
     if (!requestStarted.isCompleted) requestStarted.complete();
     requestBody = Map<String, dynamic>.from(body! as Map);

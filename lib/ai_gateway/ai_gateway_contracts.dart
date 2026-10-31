@@ -478,6 +478,15 @@ abstract interface class AiGatewayModelDiscovery {
     AiGatewayAccount account, {
     bool refreshRemote = false,
   });
+
+  /// Discovers only models mapped into a saved group from connected accounts
+  /// and satisfying each requested, provider-observed capability.
+  Future<List<AiGatewayUpstreamModel>> discoverGroupModels({
+    required String groupId,
+    required String localModelId,
+    Set<String> requiredCapabilities = const {},
+    bool refreshRemote = false,
+  });
 }
 
 /// Adapts one upstream protocol to Stroom's protocol-neutral conversation

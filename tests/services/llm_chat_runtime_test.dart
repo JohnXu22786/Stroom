@@ -17,6 +17,7 @@ void main() {
   test(
     'platform routing runtime retries initialization after a transient failure',
     () async {
+      // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
       SharedPreferencesStorePlatform.instance = _FailOncePreferencesStore();
 
@@ -62,6 +63,242 @@ void main() {
     expect(llmRouteDecisionLabel('reserve_floor_reached'), '剩余额度低于保留线');
     expect(llmRouteDecisionLabel('usage_ceiling_reached'), '已达到使用上限');
     expect(llmRouteDecisionLabel('balance_at_or_below_reserve'), '余额已达到或低于保留线');
+  });
+
+  test(
+    'group model discovery filters account membership and capabilities',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = _accountService(preferences);
+      for (final (id, status, capabilities) in [
+        ('streaming-ready', LlmAccountStatus.ready, {'streaming': true}),
+        ('non-streaming-ready', LlmAccountStatus.ready, {'streaming': false}),
+        ('streaming-paused', LlmAccountStatus.paused, {'streaming': true}),
+      ]) {
+        await accounts.saveAccount(
+          LlmAccount(
+            id: id,
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: id,
+            status: status,
+            endpointConfig: {'baseUrl': 'https://api.example.test/v1'},
+            models: [
+              LlmUpstreamModel(
+                id: 'local-model',
+                upstreamModelId: '$id-model',
+                displayName: id,
+                capabilities: capabilities,
+              ),
+            ],
+          ),
+        );
+      }
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'discovery-group',
+          displayName: 'Discovery group',
+          members: [
+            for (final id in [
+              'streaming-ready',
+              'non-streaming-ready',
+              'streaming-paused',
+            ])
+              LlmModelGroupMember(
+                accountId: id,
+                localModelId: 'local-model',
+                upstreamModelId: '$id-model',
+              ),
+          ],
+        ),
+      );
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+      );
+
+      final models = await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'discovery-group',
+        localModelId: 'local-model',
+        requiredCapabilities: const {'chat', 'streaming'},
+      );
+
+      expect(models.map((model) => model.upstreamModelId), [
+        'streaming-ready-model',
+      ]);
+    },
+  );
+
+  test('infers streaming for supported ChatAdapter protocols', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = _accountService(preferences);
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+    );
+
+    for (final (connectorType, authType) in [
+      ('openai-compatibility', 'none'),
+      ('claude', 'api_key'),
+      ('gemini', 'api_key'),
+      ('gemini-interactions', 'api_key'),
+      ('ollama', 'none'),
+    ]) {
+      final accountId = '$connectorType-streaming-account';
+      final localModelId = '$connectorType-streaming-model';
+      final groupId = '$connectorType-streaming-group';
+      final upstreamModelId = '$connectorType-upstream';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: connectorType,
+          authType: authType,
+          displayName: connectorType,
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: upstreamModelId,
+              displayName: connectorType,
+              capabilities: connectorType.startsWith('gemini')
+                  ? const {
+                      'supportedGenerationMethods': [
+                        'generateContent',
+                        'streamGenerateContent',
+                      ],
+                    }
+                  : const {},
+            ),
+          ],
+        ),
+        secret: authType == 'api_key' ? 'test-api-key' : null,
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: connectorType,
+          members: [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: localModelId,
+              upstreamModelId: upstreamModelId,
+            ),
+          ],
+        ),
+      );
+
+      final models = await runtime.modelDiscovery.discoverGroupModels(
+        groupId: groupId,
+        localModelId: localModelId,
+        requiredCapabilities: const {'chat', 'streaming'},
+      );
+
+      expect(
+        models.map((model) => model.upstreamModelId),
+        [upstreamModelId],
+        reason: '$connectorType exposes streaming from its protocol/model data',
+      );
+    }
+
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-embedding-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini embeddings only',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-embedding-model',
+            upstreamModelId: 'text-embedding-only',
+            displayName: 'Gemini embeddings only',
+            capabilities: {
+              'supportedGenerationMethods': ['embedContent'],
+            },
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-embedding-group',
+        displayName: 'Gemini embeddings only',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-embedding-account',
+            localModelId: 'gemini-embedding-model',
+            upstreamModelId: 'text-embedding-only',
+          ),
+        ],
+      ),
+    );
+    expect(
+      await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'gemini-embedding-group',
+        localModelId: 'gemini-embedding-model',
+        requiredCapabilities: const {'chat', 'streaming'},
+      ),
+      isEmpty,
+    );
+
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-nonstream-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini nonstream model',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-nonstream-model',
+            upstreamModelId: 'gemini-text-only',
+            displayName: 'Gemini nonstream model',
+            capabilities: {
+              'supportedGenerationMethods': ['generateContent'],
+            },
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-nonstream-group',
+        displayName: 'Gemini nonstream model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-nonstream-account',
+            localModelId: 'gemini-nonstream-model',
+            upstreamModelId: 'gemini-text-only',
+          ),
+        ],
+      ),
+    );
+    expect(
+      await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'gemini-nonstream-group',
+        localModelId: 'gemini-nonstream-model',
+        requiredCapabilities: const {'chat'},
+      ),
+      hasLength(1),
+    );
+    expect(
+      await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'gemini-nonstream-group',
+        localModelId: 'gemini-nonstream-model',
+        requiredCapabilities: const {'chat', 'streaming'},
+      ),
+      isEmpty,
+    );
   });
 
   group('LlmAccountConnectorService model groups', () {

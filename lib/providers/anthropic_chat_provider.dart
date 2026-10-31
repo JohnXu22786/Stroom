@@ -48,17 +48,19 @@ class AnthropicChatProvider extends BaseChatProvider {
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
-        _dio = Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            'anthropic-version': kAnthropicApiVersion,
-            if (apiKey.isNotEmpty) 'x-api-key': apiKey,
-            ...openRouterAppHeaders,
-          },
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 60),
-        ));
+        _dio = Dio(
+          BaseOptions(
+            baseUrl: '',
+            headers: {
+              'Content-Type': 'application/json',
+              'anthropic-version': kAnthropicApiVersion,
+              if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+              ...openRouterAppHeaders,
+            },
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 60),
+          ),
+        );
 
   @override
   String get name => _name;
@@ -94,7 +96,6 @@ class AnthropicChatProvider extends BaseChatProvider {
   /// - 输出 = output_tokens。
   /// - cost：兼容 num 与数字字符串（部分网关）；两端点重复上报
   ///   total_cost 时取较大值而非累加，避免双计。
-  @visibleForTesting
   static void mergeAnthropicUsage(Map<String, dynamic> localUsage, Map usage) {
     final input = usageNumberToDouble(usage['input_tokens'])?.toInt() ?? 0;
     final cacheRead =
@@ -163,7 +164,7 @@ class AnthropicChatProvider extends BaseChatProvider {
       if (temperature != null && !thinking) 'temperature': temperature,
       'stream': stream,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
-      if (extraParams != null) ...extraParams,
+      ...?extraParams,
     };
   }
 
@@ -179,14 +180,16 @@ class AnthropicChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
-    return _buildBody(messages,
-        system: system,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: stream,
-        tools: tools,
-        extraParams: extraParams);
+    return _buildBody(
+      messages,
+      system: system,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: stream,
+      tools: tools,
+      extraParams: extraParams,
+    );
   }
 
   @override
@@ -214,15 +217,18 @@ class AnthropicChatProvider extends BaseChatProvider {
   }) async {
     if (_apiKey.isEmpty) throw Exception('API key not configured');
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        system: system,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      system: system,
+      extraParams: extraParams,
+    );
 
     debugPrint(
-        'AnthropicChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
+      'AnthropicChatProvider: POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     try {
       _lastRequestBody = body;
@@ -281,7 +287,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
         _lastResponseData = <String, dynamic>{
-          'raw': e.response!.data as String
+          'raw': e.response!.data as String,
         };
       }
       final statusCode = e.response?.statusCode ?? 0;
@@ -320,14 +326,16 @@ class AnthropicChatProvider extends BaseChatProvider {
       throw Exception('API key not configured');
     }
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: true,
-        system: system,
-        tools: tools,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: true,
+      system: system,
+      tools: tools,
+      extraParams: extraParams,
+    );
 
     _lastRequestBody = body;
     _lastRequestUrl = _baseUrl;
@@ -344,7 +352,8 @@ class AnthropicChatProvider extends BaseChatProvider {
     _lastUsage = null;
 
     debugPrint(
-        'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
+      'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     final acc = AnthropicStreamAccumulator();
     // 本次请求的 usage（局部收集，per-request 隔离）
@@ -416,11 +425,12 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseData = null;
 
         if (e.response?.data is Map) {
-          _lastResponseData =
-              Map<String, dynamic>.from(e.response!.data as Map);
+          _lastResponseData = Map<String, dynamic>.from(
+            e.response!.data as Map,
+          );
         } else if (e.response?.data is String) {
           _lastResponseData = <String, dynamic>{
-            'raw': e.response!.data as String
+            'raw': e.response!.data as String,
           };
         } else {
           final streamBody = await parseStreamErrorBody(e);

@@ -39,6 +39,7 @@ enum LlmNativeProtocol {
   aiStudioRelay,
   vertexGenerateContent,
   openAIChatCompletions,
+  ollamaChat,
   bedrockConverse,
 }
 
@@ -217,6 +218,12 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'ollama',
+      displayName: 'Ollama',
+      protocol: LlmNativeProtocol.ollamaChat,
+      authTypes: {'none', 'api_key'},
+    ),
+    LlmConnectorDefinition(
       id: 'aistudio',
       displayName: 'Google AI Studio relay',
       protocol: LlmNativeProtocol.aiStudioRelay,
@@ -265,6 +272,10 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'claude' => 'anthropic',
+        'gemini' => 'google.gemini.generate_content',
+        'gemini-interactions' => 'google.gemini.interactions',
+        'ollama' => 'ollama.chat',
+        'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
         'moonshot' ||
@@ -272,7 +283,6 @@ abstract final class LlmConnectorRegistry {
         'deepseek' ||
         'minimax' ||
         'qwen' ||
-        'bedrock' ||
         'kimi' ||
         'kimi-ai' ||
         'kimi.ai' =>
@@ -989,6 +999,7 @@ class LlmAccountConnectorService {
       'qwen',
       'bedrock',
       'vertex',
+      'ollama',
     }.contains(account.connectorType);
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
@@ -998,8 +1009,9 @@ class LlmAccountConnectorService {
     }
     if (hasRemoteCatalog) {
       if (account.authType == 'oauth' &&
-          !LlmOAuthProviderPolicy.forProvider(account.connectorType)
-              .supported) {
+          !LlmOAuthProviderPolicy.forProvider(
+            account.connectorType,
+          ).supported) {
         throw const LlmAccountConnectorException();
       }
       final discovered = await _discoverRemoteModels(account);
@@ -1538,6 +1550,7 @@ class LlmAccountConnectorService {
       'minimax' => 'https://api.minimax.io/v1',
       'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
+      'ollama' => null,
       _ => null,
     };
     final base = LlmNativeRequestBuilder._configString(
@@ -1551,9 +1564,11 @@ class LlmAccountConnectorService {
     final secret = account.credentialRef == null
         ? null
         : await _readSecureValue(account.credentialRef!);
-    final uri = account.connectorType == 'vertex'
-        ? _vertexModelListUri(account.endpointConfig, base, secret)
-        : _modelListUri(base, isGemini: isGemini);
+    final uri = account.connectorType == 'ollama'
+        ? _ollamaModelListUri(base)
+        : account.connectorType == 'vertex'
+            ? _vertexModelListUri(account.endpointConfig, base, secret)
+            : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
     final usesGeminiOAuth =
@@ -1710,6 +1725,28 @@ class LlmAccountConnectorService {
               .replaceFirst(RegExp(r'^models/'), '');
           final methods = map['supportedGenerationMethods'];
           final actions = map['supportedActions'];
+          var modelExtensions = map;
+          var providerCapabilities = map['capabilities'];
+          if (account.connectorType == 'ollama') {
+            try {
+              final detailsUri = uri.replace(
+                path: uri.path.replaceFirst(RegExp(r'/tags$'), '/show'),
+              );
+              final detailsResponse = await _dio.postUri<Object?>(
+                detailsUri,
+                data: {'name': modelId},
+                options: Options(headers: headers),
+              );
+              final details = _asJsonMap(detailsResponse.data);
+              if (details != null) {
+                modelExtensions = {...map, 'show': details};
+                providerCapabilities = details['capabilities'];
+              }
+            } catch (_) {
+              // Keep the discovered model, but leave unsupported capabilities
+              // unknown when this Ollama server cannot describe them.
+            }
+          }
           final isVertexImagen = account.connectorType == 'vertex' &&
               modelId.toLowerCase().contains('imagen');
           final supportsImagenPredict = isVertexImagen &&
@@ -1745,12 +1782,58 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
-                if (methods is List)
+                if (methods is List) ...{
                   'supportedGenerationMethods': List<String>.from(
                     methods.whereType<String>(),
                   ),
+                  if (methods.contains('generateContent') ||
+                      methods.contains('streamGenerateContent'))
+                    'chat': true,
+                  if (methods.contains('streamGenerateContent'))
+                    'streaming': true,
+                },
+                if (isGemini &&
+                    providerCapabilities == null &&
+                    methods is List &&
+                    (methods.contains('generateContent') ||
+                        methods.contains('streamGenerateContent')))
+                  // Gemini's model catalog reports generation methods but
+                  // omits a separate function-calling flag. Treat the
+                  // generative Gemini model family as tool-capable unless
+                  // provider capabilities explicitly say otherwise.
+                  'tools': true,
+                if (providerCapabilities == null &&
+                    _catalogImpliesToolSupport(account.connectorType, modelId))
+                  // OpenAI and Anthropic model catalogs omit function/tool
+                  // support metadata. Infer only from model families whose
+                  // public chat APIs support tool use; explicit metadata wins.
+                  'tools': true,
+                if (providerCapabilities is List)
+                  for (final capability
+                      in providerCapabilities.whereType<String>()) ...{
+                    if (capability == 'completion') 'chat': true,
+                    if (capability == 'completion') 'streaming': true,
+                    if (capability == 'tools') 'tools': true,
+                    if (capability == 'vision') 'vision': true,
+                    if (capability == 'audio') 'audio': true,
+                  },
+                if (providerCapabilities is Map)
+                  for (final entry in providerCapabilities.entries)
+                    if (entry.value is bool &&
+                        const {
+                          'chat',
+                          'streaming',
+                          'tools',
+                          'vision',
+                          'audio',
+                        }.contains(entry.key))
+                      entry.key: entry.value as bool,
               },
-              config: const {'catalogSource': 'upstream_models_endpoint'},
+              config: {
+                'catalogSource': 'upstream_models_endpoint',
+                'provider': account.connectorType,
+                'extensions': {account.connectorType: modelExtensions},
+              },
             ),
           );
         }
@@ -1987,6 +2070,22 @@ class LlmAccountConnectorService {
     ).hasMatch(modelId);
   }
 
+  static bool _catalogImpliesToolSupport(String connectorType, String modelId) {
+    if (connectorType == 'openai-api') {
+      return RegExp(
+        r'^(?:gpt-(?:3\.5-turbo|4\.5|4|4o|4\.1|5)(?:-|$)|o[134](?:-|$))',
+        caseSensitive: false,
+      ).hasMatch(modelId);
+    }
+    if (connectorType == 'claude') {
+      return RegExp(
+        r'^claude-(?:3|4|sonnet|opus|haiku)(?:-|$)',
+        caseSensitive: false,
+      ).hasMatch(modelId);
+    }
+    return false;
+  }
+
   Future<String?> _readSecureValue(String reference) async {
     try {
       return await credentialStore.read(reference);
@@ -2026,6 +2125,25 @@ class LlmAccountConnectorService {
             ? '$path/models'
             : '$apiRoot$suffix';
     return parsed.replace(path: requestPath, query: null, fragment: null);
+  }
+
+  static Uri _ollamaModelListUri(String base) {
+    final parsed = Uri.tryParse(base.trim());
+    if (parsed == null ||
+        !parsed.hasScheme ||
+        parsed.host.isEmpty ||
+        parsed.userInfo.isNotEmpty ||
+        (parsed.scheme != 'https' &&
+            !(parsed.scheme == 'http' &&
+                LlmNativeRequestBuilder._isLoopbackHost(parsed.host)))) {
+      throw const LlmAccountConnectorException();
+    }
+    final basePath = parsed.path.replaceFirst(RegExp(r'/+$'), '');
+    return parsed.replace(
+      path: basePath.endsWith('/api/tags') ? basePath : '$basePath/api/tags',
+      query: null,
+      fragment: null,
+    );
   }
 
   /// Adds or updates an account. Pass [secret] to replace its secure value;
@@ -3277,7 +3395,9 @@ class LlmNativeRequestBuilder {
         path = '/responses';
       case 'claude':
         baseUrl = _baseUrl(config, 'https://api.anthropic.com');
-        path = '/v1/messages';
+        path = nativeFormat == 'count_tokens'
+            ? '/v1/messages/count_tokens'
+            : '/v1/messages';
         if (account.authType == 'oauth') query = 'beta=true';
       case 'antigravity':
         baseUrl = _baseUrl(config, 'https://cloudcode-pa.googleapis.com');
@@ -3321,7 +3441,7 @@ class LlmNativeRequestBuilder {
         if (stream) query = 'alt=sse';
       case 'openai-api':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
-        path = '/chat/completions';
+        path = nativeFormat == 'responses' ? '/responses' : '/chat/completions';
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
         path = '/chat/completions';
@@ -3353,6 +3473,9 @@ class LlmNativeRequestBuilder {
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
         path = '/v1beta/interactions';
         if (stream) query = 'alt=sse';
+      case 'ollama':
+        baseUrl = _baseUrl(config, '');
+        path = '/api/chat';
       case 'aistudio':
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
         path = '/v1beta/models/${Uri.encodeComponent(modelId)}:'
@@ -3553,6 +3676,7 @@ class LlmNativeRequestBuilder {
         _configString(account.endpointConfig, 'baseUrl') != null;
     final supportsCustomApiKeyEndpoint = account.authType == 'api_key' &&
         {'codex', 'claude', 'vertex'}.contains(account.connectorType);
+    if (account.connectorType == 'ollama' && hasCustomBaseUrl) return;
     if (hasCustomBaseUrl && supportsCustomApiKeyEndpoint) return;
     final location = _vertexLocation(account.endpointConfig) ?? 'us-central1';
     final bedrockRegion = _configString(account.endpointConfig, 'region');

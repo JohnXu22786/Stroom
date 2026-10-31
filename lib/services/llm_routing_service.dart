@@ -1236,7 +1236,11 @@ class LlmRoutingService {
         continue;
       }
       if (requiredCapabilities.any(
-        (capability) => model.capabilities[capability] != true,
+        (capability) => !_supportsModelCapability(
+          account.connectorType,
+          model.capabilities,
+          capability,
+        ),
       )) {
         decisions.add(
           LlmRouteDecision(
@@ -2274,6 +2278,65 @@ class LlmRoutingService {
     }
     return resolved.toSet().toList(growable: false);
   }
+}
+
+bool _supportsModelCapability(
+  String connectorType,
+  Map<String, dynamic> capabilities,
+  String capability,
+) {
+  if (capabilities.containsKey(capability)) {
+    return capabilities[capability] == true;
+  }
+  final methods = capabilities['supportedGenerationMethods'];
+  final protocol = LlmConnectorRegistry.find(connectorType)?.protocol;
+  if (methods is Iterable &&
+      const {
+        LlmNativeProtocol.geminiGenerateContent,
+        LlmNativeProtocol.geminiInteractions,
+      }.contains(protocol) &&
+      const {'chat', 'streaming'}.contains(capability)) {
+    return capability == 'streaming'
+        ? methods.contains('streamGenerateContent')
+        : methods.contains('generateContent') ||
+            methods.contains('streamGenerateContent');
+  }
+  if (methods is Iterable) {
+    if (capability == 'chat' &&
+        (methods.contains('generateContent') ||
+            methods.contains('streamGenerateContent'))) {
+      return true;
+    }
+    if (capability == 'streaming' &&
+        methods.contains('streamGenerateContent')) {
+      return true;
+    }
+  }
+  final inputModalities = capabilities['inputModalities'];
+  if (inputModalities is Iterable &&
+      capability == 'vision' &&
+      inputModalities.contains('image')) {
+    return true;
+  }
+  if (capability == 'chat' &&
+      LlmConnectorRegistry.chatAdapterEndpointType(connectorType) != null) {
+    return true;
+  }
+  if (capability == 'streaming' &&
+      const {
+        LlmNativeProtocol.openAIResponses,
+        LlmNativeProtocol.anthropicMessages,
+        LlmNativeProtocol.geminiGenerateContent,
+        LlmNativeProtocol.geminiInteractions,
+        LlmNativeProtocol.openAIChatCompletions,
+        LlmNativeProtocol.ollamaChat,
+        LlmNativeProtocol.kimiChatCompletions,
+        LlmNativeProtocol.xaiResponses,
+        LlmNativeProtocol.metaResponses,
+      }.contains(LlmConnectorRegistry.find(connectorType)?.protocol)) {
+    return true;
+  }
+  return false;
 }
 
 class _CandidateSelection {

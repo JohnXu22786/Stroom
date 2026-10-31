@@ -8,7 +8,6 @@ part of 'anthropic_chat_provider.dart';
 ///
 /// 由 chatStream 持有，在多个 SSE 载荷间传递；提取为类便于单测驱动
 /// 完整的事件序列。
-@visibleForTesting
 class AnthropicStreamAccumulator {
   final Map<int, Map<String, dynamic>> toolCalls = {};
   final List<String> thinkingSignatures = [];
@@ -18,7 +17,6 @@ class AnthropicStreamAccumulator {
 /// 处理单个 Anthropic SSE data 载荷（含跨事件状态的累计）。
 ///
 /// 返回本载荷直接产生的 [AIStreamEvent] 列表。
-@visibleForTesting
 List<AIStreamEvent> processAnthropicStreamData(
   Map<String, dynamic> data,
   AnthropicStreamAccumulator acc,
@@ -98,7 +96,6 @@ List<AIStreamEvent> processAnthropicStreamData(
 /// 仅在 `stop_reason == "tool_use"` 且存在累计工具块时产出
 /// （避免中断时把残缺累计块当作有效工具调用）。提取为静态方法
 /// 便于直接测试 chatStream 末尾的产出逻辑。
-@visibleForTesting
 AIStreamEvent? buildToolCallEvent(AnthropicStreamAccumulator acc) {
   if (acc.stopReason != 'tool_use' || acc.toolCalls.isEmpty) return null;
   final toolCalls = acc.toolCalls.entries.map((e) {

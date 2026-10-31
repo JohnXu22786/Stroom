@@ -101,10 +101,7 @@ class OpenAIProtocol implements ChatProtocol {
             final audioFormat = audioFormatFromMimeType(att.mimeType);
             parts.add({
               'type': 'input_audio',
-              'input_audio': {
-                'data': outcome.base64,
-                'format': audioFormat,
-              },
+              'input_audio': {'data': outcome.base64, 'format': audioFormat},
             });
           } else if (att.fileType == 'video') {
             // ── Video files: send as video_url with base64 data URI ──
@@ -135,7 +132,10 @@ class OpenAIProtocol implements ChatProtocol {
           } else {
             if (isTextAttachment(att)) {
               final textContent = await readTextAttachmentContent(
-                  att.fileName, att.storagePath, att.fileSize);
+                att.fileName,
+                att.storagePath,
+                att.fileSize,
+              );
               if (textContent != null) {
                 parts.add({
                   'type': 'text',
@@ -164,10 +164,7 @@ class OpenAIProtocol implements ChatProtocol {
                   final dataUri = 'data:${att.mimeType};base64,$b64';
                   parts.add({
                     'type': 'file',
-                    'file': {
-                      'filename': att.fileName,
-                      'file_data': dataUri,
-                    },
+                    'file': {'filename': att.fileName, 'file_data': dataUri},
                   });
                 } else {
                   parts.add({
@@ -245,6 +242,8 @@ class OpenAIProtocol implements ChatProtocol {
           {
             'id': tc.id,
             'type': 'function',
+            if (tc.thoughtSignature != null)
+              'thoughtSignature': tc.thoughtSignature,
             'function': {'name': tc.name, 'arguments': tc.argumentsJson},
           },
       ],

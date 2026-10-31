@@ -10,6 +10,8 @@ import 'ai_gateway_contracts.dart';
 import '../src/ai_gateway/ai_gateway_facade.dart' as implementation;
 
 export 'ai_gateway_contracts.dart';
+export 'ai_gateway_protocol_bridges.dart';
+export 'ai_gateway_realtime_session.dart';
 export '../src/ai_gateway/ai_gateway_facade.dart'
     show
         LlmChatRouteDiagnostic,
