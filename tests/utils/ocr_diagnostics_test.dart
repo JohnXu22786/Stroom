@@ -101,6 +101,35 @@ void main() {
     expect(jsonEncode(response), isNot(contains(credential)));
   });
 
+  test('response body credentials exclude echoed IDs and retain safe IDs', () {
+    const credential = 'opaque-response-body-api-key-196';
+    const safeRequestId = 'req-safe-after-body-credential-196';
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 401,
+      'requestId': credential,
+      'data': {
+        'api_key': credential,
+        'request_id': credential,
+      },
+    })!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 429,
+      'data': {
+        'api_key': credential,
+        'request_id': credential,
+        'id': safeRequestId,
+      },
+    })!;
+
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode([echoedCredential, safeResponse]),
+        isNot(contains(credential)));
+  });
+
   test('request body API keys exclude echoed response IDs but keep safe IDs',
       () {
     const apiKey = 'opaque-body-api-key-194';
