@@ -98,7 +98,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
       for (var attempt = 0; attempt < 8; attempt++) {
         if (!mounted ||
             !identical(controller, _controller) ||
-            _macDocumentNavigationStarted) {
+            _macDocumentNavigationStarted ||
+            _macLoadFailed) {
           return;
         }
         try {
@@ -111,6 +112,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             urlRequest: URLRequest(url: WebUri.uri(documentUri)),
             allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
+          if (_macLoadFailed) break;
           final currentUrl = await controller.getUrl();
           final isLoading = await controller.isLoading();
           if (kDebugMode) {
@@ -126,6 +128,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             macNavigationPending = true;
             break;
           }
+          if (_macLoadFailed) break;
         } catch (error) {
           if (kDebugMode) {
             debugPrint(
