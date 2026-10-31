@@ -89,6 +89,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
       }
 
       _macDocumentNavigationStarted = false;
+      var macNavigationPending = false;
 
       // WKWebView's loadHTMLString/loadData path reports success before it
       // necessarily starts a navigation when Flutter has just attached the
@@ -116,14 +117,16 @@ class _MessageWebHostState extends State<MessageWebHost> {
             );
             try {
               final currentUrl = await controller.getUrl();
-              final state = await controller.evaluateJavascript(
-                source:
-                    'JSON.stringify({url:location.href,state:document.readyState,renderer:typeof window.StroomMessageView})',
-              );
+              final isLoading = await controller.isLoading();
               debugPrint(
                 '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
-                'url=$currentUrl state=$state',
+                'url=$currentUrl isLoading=$isLoading',
               );
+              if (currentUrl?.toString() == documentUri.toString() &&
+                  isLoading) {
+                macNavigationPending = true;
+                break;
+              }
             } catch (error) {
               debugPrint(
                 '[MessageWebHost][load-file-state-error] macOS '
@@ -143,6 +146,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
           await Future<void>.delayed(
             Duration(milliseconds: 250 << attempt.clamp(0, 4)),
           );
+        }
+      }
+
+      if (macNavigationPending &&
+          mounted &&
+          identical(controller, _controller) &&
+          !_macDocumentNavigationStarted &&
+          !_macDocumentReady) {
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (DateTime.now().isBefore(deadline) &&
+            mounted &&
+            identical(controller, _controller) &&
+            !_macDocumentNavigationStarted &&
+            !_macDocumentReady) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
         }
       }
 
