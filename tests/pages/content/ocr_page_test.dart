@@ -816,6 +816,92 @@ void main() {
       );
     });
 
+    testWidgets(
+      'locks image imports while startup prepares the selected request images',
+      (tester) async {
+        final preparationStarted = Completer<void>();
+        final finishPreparation = Completer<OcrImagePayload>();
+        final adapter = _CapturingOcrAdapter();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        var cameraPickerCalls = 0;
+        final selectedBytes = _createTestImage().bytes;
+        final lateImportBytes = _createTestImage(seed: 2).bytes;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [SelectedImage(bytes: selectedBytes, format: 'png')],
+            backgroundTasksNotifier: notifier,
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async {
+              cameraPickerCalls++;
+              return XFile.fromData(lateImportBytes, name: 'late.png');
+            },
+            testImagePayloadPreparer: (_) {
+              preparationStarted.complete();
+              return finishPreparation.future;
+            },
+            testOcrServiceFactory: (config) => OcrService(
+              config: config,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preparationStarted.future;
+
+        final cameraButton = tester.widget<ElevatedButton>(
+          find.widgetWithText(ElevatedButton, '拍照识别'),
+        );
+        expect(cameraButton.onPressed, isNull);
+        await tester.tap(find.text('拍照识别'));
+        await tester.pump();
+        expect(cameraPickerCalls, 0);
+
+        final clearButton = tester.widget<IconButton>(
+          find.byKey(const Key('ocr_clear_button')),
+        );
+        expect(clearButton.onPressed, isNull);
+        await tester.tap(find.byKey(const Key('ocr_clear_button')));
+        await tester.pump();
+        expect(
+          find.byKey(const Key('ocr_clear_confirmation_dialog')),
+          findsNothing,
+        );
+        expect(find.text('已选 1 张图片'), findsOneWidget);
+
+        finishPreparation.complete(
+          OcrImagePayload(
+            bytes: selectedBytes,
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        );
+        await tester.pump();
+        await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
+
+        final body = adapter.requests.single.data as Map<String, dynamic>;
+        final content = ((body['messages'] as List)[1]
+            as Map<String, dynamic>)['content'] as List;
+        expect(content, hasLength(1));
+        expect(
+          (content.single as Map<String, dynamic>)['image_url'],
+          isNotNull,
+        );
+        expect(cameraPickerCalls, 0);
+        expect(notifier.tasksForTest, hasLength(1));
+
+        await _pumpUntil(
+          tester,
+          () => notifier.tasksForTest.single.status == TaskStatus.completed,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
     testWidgets('model selector falls back to modelId when name is empty', (
       tester,
     ) async {

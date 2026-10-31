@@ -219,7 +219,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool get _hasReusablePageResults =>
       _retryPageOutcomes.any((outcome) => outcome.canReuseResult);
   bool get _isImageSelectionLocked =>
-      _isProcessing || _isRetryImagesLoading || _hasReusablePageResults;
+      _ocrStarting ||
+      _isProcessing ||
+      _isRetryImagesLoading ||
+      _hasReusablePageResults;
 
   bool _retryImagesUnavailable = false;
   bool _retryImageCountUnknown = false;
@@ -546,7 +549,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             IconButton(
               key: const Key('ocr_clear_button'),
               tooltip: '清空',
-              onPressed: _clearAll,
+              onPressed: _ocrStarting ? null : _clearAll,
               icon: const Icon(Icons.delete_outline),
             ),
         ],
@@ -2248,7 +2251,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Future<void> _clearAll() async {
-    if (_isProcessing ||
+    if (_ocrStarting ||
+        _isProcessing ||
         _isRetryImagesLoading ||
         (_hasReusablePageResults && !_retryImagesUnavailable)) {
       return;
@@ -2279,7 +2283,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
     );
     if (!mounted || confirmed != true) return;
-    if (_isProcessing ||
+    if (_ocrStarting ||
+        _isProcessing ||
         _isRetryImagesLoading ||
         (_hasReusablePageResults && !_retryImagesUnavailable)) {
       return;
