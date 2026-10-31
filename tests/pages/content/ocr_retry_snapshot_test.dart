@@ -155,6 +155,39 @@ void main() {
       expect(snapshot.images.last.name, isNull);
     });
 
+    test('non-string model reference keys do not discard valid retry images',
+        () {
+      const reference =
+          'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin';
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': OcrRetrySnapshot.currentVersion,
+        'modelRef': {
+          'configId': 'config-1',
+          'modelId': 'model-1',
+          7: 'malformed-key',
+        },
+        'images': [
+          {'storageRef': reference, 'format': 'png'},
+        ],
+        'batchMode': 'joint',
+        'perImageConcurrency': 1,
+        'requestSizeBudgetBytes': 1024,
+      });
+
+      expect(snapshot.hasUnknownFields, isTrue);
+      expect(snapshot.needsMigration, isTrue);
+      expect(snapshot.configId, 'config-1');
+      expect(snapshot.modelId, 'model-1');
+      expect(snapshot.hasInvalidImages, isFalse);
+      expect(snapshot.images, hasLength(1));
+      expect(snapshot.images.single.storageRef, reference);
+      expect(snapshot.toMap()['modelRef'], {
+        'configId': 'config-1',
+        'modelId': 'model-1',
+      });
+    });
+
     test('infers format from valid inline bytes when metadata is malformed',
         () {
       final pngBytes = base64Decode(

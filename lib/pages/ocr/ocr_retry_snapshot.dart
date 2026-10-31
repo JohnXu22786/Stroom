@@ -215,9 +215,14 @@ class OcrRetrySnapshot {
     final isLegacy = !map.containsKey('version');
     final version = rawVersion is int ? rawVersion : null;
     final rawModelRef = map['modelRef'];
-    final modelRef = rawModelRef is Map
-        ? Map<String, dynamic>.from(rawModelRef)
-        : const <String, dynamic>{};
+    final modelRef = <String, dynamic>{};
+    if (rawModelRef is Map) {
+      for (final entry in rawModelRef.entries) {
+        if (entry.key is String) {
+          modelRef[entry.key as String] = entry.value;
+        }
+      }
+    }
     var hasUnknownFields = map.keys.any(
       (key) => key is! String || !_snapshotFields.contains(key),
     );
