@@ -25,8 +25,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
   Future<void> _pending = Future.value();
 
   bool _trustedDocument(Uri uri) =>
-      uri.scheme == 'file' &&
-      uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
+      uri.path.endsWith('/assets/vendor/dsh_message_view/index.html') &&
+      (defaultTargetPlatform == TargetPlatform.macOS
+          ? uri.scheme == 'https' && uri.host == 'stroom.invalid'
+          : uri.scheme == 'file');
 
   @override
   void initState() {
@@ -59,8 +61,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
   Widget build(BuildContext context) => InAppWebView(
         // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
         // native platforms except macOS, whose plugin cannot resolve Flutter
-        // asset URLs from the app bundle. Its data URL keeps the same file
-        // base URL so the trusted-document bridge check stays consistent.
+        // asset URLs from the app bundle. Give the in-memory HTML a reserved,
+        // non-routable origin so the main-frame guard can validate it below.
         initialFile: defaultTargetPlatform == TargetPlatform.macOS
             ? null
             : 'assets/vendor/dsh_message_view/index.html',
@@ -68,7 +70,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             ? InAppWebViewInitialData(
                 data: widget.html,
                 baseUrl: WebUri(
-                  'file:///assets/vendor/dsh_message_view/index.html',
+                  'https://stroom.invalid/assets/vendor/dsh_message_view/index.html',
                 ),
               )
             : null,
