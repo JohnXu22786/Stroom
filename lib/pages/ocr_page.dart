@@ -212,6 +212,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   final List<SelectedImage> _selectedImages = [];
   late List<OcrPageOutcome> _retryPageOutcomes;
   int? _retryRequestSizeBudgetBytes;
+  bool _retryRequestSizeBudgetHasStableModelReference = false;
   OcrBatchMode _batchMode = OcrBatchMode.joint;
   int _perImageConcurrency = 1;
   bool _isProcessing = false;
@@ -360,6 +361,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (data == null) return;
     final snapshot = OcrRetrySnapshot.fromMap(data);
     _retryRequestSizeBudgetBytes = snapshot.requestSizeBudgetBytes;
+    _retryRequestSizeBudgetHasStableModelReference =
+        (snapshot.version == null ||
+            snapshot.version! <= OcrRetrySnapshot.currentVersion) &&
+        snapshot.configId != null &&
+        snapshot.modelId != null;
     _retryImageCountUnknown = snapshot.imageEntryCount == 0;
     _saveFolder = snapshot.saveFolder;
 
@@ -677,14 +683,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   void _selectModelOption(_ModelOption option, int index) {
     final retryModelChanged = _retryRequestSizeBudgetBytes != null &&
-        ((_selectedConfigId != null &&
-                option.configId != _selectedConfigId) ||
-            (_selectedModelRecordId != null &&
-                option.modelRecordId != _selectedModelRecordId) ||
-            (_selectedConfigId == null &&
-                _selectedModelRecordId == null &&
-                index != _selectedModelIndex));
-    if (retryModelChanged) _retryRequestSizeBudgetBytes = null;
+        (!_retryRequestSizeBudgetHasStableModelReference ||
+            option.configId != _selectedConfigId ||
+            option.modelRecordId != _selectedModelRecordId);
+    if (retryModelChanged) {
+      _retryRequestSizeBudgetBytes = null;
+      _retryRequestSizeBudgetHasStableModelReference = false;
+    }
     _selectedModelIndex = index;
     _selectedConfigId = option.configId;
     _selectedModelRecordId = option.modelRecordId;
@@ -1015,56 +1020,65 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ),
             ),
             // 在 OCR 页面管理通用识别指令
-            IconButton(
-              key: const Key('ocr_instruction_manage_btn'),
-              icon: Icon(
-                Icons.settings_outlined,
-                size: 18,
-                color: cs.onSurfaceVariant,
-              ),
-              tooltip: '管理识别指令',
-              // Keep a usable hit target while matching the model card height.
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              onPressed: _hasReusablePageResults
-                  ? null
-                  : () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => OcrInstructionManageDialog(
-                          onInstructionDeleted: (deletedIndex) {
-                            if (!mounted) return;
-                            final selected = _selectedInstruction;
-                            if (selected != null) {
-                              final currentInstructions = ref.read(
-                                ocrInstructionsProvider,
-                              );
-                              final selectedIndex = _instructionIdentityIndex(
-                                currentInstructions,
-                                selected,
-                              );
-                              if (selectedIndex < 0) {
-                                setState(() {
-                                  _selectedInstruction = null;
-                                  _selectedInstructionIndex = -1;
-                                });
-                              } else {
-                                setState(() {
-                                  _selectedInstructionIndex = selectedIndex;
-                                });
+            Transform.translate(
+              // Balance the icon's visible inset against the leading icon
+              // while keeping the 40px touch target inside the card edge.
+              offset: const Offset(6, 0),
+              child: IconButton(
+                key: const Key('ocr_instruction_manage_btn'),
+                icon: Icon(
+                  Icons.settings_outlined,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+                tooltip: '管理识别指令',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+                onPressed: _hasReusablePageResults
+                    ? null
+                    : () {
+                        showDialog<void>(
+                          context: context,
+                          builder: (_) => OcrInstructionManageDialog(
+                            onInstructionDeleted: (deletedIndex) {
+                              if (!mounted) return;
+                              final selected = _selectedInstruction;
+                              if (selected != null) {
+                                final currentInstructions = ref.read(
+                                  ocrInstructionsProvider,
+                                );
+                                final selectedIndex = _instructionIdentityIndex(
+                                  currentInstructions,
+                                  selected,
+                                );
+                                if (selectedIndex < 0) {
+                                  setState(() {
+                                    _selectedInstruction = null;
+                                    _selectedInstructionIndex = -1;
+                                  });
+                                } else {
+                                  setState(() {
+                                    _selectedInstructionIndex = selectedIndex;
+                                  });
+                                }
+                                return;
                               }
-                              return;
-                            }
-                            if (deletedIndex == _selectedInstructionIndex) {
-                              setState(() => _selectedInstructionIndex = -1);
-                            } else if (deletedIndex <
-                                _selectedInstructionIndex) {
-                              setState(() => _selectedInstructionIndex--);
-                            }
-                          },
-                        ),
-                      );
-                    },
+                              if (deletedIndex == _selectedInstructionIndex) {
+                                setState(
+                                  () => _selectedInstructionIndex = -1,
+                                );
+                              } else if (deletedIndex <
+                                  _selectedInstructionIndex) {
+                                setState(() => _selectedInstructionIndex--);
+                              }
+                            },
+                          ),
+                        );
+                      },
+              ),
             ),
           ],
         ),

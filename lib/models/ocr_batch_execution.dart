@@ -28,8 +28,12 @@ int? ocrRequestSizeBudgetBytesFromMib(String value) {
   return bytes > 0 ? bytes : null;
 }
 
-String ocrRequestSizeBudgetMib(int bytes) =>
-    (bytes / (1024 * 1024)).toStringAsFixed(2);
+String ocrRequestSizeBudgetMib(int bytes) {
+  final mebibytes = bytes / (1024 * 1024);
+  return mebibytes < 0.005
+      ? mebibytes.toStringAsFixed(8)
+      : mebibytes.toStringAsFixed(2);
+}
 
 /// How a selected set of images is submitted to the OCR model.
 enum OcrBatchMode { joint, perImage }
