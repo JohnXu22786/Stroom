@@ -142,11 +142,32 @@ jobs:
           fi
           exit "$result"
       - uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 10
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_2
-          script: flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded
+          script: |
+            set +e
+            log="$RUNNER_TEMP/android-message-smoke.log"
+            flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
+            result=${PIPESTATUS[0]}
+            exit "$result"
+      - name: Summarize Android smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### Android message smoke failure details'
+            if [ -f "$RUNNER_TEMP/android-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/android-message-smoke.log"
+              echo '```'
+            else
+              echo 'The emulator action failed before the smoke-test script created its log.'
+            fi
+            "$ANDROID_HOME/platform-tools/adb" devices -l || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
   message-platform-windows:
     name: Message view Windows build and smoke test
@@ -185,7 +206,29 @@ jobs:
             printf '::error title=macOS build details::%s\n' "$details"
           fi
           exit "$result"
-      - run: flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded
+      - name: Run macOS message view smoke test
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/macos-message-smoke.log"
+          flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          exit "$result"
+      - name: Summarize macOS smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### macOS message smoke failure details'
+            if [ -f "$RUNNER_TEMP/macos-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/macos-message-smoke.log"
+              echo '```'
+            else
+              echo 'The smoke-test step did not create its log.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   message-platform-ios:
     name: Message view iOS simulator build and smoke test
@@ -210,7 +253,28 @@ jobs:
           xcrun simctl bootstatus "$simulator_id" -b
           echo "IOS_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
       - name: Run iOS message view smoke test
-        run: flutter test -d "$IOS_SIMULATOR_ID" integration_test/message_view_smoke_test.dart --reporter expanded
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/ios-message-smoke.log"
+          flutter test -d "$IOS_SIMULATOR_ID" integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          exit "$result"
+      - name: Summarize iOS smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### iOS message smoke failure details'
+            if [ -f "$RUNNER_TEMP/ios-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/ios-message-smoke.log"
+              echo '```'
+            else
+              echo 'The smoke-test step did not create its log.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Format Check ──────────────────────────────────────────────────────────
   format:
