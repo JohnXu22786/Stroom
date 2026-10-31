@@ -91,10 +91,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
       _macDocumentNavigationStarted = false;
       var macNavigationPending = false;
 
-      // WKWebView's loadHTMLString/loadData path reports success before it
-      // necessarily starts a navigation when Flutter has just attached the
-      // platform view. A private, isolated file gives WebKit a real URL and
-      // avoids transferring the 9 MB bundled page over the method channel.
+      // WKWebView's loadHTMLString/loadData path does not consistently start a
+      // navigation. Give WebKit read access to this self-contained file only.
       for (var attempt = 0; attempt < 8; attempt++) {
         if (!mounted ||
             !identical(controller, _controller) ||
@@ -110,7 +108,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
           }
           await controller.loadUrl(
             urlRequest: URLRequest(url: WebUri.uri(documentUri)),
-            allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
+            allowingReadAccessTo: WebUri.uri(documentUri),
           );
           if (_macLoadFailed) break;
           final currentUrl = await controller.getUrl();
