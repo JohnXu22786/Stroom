@@ -160,6 +160,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The manager owns the adapter lifecycle, not the page.
   ChatAdapter get _adapter => ref.read(chatStreamManagerProvider).adapter;
   int _selectedModelIndex = 0;
+  String? _nextRequestAccountId;
+  String? _nextRequestAccountName;
+  String? _nextRequestAccountConversationId;
+  (String, String, String)? _nextRequestAccountModelIdentity;
 
   /// Saved model display name order for drag-sort persistence.
   List<String>? _savedModelOrder;

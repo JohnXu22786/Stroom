@@ -13,6 +13,27 @@ import 'anthropic_chat_provider.dart';
 import 'chat_api_provider.dart';
 import '../services/conversation_media_storage.dart';
 
+Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
+    switch (endpointType) {
+      'anthropic' => const {'claude'},
+      'google.gemini.generate_content' => const {'gemini'},
+      'google.gemini.interactions' => const {'gemini-interactions'},
+      'ollama.chat' => const {'ollama'},
+      _ => const {
+          'openai-compatibility',
+          'openai-api',
+          'bedrock',
+          'kimi',
+          'kimi-ai',
+          'kimi.ai',
+          'moonshot',
+          'glm',
+          'deepseek',
+          'minimax',
+          'qwen',
+        },
+    };
+
 /// ChatAdapter provider that keeps the application's existing chat protocol
 /// while selecting an eligible account from the model's stable M1 group.
 class LlmRoutedChatProvider extends BaseChatProvider {
@@ -20,6 +41,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   final String groupId;
   final String localModelId;
   final String endpointType;
+  final String? conversationId;
+  String? selectedAccountId;
   final ConversationMediaWriter? _saveMediaFile;
   List<Attachment> _lastMediaAttachments = const [];
   Map<String, dynamic>? _lastRequestBody;
@@ -35,6 +58,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required this.groupId,
     required this.localModelId,
     required this.endpointType,
+    this.conversationId,
+    this.selectedAccountId,
     ConversationMediaWriter? saveMediaFile,
   })  : _runtime = runtime,
         _saveMediaFile = saveMediaFile;
@@ -95,6 +120,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String? system,
   }) async {
     _lastMediaAttachments = const [];
+    final selectedAccountId = this.selectedAccountId;
+    this.selectedAccountId = null;
     final runtime = await _runtime;
     final execution = await runtime.executeForGroupId<String>(
       groupId: groupId,
@@ -105,6 +132,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         extraParams: extraParams,
       ),
       supportedConnectorTypes: _supportedConnectorTypes,
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
         final protocolId = _protocolFor(candidate.account);
@@ -173,6 +202,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       groupId: groupId,
       localModelId: localModelId,
       supportedConnectorTypes: const {'claude'},
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
         final body = await _buildBody(
@@ -225,6 +256,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       },
     );
     unawaited(() async {
+      final selectedAccountId = this.selectedAccountId;
+      this.selectedAccountId = null;
       try {
         final runtime = await _runtime;
         await runtime.executeForGroupId<void>(
@@ -235,6 +268,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             'streaming',
           },
           supportedConnectorTypes: _supportedConnectorTypes,
+          conversationId: conversationId,
+          selectedAccountId: selectedAccountId,
           request: (candidate, progress) async {
             if (requestCancelToken.isCancelled) {
               throw requestCancelToken.cancelError!;
@@ -296,25 +331,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return controller.stream;
   }
 
-  Set<String> get _supportedConnectorTypes => switch (endpointType) {
-        'anthropic' => const {'claude'},
-        'google.gemini.generate_content' => const {'gemini'},
-        'google.gemini.interactions' => const {'gemini-interactions'},
-        'ollama.chat' => const {'ollama'},
-        _ => const {
-            'openai-compatibility',
-            'openai-api',
-            'bedrock',
-            'kimi',
-            'kimi-ai',
-            'kimi.ai',
-            'moonshot',
-            'glm',
-            'deepseek',
-            'minimax',
-            'qwen',
-          },
-      };
+  Set<String> get _supportedConnectorTypes =>
+      llmRoutedChatSupportedConnectorTypes(endpointType);
 
   String _protocolFor(AiGatewayAccount account) {
     if (endpointType == 'anthropic' ||

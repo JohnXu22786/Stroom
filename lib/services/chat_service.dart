@@ -11,6 +11,7 @@ import '../models/chat_message.dart';
 import '../models/mcp.dart' show McpServerConfig;
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/llm_routed_chat_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
 import 'context_manager.dart'
@@ -231,6 +232,14 @@ class ChatService {
   /// The provider used by this service instance (for test use only).
   @visibleForTesting
   BaseChatProvider? get provider => _provider;
+
+  /// Applies a one-request account override to the routed chat adapter.
+  void selectRoutedAccountForNextRequest(String? accountId) {
+    final provider = _provider;
+    if (provider is LlmRoutedChatProvider) {
+      provider.selectedAccountId = accountId;
+    }
+  }
 
   /// The provider config used by this service instance (for test use only).
   @visibleForTesting

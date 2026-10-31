@@ -21,6 +21,62 @@ Future<bool> removeMessagesWhilePageOwned({
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageStreamingExt on _ChatPageState {
+  String? _takeNextRequestAccountId(String? conversationId) {
+    final accountId = _nextRequestAccountId;
+    if (accountId == null) {
+      _clearNextRequestAccountId();
+      return null;
+    }
+    final selectedConversationId = _nextRequestAccountConversationId;
+    final selectedModelIdentity = _nextRequestAccountModelIdentity;
+    final currentModelIdentity =
+        mounted ? _effectiveRoutedModelIdentity(conversationId) : null;
+    if (mounted) {
+      setState(() {
+        _nextRequestAccountId = null;
+        _nextRequestAccountName = null;
+        _nextRequestAccountConversationId = null;
+        _nextRequestAccountModelIdentity = null;
+      });
+    } else {
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
+    }
+    return routedAccountChoiceMatches(
+      accountId: accountId,
+      selectedConversationId: selectedConversationId,
+      conversationId: conversationId,
+      selectedModelIdentity: selectedModelIdentity,
+      modelIdentity: currentModelIdentity,
+    )
+        ? accountId
+        : null;
+  }
+
+  void _clearNextRequestAccountId() {
+    if (_nextRequestAccountId == null &&
+        _nextRequestAccountName == null &&
+        _nextRequestAccountConversationId == null &&
+        _nextRequestAccountModelIdentity == null) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _nextRequestAccountId = null;
+        _nextRequestAccountName = null;
+        _nextRequestAccountConversationId = null;
+        _nextRequestAccountModelIdentity = null;
+      });
+    } else {
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
+    }
+  }
+
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
   /// generation and came back). Uses per-conversation state from the manager
@@ -343,6 +399,11 @@ extension _ChatPageStreamingExt on _ChatPageState {
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
       streamingMsgId: aiMsgId,
+      assistant: selectedAssistant,
+      // Consume only at dispatch time, after the awaited setup above. This
+      // lets model/conversation listeners invalidate a pending choice until
+      // the service snapshots the model that will receive it.
+      selectedAccountId: _takeNextRequestAccountId(effectiveConvId),
     );
 
     if (!mounted) return;

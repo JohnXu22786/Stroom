@@ -20,6 +20,32 @@ import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 
+class _FakeGatewayFacade implements AiGatewayFacade {
+  @override
+  final AiGatewayAccountManagement accountManagement;
+
+  _FakeGatewayFacade(this.accountManagement);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeAccountManagement implements AiGatewayAccountManagement {
+  final List<AiGatewayAccount> accounts;
+  final List<AiGatewayModelGroup> groups;
+
+  _FakeAccountManagement({required this.accounts, required this.groups});
+
+  @override
+  Future<List<AiGatewayAccount>> listAccounts() async => accounts;
+
+  @override
+  Future<List<AiGatewayModelGroup>> listModelGroups() async => groups;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   // ====================================================================
   // From chat_adapter_model_selection_test.dart
@@ -130,6 +156,56 @@ void main() {
       expect(
         runtimeAdapter.getOrCreateService('legacy')!.provider,
         isNot(isA<LlmRoutedChatProvider>()),
+      );
+    });
+
+    test('conversation service carries an explicit account override', () {
+      final runtime = Completer<LlmChatRoutingRuntime>().future;
+      final runtimeAdapter = ChatAdapter(routingRuntime: runtime);
+      addTearDown(runtimeAdapter.dispose);
+      final routedEntries = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'group-entry',
+            type: 'llm',
+            name: 'Group',
+            configs: [
+              ProviderConfigItem(
+                id: 'group-config',
+                providerName: 'Group',
+                legacyFields: {kLlmModelGroupConfigField: 'group-id'},
+                models: [
+                  ModelConfig(
+                    name: 'Model',
+                    modelId: 'local-model',
+                    legacyFields: {
+                      kLlmModelCapabilitiesConfigField: {'streaming': true},
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      runtimeAdapter.configure(routedEntries);
+
+      final service = runtimeAdapter.getOrCreateService(
+        'conversation-a',
+        selectedAccountId: 'account-b',
+      );
+
+      expect(service?.provider, isA<LlmRoutedChatProvider>());
+      expect(
+        (service!.provider as LlmRoutedChatProvider).selectedAccountId,
+        'account-b',
+      );
+
+      runtimeAdapter.getOrCreateService('conversation-a');
+
+      expect(
+        (service.provider as LlmRoutedChatProvider).selectedAccountId,
+        'account-b',
       );
     });
 
@@ -2290,6 +2366,161 @@ void main() {
       expect(adapter.currentModelIndex, equals(0));
       adapter.cancelService('conv-assistant');
     });
+
+    test(
+      'assistant account choices use its group with a non-routed global model',
+      () async {
+        const globalGroupId = 'global-group';
+        const assistantGroupId = 'assistant-group';
+        final globalModel = ModelConfig(
+          id: 'global-local-model',
+          name: 'Global',
+          modelId: 'global',
+          legacyFields: {
+            kLlmModelCapabilitiesConfigField: {'streaming': true},
+          },
+        );
+        final assistantModel = ModelConfig(
+          id: 'assistant-local-model',
+          name: 'Assistant',
+          modelId: 'assistant-model',
+          legacyFields: {
+            kLlmModelCapabilitiesConfigField: {'streaming': true},
+          },
+        );
+        final routedEntries = ProviderEntriesState(entries: [
+          ProviderEntry(
+            id: 'routed',
+            name: 'Routed',
+            type: 'llm',
+            configs: [
+              ProviderConfigItem(
+                id: 'global-config',
+                providerName: 'Global',
+                host: 'https://global.example.invalid',
+                key: 'global-test-key',
+                models: [globalModel],
+              ),
+              ProviderConfigItem(
+                id: 'assistant-config',
+                providerName: 'Assistant',
+                legacyFields: {kLlmModelGroupConfigField: assistantGroupId},
+                models: [assistantModel],
+              ),
+            ],
+          ),
+        ]);
+        final gateway = _FakeGatewayFacade(
+          _FakeAccountManagement(
+            accounts: [
+              AiGatewayAccount(
+                id: 'global-account',
+                connectorType: 'openai-api',
+                authType: 'apiKey',
+                displayName: 'Global account',
+              ),
+              AiGatewayAccount(
+                id: 'assistant-account',
+                connectorType: 'openai-api',
+                authType: 'apiKey',
+                displayName: 'Assistant account',
+              ),
+            ],
+            groups: [
+              AiGatewayModelGroup(
+                id: globalGroupId,
+                displayName: 'Global group',
+                members: [
+                  AiGatewayModelGroupMember(
+                    accountId: 'global-account',
+                    upstreamModelId: 'upstream-global',
+                    localModelId: globalModel.id,
+                  ),
+                ],
+              ),
+              AiGatewayModelGroup(
+                id: assistantGroupId,
+                displayName: 'Assistant group',
+                members: [
+                  AiGatewayModelGroupMember(
+                    accountId: 'assistant-account',
+                    upstreamModelId: 'upstream-assistant',
+                    localModelId: assistantModel.id,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+        final assistantAdapter = ChatAdapter(
+          routingRuntime: Future.value(gateway),
+        );
+        addTearDown(assistantAdapter.dispose);
+        assistantAdapter.configure(routedEntries);
+        final assistant = _assistant(modelId: 'assistant-model');
+
+        final choices = await assistantAdapter.routedAccountChoicesForAssistant(
+            assistant, routedEntries);
+        final identity = assistantAdapter.routedModelIdentityForAssistant(
+          assistant,
+          routedEntries,
+        );
+        final service = assistantAdapter.getOrCreateService(
+          'conv-assistant-group',
+          assistant: assistant,
+          entriesState: routedEntries,
+          selectedAccountId: choices.single.id,
+        );
+
+        expect(choices.map((account) => account.id), ['assistant-account']);
+        expect(assistantAdapter.hasSelectedRoutedModel, isFalse);
+        expect(identity, isNotNull);
+        expect(identity, (assistantGroupId, assistantModel.id, 'openai'));
+        expect(
+          routedAccountChoiceMatches(
+            accountId: 'assistant-account',
+            selectedConversationId: 'conv-assistant-group',
+            conversationId: 'conv-assistant-group',
+            selectedModelIdentity: identity,
+            modelIdentity: identity,
+          ),
+          isTrue,
+        );
+        expect(
+          routedAccountChoiceMatches(
+            accountId: 'assistant-account',
+            selectedConversationId: 'conv-assistant-group',
+            conversationId: 'conv-assistant-group',
+            selectedModelIdentity: identity,
+            modelIdentity: assistantAdapter.routedModelIdentityForAssistant(
+              null,
+              routedEntries,
+            ),
+          ),
+          isFalse,
+          reason: 'a model switch must invalidate a stale one-turn choice',
+        );
+        expect(
+          routedAccountChoiceMatches(
+            accountId: 'assistant-account',
+            selectedConversationId: 'conv-assistant-group',
+            conversationId: 'another-conversation',
+            selectedModelIdentity: identity,
+            modelIdentity: identity,
+          ),
+          isFalse,
+          reason: 'a conversation switch must invalidate a stale choice',
+        );
+        expect(service?.modelConfig?.id, assistantModel.id);
+        expect(
+          (service?.provider as LlmRoutedChatProvider).selectedAccountId,
+          'assistant-account',
+        );
+        expect(assistantAdapter.currentConfigIndex, 0);
+        expect(assistantAdapter.currentModelIndex, 0);
+        assistantAdapter.cancelService('conv-assistant-group');
+      },
+    );
 
     test(
         'assistant with a display-name default model (no modelId set) '

@@ -327,7 +327,7 @@ void main() {
     );
 
     test(
-      'skips unsupported ChatAdapter group members when no protocol set is given',
+      'falls back from an explicitly selected filtered group member',
       () async {
         final preferences = _MemoryPreferences();
         final accountService = _accountService(preferences);
@@ -384,6 +384,7 @@ void main() {
         final result = await runtime.executeForGroupId<String>(
           groupId: groupId,
           localModelId: 'local-model',
+          selectedAccountId: 'unsupported-account',
           request: (candidate, progress) async => candidate.account.id,
         );
 

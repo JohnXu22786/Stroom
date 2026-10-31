@@ -199,6 +199,8 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
+    String? conversationId,
+    String? selectedAccountId,
   }) async {
     final stableId = stableLlmModelGroupId(accountId, localModelId);
     final LlmModelGroup group;
@@ -225,6 +227,8 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
       requiredCapabilities: requiredCapabilities,
       estimatedUsage: estimatedUsage,
       supportedConnectorTypes: supportedConnectorTypes,
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
     );
     return _gatewayExecution(execution);
   }
@@ -242,6 +246,8 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
+    String? conversationId,
+    String? selectedAccountId,
   }) async {
     final matching = (await _accountService.listModelGroups())
         .where((group) => group.id == groupId)
@@ -272,6 +278,8 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
       requiredCapabilities: requiredCapabilities,
       estimatedUsage: estimatedUsage,
       supportedConnectorTypes: supportedConnectorTypes,
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
     );
     return _gatewayExecution(execution);
   }
@@ -361,6 +369,8 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required Set<String> requiredCapabilities,
     required Map<String, num> estimatedUsage,
     required Set<String>? supportedConnectorTypes,
+    String? conversationId,
+    String? selectedAccountId,
   }) async {
     // Every routed connector invocation sends one HTTP request. Keep that
     // known usage estimate available to account/group request-count policies
@@ -415,6 +425,13 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
           legacyProviderName: group.legacyProviderName,
         );
       }
+      final selectedAccountIsIneligible = selectedAccountId != null &&
+          group.members.any(
+            (member) => member.accountId == selectedAccountId,
+          ) &&
+          !routeGroup.members.any(
+            (member) => member.accountId == selectedAccountId,
+          );
 
       final execution = await _routingService.execute<T>(
         group: routeGroup,
@@ -446,6 +463,9 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
         },
         requiredCapabilities: requiredCapabilities,
         estimatedUsage: routeEstimatedUsage,
+        conversationId: conversationId,
+        selectedAccountId: selectedAccountId,
+        selectedAccountIsIneligible: selectedAccountIsIneligible,
       );
       final result = LlmRoutingExecution<T>(
         value: execution.value,
@@ -458,6 +478,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
         localModelId: localModelId,
         selectedAccountId: result.candidate.account.id,
         decisions: _gatewayRouteDecisions(result.decisions),
+        requestSucceeded: true,
       );
       return result;
     } on LlmRoutingUnavailableException catch (error) {
@@ -774,6 +795,7 @@ class LlmChatRouteDiagnostic {
   final String localModelId;
   final String? selectedAccountId;
   final List<AiGatewayRouteDecision> decisions;
+  final bool requestSucceeded;
   final DateTime recordedAt;
 
   LlmChatRouteDiagnostic({
@@ -781,6 +803,7 @@ class LlmChatRouteDiagnostic {
     required this.localModelId,
     this.selectedAccountId,
     required Iterable<AiGatewayRouteDecision> decisions,
+    this.requestSucceeded = false,
     DateTime? recordedAt,
   })  : decisions = List.unmodifiable(decisions),
         recordedAt = (recordedAt ?? DateTime.now()).toUtc();
@@ -798,18 +821,25 @@ class LlmChatRouteDiagnostics {
     required String localModelId,
     String? selectedAccountId,
     required Iterable<AiGatewayRouteDecision> decisions,
+    bool requestSucceeded = false,
   }) {
     _latest[groupId] = LlmChatRouteDiagnostic(
       groupId: groupId,
       localModelId: localModelId,
       selectedAccountId: selectedAccountId,
       decisions: decisions,
+      requestSucceeded: requestSucceeded,
     );
     revision.value++;
   }
 }
 
 String llmRouteDecisionLabel(String reason) => switch (reason) {
+      'session_affinity' => '沿用此对话最近成功的账号',
+      'session_affinity_persistence_failed' => '本次账号连续性未能保存',
+      'explicit_account_selection' => '按用户选择的账号路由',
+      'selected_account_outside_group' => '所选账号不属于当前模型组',
+      'conversation_id_invalid' => '对话标识无效，未使用会话亲和',
       'model_group_missing' => '没有找到此模型的稳定模型组',
       'model_group_ambiguous' => '此模型同时关联多个模型组',
       'connector_protocol_incompatible' => '连接器协议不适用于此聊天模型',
