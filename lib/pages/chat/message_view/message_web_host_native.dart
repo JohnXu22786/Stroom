@@ -346,8 +346,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
 JSON.stringify({
   url: location.href,
   state: document.readyState,
-  renderer: typeof window.StroomMessageView,
-  root: document.getElementById("root")?.textContent
+  renderer: typeof window.StroomMessageView
 })''',
                   );
                   debugPrint('[MessageWebHost][not-ready] $url: $state');
