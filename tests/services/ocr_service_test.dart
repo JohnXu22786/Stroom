@@ -2162,7 +2162,7 @@ void main() {
               apiKey: 'test-key',
               host: 'https://api.test.com/v1',
               customParams: [
-                const CustomParam(
+                CustomParam(
                   paramName: 'secretAccessKey',
                   defaultValue: credential,
                   type: 'string',
