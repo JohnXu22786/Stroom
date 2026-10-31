@@ -676,6 +676,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   void _selectModelOption(_ModelOption option, int index) {
+    final retryModelChanged = _retryRequestSizeBudgetBytes != null &&
+        ((_selectedConfigId != null &&
+                option.configId != _selectedConfigId) ||
+            (_selectedModelRecordId != null &&
+                option.modelRecordId != _selectedModelRecordId) ||
+            (_selectedConfigId == null &&
+                _selectedModelRecordId == null &&
+                index != _selectedModelIndex));
+    if (retryModelChanged) _retryRequestSizeBudgetBytes = null;
     _selectedModelIndex = index;
     _selectedConfigId = option.configId;
     _selectedModelRecordId = option.modelRecordId;
