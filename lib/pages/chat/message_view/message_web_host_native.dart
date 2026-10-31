@@ -23,6 +23,10 @@ class MessageWebHost extends StatefulWidget {
 class _MessageWebHostState extends State<MessageWebHost> {
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
+  bool _macDocumentNavigationStarted = false;
+
+  static const _macDocumentUrl =
+      'https://stroom.invalid/assets/vendor/dsh_message_view/index.html';
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
@@ -34,6 +38,59 @@ class _MessageWebHostState extends State<MessageWebHost> {
     }
     return uri.scheme == 'file' &&
         uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
+  }
+
+  bool _isMacDocumentUrl(WebUri? url) =>
+      url?.scheme == 'https' &&
+      url?.host == 'stroom.invalid' &&
+      url?.path.endsWith('/assets/vendor/dsh_message_view/index.html') == true;
+
+  Future<void> _loadMacDocument(InAppWebViewController controller) async {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (!mounted ||
+          !identical(controller, _controller) ||
+          _macDocumentNavigationStarted) {
+        return;
+      }
+
+      try {
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageWebHost][load-data-start] macOS attempt=${attempt + 1}',
+          );
+        }
+        await controller.loadData(
+          data: widget.html,
+          baseUrl: WebUri(_macDocumentUrl),
+        );
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageWebHost][load-data-sent] macOS attempt=${attempt + 1}',
+          );
+        }
+      } catch (error) {
+        if (kDebugMode) {
+          debugPrint(
+            '[MessageWebHost][load-error] macOS attempt=${attempt + 1}: $error',
+          );
+        }
+      }
+
+      if (attempt < 4 && !_macDocumentNavigationStarted) {
+        await Future<void>.delayed(
+          Duration(milliseconds: 250 << attempt.clamp(0, 3)),
+        );
+      }
+    }
+
+    if (mounted &&
+        identical(controller, _controller) &&
+        !_macDocumentNavigationStarted &&
+        kDebugMode) {
+      debugPrint(
+        '[MessageWebHost][load-timeout] macOS navigation did not start',
+      );
+    }
   }
 
   @override
@@ -103,37 +160,12 @@ class _MessageWebHostState extends State<MessageWebHost> {
             );
           }
           if (defaultTargetPlatform == TargetPlatform.macOS) {
-            // The macOS plugin starts initialData inside native view creation,
-            // before Flutter has attached the WKWebView to its window. Load
-            // after this frame so the first document navigation is not lost.
+            _macDocumentNavigationStarted = false;
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              if (!mounted || !identical(controller, _controller)) return;
-              try {
-                await Future<void>.delayed(
-                  const Duration(milliseconds: 250),
-                );
-                if (!mounted || !identical(controller, _controller)) return;
-                if (kDebugMode) {
-                  debugPrint('[MessageWebHost][load-data-start] macOS');
-                }
-                await controller.loadData(
-                  data: widget.html,
-                  baseUrl: WebUri(
-                    'https://stroom.invalid/assets/vendor/dsh_message_view/index.html',
-                  ),
-                );
-                if (kDebugMode) {
-                  debugPrint('[MessageWebHost][load-data-sent] macOS');
-                }
-              } catch (error) {
-                if (kDebugMode) {
-                  debugPrint('[MessageWebHost][load-error] $error');
-                }
-              }
+              await _loadMacDocument(controller);
             });
-            // A platform view can be created between Flutter frames. Make
-            // sure the post-frame load callback runs even when the enclosing
-            // page has no other state change to schedule a frame.
+            // Platform-view creation can happen between frames. Schedule the
+            // post-frame load, then retry only until WKWebView starts navigating.
             WidgetsBinding.instance.ensureVisualUpdate();
           }
           controller.addJavaScriptHandler(
@@ -163,6 +195,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
           );
         },
         onLoadStart: (controller, url) {
+          if (defaultTargetPlatform == TargetPlatform.macOS &&
+              _isMacDocumentUrl(url)) {
+            _macDocumentNavigationStarted = true;
+          }
           if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
         },
         onLoadStop: (controller, url) async {
@@ -188,7 +224,10 @@ JSON.stringify({
               debugPrint('[MessageWebHost][not-ready] $url: $error');
             }
           }
-          if (mounted && ready == true) widget.onEvent({'type': 'ready'});
+          if (mounted && ready == true) {
+            _macDocumentNavigationStarted = true;
+            widget.onEvent({'type': 'ready'});
+          }
         },
         shouldOverrideUrlLoading: (controller, action) async {
           final url = action.request.url;
