@@ -47,6 +47,7 @@ class _HangingStreamManager extends ChatStreamManager {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
