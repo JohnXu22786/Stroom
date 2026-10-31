@@ -58,6 +58,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
         // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
         // every native platform; all scripts, styles and fonts are self-contained.
         initialFile: 'assets/vendor/dsh_message_view/index.html',
+        // Local file URLs have no host on WKWebView, so the plugin's origin
+        // allow-list rejects their JavaScript callbacks. The handler below
+        // validates the main-frame URL against this exact bundled document.
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true,
           transparentBackground: true,
@@ -65,11 +68,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
           supportZoom: false,
           useShouldOverrideUrlLoading: true,
           javaScriptHandlersForMainFrameOnly: true,
-          // Linux currently matches literal substrings; other hosts use regex.
-          javaScriptHandlersOriginAllowList:
-              defaultTargetPlatform == TargetPlatform.linux
-                  ? {'file://'}
-                  : {r'^(file://.*|null)$'},
         ),
         onWebViewCreated: (controller) {
           _controller = controller;
