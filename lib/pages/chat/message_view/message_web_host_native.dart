@@ -109,6 +109,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               if (!mounted || !identical(controller, _controller)) return;
               try {
+                await Future<void>.delayed(
+                  const Duration(milliseconds: 250),
+                );
+                if (!mounted || !identical(controller, _controller)) return;
                 if (kDebugMode) {
                   debugPrint('[MessageWebHost][load-data-start] macOS');
                 }
