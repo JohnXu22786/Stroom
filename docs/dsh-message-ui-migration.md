@@ -53,3 +53,22 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 目前这些属于自动行为检查；六个平台的实际设备滚动、键盘、文件选择、WebView 可用性与全屏预览还需要运行验证，不能以 JS 或组件测试代替。交付时记录远程 CI 结果和审查状态。
 
 - 为兼容 macOS 11 WebKit，补齐 `Array.at` / `Object.hasOwn`，代码高亮使用内嵌 Oniguruma WASM，资源无需联网。旧版 WebKit 的 CSP 需要允许该编译过程；模型内容仍经过 AST 绘制，不能进入脚本或消息操作桥接。
+
+## 范围补充：Intelligent UI 延后
+
+2026-10-18 确认：当前 v0.7 工作继续聚焦于对话消息区迁移与生效；模型在回答中自行生成 Intelligent UI 的提示词、输出协议和 UI 选择逻辑，留待后续单独规划。本迁移中对 HTML 代码围栏的消息内预览属于普通消息内容渲染，不代表已经接入模型生成的 Intelligent UI。
+
+### 后续研究记录
+
+- 实际生成样本来自 Thesys 默认管线：回答模型依据 OpenUI 组件协议同时组织回答和展示形式。对 6 类自然语言问题重复生成、追问和可交互抛射演示共 22 个样本，均通过 OpenUI 解析；本次没有做浏览器截图或控件点击验证。
+- CopilotKit 将展示类型选择交给 Jev（文本、表格、图表、示意图、交互图、地图、计算器等 13 类），再让回答模型按选定类型生成。Jev 是后台额外调用，不需要终端用户编写规则；公开 demo 的 BYOK 配置需要 OpenAI 和 Jev 两个密钥。
+- 提示词长度是后续设计问题：Thesys 仓库中的生成系统提示词快照约 33,400 字符；CopilotKit 的基础回答提示词约 6,200 字符。CopilotKit 的路由源码是程序代码，不应按源码长度当作提示词长度；其 SVG 与高级可视化说明另有 skills 文档供按需读取。
+- 后续可评估让回答模型自行选择展示方式，是否采用按需 skill，以及如何提供渲染工具。CopilotKit 本次没有真实模型输出样本，因此当前不能对两者的生成质量做等量比较。
+
+以上 Intelligent UI 研究不属于 PR #800 的实现范围；后续重新启动时，应另行确定提示词/skill 方案并做真实渲染与交互验证。
+
+### Current work snapshot (2026-10-31)
+
+- The conversation message UI branch is `feat/dsh-message-renderer`, targeting `v0.7`; GitHub PR #800 remains a draft and is not merged.
+- GitHub's latest reported checks are from 2026-10-14 and pass, but they predate the current six-platform WebView smoke-test workflow changes.
+- PR CI now covers native message-view smoke tests on Android, iOS, Windows, macOS, Linux, and Web. The updated workflow has not run yet; the results, final visual review, and merge are pending.

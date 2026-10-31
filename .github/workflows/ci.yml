@@ -75,7 +75,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -87,6 +87,88 @@ jobs:
         run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
       - run: flutter build ${{ matrix.platform }} --release
+      - name: Run native Linux message view smoke test
+        if: matrix.platform == 'linux'
+        run: xvfb-run flutter test -d linux integration_test/message_view_smoke_test.dart --reporter expanded
+      - uses: browser-actions/setup-chrome@v2
+        if: matrix.platform == 'web'
+        with:
+          install-chromedriver: true
+      - name: Run web message view smoke test
+        if: matrix.platform == 'web'
+        run: |
+          chromedriver --port=4444 > /tmp/chromedriver.log 2>&1 &
+          chromedriver_pid=$!
+          trap 'kill "$chromedriver_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4444/status >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4444/status >/dev/null || { cat /tmp/chromedriver.log; exit 1; }
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d web-server --browser-name=chrome --driver-port=4444
+
+  message-platform-android:
+    name: Message view Android build and smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          script: flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-windows:
+    name: Message view Windows build and smoke test
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - run: flutter test -d windows integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-macos-ios:
+    name: Message view macOS and iOS build and smoke tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - run: flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded
+      - run: flutter build ios --simulator --debug --no-codesign
+      - name: Boot an available iOS simulator
+        shell: bash
+        run: |
+          simulator_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")))')"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+          echo "IOS_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+      - name: Run iOS message view smoke test
+        run: flutter test -d "$IOS_SIMULATOR_ID" integration_test/message_view_smoke_test.dart --reporter expanded
 
   # ── Format Check ──────────────────────────────────────────────────────────
   format:
