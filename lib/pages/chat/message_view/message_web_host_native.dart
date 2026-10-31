@@ -83,21 +83,43 @@ class _MessageWebHostState extends State<MessageWebHost> {
         },
         onWebViewCreated: (controller) {
           _controller = controller;
+          if (kDebugMode) debugPrint('[MessageWebHost][created]');
           controller.addJavaScriptHandler(
               handlerName: 'StroomMessageView',
               callback: (JavaScriptHandlerFunctionData data) {
-                if (!mounted ||
-                    !data.isMainFrame ||
-                    !_trustedDocument(data.requestUrl) ||
-                    data.args.length != 1 ||
-                    data.args.first is! Map) return;
+                final rejection = !mounted
+                    ? 'unmounted'
+                    : !data.isMainFrame
+                        ? 'subframe'
+                        : !_trustedDocument(data.requestUrl)
+                            ? 'untrusted-url:${data.requestUrl}'
+                            : data.args.length != 1 || data.args.first is! Map
+                                ? 'invalid-arguments'
+                                : null;
+                if (rejection != null) {
+                  if (kDebugMode) {
+                    debugPrint('[MessageWebHost][handler-rejected] $rejection');
+                  }
+                  return;
+                }
+                if (kDebugMode) {
+                  debugPrint(
+                    '[MessageWebHost][handler] ${data.args.first['type']}',
+                  );
+                }
                 widget
                     .onEvent(Map<String, dynamic>.from(data.args.first as Map));
               });
         },
+        onLoadStart: (controller, url) {
+          if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
+        },
         onLoadStop: (controller, url) async {
           final ready = await controller.evaluateJavascript(
               source: '!!window.StroomMessageView');
+          if (kDebugMode) {
+            debugPrint('[MessageWebHost][load-stop] $url ready=$ready');
+          }
           if (kDebugMode && ready != true) {
             try {
               final state = await controller.evaluateJavascript(
