@@ -111,28 +111,20 @@ class _MessageWebHostState extends State<MessageWebHost> {
             urlRequest: URLRequest(url: WebUri.uri(documentUri)),
             allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
+          final currentUrl = await controller.getUrl();
+          final isLoading = await controller.isLoading();
           if (kDebugMode) {
             debugPrint(
               '[MessageWebHost][load-file-sent] macOS attempt=${attempt + 1}',
             );
-            try {
-              final currentUrl = await controller.getUrl();
-              final isLoading = await controller.isLoading();
-              debugPrint(
-                '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
-                'url=$currentUrl isLoading=$isLoading',
-              );
-              if (currentUrl?.toString() == documentUri.toString() &&
-                  isLoading) {
-                macNavigationPending = true;
-                break;
-              }
-            } catch (error) {
-              debugPrint(
-                '[MessageWebHost][load-file-state-error] macOS '
-                'attempt=${attempt + 1}: $error',
-              );
-            }
+            debugPrint(
+              '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
+              'url=$currentUrl isLoading=$isLoading',
+            );
+          }
+          if (currentUrl?.toString() == documentUri.toString() && isLoading) {
+            macNavigationPending = true;
+            break;
           }
         } catch (error) {
           if (kDebugMode) {
