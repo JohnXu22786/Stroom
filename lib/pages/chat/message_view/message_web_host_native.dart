@@ -72,14 +72,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
         initialFile: defaultTargetPlatform == TargetPlatform.macOS
             ? null
             : 'assets/vendor/dsh_message_view/index.html',
-        initialData: defaultTargetPlatform == TargetPlatform.macOS
-            ? InAppWebViewInitialData(
-                data: widget.html,
-                baseUrl: WebUri(
-                  'https://stroom.invalid/assets/vendor/dsh_message_view/index.html',
-                ),
-              )
-            : null,
+        initialData: null,
         // Leave the plugin origin allow-list unset: WKWebView file URLs have
         // no host. The handler below validates this exact main-frame URL.
         initialSettings: InAppWebViewSettings(
@@ -108,6 +101,26 @@ class _MessageWebHostState extends State<MessageWebHost> {
             debugPrint(
               '[MessageWebHost][created] platform=$defaultTargetPlatform htmlLength=${widget.html.length}',
             );
+          }
+          if (defaultTargetPlatform == TargetPlatform.macOS) {
+            // The macOS plugin starts initialData inside native view creation,
+            // before Flutter has attached the WKWebView to its window. Load
+            // after this frame so the first document navigation is not lost.
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted || !identical(controller, _controller)) return;
+              try {
+                await controller.loadData(
+                  data: widget.html,
+                  baseUrl: WebUri(
+                    'https://stroom.invalid/assets/vendor/dsh_message_view/index.html',
+                  ),
+                );
+              } catch (error) {
+                if (kDebugMode) {
+                  debugPrint('[MessageWebHost][load-error] $error');
+                }
+              }
+            });
           }
           controller.addJavaScriptHandler(
             handlerName: 'StroomMessageView',
