@@ -58,7 +58,10 @@ const foldSearchCase = (value) =>
 let current = { session: null, messages: [], hasOlder: false, theme: {} };
 let search = { query: "" };
 let update;
-let channel = null;
+// On the Web, the opaque-origin sandbox cannot be identified by comparing
+// WindowProxy objects through Dart interop. The host gives this iframe a
+// random browsing-context name and validates that nonce on every message.
+let channel = window.name || null;
 let follow = false;
 let initialPositionPending = true;
 let searchDecorations = [];
@@ -574,7 +577,6 @@ engineReady
     );
     requestAnimationFrame(() => {
       send({ type: "ready" });
-      window.parent.postMessage({ type: "stroomMessageReady" }, "*");
     });
   })
   .catch((error) => {

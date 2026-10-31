@@ -29,12 +29,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
     super.initState();
     _listener = ((web.Event event) {
       final message = event as web.MessageEvent;
-      if (_frame == null || message.source != _frame!.contentWindow) return;
       final data = message.data.dartify();
       if (data is! Map) return;
-      if (data['type'] == 'stroomMessageReady') {
-        widget.onEvent({'type': 'ready'});
-      } else if (data['channel'] == _channel && data['event'] is Map) {
+      // Sandboxed srcdoc frames have an opaque origin, so comparing their
+      // WindowProxy with event.source can trigger a cross-origin access error
+      // in dart:js_interop. The unpredictable per-frame channel is the origin
+      // independent handshake and is also required for every later event.
+      if (data['channel'] != _channel) return;
+      if (data['event'] is Map) {
         widget.onEvent(Map<String, dynamic>.from(data['event'] as Map));
       }
     }).toJS;
@@ -68,6 +70,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             ..width = '100%'
             ..height = '100%';
           frame.title = '对话消息';
+          frame.name = _channel;
           // Opaque origin: HTML in another preview cannot inspect this document.
           frame.setAttribute('sandbox', 'allow-scripts');
           frame.srcdoc = widget.html.toJS;
