@@ -15050,6 +15050,82 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves token plural in an ordinary use prompt',
+      () {
+        const instruction = 'Use tokens to process this image';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-token-plural-use-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'token…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(jsonEncode(instruction)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a credential echo after a token mask prefix',
+      () {
+        const credential = 'tokenOpaqueCredential987';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-token-mask-prefix-credential-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'token…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text': 'Use $credential to process this image',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Use [redacted] to process this image',
+        );
+        expect(persisted, contains('Use [redacted] to process this image'));
+        expect(persisted, isNot(contains(credential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves Spanish cañón and redacts Unicode credential tails',
       () {
         BackgroundTask taskFor(String id, String instruction) =>
