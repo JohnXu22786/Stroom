@@ -1953,6 +1953,11 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeImageContext = RegExp(
+    r'^\s*the\s+image\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
   final safeKeepLead = RegExp(
     r'^\s*(?:please\s+)?keep\b.*\[redacted\]',
     caseSensitive: false,
@@ -1966,6 +1971,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
       (safeUseLead && safeRequestUseLead) ||
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
+      safeImageContext ||
       safeKeepLead;
 }
 
