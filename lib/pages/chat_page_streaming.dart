@@ -28,24 +28,38 @@ extension _ChatPageStreamingExt on _ChatPageState {
       return null;
     }
     final selectedConversationId = _nextRequestAccountConversationId;
+    final selectedModelIdentity = _nextRequestAccountModelIdentity;
+    final currentModelIdentity =
+        mounted ? _effectiveRoutedModelIdentity(conversationId) : null;
     if (mounted) {
       setState(() {
         _nextRequestAccountId = null;
         _nextRequestAccountName = null;
         _nextRequestAccountConversationId = null;
+        _nextRequestAccountModelIdentity = null;
       });
     } else {
       _nextRequestAccountId = null;
       _nextRequestAccountName = null;
       _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
     }
-    return selectedConversationId == conversationId ? accountId : null;
+    return routedAccountChoiceMatches(
+      accountId: accountId,
+      selectedConversationId: selectedConversationId,
+      conversationId: conversationId,
+      selectedModelIdentity: selectedModelIdentity,
+      modelIdentity: currentModelIdentity,
+    )
+        ? accountId
+        : null;
   }
 
   void _clearNextRequestAccountId() {
     if (_nextRequestAccountId == null &&
         _nextRequestAccountName == null &&
-        _nextRequestAccountConversationId == null) {
+        _nextRequestAccountConversationId == null &&
+        _nextRequestAccountModelIdentity == null) {
       return;
     }
     if (mounted) {
@@ -53,11 +67,13 @@ extension _ChatPageStreamingExt on _ChatPageState {
         _nextRequestAccountId = null;
         _nextRequestAccountName = null;
         _nextRequestAccountConversationId = null;
+        _nextRequestAccountModelIdentity = null;
       });
     } else {
       _nextRequestAccountId = null;
       _nextRequestAccountName = null;
       _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
     }
   }
 
@@ -279,7 +295,6 @@ extension _ChatPageStreamingExt on _ChatPageState {
     String text, {
     String? capturedConvId,
     List<ChatMessage>? historyOverride,
-    String? selectedAccountId,
   }) async {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
@@ -384,7 +399,11 @@ extension _ChatPageStreamingExt on _ChatPageState {
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
       streamingMsgId: aiMsgId,
-      selectedAccountId: selectedAccountId,
+      assistant: selectedAssistant,
+      // Consume only at dispatch time, after the awaited setup above. This
+      // lets model/conversation listeners invalidate a pending choice until
+      // the service snapshots the model that will receive it.
+      selectedAccountId: _takeNextRequestAccountId(effectiveConvId),
     );
 
     if (!mounted) return;

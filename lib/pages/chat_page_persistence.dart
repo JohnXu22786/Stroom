@@ -275,7 +275,6 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     // during the async gap between the guard above and the synchronous
     // _streams insertion inside manager.startStreaming.
     if (convId != null && _pendingSendConvIds.contains(convId)) return;
-    final selectedAccountId = _takeNextRequestAccountId(convId);
     try {
       await AppLogService.info(
         'ChatPage',
@@ -365,7 +364,6 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         text,
         capturedConvId: convId,
         historyOverride: historyForStream,
-        selectedAccountId: selectedAccountId,
       );
       await saveFuture;
 

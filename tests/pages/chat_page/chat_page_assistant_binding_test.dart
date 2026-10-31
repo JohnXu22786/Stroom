@@ -19,6 +19,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tool_call.dart' show ToolDefinition;
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
@@ -26,7 +28,8 @@ import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';
-import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/services/chat_stream_manager.dart'
+    show ChatStreamManager, StreamResult;
 
 /// Records every chatStream call (messages, system, tools, extraParams).
 class _RecordingProvider extends BaseChatProvider {
@@ -83,6 +86,42 @@ class _RecordingProvider extends BaseChatProvider {
       };
 }
 
+class _AssistantCapturingChatStreamManager extends ChatStreamManager {
+  _AssistantCapturingChatStreamManager(super.ref);
+
+  Assistant? receivedAssistant;
+
+  @override
+  Future<StreamResult> startStreaming({
+    required String text,
+    required String convId,
+    required List<ChatMessage> history,
+    List<ToolDefinition> tools = const [],
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
+    String? streamingMsgId,
+    Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
+    String? selectedAccountId,
+  }) {
+    receivedAssistant = assistant;
+    return super.startStreaming(
+      text: text,
+      convId: convId,
+      history: history,
+      tools: tools,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      reasoningParamValues: reasoningParamValues,
+      streamingMsgId: streamingMsgId,
+      assistant: assistant,
+      entriesStateOverride: entriesStateOverride,
+      selectedAccountId: selectedAccountId,
+    );
+  }
+}
+
 /// Pumps [ChatPage] with a conversation bound to [boundAssistantId], a
 /// recording provider wired into the manager's adapter, and a stable
 /// provider container. Returns the container so the test can set the
@@ -93,12 +132,12 @@ Future<ProviderContainer> _pumpChat(
   required _RecordingProvider provider,
 }) async {
   SharedPreferences.setMockInitialValues({});
-  late final ChatStreamManager manager;
+  late final _AssistantCapturingChatStreamManager manager;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         chatStreamManagerProvider.overrideWith((ref) {
-          manager = ChatStreamManager(ref);
+          manager = _AssistantCapturingChatStreamManager(ref);
           return manager;
         }),
         conversationsProvider.overrideWith((ref) {
@@ -234,6 +273,14 @@ void main() {
       expect(system, contains('A的系统提示词'),
           reason: '对话绑定助手 A 的提示词必须生效，而不是会话选择的 B');
       expect(system, isNot(contains('B的系统提示词')));
+      expect(
+        (container.read(chatStreamManagerProvider)
+                as _AssistantCapturingChatStreamManager)
+            .receivedAssistant
+            ?.id,
+        'assistant-a',
+        reason: 'the manager must snapshot the same bound assistant model',
+      );
       await _flushPendingTimers(tester);
     });
 

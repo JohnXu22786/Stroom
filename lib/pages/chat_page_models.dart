@@ -122,6 +122,7 @@ extension _ChatPageModelsExt on _ChatPageState {
       _nextRequestAccountId = null;
       _nextRequestAccountName = null;
       _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
     });
     // Persist the choice for THIS conversation so the user's switch survives
     // re-entry, without affecting other conversations. 同时记录绝对身份
@@ -149,13 +150,20 @@ extension _ChatPageModelsExt on _ChatPageState {
 
   Future<void> _chooseAccountOverride() async {
     final conversationId = ref.read(activeConversationIdProvider);
-    final selectedModelIdentity = _selectedRoutedModelIdentity();
+    final entriesState = ref.read(providerEntriesProvider);
+    final assistant = _assistantForConversation(conversationId);
+    final selectedModelIdentity =
+        _adapter.routedModelIdentityForAssistant(assistant, entriesState);
     if (selectedModelIdentity == null) return;
-    final accounts = await _adapter.routedAccountChoicesForSelectedModel();
+    final accounts = await _adapter.routedAccountChoicesForAssistant(
+      assistant,
+      entriesState,
+    );
     if (!mounted ||
         accounts.isEmpty ||
         ref.read(activeConversationIdProvider) != conversationId ||
-        _selectedRoutedModelIdentity() != selectedModelIdentity) {
+        _effectiveRoutedModelIdentity(conversationId) !=
+            selectedModelIdentity) {
       return;
     }
     final selectedAccountId = await showDialog<String>(
@@ -191,7 +199,8 @@ extension _ChatPageModelsExt on _ChatPageState {
     if (selectedAccountId == null ||
         !mounted ||
         ref.read(activeConversationIdProvider) != conversationId ||
-        _selectedRoutedModelIdentity() != selectedModelIdentity) {
+        _effectiveRoutedModelIdentity(conversationId) !=
+            selectedModelIdentity) {
       return;
     }
     final selectedAccount = accounts
@@ -202,34 +211,32 @@ extension _ChatPageModelsExt on _ChatPageState {
       _nextRequestAccountName = selectedAccount?.displayName;
       _nextRequestAccountConversationId =
           selectedAccount == null ? null : conversationId;
+      _nextRequestAccountModelIdentity =
+          selectedAccount == null ? null : selectedModelIdentity;
     });
   }
 
-  (String, String, String)? _selectedRoutedModelIdentity() {
+  Assistant? _assistantForConversation(String? conversationId) {
+    final conversation = conversationId == null
+        ? null
+        : ref
+            .read(conversationsProvider)
+            .where((item) => item.id == conversationId)
+            .firstOrNull;
+    return resolveAssistantForSend(
+      conversationAssistantId: conversation?.assistantId,
+      sessionAssistant: ref.read(selectedAssistantProvider),
+      assistants: ref.read(assistantProvider),
+    );
+  }
+
+  (String, String, String)? _effectiveRoutedModelIdentity(
+    String? conversationId,
+  ) {
     final entriesState = ref.read(providerEntriesProvider);
-    final model = _adapter
-        .availableModels(entriesState)
-        .where(
-          (item) =>
-              item.configIndex == _adapter.currentConfigIndex &&
-              item.modelIndex == _adapter.currentModelIndex,
-        )
-        .firstOrNull;
-    final groupId = model?.modelGroupId;
-    if (model == null || groupId == null) return null;
-    final llmEntry =
-        entriesState.entries.where((entry) => entry.type == 'llm').firstOrNull;
-    if (llmEntry == null ||
-        model.configIndex >= llmEntry.configs.length ||
-        model.modelIndex >= llmEntry.configs[model.configIndex].models.length) {
-      return null;
-    }
-    final config = llmEntry.configs[model.configIndex];
-    final modelConfig = config.models[model.modelIndex];
-    return (
-      groupId,
-      model.modelId,
-      effectiveEndpointType(modelConfig.endpointType, config.endpointType),
+    return _adapter.routedModelIdentityForAssistant(
+      _assistantForConversation(conversationId),
+      entriesState,
     );
   }
 
@@ -272,6 +279,8 @@ extension _ChatPageModelsExt on _ChatPageState {
       _selectedModelIndex = displayIdx;
       _nextRequestAccountId = null;
       _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
     });
     // Restore per-model settings for this model
     SharedPreferences.getInstance().then((prefs) {
@@ -534,8 +543,9 @@ extension _ChatPageModelsExt on _ChatPageState {
       modelNames: _getModelNames(),
       selectedModelIndex: _selectedModelIndex,
       onModelSelected: _onModelSelected,
-      onAccountOverrideTap:
-          _adapter.hasSelectedRoutedModel ? _chooseAccountOverride : null,
+      onAccountOverrideTap: _effectiveRoutedModelIdentity(activeId) != null
+          ? _chooseAccountOverride
+          : null,
       accountOverrideName: _nextRequestAccountName,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,

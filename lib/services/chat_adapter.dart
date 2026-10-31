@@ -84,6 +84,18 @@ class AvailableModel {
   });
 }
 
+bool routedAccountChoiceMatches({
+  required String? accountId,
+  required String? selectedConversationId,
+  required String? conversationId,
+  required (String, String, String)? selectedModelIdentity,
+  required (String, String, String)? modelIdentity,
+}) =>
+    accountId != null &&
+    selectedConversationId == conversationId &&
+    selectedModelIdentity != null &&
+    selectedModelIdentity == modelIdentity;
+
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
   final Future<AiGatewayFacade>? _routingRuntime;
@@ -177,11 +189,79 @@ class ChatAdapter {
   Future<List<AiGatewayAccount>> routedAccountChoicesForSelectedModel() async {
     final config = _cachedProviderConfig;
     final model = _cachedModelConfig;
+    if (config == null || model == null) return const [];
+    return _routedAccountChoices(config, model, _cachedEndpointType);
+  }
+
+  /// Accounts available to the model that [getOrCreateService] will use for
+  /// [assistant], including its bound model when one is configured.
+  Future<List<AiGatewayAccount>> routedAccountChoicesForAssistant(
+    Assistant? assistant,
+    ProviderEntriesState entriesState,
+  ) async {
+    final resolved = _routedModelForAssistant(assistant, entriesState);
+    if (resolved == null) return const [];
+    return _routedAccountChoices(resolved.$1, resolved.$2, resolved.$3);
+  }
+
+  /// Stable identity for the model/group that the next assistant send will
+  /// use. The chat page uses it to reject account choices made before a
+  /// conversation or assistant model changed.
+  (String, String, String)? routedModelIdentityForAssistant(
+    Assistant? assistant,
+    ProviderEntriesState entriesState,
+  ) {
+    final resolved = _routedModelForAssistant(assistant, entriesState);
+    if (resolved == null) return null;
+    final (config, model, endpointType) = resolved;
+    final groupId = llmModelGroupIdForConfig(config);
+    if (groupId == null) return null;
+    return (groupId, model.id, endpointType);
+  }
+
+  (ProviderConfigItem, ModelConfig, String)? _routedModelForAssistant(
+    Assistant? assistant,
+    ProviderEntriesState entriesState,
+  ) {
+    if (_hasConfiguredAssistantModelReference(assistant)) {
+      if (assistant == null) return null;
+      final useDefaultRef =
+          assistant.modelId == null || assistant.modelId!.isEmpty;
+      final hasBoundModelId = assistant.modelId?.isNotEmpty == true;
+      final modelRef = hasBoundModelId
+          ? assistant.modelId
+          : assistant.defaultModelId?.isNotEmpty == true
+              ? assistant.defaultModelId
+              : null;
+      final resolved = _resolveAssistantModel(
+        modelRef,
+        entriesState,
+        providerName: useDefaultRef ? assistant.defaultProviderName : null,
+        modelDisplayName:
+            hasBoundModelId ? assistant.modelId : assistant.defaultModelName,
+      );
+      if (resolved == null) return null;
+      final (config, model) = resolved;
+      return (
+        config,
+        model,
+        effectiveEndpointType(model.endpointType, config.endpointType),
+      );
+    }
+
+    final config = _cachedProviderConfig;
+    final model = _cachedModelConfig;
+    if (config == null || model == null) return null;
+    return (config, model, _cachedEndpointType);
+  }
+
+  Future<List<AiGatewayAccount>> _routedAccountChoices(
+    ProviderConfigItem config,
+    ModelConfig model,
+    String endpointType,
+  ) async {
     final runtime = _routingRuntime;
-    if (config == null ||
-        model == null ||
-        runtime == null ||
-        !isLlmModelGroupProviderConfig(config)) {
+    if (runtime == null || !isLlmModelGroupProviderConfig(config)) {
       return const [];
     }
     final groupId = llmModelGroupIdForConfig(config)!;
@@ -192,7 +272,7 @@ class ChatAdapter {
     final accounts = await gateway.accountManagement.listAccounts();
     final accountsById = {for (final account in accounts) account.id: account};
     final supportedConnectors =
-        llmRoutedChatSupportedConnectorTypes(_cachedEndpointType);
+        llmRoutedChatSupportedConnectorTypes(endpointType);
     return [
       for (final member in group.members)
         if ((member.localModelId ?? group.id) == model.id &&
