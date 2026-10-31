@@ -15394,8 +15394,10 @@ void main() {
       final map = task.toMap();
       final restored = BackgroundTask.fromMap(map);
 
-      expect(restored.rawRequest, {'host': 'api.example.com'});
-      expect(restored.rawResponse, {'statusCode': 400});
+      expect(map, isNot(contains('rawRequest')));
+      expect(map, isNot(contains('rawResponse')));
+      expect(restored.rawRequest, isNull);
+      expect(restored.rawResponse, isNull);
       expect(restored.error, '识别失败');
     });
 
@@ -15645,7 +15647,7 @@ void main() {
       expect(serializedTask['steps'], [
         {'label': 'OCR request', 'status': 'failed', 'error': 'OCR 错误详情已隐藏'},
       ]);
-      expect(persistedSnapshot, contains('req-safe-auth-fallback-123'));
+      expect(persistedSnapshot, isNot(contains('req-safe-auth-fallback-123')));
     });
 
     test('legacy diagnostics fall back after an unsafe request ID field', () {
@@ -15669,7 +15671,7 @@ void main() {
         'statusCode': 503,
         'requestId': 'req-safe-123',
       });
-      expect(jsonEncode(task.toMap()), contains('req-safe-123'));
+      expect(jsonEncode(task.toMap()), isNot(contains('req-safe-123')));
     });
 
     test(
@@ -15700,7 +15702,7 @@ void main() {
           'statusCode': 503,
           'requestId': 'req-safe-after-key',
         });
-        expect(persisted, contains('req-safe-after-key'));
+        expect(persisted, isNot(contains('req-safe-after-key')));
         expect(persisted, isNot(contains(apiKey)));
       },
     );
@@ -15809,7 +15811,7 @@ void main() {
           'statusCode': 503,
           'requestId': safeRequestId,
         });
-        expect(persisted, contains(safeRequestId));
+        expect(persisted, isNot(contains(safeRequestId)));
         expect(persisted, isNot(contains(apiKey)));
       },
     );
@@ -15835,7 +15837,7 @@ void main() {
       final persisted = jsonEncode(task.toMap());
 
       expect(task.rawResponse, {'statusCode': 401, 'requestId': safeRequestId});
-      expect(persisted, contains(safeRequestId));
+      expect(persisted, isNot(contains(safeRequestId)));
       expect(persisted, isNot(contains(apiKey)));
     });
 
