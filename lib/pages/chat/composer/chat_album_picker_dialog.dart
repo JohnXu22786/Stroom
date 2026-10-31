@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -32,6 +31,18 @@ Future<List<MapEntry<String, Uint8List>>?> showAppAlbumPickerDialog(
 @visibleForTesting
 Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
 
+/// Overrides edited-image temp writes in focused async lifecycle tests.
+@visibleForTesting
+Future<void> Function(File file, Uint8List bytes)?
+    beforeAppAlbumPickerTempWriteForTesting;
+
+/// Supplies edited bytes without opening the editor in lifecycle tests.
+@visibleForTesting
+Future<Uint8List?> Function(String fileName, Uint8List imageBytes)?
+    appAlbumPickerEditImageForTesting;
+
+int _appAlbumPickerTempEditCounter = 0;
+
 class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
   const _AppAlbumPickerDialog();
 
@@ -57,6 +68,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
+  final Map<String, Future<void>> _pendingTempEditWrites = {};
 
   @override
   void initState() {
@@ -72,7 +84,17 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
-    for (final path in _tempEditFiles) {
+    final paths = List<String>.of(_tempEditFiles);
+    try {
+      await Future.wait<void>([
+        for (final path in paths)
+          if (_pendingTempEditWrites.containsKey(path))
+            _pendingTempEditWrites[path]!,
+      ]);
+    } catch (_) {
+      // A failed write can still leave a partial file to remove below.
+    }
+    for (final path in paths) {
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -82,7 +104,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         // Non-critical cleanup
       }
     }
-    _tempEditFiles.clear();
+    _tempEditFiles.removeWhere(paths.contains);
   }
 
   Future<void> _loadData() async {
@@ -610,39 +632,68 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     String fileName,
     Uint8List imageBytes,
   ) async {
-    // Show the fullscreen preview dialog with edit button
-    final shouldEdit = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: fileName,
-      ),
-    );
-
-    if (shouldEdit != true || !mounted) return;
-
-    // User tapped edit — open quick editor
-    final editedBytes = await Navigator.push<Uint8List>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
+    final editForTesting = appAlbumPickerEditImageForTesting;
+    final Uint8List? editedBytes;
+    if (editForTesting != null) {
+      editedBytes = await editForTesting(fileName, imageBytes);
+    } else {
+      // Show the fullscreen preview dialog with edit button
+      final shouldEdit = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => ImagePreviewDialog(
+          imageData: imageBytes,
           fileName: fileName,
         ),
-      ),
-    );
+      );
 
-    if (editedBytes == null || !mounted) return;
+      if (shouldEdit != true || !mounted) return;
+
+      // User tapped edit — open quick editor
+      editedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: imageBytes,
+            fileName: fileName,
+          ),
+        ),
+      );
+    }
+
+    final editedImageBytes = editedBytes;
+    if (editedImageBytes == null || !mounted) return;
 
     // Save edited bytes to temp cache directory instead of overwriting original
+    String? tempPath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      if (!mounted) return;
+      final tempFileName = 'edited_${DateTime.now().millisecondsSinceEpoch}_'
+          '${_appAlbumPickerTempEditCounter++}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
+      tempPath = tempFile.path;
+      _tempEditFiles.add(tempPath);
+      final write = beforeAppAlbumPickerTempWriteForTesting?.call(
+            tempFile,
+            editedImageBytes,
+          ) ??
+          tempFile.writeAsBytes(editedImageBytes);
+      _pendingTempEditWrites[tempFile.path] = write;
+      try {
+        await write;
+      } finally {
+        _pendingTempEditWrites.remove(tempFile.path);
+      }
     } catch (_) {
+      if (tempPath != null) {
+        _tempEditFiles.remove(tempPath);
+        try {
+          final file = File(tempPath);
+          if (await file.exists()) await file.delete();
+        } catch (_) {
+          // Best-effort cleanup of a partial temp file.
+        }
+      }
       // Temp file save is best-effort; we keep the bytes in memory
     }
 
@@ -655,7 +706,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
     // Update the selected item in-memory with edited bytes
     setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+      _selectedItems[recordKey] = MapEntry(fileName, editedImageBytes);
     });
   }
 
