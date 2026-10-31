@@ -2649,7 +2649,7 @@ void main() {
         final providerNotifier = ProviderEntriesNotifier()
           ..state = ProviderEntriesState(
             entries: [
-              entryWithModels(const [
+              entryWithModels([
                 ModelConfig(
                   id: 'first-model',
                   name: 'First Model',
@@ -2686,7 +2686,7 @@ void main() {
 
         providerNotifier.state = ProviderEntriesState(
           entries: [
-            entryWithModels(const [
+            entryWithModels([
               ModelConfig(
                 id: selectedModelId,
                 name: 'Selected Model',
