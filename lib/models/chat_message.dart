@@ -132,6 +132,7 @@ class Attachment {
     String? base64Data,
     String? conversationId,
     bool? compressedCachePersisted,
+    Map<String, dynamic>? extraFields,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -145,7 +146,7 @@ class Attachment {
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
         base64Data: base64Data ?? this.base64Data,
         conversationId: conversationId ?? this.conversationId,
-        extraFields: extraFields,
+        extraFields: extraFields ?? this.extraFields,
       )..compressedCachePersisted =
           compressedCachePersisted ?? this.compressedCachePersisted;
 
@@ -192,6 +193,10 @@ class ChatMessage {
   /// When null or empty, fall back to [content] as a single block.
   final List<String>? textSections;
 
+  /// Ordered assistant text and generated attachment references. Older
+  /// records omit this and continue rendering [content] plus [attachments].
+  final List<Map<String, dynamic>>? contentParts;
+
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Round 0 always starts at index 0 (when [toolCalls] is non-empty).
   /// Each subsequent entry is the index of the first tool call in that
@@ -227,6 +232,7 @@ class ChatMessage {
     this.toolCalls,
     this.reasoningSections,
     this.textSections,
+    this.contentParts,
     this.toolCallRoundStarts,
     this.blocks,
     this.schemaVersion = currentSchemaVersion,
@@ -350,6 +356,10 @@ class ChatMessage {
         // Persist per-round text sections if present and non-empty.
         if (textSections != null && textSections!.isNotEmpty)
           'textSections': textSections!.toList(),
+        if (contentParts != null && contentParts!.isNotEmpty)
+          'contentParts': contentParts!
+              .map((part) => Map<String, dynamic>.from(part))
+              .toList(),
         // Persist round boundary indices for multi-tool grouping.
         if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
           'toolCallRoundStarts': toolCallRoundStarts!.toList(),
@@ -373,6 +383,7 @@ class ChatMessage {
       'toolCalls',
       'reasoningSections',
       'textSections',
+      'contentParts',
       'toolCallRoundStarts',
       'blocks',
     };
@@ -465,6 +476,14 @@ class ChatMessage {
       if (textSections.isEmpty) textSections = null;
     }
 
+    final contentPartsRaw = map['contentParts'];
+    final contentParts = contentPartsRaw is List
+        ? contentPartsRaw
+            .whereType<Map>()
+            .map((part) => Map<String, dynamic>.from(part))
+            .toList()
+        : null;
+
     return ChatMessage(
       id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
@@ -488,6 +507,7 @@ class ChatMessage {
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
       textSections: textSections,
+      contentParts: contentParts,
       toolCallRoundStarts: toolCallRoundStarts,
       blocks: _parseBlocks(map['blocks']),
       schemaVersion: map['schemaVersion'] is num
@@ -524,6 +544,7 @@ class ChatMessage {
     List<ToolCallData>? toolCalls,
     List<String>? reasoningSections,
     List<String>? textSections,
+    List<Map<String, dynamic>>? contentParts,
     List<int>? toolCallRoundStarts,
     List<MessageBlock>? blocks,
   }) =>
@@ -542,6 +563,7 @@ class ChatMessage {
         toolCalls: toolCalls ?? this.toolCalls,
         reasoningSections: reasoningSections ?? this.reasoningSections,
         textSections: textSections ?? this.textSections,
+        contentParts: contentParts ?? this.contentParts,
         toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
         blocks: blocks ?? this.blocks,
         schemaVersion: schemaVersion,

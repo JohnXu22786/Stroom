@@ -11,10 +11,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' show SimpleTextMessage;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/message_attachment_preview.dart';
+import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 /// Creates a ChatPage app with a conversation pre-populated with [messages].
@@ -57,6 +59,30 @@ ChatMessage _userMessage({
     role: 'user',
     content: content,
     attachments: attachments,
+    createdAt: DateTime(2025, 1, 1),
+  );
+}
+
+ChatMessage _assistantMessage({
+  required String id,
+  required String content,
+  List<Attachment> attachments = const [],
+  List<Map<String, dynamic>>? contentParts,
+  List<ToolCallData>? toolCalls,
+  String? reasoningContent,
+  List<String>? reasoningSections,
+  bool isError = false,
+}) {
+  return ChatMessage(
+    id: id,
+    role: 'assistant',
+    content: content,
+    isError: isError,
+    attachments: attachments,
+    contentParts: contentParts,
+    toolCalls: toolCalls,
+    reasoningContent: reasoningContent,
+    reasoningSections: reasoningSections,
     createdAt: DateTime(2025, 1, 1),
   );
 }
@@ -109,8 +135,9 @@ void main() {
   });
 
   tearDown(() {
-    VisibilityDetectorController.instance.updateInterval =
-        const Duration(milliseconds: 500);
+    VisibilityDetectorController.instance.updateInterval = const Duration(
+      milliseconds: 500,
+    );
   });
 
   group('ChatPage user message bubble visibility', () {
@@ -190,26 +217,131 @@ void main() {
     );
 
     testWidgets(
-      'attachment-only message does not add extra spacing above the '
-      'previews (no bubble to separate from)',
-      (tester) async {
-        await _pumpLoadedChatPage(tester, [
-          _userMessage(
-            id: 'u1',
-            content: '',
-            attachments: [_documentAttachment()],
-          ),
-        ]);
+        'attachment-only message does not add extra spacing above the '
+        'previews (no bubble to separate from)', (tester) async {
+      await _pumpLoadedChatPage(tester, [
+        _userMessage(
+          id: 'u1',
+          content: '',
+          attachments: [_documentAttachment()],
+        ),
+      ]);
 
-        // No bubble above → the attachment area must not carry the
-        // bubble-separation top padding.
-        final padding = tester.widget<Padding>(
-          find.byKey(const ValueKey('user-message-attachment-area')),
-        );
-        expect(padding.padding.resolve(TextDirection.ltr).top, 0);
-      },
-    );
+      // No bubble above → the attachment area must not carry the
+      // bubble-separation top padding.
+      final padding = tester.widget<Padding>(
+        find.byKey(const ValueKey('user-message-attachment-area')),
+      );
+      expect(padding.padding.resolve(TextDirection.ltr).top, 0);
+    });
   });
+
+  testWidgets(
+    'assistant generated media attachment renders through the message preview',
+    (tester) async {
+      await _pumpLoadedChatPage(tester, [
+        _assistantMessage(
+          id: 'a1',
+          content: 'Here is the generated image.',
+          attachments: [
+            Attachment(
+              fileName: 'generated.png',
+              mimeType: 'image/png',
+              fileType: 'image',
+              hash: 'generated-image-hash',
+              storagePath: '/tmp/generated.png',
+              fileSize: 3,
+            ),
+          ],
+        ),
+      ]);
+
+      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
+      expect(find.text('generated.png'), findsOneWidget);
+      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    },
+  );
+
+  testWidgets('assistant generated media stays between ordered text parts', (
+    tester,
+  ) async {
+    final attachment = _namedDocumentAttachment('generated.pdf');
+    await _pumpLoadedChatPage(tester, [
+      _assistantMessage(
+        id: 'a-ordered-media',
+        content: 'before after',
+        attachments: [attachment],
+        contentParts: [
+          {'type': 'text', 'text': 'before'},
+          {'type': 'attachment', 'attachmentId': attachment.id},
+          {'type': 'text', 'text': 'after'},
+        ],
+      ),
+    ]);
+
+    final beforeY = tester.getTopLeft(find.text('before')).dy;
+    final attachmentY = tester.getTopLeft(find.text('generated.pdf')).dy;
+    final afterY = tester.getTopLeft(find.text('after')).dy;
+    expect(beforeY, lessThan(attachmentY));
+    expect(attachmentY, lessThan(afterY));
+  });
+
+  testWidgets('assistant ordered media does not hide tool calls or reasoning', (
+    tester,
+  ) async {
+    final attachment = _namedDocumentAttachment('generated.pdf');
+    await _pumpLoadedChatPage(tester, [
+      _assistantMessage(
+        id: 'a-media-tools',
+        content: 'Here is the file',
+        attachments: [attachment],
+        contentParts: [
+          {'type': 'text', 'text': 'Here is the file'},
+          {'type': 'attachment', 'attachmentId': attachment.id},
+        ],
+        toolCalls: const [
+          ToolCallData(
+            id: 'tool-1',
+            name: 'search',
+            arguments: {},
+            status: ToolCallStatus.completed,
+            result: 'Found a match',
+          ),
+        ],
+        reasoningSections: ['I inspected the document.'],
+      ),
+    ]);
+
+    expect(find.text('generated.pdf'), findsOneWidget);
+    expect(find.text('search'), findsOneWidget);
+    expect(find.byType(ReasoningSection), findsOneWidget);
+  });
+
+  testWidgets(
+    'partial media remains available on an errored assistant message',
+    (tester) async {
+      await _pumpLoadedChatPage(tester, [
+        _assistantMessage(
+          id: 'a-error',
+          content: 'Partial result',
+          isError: true,
+          attachments: [
+            Attachment(
+              fileName: 'partial.png',
+              mimeType: 'image/png',
+              fileType: 'image',
+              hash: 'partial-image-hash',
+              storagePath: '/tmp/partial.png',
+              fileSize: 3,
+            ),
+          ],
+        ),
+      ]);
+
+      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
+      expect(find.text('partial.png'), findsOneWidget);
+    },
+  );
 
   group('ChatPage user message attachment preview order', () {
     testWidgets(
@@ -282,5 +414,29 @@ void main() {
         expect(dxs[2], lessThan(dxs[3]));
       },
     );
+  });
+
+  testWidgets('remote generated media preview shows its provider reference', (
+    tester,
+  ) async {
+    const reference = 'gs://bucket/generated-clip.mp4';
+    final attachment = Attachment(
+      id: 'generated-remote-video',
+      fileName: 'generated-clip.mp4',
+      mimeType: 'video/mp4',
+      fileType: 'video',
+      hash: '',
+      storagePath: reference,
+      fileSize: 0,
+      extraFields: const {'stroom.mediaReference': reference},
+    );
+    await _pumpLoadedChatPage(tester, [
+      _assistantMessage(id: 'a1', content: '', attachments: [attachment]),
+    ]);
+
+    await tester.tap(find.byType(MessageAttachmentPreview));
+    await tester.pumpAndSettle();
+
+    expect(find.text(reference), findsOneWidget);
   });
 }

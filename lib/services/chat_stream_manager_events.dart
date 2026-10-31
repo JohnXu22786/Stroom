@@ -13,6 +13,17 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
         state.fullReply += e.text;
         state.textChunks[state.textChunks.length - 1] += e.text;
+        final contentOrder = e.contentOrder == null
+            ? state.nextContentOrder
+            : e.contentOrder! + state.contentOrderOffset;
+        if (contentOrder >= state.nextContentOrder) {
+          state.nextContentOrder = contentOrder + 1;
+        }
+        state.orderedContentParts.add({
+          'type': 'text',
+          'text': e.text,
+          'contentOrder': contentOrder,
+        });
         // 节流：最长200ms更新一次 provider
         final now = DateTime.now();
         if (now.difference(state.lastTextUpdate) >=
@@ -24,6 +35,26 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           _pushToProvider(convId, streamingTextSectionsProvider,
               List<String>.from(state.textChunks));
           _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
+        }
+
+      case MediaAttachmentsEvent e:
+        state.mediaAttachments.addAll(e.attachments);
+        for (var index = 0; index < e.attachments.length; index++) {
+          final attachment = e.attachments[index];
+          final attachmentOrder = attachment.extraFields['stroom.contentOrder'];
+          final contentOrder = attachmentOrder is int
+              ? attachmentOrder + state.contentOrderOffset
+              : e.contentOrder == null
+                  ? state.nextContentOrder
+                  : e.contentOrder! + state.contentOrderOffset + index;
+          if (contentOrder >= state.nextContentOrder) {
+            state.nextContentOrder = contentOrder + 1;
+          }
+          state.orderedContentParts.add({
+            'type': 'attachment',
+            'attachmentId': attachment.id,
+            'contentOrder': contentOrder,
+          });
         }
 
       case ReasoningEvent e:
@@ -46,6 +77,10 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
 
       case ReasoningSectionEndEvent():
+        // Each provider request starts its own contentOrder sequence at zero.
+        // A tool follow-up is still part of this assistant message, so shift
+        // that request's order values past all content already received.
+        state.contentOrderOffset = state.nextContentOrder;
         final sections = List<String>.from(state.reasoningSections);
         sections.add('');
         state.reasoningSections = sections;

@@ -1147,11 +1147,74 @@ abstract base class _MapBridge
             },
           ),
         );
+      } else if (_isAudioPart(item)) {
+        parts.add(_typedMediaPart('audio', item));
+      } else if (_isVideoPart(item)) {
+        parts.add(_typedMediaPart('video', item));
+      } else if (_isFilePart(item)) {
+        parts.add(_typedMediaPart('file', item));
+      } else if (_isTranscriptionPart(item)) {
+        parts.add(_typedMediaPart('transcription', item));
       } else {
         parts.add(_genericPart(item));
       }
     }
     return parts;
+  }
+
+  bool _isAudioPart(Map item) => const {
+        'input_audio',
+        'audio_url',
+        'audio',
+        'output_audio',
+      }.contains(item['type']);
+
+  bool _isVideoPart(Map item) =>
+      const {'video_url', 'video_frame', 'input_video'}.contains(item['type']);
+
+  bool _isFilePart(Map item) =>
+      const {'file', 'input_file', 'document'}.contains(item['type']);
+
+  bool _isTranscriptionPart(Map item) => const {
+        'transcription',
+        'audio_transcription',
+        'transcript',
+      }.contains(item['type']);
+
+  StroomContentPart _typedMediaPart(String type, Map item) {
+    final source = _copyMap(item);
+    final media = _copyValueMap(
+      item[type] ??
+          item['${type}_url'] ??
+          item['input_audio'] ??
+          item['output_audio'] ??
+          item['input_file'] ??
+          item['file'] ??
+          item['document'] ??
+          (item['type'] == 'input_file' ? item : null),
+    );
+    final segments =
+        item['segments'] ?? item['timestamps'] ?? media['segments'];
+    return StroomContentPart(
+      type: type,
+      data: {
+        'source': source,
+        if (item['text'] is String) 'text': item['text'],
+        if (media['url'] is String) 'reference': media['url'],
+        if (media['file_url'] is String) 'reference': media['file_url'],
+        if (media['file_data'] is String) 'reference': media['file_data'],
+        if (media['file_uri'] is String) 'reference': media['file_uri'],
+        if (media['filename'] is String) 'fileName': media['filename'],
+        if (media['mime_type'] is String) 'mimeType': media['mime_type'],
+        if (media['mimeType'] is String) 'mimeType': media['mimeType'],
+        if (media['format'] is String) 'format': media['format'],
+        if (media['timestamp'] != null) 'timestamp': media['timestamp'],
+        if (segments is List)
+          'segments': List<dynamic>.from(
+            jsonDecode(jsonEncode(segments)) as List,
+          ),
+      },
+    );
   }
 
   StroomContentPart? _textBlock(Map item) {
@@ -1746,8 +1809,8 @@ final class _AnthropicMessagesBridge extends _MapBridge {
               })
             else if (part.type == 'image')
               _encodeAnthropicImage(message, part)
-            else if (part.type == 'document' && part.data['source'] is Map)
-              _copyValueMap(part.data['source'])
+            else if (part.type == 'file')
+              _encodeAnthropicFile(part)
             else if (_targetSource(message, part).isNotEmpty)
               _targetSource(message, part)
             else
@@ -1790,7 +1853,7 @@ final class _AnthropicMessagesBridge extends _MapBridge {
       throw UnsupportedError('Anthropic image input requires an image URL.');
     }
     final dataUrl = RegExp(
-      r'^data:([^;,]+);base64,(.+)$',
+      r'^data:([^;,]+)(?:;[^,]+)*;base64,(.+)$',
       dotAll: true,
     ).firstMatch(rawUrl);
     if (dataUrl != null) {
@@ -1813,6 +1876,106 @@ final class _AnthropicMessagesBridge extends _MapBridge {
     throw UnsupportedError(
       'Anthropic image references must be HTTPS URLs or base64 data URLs.',
     );
+  }
+
+  Map<String, dynamic> _encodeAnthropicFile(StroomContentPart part) {
+    final source = _sourceOf(part);
+    if (source['type'] == 'document' && source['source'] is Map) {
+      final documentSource = _asMap(source['source']);
+      if (documentSource['type'] == 'base64' &&
+          documentSource['media_type'] == 'application/pdf' &&
+          documentSource['data'] is String &&
+          (documentSource['data'] as String).isNotEmpty &&
+          _isValidAnthropicBase64(documentSource['data'] as String)) {
+        return _copyMap(source);
+      }
+      final url = documentSource['url'];
+      final uri = url is String ? Uri.tryParse(url) : null;
+      if (documentSource['type'] == 'url' &&
+          uri?.scheme == 'https' &&
+          uri!.host.isNotEmpty) {
+        return _copyMap(source);
+      }
+      // Media externalization may replace the nested bytes with a marker and
+      // store the usable M2 reference on the neutral part. Fall through to
+      // that reference instead of treating the stale source map as final.
+    }
+    final media = _asMap(
+      source['input_file'] ??
+          source['file'] ??
+          source['document'] ??
+          (source['type'] == 'input_file' ? source : null),
+    );
+    final rawReference = part.data['reference'] ??
+        media['file_data'] ??
+        media['file_url'] ??
+        media['url'] ??
+        media['uri'];
+    final reference = rawReference is Map ? rawReference['url'] : rawReference;
+    final fileName = part.data['fileName'] ?? media['filename'] ?? 'attachment';
+    final declaredMimeType =
+        part.data['mimeType'] ?? media['mime_type'] ?? media['mimeType'];
+    if (reference is String) {
+      final dataUri = RegExp(
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+        dotAll: true,
+      ).firstMatch(reference);
+      final mimeType = dataUri?.group(1) ??
+          declaredMimeType ??
+          (fileName.toString().toLowerCase().endsWith('.pdf')
+              ? 'application/pdf'
+              : null);
+      if (mimeType != 'application/pdf') {
+        throw UnsupportedError(
+          'Anthropic document blocks only support PDF files; '
+          'cannot map ${mimeType ?? 'an untyped file'}.',
+        );
+      }
+      if (dataUri != null) {
+        final data = dataUri.group(2);
+        if (data == null || data.isEmpty || !_isValidAnthropicBase64(data)) {
+          throw UnsupportedError(
+            'Anthropic PDF data URL contains invalid base64.',
+          );
+        }
+        return {
+          'type': 'document',
+          'source': {
+            'type': 'base64',
+            'media_type': mimeType,
+            'data': data,
+          },
+          'title': fileName,
+        };
+      }
+      final uri = Uri.tryParse(reference);
+      if (uri?.scheme == 'https' && uri!.host.isNotEmpty) {
+        return {
+          'type': 'document',
+          'source': {'type': 'url', 'url': reference},
+          'title': fileName,
+        };
+      }
+    }
+    throw UnsupportedError(
+      'Anthropic file input requires a document reference or data URL.',
+    );
+  }
+}
+
+bool _isValidAnthropicBase64(String value) {
+  try {
+    return base64Decode(value).isNotEmpty;
+  } on FormatException {
+    return false;
+  }
+}
+
+bool _isValidGeminiBase64(String value) {
+  try {
+    return base64Decode(value).isNotEmpty;
+  } on FormatException {
+    return false;
   }
 }
 
@@ -1924,22 +2087,31 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
           );
         } else if (raw['inlineData'] is Map) {
           final data = _copyValueMap(raw['inlineData']);
+          final mimeType = _string(data['mimeType']);
           content.add(
             StroomContentPart(
-              type: data['mimeType'] is String &&
-                      (data['mimeType'] as String).startsWith('image/')
-                  ? 'image'
-                  : 'media',
-              data: {'inlineData': data, 'source': _copyMap(raw)},
+              type: _geminiMediaType(mimeType),
+              data: {
+                'mimeType': mimeType,
+                'inlineData': data,
+                'source': _copyMap(raw),
+                if (raw['videoMetadata'] != null)
+                  'videoMetadata': _copyValueMap(raw['videoMetadata']),
+              },
             ),
           );
         } else if (raw['fileData'] is Map) {
+          final data = _copyValueMap(raw['fileData']);
+          final mimeType = _string(data['mimeType']);
           content.add(
             StroomContentPart(
-              type: 'media',
+              type: _geminiMediaType(mimeType),
               data: {
-                'fileData': _copyValueMap(raw['fileData']),
+                'mimeType': mimeType,
+                'fileData': data,
                 'source': _copyMap(raw),
+                if (raw['videoMetadata'] != null)
+                  'videoMetadata': _copyValueMap(raw['videoMetadata']),
               },
             ),
           );
@@ -2004,8 +2176,16 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
                 if (part.data['thoughtSignature'] != null)
                   'thoughtSignature': part.data['thoughtSignature'],
               })
-            else if (part.type == 'image' || part.type == 'media')
+            else if (const {
+              'image',
+              'audio',
+              'video',
+              'file',
+              'media',
+            }.contains(part.type))
               _geminiMediaPart(message, part)
+            else if (part.type == 'transcription')
+              _geminiTranscriptionPart(part)
             else if (part.type == 'tool_call')
               _overlaySource(_targetSource(message, part), {
                 'functionCall': {
@@ -2049,50 +2229,120 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         'Gemini cannot map ${part.type} content from another protocol.',
       );
 
+  Map<String, dynamic> _geminiTranscriptionPart(StroomContentPart part) {
+    final segments = part.data['segments'];
+    if (segments is List && segments.isNotEmpty) {
+      throw UnsupportedError(
+        'Gemini text parts cannot preserve transcription timestamps.',
+      );
+    }
+    final text = part.data['text'];
+    if (text is! String || text.isEmpty) {
+      throw UnsupportedError('Gemini transcription requires transcript text.');
+    }
+    return {'text': text};
+  }
+
   Map<String, dynamic> _geminiMediaPart(
     StroomMessage message,
     StroomContentPart part,
   ) {
     final source = _targetSource(message, part);
-    final inlineData = part.data['inlineData'] ?? source['inlineData'];
-    if (inlineData is Map) {
-      return _overlaySource(source, {'inlineData': _copyMap(inlineData)});
+    if (part.type == 'video' && part.data['timestamp'] != null) {
+      throw UnsupportedError(
+        'Gemini cannot map a standalone video-frame timestamp.',
+      );
     }
+    final inlineData = part.data['inlineData'] ?? source['inlineData'];
+    final inlinePayload = inlineData is Map ? inlineData['data'] : null;
+    final inlineMime = inlineData is Map ? inlineData['mimeType'] : null;
+    if (inlineData is Map &&
+        inlinePayload is String &&
+        inlinePayload.isNotEmpty &&
+        _isValidGeminiBase64(inlinePayload) &&
+        inlineMime is String &&
+        _geminiMimeMatches(part.type, inlineMime)) {
+      return _overlayVideoMetadata(
+        _overlaySource(source, {'inlineData': _copyMap(inlineData)}),
+        part,
+      );
+    }
+    final targetSource = Map<String, dynamic>.from(source);
+    if (inlineData is Map) targetSource.remove('inlineData');
     final fileData = part.data['fileData'] ?? source['fileData'];
     if (fileData is Map) {
-      return _overlaySource(source, {'fileData': _copyMap(fileData)});
+      return _overlayVideoMetadata(
+        _overlaySource(targetSource, {'fileData': _copyMap(fileData)}),
+        part,
+      );
+    }
+
+    if (source.isEmpty && part.data['source'] is Map) {
+      return _geminiGenericMediaPart(part);
     }
 
     final imageValue = part.data['reference'] ?? part.data['imageUrl'];
     final reference = imageValue is Map ? imageValue['url'] : imageValue;
     if (reference is String) {
       final dataUri = RegExp(
-        r'^data:([^;,]+);base64,(.*)$',
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
       ).firstMatch(reference);
       if (dataUri != null) {
-        return _overlaySource(source, {
-          'inlineData': {
-            'mimeType': dataUri.group(1),
-            'data': dataUri.group(2),
-          },
-        });
+        final data = dataUri.group(2);
+        final mimeType = dataUri.group(1)!;
+        if (data == null || data.isEmpty || !_isValidGeminiBase64(data)) {
+          throw UnsupportedError(
+            'Gemini ${part.type} data URL contains invalid base64.',
+          );
+        }
+        final declaredMime = part.data['mimeType'];
+        if (!_geminiMimeMatches(part.type, mimeType) ||
+            (declaredMime is String &&
+                !_geminiMimeMatches(part.type, declaredMime))) {
+          throw UnsupportedError(
+            'Gemini ${part.type} data URL MIME does not match the media part.',
+          );
+        }
+        return _overlayVideoMetadata(
+          _overlaySource(targetSource, {
+            'inlineData': {
+              'mimeType': mimeType,
+              'data': data,
+            },
+          }),
+          part,
+        );
       }
       final uri = Uri.tryParse(reference);
       if (uri != null &&
           (uri.scheme == 'https' || uri.scheme == 'gs') &&
           uri.host.isNotEmpty) {
-        return _overlaySource(source, {
-          'fileData': {
-            'fileUri': reference,
-            if (part.data['mimeType'] is String)
-              'mimeType': part.data['mimeType'],
-          },
-        });
+        return _overlayVideoMetadata(
+          _overlaySource(targetSource, {
+            'fileData': {
+              'fileUri': reference,
+              if (part.data['mimeType'] is String)
+                'mimeType': part.data['mimeType'],
+            },
+          }),
+          part,
+        );
       }
     }
     throw UnsupportedError(
-      'Gemini image references must be base64 data or an HTTPS/gs URI.',
+      'Gemini ${part.type} references must be base64 data or an HTTPS/gs URI.',
     );
+  }
+
+  Map<String, dynamic> _overlayVideoMetadata(
+    Map<String, dynamic> target,
+    StroomContentPart part,
+  ) {
+    final metadata = part.data['videoMetadata'];
+    if (metadata is Map) {
+      return _overlaySource(target, {'videoMetadata': _copyMap(metadata)});
+    }
+    return target;
   }
 
   Map<String, dynamic> _geminiGenericMediaPart(StroomContentPart part) {
@@ -2105,9 +2355,17 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         throw UnsupportedError('Gemini audio input requires audio data.');
       }
       final dataUri = RegExp(
-        r'^data:([^;,]+);base64,(.*)$',
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
         dotAll: true,
       ).firstMatch(rawData);
+      final encoded = dataUri?.group(2);
+      if (dataUri != null &&
+          (encoded == null ||
+              encoded.isEmpty ||
+              !_isValidGeminiBase64(encoded))) {
+        throw UnsupportedError(
+            'Gemini audio data URL contains invalid base64.');
+      }
       final format = _string(audio['format']).toLowerCase();
       final mimeType = dataUri?.group(1) ??
           (audio['mime_type'] is String
@@ -2117,53 +2375,142 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
                   'mp3' => 'audio/mpeg',
                   _ => null,
                 });
-      if (mimeType == null) {
+      if (mimeType == null || !_geminiMimeMatches(part.type, mimeType)) {
         throw UnsupportedError(
           'Gemini audio input requires a supported audio format.',
+        );
+      }
+      if (encoded == null && !_isValidGeminiBase64(rawData)) {
+        throw UnsupportedError('Gemini audio input contains invalid base64.');
+      }
+      final declaredMime = audio['mime_type'];
+      if (dataUri != null &&
+          declaredMime is String &&
+          !_geminiMimeMatches(part.type, declaredMime)) {
+        throw UnsupportedError(
+          'Gemini audio data URL MIME does not match the declared MIME type.',
         );
       }
       return {
         'inlineData': {
           'mimeType': mimeType,
-          'data': dataUri?.group(2) ?? rawData,
+          'data': encoded ?? rawData,
         },
       };
     }
 
-    final media = _asMap(
-      source[sourceType] ?? source['file'] ?? source['document'],
-    );
+    final media = sourceType == 'input_file'
+        ? source
+        : sourceType == 'document' && source['source'] is Map
+            ? _asMap(source['source'])
+            : _asMap(
+                source[sourceType] ?? source['file'] ?? source['document']);
     final dataValue = media['file_data'] ?? media['data'];
     final data = dataValue is Map ? dataValue['data'] : dataValue;
     final dataUrl = data is String
-        ? RegExp(r'^data:([^;,]+);base64,(.*)$', dotAll: true).firstMatch(data)
+        ? RegExp(
+            r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+            dotAll: true,
+          ).firstMatch(data)
         : null;
-    final explicitMime =
-        media['mime_type'] ?? media['mimeType'] ?? media['mimetype'];
+    final explicitMime = media['media_type'] ??
+        media['mime_type'] ??
+        media['mimeType'] ??
+        media['mimetype'];
+    final format = _string(media['format']).toLowerCase();
+    final formatMime = const {'audio', 'output_audio'}.contains(sourceType)
+        ? switch (format) {
+            'wav' => 'audio/wav',
+            'mp3' => 'audio/mpeg',
+            _ => null,
+          }
+        : null;
     final mimeType = dataUrl?.group(1) ??
         (explicitMime is String
             ? explicitMime
-            : _geminiMimeType(media['filename'] ?? media['name']));
+            : formatMime ??
+                _geminiMimeType(media['filename'] ?? media['name']));
+    final encodedData = dataUrl?.group(2);
+    if (dataUrl != null &&
+        (encodedData == null ||
+            encodedData.isEmpty ||
+            !_isValidGeminiBase64(encodedData))) {
+      throw UnsupportedError(
+          'Gemini ${part.type} data URL contains invalid base64.');
+    }
+    if (mimeType != null && !_geminiMimeMatches(part.type, mimeType)) {
+      throw UnsupportedError(
+        'Gemini ${part.type} media MIME does not match the media part.',
+      );
+    }
+    if (dataUrl != null &&
+        explicitMime is String &&
+        !_geminiMimeMatches(part.type, explicitMime)) {
+      throw UnsupportedError(
+        'Gemini ${part.type} data URL MIME does not match the declared MIME type.',
+      );
+    }
+    if (data is String &&
+        data.isNotEmpty &&
+        dataUrl == null &&
+        const {'audio', 'output_audio'}.contains(sourceType) &&
+        !_isValidGeminiBase64(data)) {
+      throw UnsupportedError('Gemini audio input contains invalid base64.');
+    }
     if (data is String && data.isNotEmpty && mimeType != null) {
       return {
-        'inlineData': {'mimeType': mimeType, 'data': dataUrl?.group(2) ?? data},
+        'inlineData': {'mimeType': mimeType, 'data': encodedData ?? data},
       };
     }
 
-    final rawUri =
-        media['url'] ?? media['file_url'] ?? media['file_uri'] ?? media['uri'];
+    final rawUri = media['url'] ??
+        media['file_url'] ??
+        media['file_uri'] ??
+        media['uri'] ??
+        part.data['reference'];
     final uriValue = rawUri is Map ? rawUri['url'] : rawUri;
     if (uriValue is String) {
+      final dataUrl = RegExp(
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+        dotAll: true,
+      ).firstMatch(uriValue);
+      if (dataUrl != null) {
+        final encodedData = dataUrl.group(2);
+        final dataMime = dataUrl.group(1)!;
+        if (encodedData == null ||
+            encodedData.isEmpty ||
+            !_isValidGeminiBase64(encodedData)) {
+          throw UnsupportedError(
+            'Gemini ${part.type} data URL contains invalid base64.',
+          );
+        }
+        if (!_geminiMimeMatches(part.type, dataMime) ||
+            (mimeType != null && !_geminiMimeMatches(part.type, mimeType))) {
+          throw UnsupportedError(
+            'Gemini ${part.type} data URL MIME does not match the media part.',
+          );
+        }
+        return {
+          'inlineData': {
+            'mimeType': dataMime,
+            'data': encodedData,
+          },
+        };
+      }
       final uri = Uri.tryParse(uriValue);
       if (uri != null &&
           (uri.scheme == 'https' || uri.scheme == 'gs') &&
           uri.host.isNotEmpty) {
-        final videoMime =
-            sourceType == 'video_url' ? _geminiMimeType(uri.path) : null;
-        final resolvedMime = mimeType ?? videoMime;
+        final uriMimeType = _geminiMimeType(uri.path);
+        final resolvedMime = mimeType ?? uriMimeType;
         if (resolvedMime == null) {
           throw UnsupportedError(
             'Gemini media references require a MIME type.',
+          );
+        }
+        if (!_geminiMimeMatches(part.type, resolvedMime)) {
+          throw UnsupportedError(
+            'Gemini ${part.type} media MIME does not match the media part.',
           );
         }
         return {
@@ -2175,6 +2522,10 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
       'Gemini media requires supported base64 data or an HTTPS/gs file URI.',
     );
   }
+
+  bool _geminiMimeMatches(String partType, String mimeType) =>
+      !const {'image', 'audio', 'video'}.contains(partType) ||
+      mimeType.startsWith('$partType/');
 
   String? _geminiMimeType(Object? rawName) {
     if (rawName is! String) return null;
@@ -2194,6 +2545,14 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
       _ => null,
     };
   }
+
+  String _geminiMediaType(String mimeType) =>
+      switch (mimeType.split('/').first) {
+        'image' => 'image',
+        'audio' => 'audio',
+        'video' => 'video',
+        _ => 'file',
+      };
 }
 
 final class _GeminiInteractionsBridge extends _MapBridge {
@@ -2407,7 +2766,7 @@ final class _OllamaChatBridge extends _MapBridge {
     final rawUrl = imageValue is Map ? imageValue['url'] : imageValue;
     if (rawUrl is String) {
       final dataUrl = RegExp(
-        r'^data:image/[^;,]+;base64,(.+)$',
+        r'^data:image/[^;,]+(?:;[^,]+)*;base64,(.+)$',
         dotAll: true,
       ).firstMatch(rawUrl);
       if (dataUrl != null) return dataUrl.group(1)!;

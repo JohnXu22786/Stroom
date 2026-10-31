@@ -68,6 +68,27 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
   }
 
   void _showAttachmentPreview(Attachment att) async {
+    final mediaReference = att.extraFields['stroom.mediaReference'];
+    final parsedReference =
+        mediaReference is String ? Uri.tryParse(mediaReference) : null;
+    if (mediaReference is String &&
+        parsedReference?.hasScheme == true &&
+        parsedReference!.scheme != 'file') {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(att.fileName),
+          content: SelectableText(mediaReference),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     // 图片附件：立即弹出预览对话框，字节由 dataLoader 在对话框内异步
     // 加载 —— 大图（数 MB）不再阻塞弹窗前读盘，这是预览卡顿的来源
     if (att.fileType == 'image') {

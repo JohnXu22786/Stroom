@@ -503,10 +503,7 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   /// Returns whether a message's repository order falls before (-1), inside
   /// (0), or after (1) the currently loaded page. Null means repository
   /// paging is unavailable for this conversation.
-  int? repositoryMessagePageDirection(
-    String conversationId,
-    int messageOrder,
-  ) {
+  int? repositoryMessagePageDirection(String conversationId, int messageOrder) {
     if (!_repositoryReady || messageOrder < 0) return null;
     final conversation =
         state.where((item) => item.id == conversationId).firstOrNull;
@@ -970,6 +967,7 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
                       reasoningSections: m.reasoningSections,
                       textSections: m.textSections,
                       toolCallRoundStarts: m.toolCallRoundStarts,
+                      contentParts: m.contentParts,
                       blocks: m.blocks,
                       schemaVersion: m.schemaVersion,
                       legacyFields: m.legacyFields,
@@ -1178,8 +1176,22 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
       final deletedConversationIds = persistedConversationRecords.keys
           .where((id) => !currentIds.contains(id))
           .toList();
+      final persistedChanges = <ConversationRepositoryChange>[];
+      for (final change in changes) {
+        final persistedMessages = <StroomMessage>[];
+        for (final message in change.upsertMessages) {
+          persistedMessages.add(await externalizeConversationMedia(message));
+        }
+        persistedChanges.add(
+          ConversationRepositoryChange(
+            conversation: change.conversation,
+            upsertMessages: persistedMessages,
+            deleteMessageIds: change.deleteMessageIds,
+          ),
+        );
+      }
       await repository.applySnapshotChanges(
-        changes: changes,
+        changes: persistedChanges,
         conversationOrder:
             snapshot.map((conversation) => conversation.id).toList(),
         deleteConversationIds: deletedConversationIds,

@@ -15,6 +15,7 @@ import '../services/attachment_storage.dart';
 import '../services/conversation_migration_service.dart';
 import '../services/conversation_record_adapter.dart';
 import '../services/conversation_repository.dart';
+import '../services/conversation_media_storage.dart';
 import 'assistant_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
@@ -691,10 +692,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     final lifecycle = _repositoryLifecycle;
     if (lifecycle != null) {
       lifecycle.pendingWrites = _initialLoad
-          .then<void>(
-            (_) {},
-            onError: (Object error, StackTrace stackTrace) {},
-          )
+          .then<void>((_) {}, onError: (Object error, StackTrace stackTrace) {})
           .then((_) => _persistQueue);
     }
     super.dispose();

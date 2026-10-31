@@ -44,6 +44,22 @@ void main() {
               'createdAt': '2025-01-01T00:01:00.000Z',
               'schemaVersion': 8,
               'futureMessageField': 'keep',
+              'attachments': [
+                {
+                  'id': 'image',
+                  'fileName': 'image.png',
+                  'mimeType': 'image/png',
+                  'fileType': 'image',
+                  'hash': 'image-hash',
+                  'storagePath': 'attachments/image.png',
+                  'fileSize': 3,
+                },
+              ],
+              'contentParts': [
+                {'type': 'text', 'text': 'before'},
+                {'type': 'attachment', 'attachmentId': 'image'},
+                {'type': 'text', 'text': 'after'},
+              ],
               'rawRequest': {'body': 'drop this only in tier two'},
             },
           ],
@@ -71,6 +87,11 @@ void main() {
       expect(savedMessage['schemaVersion'], 8);
       expect(savedMessage['futureMessageField'], 'keep');
       expect(savedMessage['role'], 'tool');
+      expect(savedMessage['contentParts'], [
+        {'type': 'text', 'text': 'before'},
+        {'type': 'attachment', 'attachmentId': 'image'},
+        {'type': 'text', 'text': 'after'},
+      ]);
       expect(savedMessage.containsKey('rawRequest'), isFalse);
     } finally {
       container.dispose();

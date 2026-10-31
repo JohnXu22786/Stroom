@@ -2,6 +2,184 @@ part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup3() {
   group('ChatStreamManager - reasoning + toolCalls propagation', () {
+    test('generated media attachments are saved on the assistant message',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+      final attachment = Attachment(
+        id: 'generated-image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'image-hash',
+        storagePath: 'attachments/image.png',
+        fileSize: 3,
+        base64Data: 'AQID',
+      );
+      manager.adapter.forceService(
+        _makeChatService(
+          _MockProvider([
+            [
+              AIStreamEvent('', mediaAttachments: [attachment])
+            ],
+          ]),
+        ),
+      );
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'conv-generated-media',
+        history: [_userMsg('Generate an image', 'u1')],
+      );
+
+      expect(result.hasContent, isTrue);
+      expect(result.attachments.single.storagePath, attachment.storagePath);
+      expect(
+        result.assistantMessage!.attachments.single.mimeType,
+        'image/png',
+      );
+      expect(
+        result.assistantMessage!.toMap().toString(),
+        isNot(contains('AQID')),
+      );
+      manager.dispose();
+    });
+
+    test('generated media keeps its position between streamed text parts',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+      final attachment = Attachment(
+        id: 'ordered-generated-image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'ordered-image-hash',
+        storagePath: 'attachments/ordered-image.png',
+        fileSize: 3,
+      );
+      manager.adapter.forceService(
+        _makeChatService(
+          _MockProvider([
+            [
+              AIStreamEvent('before '),
+              AIStreamEvent('', mediaAttachments: [attachment]),
+              AIStreamEvent('after'),
+            ],
+          ]),
+        ),
+      );
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'conv-generated-media-order',
+        history: [_userMsg('Generate an image', 'u1')],
+      );
+
+      expect(result.assistantMessage!.toMap()['contentParts'], [
+        {'type': 'text', 'text': 'before '},
+        {'type': 'attachment', 'attachmentId': attachment.id},
+        {'type': 'text', 'text': 'after'},
+      ]);
+      manager.dispose();
+    });
+
+    test('buffered media retains its original order after later text',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+      final attachment = Attachment(
+        id: 'buffered-audio',
+        fileName: 'audio.wav',
+        mimeType: 'audio/wav',
+        fileType: 'audio',
+        hash: 'buffered-audio-hash',
+        storagePath: 'attachments/buffered-audio.wav',
+        fileSize: 3,
+        extraFields: const {'stroom.contentOrder': 1},
+      );
+      manager.adapter.forceService(
+        _makeChatService(
+          _MockProvider([
+            [
+              AIStreamEvent('before ', contentOrder: 0),
+              AIStreamEvent('after', contentOrder: 2),
+              AIStreamEvent('', mediaAttachments: [attachment]),
+            ],
+          ]),
+        ),
+      );
+
+      final result = await manager.startStreaming(
+        text: 'Generate audio',
+        convId: 'conv-buffered-media-order',
+        history: [_userMsg('Generate audio', 'u1')],
+      );
+
+      expect(result.assistantMessage!.toMap()['contentParts'], [
+        {'type': 'text', 'text': 'before '},
+        {'type': 'attachment', 'attachmentId': attachment.id},
+        {'type': 'text', 'text': 'after'},
+      ]);
+      manager.dispose();
+    });
+
+    test('content order continues across tool follow-up requests', () async {
+      SharedPreferences.setMockInitialValues({});
+      const tool = ToolDefinition(
+        name: 'content_order_test_tool',
+        description: 'Test tool for content ordering',
+        parameters: {'type': 'object'},
+      );
+      ChatService.registerTool(tool, (_) => 'done');
+      final manager = ChatStreamManager();
+      final attachment = Attachment(
+        id: 'tool-round-image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'tool-round-image-hash',
+        storagePath: 'attachments/tool-round-image.png',
+        fileSize: 3,
+        extraFields: const {'stroom.contentOrder': 1},
+      );
+      manager.adapter.forceService(
+        _makeChatService(
+          _MockProvider([
+            [
+              AIStreamEvent('before ', contentOrder: 0),
+              AIStreamEvent('', mediaAttachments: [attachment]),
+              AIStreamEvent('', toolCalls: [
+                {
+                  'id': 'content-order-tool-call',
+                  'type': 'function',
+                  'function': {
+                    'name': tool.name,
+                    'arguments': '{}',
+                  },
+                },
+              ]),
+            ],
+            [AIStreamEvent('after', contentOrder: 0)],
+          ]),
+        ),
+      );
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'conv-content-order-across-tools',
+        history: [_userMsg('Generate an image', 'u1')],
+        tools: [tool],
+      );
+
+      expect(result.assistantMessage!.toMap()['contentParts'], [
+        {'type': 'text', 'text': 'before '},
+        {'type': 'attachment', 'attachmentId': attachment.id},
+        {'type': 'text', 'text': 'after'},
+      ]);
+      manager.dispose();
+    });
+
     test('reasoning sections and toolCalls appear in StreamResult', () async {
       SharedPreferences.setMockInitialValues({});
       final manager = ChatStreamManager();
@@ -492,6 +670,48 @@ void chatStreamManagerGroup3() {
   });
 
   group('ChatStreamManager - periodic persist guard', () {
+    test('periodic partial snapshots refresh generated media in place', () {
+      final attachment = Attachment(
+        id: 'late-generated-image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'late-image-hash',
+        storagePath: 'attachments/late-image.png',
+        fileSize: 3,
+      );
+      final history = <ChatMessage>[
+        _userMsg('Generate an image', 'u1'),
+        ChatMessage(
+          role: 'assistant',
+          content: 'Generating',
+          id: 'streaming-message',
+        ),
+      ];
+
+      ChatStreamManager.upsertPartialAssistantMessage(
+        history,
+        ChatMessage(
+          role: 'assistant',
+          content: 'Generating',
+          id: 'streaming-message',
+          attachments: [attachment],
+          contentParts: [
+            {'type': 'text', 'text': 'Generating'},
+            {'type': 'attachment', 'attachmentId': attachment.id},
+          ],
+        ),
+      );
+
+      expect(history, hasLength(2));
+      expect(history.last.content, 'Generating');
+      expect(history.last.attachments.single.id, attachment.id);
+      expect(history.last.toMap()['contentParts'], [
+        {'type': 'text', 'text': 'Generating'},
+        {'type': 'attachment', 'attachmentId': attachment.id},
+      ]);
+    });
+
     test(
         'periodic persist does NOT save when stream has completed (persistTimer null)',
         () async {
@@ -536,6 +756,19 @@ void chatStreamManagerGroup3() {
         ),
         isTrue,
         reason: 'Pure tool round (no text/reasoning) must be persisted.',
+      );
+    });
+
+    test('partialPersistHasContent: generated media counts as content', () {
+      expect(
+        ChatStreamManager.partialPersistHasContent(
+          fullReply: '',
+          reasoningSections: const [],
+          hasAccumulatedToolCalls: false,
+          hasMediaAttachments: true,
+        ),
+        isTrue,
+        reason: 'A generated attachment must survive an interrupted stream.',
       );
     });
 

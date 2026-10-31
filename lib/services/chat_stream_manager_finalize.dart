@@ -104,6 +104,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
       final hasContent = state.fullReply.isNotEmpty ||
+          state.mediaAttachments.isNotEmpty ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
       if (hasContent) {
@@ -121,8 +122,15 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           id: state.streamingMsgId ?? '',
           isError: isError,
           reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
-          rawRequest: rawRequestCapture,
-          rawResponse: rawResponseCapture,
+          rawRequest: rawRequestCapture == null
+              ? null
+              : sanitizeConversationMediaJson(rawRequestCapture),
+          rawResponse: rawResponseCapture == null
+              ? null
+              : sanitizeConversationMediaJson(rawResponseCapture),
+          attachments: state.mediaAttachments
+              .map((attachment) => attachment.copyWith(conversationId: convId))
+              .toList(growable: false),
           toolCalls: state.accumulatedToolCalls.isNotEmpty
               ? List<ToolCallData>.from(state.accumulatedToolCalls)
               : null,
@@ -131,6 +139,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
               : null,
           textSections: state.textChunks.any((c) => c.isNotEmpty)
               ? List<String>.from(state.textChunks)
+              : null,
+          contentParts: state.mediaAttachments.isNotEmpty
+              ? _orderedAssistantContentParts(state)
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
@@ -194,6 +205,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         reasoningSections: List.from(state.reasoningSections),
         textSections: List.from(state.textChunks),
         toolCalls: List.from(state.accumulatedToolCalls),
+        attachments: List.from(state.mediaAttachments),
         toolCallRoundStarts: List.from(state.toolCallRoundStarts),
         blocks: legacyToBlocks(
           reasoningSections: state.reasoningSections,
@@ -208,6 +220,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       result = StreamResult(
         history: List.from(state.history),
         fullReply: state.fullReply,
+        attachments: List.from(state.mediaAttachments),
         cancelled: wasCancelled,
       );
     }

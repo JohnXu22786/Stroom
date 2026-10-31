@@ -1,3 +1,5 @@
+import 'chat_message.dart';
+
 class AIStreamEvent {
   final String text;
   final bool isReasoning;
@@ -14,12 +16,20 @@ class AIStreamEvent {
   /// 覆盖）：ChatService 从事件流按请求隔离地累计。
   final Map<String, dynamic>? usage;
 
+  /// Provider-generated media already stored in M2 attachment storage.
+  final List<Attachment>? mediaAttachments;
+
+  /// Position of this text/media output among visible streamed content.
+  final int? contentOrder;
+
   const AIStreamEvent(
     this.text, {
     this.isReasoning = false,
     this.toolCalls,
     this.thinkingSignature,
     this.usage,
+    this.mediaAttachments,
+    this.contentOrder,
   });
 
   bool get isToolCallEvent => toolCalls != null && toolCalls!.isNotEmpty;

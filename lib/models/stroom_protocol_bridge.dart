@@ -424,7 +424,7 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
         );
       }
       if (protocolId == 'openai.responses' &&
-          message.role != 'assistant' &&
+          !{'assistant', 'user'}.contains(message.role) &&
           message.content.any(
             (part) => part.type == 'text' || part.type == 'refusal',
           )) {
@@ -928,6 +928,25 @@ final class OpenAiResponsesBridge extends _JsonProtocolBridge {
                   ),
                 ),
               );
+            } else if (partType == 'input_image' ||
+                partType == 'output_image') {
+              parts.add(
+                StroomContentPart(
+                  type: 'image',
+                  data: {
+                    if (part['image_url'] is String)
+                      'reference': part['image_url'],
+                    if (part['detail'] != null) 'detail': part['detail'],
+                    'wireType': partType,
+                  },
+                  extraFields: Map<String, dynamic>.fromEntries(
+                    part.entries.where(
+                      (entry) =>
+                          !{'type', 'image_url', 'detail'}.contains(entry.key),
+                    ),
+                  ),
+                ),
+              );
             } else if (partType == 'refusal') {
               const knownFields = {'type', 'refusal'};
               parts.add(
@@ -1013,27 +1032,161 @@ final class OpenAiResponsesBridge extends _JsonProtocolBridge {
   @override
   ProtocolMappingResult serializeMessage(StroomMessage message) {
     final original = originalMessage(message);
-    const supported = {
+    final supported = <String>{
       'text',
       'tool_call',
       'tool_result',
       'refusal',
       'reasoning',
     };
+    Map<String, dynamic>? responseFileItem(StroomContentPart part) {
+      final source = part.data['source'];
+      final sourceMap = source is Map ? source : const <String, dynamic>{};
+      final inputFile = sourceMap['input_file'];
+      final file = inputFile is Map ? inputFile : sourceMap;
+      final rawReference = part.data['reference'] ??
+          file['file_url'] ??
+          file['file_data'] ??
+          file['url'];
+      final reference =
+          rawReference is Map ? rawReference['url'] : rawReference;
+      if (reference is! String || reference.isEmpty) return null;
+
+      final dataUrl = RegExp(
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+        dotAll: true,
+      ).firstMatch(reference);
+      final fileName = part.data['fileName'] ?? file['filename'];
+      final mimeType = part.data['mimeType'] ??
+          file['mime_type'] ??
+          (fileName is String && fileName.toLowerCase().endsWith('.pdf')
+              ? 'application/pdf'
+              : null);
+      if (dataUrl != null) {
+        final encoded = dataUrl.group(2);
+        if (dataUrl.group(1) != 'application/pdf' ||
+            (mimeType is String && mimeType != 'application/pdf') ||
+            encoded == null ||
+            encoded.isEmpty ||
+            !_isValidBase64(encoded)) {
+          return null;
+        }
+        return {
+          'type': 'input_file',
+          'file_data': encoded,
+          if (fileName is String) 'filename': fileName,
+        };
+      }
+      final uri = Uri.tryParse(reference);
+      if (uri == null ||
+          uri.scheme != 'https' ||
+          uri.host.isEmpty ||
+          mimeType != 'application/pdf') {
+        return null;
+      }
+      return {
+        'type': 'input_file',
+        'file_url': reference,
+        if (fileName is String) 'filename': fileName,
+      };
+    }
+
+    String? imageReference(StroomContentPart part) {
+      final reference = part.data['reference'];
+      final imageUrl = part.data['imageUrl'];
+      final candidate = reference is String
+          ? reference
+          : imageUrl is String
+              ? imageUrl
+              : imageUrl is Map && imageUrl['url'] is String
+                  ? imageUrl['url'] as String
+                  : null;
+      if (candidate == null || candidate.isEmpty) return null;
+      final declaredMime = part.data['mimeType'];
+      const imageMimeTypes = {
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+      };
+      if (declaredMime is String && !imageMimeTypes.contains(declaredMime)) {
+        return null;
+      }
+      final dataUrl = RegExp(
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+        dotAll: true,
+      ).firstMatch(candidate);
+      if (dataUrl != null) {
+        final data = dataUrl.group(2);
+        if (!imageMimeTypes.contains(dataUrl.group(1)) ||
+            (declaredMime is String && declaredMime != dataUrl.group(1)) ||
+            data == null ||
+            data.isEmpty ||
+            !_isValidBase64(data)) {
+          return null;
+        }
+        return candidate;
+      }
+      final uri = Uri.tryParse(candidate);
+      if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+      return candidate;
+    }
+
+    Object? imageDetail(StroomContentPart part) {
+      final detail = part.data['detail'];
+      if (detail != null) return detail;
+      final imageUrl = part.data['imageUrl'];
+      return imageUrl is Map ? imageUrl['detail'] : null;
+    }
+
+    final imageParts =
+        message.content.where((part) => part.type == 'image').toList();
+    if (message.role == 'user' &&
+        imageParts.isNotEmpty &&
+        imageParts.every((part) => imageReference(part) != null)) {
+      supported.add('image');
+    }
+    final fileParts = message.content.where((part) => part.type == 'file');
+    if (message.role == 'user' &&
+        fileParts.isNotEmpty &&
+        fileParts.every((part) => responseFileItem(part) != null)) {
+      supported.add('file');
+    }
     if (original != null) {
       return mappingResult(message, original, supportedContentTypes: supported);
     }
     final output = <Map<String, dynamic>>[];
+    final targetRole = message.role == 'user' ? 'user' : 'assistant';
+    final messageContent = <Map<String, dynamic>>[];
+    void flushMessageContent() {
+      if (messageContent.isEmpty) return;
+      output.add({
+        'type': 'message',
+        'role': targetRole,
+        'content': List<Map<String, dynamic>>.from(messageContent),
+      });
+      messageContent.clear();
+    }
+
     for (final part in message.content) {
       if (part.type == 'text') {
-        output.add({
-          'type': 'message',
-          'role': 'assistant',
-          'content': [
-            {'type': 'output_text', 'text': part.data['text'] ?? ''},
-          ],
+        messageContent.add({
+          'type': targetRole == 'user' ? 'input_text' : 'output_text',
+          'text': part.data['text'] ?? '',
         });
+      } else if (part.type == 'image' &&
+          message.role == 'user' &&
+          imageReference(part) != null) {
+        messageContent.add({
+          'type': 'input_image',
+          'image_url': imageReference(part),
+          if (imageDetail(part) != null) 'detail': imageDetail(part),
+        });
+      } else if (part.type == 'file' && message.role == 'user') {
+        final inputFile = responseFileItem(part);
+        if (inputFile != null) messageContent.add(inputFile);
       } else if (part.type == 'tool_call') {
+        flushMessageContent();
         output.add({
           'type': 'function_call',
           'call_id': part.data['id'],
@@ -1041,12 +1194,14 @@ final class OpenAiResponsesBridge extends _JsonProtocolBridge {
           'arguments': jsonEncode(part.data['arguments'] ?? {}),
         });
       } else if (part.type == 'tool_result') {
+        flushMessageContent();
         output.add({
           'type': 'function_call_output',
           'call_id': part.data['toolCallId'],
           'output': part.data['result'],
         });
       } else if (part.type == 'refusal') {
+        flushMessageContent();
         output.add({
           'type': 'message',
           'role': 'assistant',
@@ -1055,6 +1210,7 @@ final class OpenAiResponsesBridge extends _JsonProtocolBridge {
           ],
         });
       } else if (part.type == 'reasoning') {
+        flushMessageContent();
         output.add({
           'type': 'reasoning',
           'summary': part.data['summary'] is List
@@ -1063,6 +1219,7 @@ final class OpenAiResponsesBridge extends _JsonProtocolBridge {
         });
       }
     }
+    flushMessageContent();
     final payload = {
       'status': message.status ?? 'completed',
       'output': output,
@@ -1153,6 +1310,19 @@ final class AnthropicMessagesBridge extends _JsonProtocolBridge {
               ),
             ),
           );
+        } else if (type == 'document') {
+          final source = part['source'];
+          parts.add(
+            StroomContentPart(
+              type: 'file',
+              data: {
+                'source': part,
+                if (part['title'] is String) 'fileName': part['title'],
+                if (source is Map && source['media_type'] is String)
+                  'mimeType': source['media_type'],
+              },
+            ),
+          );
         } else {
           parts.add(
             StroomContentPart(type: type as String? ?? 'unknown', data: part),
@@ -1177,7 +1347,21 @@ final class AnthropicMessagesBridge extends _JsonProtocolBridge {
   @override
   ProtocolMappingResult serializeMessage(StroomMessage message) {
     final original = originalMessage(message);
-    const supported = {'text', 'tool_call', 'tool_result', 'reasoning'};
+    final supported = <String>{'text', 'tool_call', 'tool_result', 'reasoning'};
+    final imageParts =
+        message.content.where((part) => part.type == 'image').toList();
+    if (message.role != 'assistant' &&
+        imageParts.isNotEmpty &&
+        imageParts.every(_anthropicImageSourceForPartIsSupported)) {
+      supported.add('image');
+    }
+    final fileParts =
+        message.content.where((part) => part.type == 'file').toList();
+    if (message.role != 'assistant' &&
+        fileParts.isNotEmpty &&
+        fileParts.every(_anthropicFileDocumentForPartIsSupported)) {
+      supported.add('file');
+    }
     if (original != null) {
       return mappingResult(message, original, supportedContentTypes: supported);
     }
@@ -1206,8 +1390,16 @@ final class AnthropicMessagesBridge extends _JsonProtocolBridge {
           'thinking': _reasoningSummaryText(
             part.data['text'] ?? part.data['summary'],
           ),
-          if (signature != null) 'signature': signature,
+          ...?(signature == null ? null : {'signature': signature}),
         });
+      } else if (part.type == 'image' && message.role != 'assistant') {
+        final source = _anthropicImageSource(part);
+        if (source != null) {
+          content.add({'type': 'image', 'source': source});
+        }
+      } else if (part.type == 'file' && message.role != 'assistant') {
+        final document = _anthropicFileDocument(part);
+        if (document != null) content.add(document);
       }
     }
     final payload = {
@@ -1222,6 +1414,131 @@ final class AnthropicMessagesBridge extends _JsonProtocolBridge {
       supportedContentTypes: supported,
       supportedMetadata: const {'finishReason', 'usage'},
     );
+  }
+
+  bool _anthropicImageSourceForPartIsSupported(StroomContentPart part) =>
+      _anthropicImageSource(part) != null;
+
+  bool _anthropicFileDocumentForPartIsSupported(StroomContentPart part) =>
+      _anthropicFileDocument(part) != null;
+
+  Map<String, dynamic>? _anthropicFileDocument(StroomContentPart part) {
+    final source = part.data['source'];
+    if (source is Map && source['type'] == 'document') {
+      final documentSource = source['source'];
+      if (documentSource is Map &&
+          documentSource['type'] == 'base64' &&
+          documentSource['media_type'] == 'application/pdf' &&
+          documentSource['data'] is String &&
+          (documentSource['data'] as String).isNotEmpty &&
+          _isValidBase64(documentSource['data'] as String)) {
+        return Map<String, dynamic>.from(source);
+      }
+      if (documentSource is Map &&
+          documentSource['type'] == 'url' &&
+          documentSource['url'] is String) {
+        final uri = Uri.tryParse(documentSource['url'] as String);
+        if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
+          return Map<String, dynamic>.from(source);
+        }
+      }
+    }
+    final media = source is Map
+        ? Map<String, dynamic>.from(
+            source['input_file'] ?? source['file'] ?? source['document'] ?? {},
+          )
+        : const <String, dynamic>{};
+    final rawReference = part.data['reference'] ??
+        media['file_data'] ??
+        media['file_url'] ??
+        media['url'] ??
+        media['uri'];
+    final reference = rawReference is Map ? rawReference['url'] : rawReference;
+    if (reference is! String || reference.isEmpty) return null;
+    final dataUri = RegExp(
+      r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+      dotAll: true,
+    ).firstMatch(reference);
+    final fileName = part.data['fileName'] ?? media['filename'];
+    final declaredMimeType =
+        part.data['mimeType'] ?? media['mime_type'] ?? media['mimeType'];
+    final mimeType = dataUri?.group(1) ??
+        declaredMimeType ??
+        (fileName is String && fileName.toLowerCase().endsWith('.pdf')
+            ? 'application/pdf'
+            : null);
+    if (mimeType != 'application/pdf') return null;
+    if (dataUri != null) {
+      final data = dataUri.group(2);
+      if (data == null || data.isEmpty || !_isValidBase64(data)) return null;
+      return {
+        'type': 'document',
+        'source': {
+          'type': 'base64',
+          'media_type': 'application/pdf',
+          'data': data,
+        },
+        if (fileName is String) 'title': fileName,
+      };
+    }
+    final uri = Uri.tryParse(reference);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+    return {
+      'type': 'document',
+      'source': {'type': 'url', 'url': reference},
+      if (fileName is String) 'title': fileName,
+    };
+  }
+
+  Map<String, dynamic>? _anthropicImageSource(StroomContentPart part) {
+    final source = part.data['source'];
+    if (source is Map) {
+      final type = source['type'];
+      final mediaType = source['media_type'];
+      final data = source['data'];
+      if (type == 'base64' &&
+          _isAnthropicImageMediaType(mediaType) &&
+          data is String) {
+        try {
+          if (base64.decode(data).isNotEmpty) {
+            return Map<String, dynamic>.from(source);
+          }
+        } on FormatException {
+          // Malformed retained bytes cannot be forwarded as an exact image.
+        }
+      }
+      if (type == 'url' && source['url'] is String) {
+        final uri = Uri.tryParse(source['url'] as String);
+        if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
+          return Map<String, dynamic>.from(source);
+        }
+      }
+    }
+
+    final reference = part.data['reference'];
+    if (reference is! String) return null;
+    final dataUrl = RegExp(
+      r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+      dotAll: true,
+    ).firstMatch(reference);
+    if (dataUrl != null) {
+      final mediaType = dataUrl.group(1);
+      final data = dataUrl.group(2);
+      if (!_isAnthropicImageMediaType(mediaType) ||
+          data == null ||
+          data.isEmpty ||
+          !_isValidBase64(data)) {
+        return null;
+      }
+      return {
+        'type': 'base64',
+        'media_type': mediaType,
+        'data': data,
+      };
+    }
+    final uri = Uri.tryParse(reference);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+    return {'type': 'url', 'url': reference};
   }
 }
 
@@ -1307,12 +1624,17 @@ final class GeminiBridge extends _JsonProtocolBridge {
             ),
           );
         } else if (part['inlineData'] is Map || part['fileData'] is Map) {
-          parts.add(
-            StroomContentPart(
-              type: part['inlineData'] is Map ? 'inline_media' : 'file',
-              data: part,
-            ),
-          );
+          final media = part['inlineData'] is Map
+              ? part['inlineData'] as Map
+              : part['fileData'] as Map;
+          final mimeType = media['mimeType'] as String? ?? '';
+          final mediaType = switch (mimeType.split('/').first) {
+            'image' => 'image',
+            'audio' => 'audio',
+            'video' => 'video',
+            _ => 'file',
+          };
+          parts.add(StroomContentPart(type: mediaType, data: part));
         } else {
           parts.add(StroomContentPart(type: 'unknown', data: part));
         }
@@ -1335,27 +1657,52 @@ final class GeminiBridge extends _JsonProtocolBridge {
   @override
   ProtocolMappingResult serializeMessage(StroomMessage message) {
     final original = originalMessage(message);
-    final supported = <String>{
-      'text',
-      'reasoning',
-      'tool_call',
-      'tool_result',
-    };
-    for (final part in message.content) {
-      if (part.type == 'inline_media' &&
-          (part.data['inlineData'] is Map || part.data['fileData'] is Map)) {
-        supported.add('inline_media');
-      }
-      if (part.type == 'file' &&
-          (part.data['fileData'] is Map ||
-              (part.data['reference'] is String &&
-                  part.data['mimeType'] is String))) {
-        supported.add('file');
-      }
-      if ({'image', 'audio', 'video'}.contains(part.type) &&
-          part.data['reference'] is String &&
-          part.data['mimeType'] is String) {
-        supported.add(part.type);
+    final supported = <String>{'text', 'reasoning', 'tool_call', 'tool_result'};
+    final transcriptionParts =
+        message.content.where((part) => part.type == 'transcription').toList();
+    if (transcriptionParts.isNotEmpty &&
+        transcriptionParts.every((part) =>
+            part.data['text'] is String &&
+            !(part.data['segments'] is List &&
+                (part.data['segments'] as List).any(
+                  (segment) =>
+                      segment is Map &&
+                      const {
+                        'start',
+                        'end',
+                        'startSeconds',
+                        'endSeconds',
+                        'start_seconds',
+                        'end_seconds',
+                        'timestamp',
+                      }.any(segment.containsKey),
+                )))) {
+      supported.add('transcription');
+    }
+    final inlineMediaParts =
+        message.content.where((part) => part.type == 'inline_media').toList();
+    if (inlineMediaParts.isNotEmpty &&
+        inlineMediaParts.every((part) =>
+            _geminiInlineDataIsSupported(part.data['inlineData']) ||
+            _geminiFileDataIsSupported(part.data['fileData']))) {
+      supported.add('inline_media');
+    }
+    for (final type in const {'image', 'audio', 'video', 'file'}) {
+      final mediaParts =
+          message.content.where((part) => part.type == type).toList();
+      if (mediaParts.isNotEmpty &&
+          mediaParts.every((part) =>
+              !(part.type == 'video' && part.data['timestamp'] != null) &&
+              (_geminiInlineDataIsSupported(part.data['inlineData'],
+                      expectedType: type) ||
+                  _geminiFileDataIsSupported(part.data['fileData'],
+                      expectedType: type) ||
+                  _geminiMediaReferenceIsSupported(
+                    part.data['reference'],
+                    expectedType: type,
+                    declaredMime: part.data['mimeType'],
+                  )))) {
+        supported.add(type);
       }
     }
     if (original != null) {
@@ -1367,6 +1714,8 @@ final class GeminiBridge extends _JsonProtocolBridge {
         parts.add({'text': part.data['text']});
       } else if (part.type == 'reasoning') {
         parts.add({'text': part.data['text'], 'thought': true});
+      } else if (part.type == 'transcription' && part.data['text'] is String) {
+        parts.add({'text': part.data['text']});
       } else if (part.type == 'tool_call') {
         parts.add({
           'functionCall': {
@@ -1383,18 +1732,51 @@ final class GeminiBridge extends _JsonProtocolBridge {
             'response': part.data['result'],
           },
         });
-      } else if ((part.type == 'inline_media' || part.type == 'file') &&
-          (part.data['inlineData'] is Map || part.data['fileData'] is Map)) {
-        parts.add(part.data);
+      } else if ((part.type == 'inline_media' ||
+              {'image', 'audio', 'video', 'file'}.contains(part.type)) &&
+          (_geminiInlineDataIsSupported(part.data['inlineData'],
+                  expectedType: part.type) ||
+              _geminiFileDataIsSupported(part.data['fileData'],
+                  expectedType: part.type))) {
+        final mediaData = Map<String, dynamic>.from(part.data);
+        if (part.data['inlineData'] is Map &&
+            !_geminiInlineDataIsSupported(part.data['inlineData'],
+                expectedType: part.type)) {
+          mediaData.remove('inlineData');
+        }
+        if (part.data['fileData'] is Map &&
+            !_geminiFileDataIsSupported(part.data['fileData'],
+                expectedType: part.type)) {
+          mediaData.remove('fileData');
+        }
+        parts.add(mediaData);
       } else if ({'image', 'audio', 'video', 'file'}.contains(part.type) &&
-          part.data['reference'] is String &&
+          _geminiMediaReferenceIsSupported(
+            part.data['reference'],
+            expectedType: part.type,
+            declaredMime: part.data['mimeType'],
+          ) &&
           part.data['mimeType'] is String) {
-        parts.add({
-          'fileData': {
-            'mimeType': part.data['mimeType'],
-            'fileUri': part.data['reference'],
-          },
-        });
+        final reference = part.data['reference'] as String;
+        final inlineData = _geminiInlineDataFromReference(reference);
+        final mediaPart = inlineData == null
+            ? <String, dynamic>{
+                'fileData': {
+                  'mimeType': part.data['mimeType'],
+                  'fileUri': reference,
+                },
+              }
+            : <String, dynamic>{
+                'inlineData': {
+                  'mimeType': inlineData.$1,
+                  'data': inlineData.$2,
+                },
+              };
+        final videoMetadata = part.data['videoMetadata'];
+        if (part.type == 'video' && videoMetadata is Map) {
+          mediaPart['videoMetadata'] = Map<String, dynamic>.from(videoMetadata);
+        }
+        parts.add(mediaPart);
       } else {
         // Unknown and unsupported neutral shapes remain on the source message
         // and are reported as partial by mappingResult; they are not valid
@@ -1415,6 +1797,106 @@ final class GeminiBridge extends _JsonProtocolBridge {
     return mappingResult(message, payload, supportedContentTypes: supported);
   }
 }
+
+(String, String)? _geminiInlineDataFromReference(String reference) {
+  final match = RegExp(
+    r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+    dotAll: true,
+  ).firstMatch(reference);
+  if (match == null) return null;
+  final mimeType = match.group(1)!;
+  final data = match.group(2)!;
+  try {
+    if (base64Decode(data).isEmpty) return null;
+    return (mimeType, data);
+  } on FormatException {
+    return null;
+  }
+}
+
+bool _geminiInlineDataIsSupported(
+  Object? value, {
+  String? expectedType,
+}) {
+  if (value is! Map) return false;
+  final mimeType = value['mimeType'];
+  final data = value['data'];
+  if (mimeType is! String || mimeType.isEmpty || data is! String) {
+    return false;
+  }
+  if (const {'image', 'audio', 'video'}.contains(expectedType) &&
+      !mimeType.startsWith('$expectedType/')) {
+    return false;
+  }
+  return _isValidBase64(data);
+}
+
+bool _geminiFileDataIsSupported(
+  Object? value, {
+  String? expectedType,
+}) {
+  if (value is! Map) return false;
+  final mimeType = value['mimeType'];
+  final reference = value['fileUri'];
+  if (mimeType is! String || mimeType.isEmpty || reference is! String) {
+    return false;
+  }
+  if (const {'image', 'audio', 'video'}.contains(expectedType) &&
+      !mimeType.startsWith('$expectedType/')) {
+    return false;
+  }
+  if (reference.startsWith('attachments/') ||
+      reference.startsWith('temp_edited/')) {
+    return true;
+  }
+  final uri = Uri.tryParse(reference);
+  return uri?.scheme == 'https' && uri!.host.isNotEmpty ||
+      uri?.scheme == 'gs' && uri!.host.isNotEmpty;
+}
+
+bool _geminiMediaReferenceIsSupported(
+  Object? value, {
+  String? expectedType,
+  Object? declaredMime,
+}) {
+  if (value is! String || value.isEmpty) return false;
+  if (value.startsWith('data:')) {
+    final inlineData = _geminiInlineDataFromReference(value);
+    return inlineData != null &&
+        _geminiMediaMimeMatches(inlineData.$1, expectedType) &&
+        (declaredMime is! String ||
+            _geminiMediaMimeMatches(declaredMime, expectedType));
+  }
+  if (declaredMime is! String ||
+      !_geminiMediaMimeMatches(declaredMime, expectedType)) {
+    return false;
+  }
+  if (value.startsWith('attachments/') || value.startsWith('temp_edited/')) {
+    return true;
+  }
+  final uri = Uri.tryParse(value);
+  return uri?.scheme == 'https' && uri!.host.isNotEmpty ||
+      uri?.scheme == 'gs' && uri!.host.isNotEmpty;
+}
+
+bool _geminiMediaMimeMatches(String mimeType, String? expectedType) =>
+    !const {'image', 'audio', 'video'}.contains(expectedType) ||
+    mimeType.startsWith('$expectedType/');
+
+bool _isValidBase64(String value) {
+  try {
+    return base64Decode(value).isNotEmpty;
+  } on FormatException {
+    return false;
+  }
+}
+
+bool _isAnthropicImageMediaType(Object? value) => const {
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp'
+    }.contains(value);
 
 Map<String, dynamic> _arguments(dynamic value) {
   if (value is Map) return Map<String, dynamic>.from(value);

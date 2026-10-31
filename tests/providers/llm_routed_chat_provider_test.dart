@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,569 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  test('non-streaming image output is stored and exposed to callers', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'image-output-account',
+        connectorType: 'openai-api',
+        authType: 'api_key',
+        displayName: 'Image output',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'chatProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'image-output-model',
+            upstreamModelId: 'image-upstream',
+            displayName: 'Image model',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'image-output-group',
+        displayName: 'Image output',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'image-output-account',
+            localModelId: 'image-output-model',
+            upstreamModelId: 'image-upstream',
+          ),
+        ],
+      ),
+    );
+    final imageBytes = Uint8List.fromList([1, 2, 3]);
+    final saved = <Uint8List>[];
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'output': [
+          {
+            'type': 'image_generation_call',
+            'id': 'image-1',
+            'result': base64Encode(imageBytes),
+            'mime_type': 'image/png',
+          },
+        ],
+      },
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'image-output-group',
+      localModelId: 'image-output-model',
+      endpointType: 'openai',
+      saveMediaFile: (fileName, payload, {stableId}) async {
+        saved.add(payload);
+        return 'attachments/$fileName';
+      },
+    );
+
+    final text = await provider.chat(const [
+      {'role': 'user', 'content': 'draw a blue circle'},
+    ]);
+
+    expect(text, isEmpty);
+    expect(saved, [imageBytes]);
+    expect(provider.lastMediaAttachments, hasLength(1));
+    expect(provider.lastMediaAttachments.single.fileType, 'image');
+    expect(provider.lastMediaAttachments.single.mimeType, 'image/png');
+    expect(provider.lastMediaAttachments.single.storagePath,
+        'attachments/image.png');
+  });
+
+  test('streamed audio output is stored and emitted as a media attachment',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'audio-output-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Audio output',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'audio-output-model',
+            upstreamModelId: 'audio-upstream',
+            displayName: 'Audio model',
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'audio-output-group',
+        displayName: 'Audio output',
+        members: [
+          LlmModelGroupMember(
+            accountId: 'audio-output-account',
+            localModelId: 'audio-output-model',
+            upstreamModelId: 'audio-upstream',
+          ),
+        ],
+      ),
+    );
+    final bytes = Uint8List.fromList([1, 3, 5, 7]);
+    final parameterizedImageBytes = Uint8List.fromList([8, 9, 10]);
+    final savedMedia = <Uint8List>[];
+    final frame = jsonEncode({
+      'choices': [
+        {
+          'index': 0,
+          'delta': {
+            'audio': {'data': base64Encode(bytes), 'format': 'mp3'},
+          },
+        },
+        {
+          'index': 1,
+          'delta': {
+            'audio': {
+              'data': base64Encode(Uint8List.fromList([20, 21])),
+              'format': 'mp3'
+            },
+          },
+        },
+      ],
+    });
+    final imageFrame = jsonEncode({
+      'type': 'image_generation_call',
+      'result': base64Encode(Uint8List.fromList([2, 4, 6])),
+      'mime_type': 'image/png',
+      'revised_prompt': 'A small blue circle',
+    });
+    final parameterizedImageFrame = jsonEncode({
+      'image_url': {
+        'url':
+            'data:image/png;charset=utf-8;base64,${base64Encode(parameterizedImageBytes)}',
+      },
+    });
+    final textBeforeImageFrame = jsonEncode({
+      'choices': [
+        {
+          'delta': {'content': 'before image'}
+        },
+      ],
+    });
+    final textBeforeAudioFrame = jsonEncode({
+      'choices': [
+        {
+          'delta': {'content': 'before audio'}
+        },
+      ],
+    });
+    final textAfterAudioFrame = jsonEncode({
+      'choices': [
+        {
+          'delta': {'content': 'after audio'}
+        },
+      ],
+    });
+    final textAfterImageFrame = jsonEncode({
+      'choices': [
+        {
+          'delta': {'content': 'after image'}
+        },
+      ],
+    });
+    final secondAudioFrame = jsonEncode({
+      'choices': [
+        {
+          'index': 0,
+          'delta': {
+            'audio': {
+              'data': base64Encode(Uint8List.fromList([5, 6])),
+            },
+          },
+        },
+        {
+          'index': 1,
+          'delta': {
+            'audio': {
+              'data': base64Encode(Uint8List.fromList([22])),
+              'format': 'mp3'
+            },
+          },
+        },
+      ],
+    });
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.fromIterable([
+        utf8.encode('data: $textBeforeAudioFrame\n\n'),
+        utf8.encode('data: $frame\n\n'),
+        utf8.encode('data: $textAfterAudioFrame\n\n'),
+        utf8.encode('data: $textBeforeImageFrame\n\n'),
+        utf8.encode('data: $imageFrame\n\n'),
+        utf8.encode('data: $textAfterImageFrame\n\n'),
+        utf8.encode('data: $parameterizedImageFrame\n\n'),
+        utf8.encode('data: $secondAudioFrame\n\n'),
+        utf8.encode('data: [DONE]\n\n'),
+      ]),
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: 'audio-output-group',
+      localModelId: 'audio-output-model',
+      endpointType: 'openai',
+      saveMediaFile: (fileName, payload, {stableId}) async {
+        savedMedia.add(payload);
+        return 'attachments/$fileName';
+      },
+    );
+
+    final events = await provider.chatStream(const [
+      {'role': 'user', 'content': 'make audio'},
+    ]).toList();
+    final attachments =
+        events.expand((event) => event.mediaAttachments ?? const []).toList();
+
+    final beforeImageIndex =
+        events.indexWhere((event) => event.text == 'before image');
+    final mediaIndex = events
+        .indexWhere((event) => event.mediaAttachments?.isNotEmpty == true);
+    final afterImageIndex =
+        events.indexWhere((event) => event.text == 'after image');
+    expect(beforeImageIndex, lessThan(mediaIndex));
+    expect(mediaIndex, lessThan(afterImageIndex));
+    final beforeAudio =
+        events.firstWhere((event) => event.text == 'before audio');
+    final afterAudio =
+        events.firstWhere((event) => event.text == 'after audio');
+    final audioEvent = events.firstWhere(
+      (event) =>
+          event.mediaAttachments?.any((item) => item.fileType == 'audio') ==
+          true,
+    );
+    expect(beforeAudio.contentOrder, lessThan(audioEvent.contentOrder!));
+    expect(audioEvent.contentOrder, lessThan(afterAudio.contentOrder!));
+
+    final attachment =
+        attachments.firstWhere((item) => item.fileType == 'audio');
+    expect(attachment.fileType, 'audio');
+    expect(attachment.mimeType, 'audio/mpeg');
+    expect(attachment.storagePath, 'attachments/audio.mp3');
+    expect(
+      savedMedia.map(base64Encode),
+      unorderedEquals([
+        base64Encode(Uint8List.fromList([1, 3, 5, 7, 5, 6])),
+        base64Encode(Uint8List.fromList([20, 21, 22])),
+        base64Encode(Uint8List.fromList([2, 4, 6])),
+        base64Encode(parameterizedImageBytes),
+      ]),
+    );
+    expect(attachments, hasLength(4));
+    expect(attachments.map((attachment) => attachment.fileType), [
+      'image',
+      'image',
+      'audio',
+      'audio',
+    ]);
+    expect(attachments.map((attachment) => attachment.mimeType), [
+      'image/png',
+      'image/png',
+      'audio/mpeg',
+      'audio/mpeg',
+    ]);
+    expect(
+      attachments[2].extraFields['stroom.mediaSource']['metadata']
+          ['choiceIndex'],
+      0,
+    );
+    expect(
+      attachments[3].extraFields['stroom.mediaSource']['metadata']
+          ['choiceIndex'],
+      1,
+    );
+    expect(
+      attachments[0].extraFields['stroom.mediaSource']['metadata']
+          ['revised_prompt'],
+      'A small blue circle',
+    );
+  });
+
+  test('Responses partial audio is persisted when the stream errors', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'responses-audio-account',
+        connectorType: 'openai-api',
+        authType: 'api_key',
+        displayName: 'Responses audio',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'chatProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'responses-audio-model',
+            upstreamModelId: 'gpt-4o-audio',
+            displayName: 'Responses audio model',
+          ),
+        ],
+      ),
+      secret: 'responses-audio-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'responses-audio-group',
+        displayName: 'Responses audio group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'responses-audio-account',
+            localModelId: 'responses-audio-model',
+            upstreamModelId: 'gpt-4o-audio',
+          ),
+        ],
+      ),
+    );
+    final bytes = Uint8List.fromList([9, 8, 7]);
+    final secondAudioBytes = Uint8List.fromList([6, 5, 4]);
+    final imageBytes = Uint8List.fromList([4, 5, 6]);
+    final partialImageBytes = Uint8List.fromList([1, 2, 3]);
+    final partialImage = jsonEncode({
+      'type': 'response.image_generation_call.partial_image',
+      'item_id': 'image-generation-1',
+      'output_index': 0,
+      'partial_image_index': 0,
+      'partial_image_b64': base64Encode(partialImageBytes),
+    });
+    final imageItem = {
+      'id': 'image-generation-1',
+      'type': 'image_generation_call',
+      'result': base64Encode(imageBytes),
+      'mime_type': 'image/png',
+    };
+    final imageItemDone = jsonEncode({
+      'type': 'response.output_item.done',
+      'item': imageItem,
+    });
+    final responseCompleted = jsonEncode({
+      'type': 'response.completed',
+      'response': {
+        'output': [imageItem]
+      },
+    });
+    final frame = jsonEncode({
+      'type': 'response.output_audio.delta',
+      'item_id': 'audio-item-1',
+      'output_index': 1,
+      'content_index': 0,
+      'delta': base64Encode(bytes),
+      'format': 'wav',
+    });
+    final secondAudioFrame = jsonEncode({
+      'type': 'response.output_audio.delta',
+      'item_id': 'audio-item-2',
+      'output_index': 2,
+      'content_index': 0,
+      'delta': base64Encode(secondAudioBytes),
+      'format': 'mp3',
+    });
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.multi((controller) {
+        controller.add(utf8.encode('data: $partialImage\n\n'));
+        controller.add(utf8.encode('data: $imageItemDone\n\n'));
+        controller.add(utf8.encode('data: $responseCompleted\n\n'));
+        controller.add(utf8.encode('data: $frame\n\n'));
+        controller.add(utf8.encode('data: $secondAudioFrame\n\n'));
+        controller.addError(StateError('stream failed'));
+        controller.close();
+      }),
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final savedMedia = <String, List<Uint8List>>{};
+    var audioSaveAttempts = 0;
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: 'responses-audio-group',
+      localModelId: 'responses-audio-model',
+      endpointType: 'openai',
+      saveMediaFile: (fileName, payload, {stableId}) async {
+        if (fileName == 'audio.wav' && audioSaveAttempts++ == 0) {
+          throw StateError('temporary media storage error');
+        }
+        savedMedia.putIfAbsent(fileName, () => []).add(payload);
+        return 'attachments/$fileName';
+      },
+    );
+
+    final receivedEvents = <dynamic>[];
+    try {
+      await for (final event in provider.chatStream(const [
+        {'role': 'user', 'content': 'make audio'},
+      ])) {
+        receivedEvents.add(event);
+      }
+    } catch (_) {
+      // The test expects the provider to preserve usable audio before the error.
+    }
+
+    final attachments = receivedEvents
+        .expand((event) => event.mediaAttachments ?? const [])
+        .toList();
+    expect(attachments, hasLength(4));
+    expect(attachments.map((attachment) => attachment.fileType), [
+      'image',
+      'image',
+      'audio',
+      'audio',
+    ]);
+    expect(attachments.map((attachment) => attachment.mimeType), [
+      'image/png',
+      'image/png',
+      'audio/wav',
+      'audio/mpeg',
+    ]);
+    expect(
+      savedMedia['image.png']!.map(base64Encode),
+      containsAll([base64Encode(partialImageBytes), base64Encode(imageBytes)]),
+    );
+    expect(savedMedia['audio.wav']!.single, bytes);
+    expect(savedMedia['audio.mp3']!.single, secondAudioBytes);
+    expect(
+      attachments[2].extraFields['stroom.mediaSource']['metadata']['item_id'],
+      'audio-item-1',
+    );
+    expect(
+      attachments[3].extraFields['stroom.mediaSource']['metadata']['item_id'],
+      'audio-item-2',
+    );
+    expect(
+      attachments.first.extraFields['stroom.mediaSource']['metadata']
+          ['partial_image_index'],
+      0,
+    );
+    expect(audioSaveAttempts, 2);
+  });
+
+  test('routing reports when no candidate supports requested modalities', () {
+    final error = AiGatewayRoutingException([
+      const AiGatewayRouteDecision(
+        subjectId: 'account-model',
+        reason: 'capability_mismatch',
+      ),
+    ]);
+
+    expect(error.toString(), contains('support the capabilities required'));
+  });
+
+  test('output modality options route to capable members', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    for (final (accountId, supportsAudio) in [
+      ('output-text-account', false),
+      ('output-audio-account', true),
+    ]) {
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: accountId,
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: '$accountId-model',
+              upstreamModelId: '$accountId-upstream',
+              displayName: accountId,
+              capabilities: {'audio': supportsAudio},
+            ),
+          ],
+        ),
+      );
+    }
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'output-audio-group',
+        displayName: 'Output audio routing',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'output-text-account',
+            localModelId: 'output-audio-model',
+            upstreamModelId: 'output-text-account-upstream',
+          ),
+          LlmModelGroupMember(
+            accountId: 'output-audio-account',
+            localModelId: 'output-audio-model',
+            upstreamModelId: 'output-audio-account-upstream',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(accounts);
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'output-audio-group',
+      localModelId: 'output-audio-model',
+      endpointType: 'openai',
+    );
+
+    await provider.chat(
+      const [
+        {'role': 'user', 'content': 'speak the answer'},
+      ],
+      extraParams: const {
+        'modalities': ['audio']
+      },
+    );
+
+    expect(connector.requestedAccountIds, ['output-audio-account']);
+  });
+
   for (final (
         connectorType,
         endpointType,
@@ -2099,6 +2663,210 @@ void main() {
     );
   });
 
+  test('Gemini preserves text and inline media order within one frame',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-mixed-content-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini mixed content',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-mixed-content-model',
+            upstreamModelId: 'gemini-2.5-pro',
+            displayName: 'Gemini mixed content model',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-mixed-content-group',
+        displayName: 'Gemini mixed content',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-mixed-content-account',
+            localModelId: 'gemini-mixed-content-model',
+            upstreamModelId: 'gemini-2.5-pro',
+          ),
+        ],
+      ),
+    );
+    final bytes = Uint8List.fromList([2, 4, 6]);
+    final frame = jsonEncode({
+      'candidates': [
+        {
+          'content': {
+            'role': 'model',
+            'parts': [
+              {'text': 'before'},
+              {
+                'inlineData': {
+                  'mimeType': 'image/png',
+                  'data': base64Encode(bytes),
+                },
+              },
+              {'text': 'after'},
+            ],
+          },
+        },
+      ],
+    });
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.value(utf8.encode('data: $frame\n\n')),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'gemini-mixed-content-group',
+      localModelId: 'gemini-mixed-content-model',
+      endpointType: 'google.gemini.generate_content',
+      saveMediaFile: (fileName, payload, {stableId}) async =>
+          'attachments/$fileName',
+    );
+
+    final events = await provider.chatStream(const [
+      {'role': 'user', 'content': 'Describe the image.'},
+    ]).toList();
+
+    final before = events.firstWhere((event) => event.text == 'before');
+    final media = events.firstWhere(
+      (event) => event.mediaAttachments?.isNotEmpty == true,
+    );
+    final after = events.firstWhere((event) => event.text == 'after');
+    expect(before.contentOrder, lessThan(media.contentOrder!));
+    expect(media.contentOrder, lessThan(after.contentOrder!));
+  });
+
+  test('Gemini stream emits fileData media references', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-file-reference-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini file reference',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-file-reference-model',
+            upstreamModelId: 'gemini-2.5-pro',
+            displayName: 'Gemini file reference model',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-file-reference-group',
+        displayName: 'Gemini file reference',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-file-reference-account',
+            localModelId: 'gemini-file-reference-model',
+            upstreamModelId: 'gemini-2.5-pro',
+          ),
+        ],
+      ),
+    );
+    final frame = jsonEncode({
+      'candidates': [
+        {
+          'content': {
+            'role': 'model',
+            'parts': [
+              {'text': 'primary answer'},
+              {
+                'fileData': {
+                  'mimeType': 'video/mp4',
+                  'fileUri': 'gs://bucket/generated-clip.mp4',
+                },
+              },
+            ],
+          },
+        },
+        {
+          'index': 1,
+          'content': {
+            'role': 'model',
+            'parts': [
+              {'text': 'alternative answer'},
+              {
+                'fileData': {
+                  'mimeType': 'video/mp4',
+                  'fileUri': 'gs://bucket/alternative-clip.mp4',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.value(utf8.encode('data: $frame\n\n')),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'gemini-file-reference-group',
+      localModelId: 'gemini-file-reference-model',
+      endpointType: 'google.gemini.generate_content',
+    );
+
+    final events = await provider.chatStream(const [
+      {'role': 'user', 'content': 'Create a clip.'},
+    ]).toList();
+
+    expect(
+      events.map((event) => event.text).where((text) => text.isNotEmpty),
+      ['primary answer'],
+    );
+    final attachment =
+        events.expand((event) => event.mediaAttachments ?? const []).single;
+    expect(attachment.fileType, 'video');
+    expect(attachment.mimeType, 'video/mp4');
+    expect(attachment.storagePath, 'gs://bucket/generated-clip.mp4');
+    expect(
+      attachment.extraFields['stroom.mediaReference'],
+      'gs://bucket/generated-clip.mp4',
+    );
+  });
+
   test(
     'streaming chat skips malformed OpenAI frames and keeps valid output',
     () async {
@@ -2172,7 +2940,13 @@ void main() {
     },
   );
 
-  for (final (contentType, connectorType, endpointType, contentBlock) in [
+  for (final (
+        contentType,
+        connectorType,
+        endpointType,
+        contentBlock,
+        requiredCapability,
+      ) in [
     (
       'input_image',
       'openai-compatibility',
@@ -2181,6 +2955,7 @@ void main() {
         'type': 'input_image',
         'image_url': 'https://example.test/input.png',
       },
+      'vision',
     ),
     (
       'output_image',
@@ -2190,6 +2965,7 @@ void main() {
         'type': 'output_image',
         'image_url': 'https://example.test/output.png',
       },
+      'vision',
     ),
     (
       'video_url',
@@ -2199,6 +2975,7 @@ void main() {
         'type': 'video_url',
         'video_url': {'url': 'https://example.test/video.mp4'},
       },
+      'vision',
     ),
     (
       'file',
@@ -2206,8 +2983,12 @@ void main() {
       'openai',
       <String, dynamic>{
         'type': 'file',
-        'file': {'filename': 'report.pdf', 'file_data': 'data:application/pdf'},
+        'file': {
+          'filename': 'report.pdf',
+          'file_data': 'data:application/pdf;base64,cGRm',
+        },
       },
+      'vision',
     ),
     (
       'document',
@@ -2215,85 +2996,103 @@ void main() {
       'anthropic',
       <String, dynamic>{
         'type': 'document',
-        'source': {'type': 'base64', 'media_type': 'application/pdf'},
+        'source': {
+          'type': 'base64',
+          'media_type': 'application/pdf',
+          'data': 'cGRm',
+        },
       },
+      'vision',
+    ),
+    (
+      'output_audio',
+      'openai-compatibility',
+      'openai',
+      <String, dynamic>{
+        'type': 'output_audio',
+        'output_audio': {'data': 'AQID', 'format': 'pcm16'},
+      },
+      'audio',
     ),
   ]) {
-    test('$contentType content routes to a vision-capable member', () async {
-      final preferences = _MemoryPreferences();
-      final accounts = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: _MemoryCredentialStore(),
-      );
-      for (final (suffix, supportsVision) in [
-        ('text', false),
-        ('vision', true),
-      ]) {
-        final accountId = '$contentType-$suffix';
-        await accounts.saveAccount(
-          LlmAccount(
-            id: accountId,
-            connectorType: connectorType,
-            authType: connectorType == 'claude' ? 'api_key' : 'none',
-            displayName: accountId,
-            status: LlmAccountStatus.ready,
-            models: [
-              LlmUpstreamModel(
-                id: '$accountId-model',
-                upstreamModelId: '$accountId-upstream',
-                displayName: accountId,
-                capabilities: {'vision': supportsVision},
+    test(
+      '$contentType content routes to a $requiredCapability-capable member',
+      () async {
+        final preferences = _MemoryPreferences();
+        final accounts = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentialStore(),
+        );
+        for (final (suffix, supportsVision) in [
+          ('text', false),
+          ('vision', true),
+        ]) {
+          final accountId = '$contentType-$suffix';
+          await accounts.saveAccount(
+            LlmAccount(
+              id: accountId,
+              connectorType: connectorType,
+              authType: connectorType == 'claude' ? 'api_key' : 'none',
+              displayName: accountId,
+              status: LlmAccountStatus.ready,
+              models: [
+                LlmUpstreamModel(
+                  id: '$accountId-model',
+                  upstreamModelId: '$accountId-upstream',
+                  displayName: accountId,
+                  capabilities: {requiredCapability: supportsVision},
+                ),
+              ],
+            ),
+            secret: connectorType == 'claude' ? 'test-api-key' : null,
+          );
+        }
+        await accounts.saveModelGroup(
+          LlmModelGroup(
+            id: 'multimodal-$contentType',
+            displayName: 'Multimodal group',
+            members: [
+              LlmModelGroupMember(
+                accountId: '$contentType-text',
+                localModelId: 'multimodal-model',
+                upstreamModelId: '$contentType-text-upstream',
+              ),
+              LlmModelGroupMember(
+                accountId: '$contentType-vision',
+                localModelId: 'multimodal-model',
+                upstreamModelId: '$contentType-vision-upstream',
               ),
             ],
           ),
-          secret: connectorType == 'claude' ? 'test-api-key' : null,
         );
-      }
-      await accounts.saveModelGroup(
-        LlmModelGroup(
-          id: 'multimodal-$contentType',
-          displayName: 'Multimodal group',
-          members: [
-            LlmModelGroupMember(
-              accountId: '$contentType-text',
-              localModelId: 'multimodal-model',
-              upstreamModelId: '$contentType-text-upstream',
-            ),
-            LlmModelGroupMember(
-              accountId: '$contentType-vision',
-              localModelId: 'multimodal-model',
-              upstreamModelId: '$contentType-vision-upstream',
-            ),
-          ],
-        ),
-      );
-      final connector = _FakeConnectorClient(accounts);
-      final provider = LlmRoutedChatProvider(
-        runtime: Future.value(
-          LlmChatRoutingRuntime(
-            accountService: accounts,
-            routingService: LlmRoutingService(
+        final connector = _FakeConnectorClient(accounts);
+        final provider = LlmRoutedChatProvider(
+          runtime: Future.value(
+            LlmChatRoutingRuntime(
               accountService: accounts,
-              stateStore: LlmRoutingStateStore(preferences: preferences),
-              concurrency: LlmConcurrencyReservations(),
+              routingService: LlmRoutingService(
+                accountService: accounts,
+                stateStore: LlmRoutingStateStore(preferences: preferences),
+                concurrency: LlmConcurrencyReservations(),
+              ),
+              connectorClient: connector,
             ),
-            connectorClient: connector,
           ),
-        ),
-        groupId: 'multimodal-$contentType',
-        localModelId: 'multimodal-model',
-        endpointType: endpointType,
-      );
+          groupId: 'multimodal-$contentType',
+          localModelId: 'multimodal-model',
+          endpointType: endpointType,
+        );
 
-      await provider.chat([
-        {
-          'role': 'user',
-          'content': [contentBlock],
-        },
-      ]);
+        await provider.chat([
+          {
+            'role': 'user',
+            'content': [contentBlock],
+          },
+        ]);
 
-      expect(connector.requestedAccountIds, ['$contentType-vision']);
-    });
+        expect(connector.requestedAccountIds, ['$contentType-vision']);
+      },
+    );
   }
 
   test('records response cost alongside connector token observations',
