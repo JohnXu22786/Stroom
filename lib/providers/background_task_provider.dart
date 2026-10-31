@@ -555,6 +555,26 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
+Iterable<String> _legacyOcrInstructionCredentialValues(
+  Map<String, dynamic>? rawRequest,
+) {
+  if (rawRequest == null) return const [];
+  final requestForInstruction = Map<String, dynamic>.from(rawRequest);
+  final headers = requestForInstruction['headers'];
+  if (headers is Map) {
+    requestForInstruction['headers'] = Map.fromEntries(
+      headers.entries.where(
+        (entry) =>
+            entry.key is! String ||
+            (entry.key as String).toLowerCase() != 'authorization',
+      ),
+    );
+  }
+  // Authorization may be a sanitized prefix such as `Bearer secret…`, not
+  // the credential itself. It must not classify ordinary retry instructions.
+  return _legacyOcrCredentialValues(requestForInstruction);
+}
+
 bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
@@ -2001,7 +2021,8 @@ bool _legacyOcrShouldPreserveBareRedactedAction(String sourceText) {
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final body = rawRequest?['body'];
   if (body is! Map || body['messages'] is! List) return null;
-  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+  final credentialValues =
+      _legacyOcrInstructionCredentialValues(rawRequest).toList();
   final sourceTextParts = <String>[];
   for (final message in body['messages'] as List) {
     if (message is! Map ||
@@ -2962,8 +2983,10 @@ class BackgroundTask {
         'steps': steps.map((s) => s.toMap()).toList(),
         if (downloadedFilePath != null)
           'downloadedFilePath': downloadedFilePath,
-        if (rawRequest != null) 'rawRequest': rawRequest,
-        if (rawResponse != null) 'rawResponse': rawResponse,
+        if (type != BackgroundTaskType.ocr && rawRequest != null)
+          'rawRequest': rawRequest,
+        if (type != BackgroundTaskType.ocr && rawResponse != null)
+          'rawResponse': rawResponse,
         if (retryData != null) 'retryData': retryData,
         if (ocrPageOutcomes.isNotEmpty)
           'ocrPageOutcomes':

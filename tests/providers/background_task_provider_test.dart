@@ -1292,6 +1292,97 @@ void main() {
     );
 
     test(
+      'legacy Authorization masks do not alter natural retry instructions',
+      () {
+        const instruction = 'Please keep secrets private';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-secrets-with-masked-authorization',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('secret…')));
+        expect(persisted, isNot(contains('rawRequest')));
+      },
+    );
+
+    test(
+      'failed OCR task persistence omits request and response diagnostics',
+      () {
+        const apiKey = 'persisted-ocr-api-key-7391';
+        const instruction = 'Please keep secrets private';
+        final retryData = OcrRetrySnapshot.capture(
+          configId: 'provider-config',
+          modelId: 'vision-model-record',
+          images: const [],
+          instructionContent: instruction,
+        ).toMap();
+        final task = BackgroundTask(
+          id: 'failed-ocr-diagnostics-are-not-persisted',
+          type: BackgroundTaskType.ocr,
+          title: 'failed OCR task',
+          status: TaskStatus.failed,
+          error: 'provider request failed',
+          createdAt: DateTime(2025, 1, 1),
+          completedAt: DateTime(2025, 1, 1, 0, 1),
+          steps: const [
+            BgTaskStep(label: '识别', status: BgStepStatus.failed),
+          ],
+          retryData: retryData,
+          rawRequest: {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {'prompt': instruction},
+          },
+          rawResponse: {
+            'statusCode': 401,
+            'body': {'error': 'invalid $apiKey'},
+          },
+        );
+        final serialized = task.toMap();
+        final persisted = jsonEncode(serialized);
+
+        expect(serialized['status'], TaskStatus.failed.name);
+        expect(serialized['error'], 'provider request failed');
+        expect(serialized['steps'], isNotEmpty);
+        expect(
+          OcrRetrySnapshot.fromMap(
+            serialized['retryData'] as Map<String, dynamic>,
+          ).instructionContent,
+          instruction,
+        );
+        expect(serialized.containsKey('rawRequest'), isFalse);
+        expect(serialized.containsKey('rawResponse'), isFalse);
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
       'legacy OCR migration omits model IDs matching an auth credential',
       () {
         const apiKey = 'opaque-provider-secret-value-92';
