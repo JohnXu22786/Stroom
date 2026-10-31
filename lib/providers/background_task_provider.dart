@@ -562,17 +562,38 @@ Iterable<String> _legacyOcrInstructionCredentialValues(
   final requestForInstruction = Map<String, dynamic>.from(rawRequest);
   final headers = requestForInstruction['headers'];
   if (headers is Map) {
-    requestForInstruction['headers'] = Map.fromEntries(
-      headers.entries.where(
-        (entry) =>
-            entry.key is! String ||
-            (entry.key as String).toLowerCase() != 'authorization',
-      ),
-    );
+    final instructionHeaders = <dynamic, dynamic>{};
+    for (final entry in headers.entries) {
+      if (entry.key is! String ||
+          (entry.key as String).toLowerCase() != 'authorization') {
+        instructionHeaders[entry.key] = entry.value;
+        continue;
+      }
+      final values = entry.value is List ? entry.value as List : [entry.value];
+      final unmaskedValues = values
+          .where((value) =>
+              value is! String || !_legacyOcrAuthorizationValueIsMasked(value))
+          .toList();
+      if (unmaskedValues.isEmpty) continue;
+      instructionHeaders[entry.key] = entry.value is List
+          ? unmaskedValues
+          : unmaskedValues.single;
+    }
+    requestForInstruction['headers'] = instructionHeaders;
   }
-  // Authorization may be a sanitized prefix such as `Bearer secret…`, not
-  // the credential itself. It must not classify ordinary retry instructions.
+  // A masked prefix such as `Bearer secret…` must not classify ordinary
+  // retry instructions, while unmasked authorization values must still be
+  // available to redact an exact credential echoed in legacy prompt text.
   return _legacyOcrCredentialValues(requestForInstruction);
+}
+
+bool _legacyOcrAuthorizationValueIsMasked(String value) {
+  final token = value
+      .trim()
+      .replaceFirst(RegExp(r'^(?:Bearer|Basic)\s+', caseSensitive: false), '');
+  return RegExp(
+    r'^(?:[A-Za-z0-9_-]+(?:…|\.{3})|[A-Za-z0-9_-]{8,}\.{3}[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]\*{3}|[A-Za-z0-9_-]{4}\*{4})$',
+  ).hasMatch(token);
 }
 
 bool _legacyOcrTextContainsCredential(

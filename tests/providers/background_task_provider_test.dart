@@ -1332,6 +1332,44 @@ void main() {
     );
 
     test(
+      'legacy Authorization values with internal ellipses are redacted',
+      () {
+        for (final apiKey in ['custom-auth-7391', 'custom-...-auth-7391']) {
+          final instruction = 'Please use $apiKey for this receipt';
+          final task = BackgroundTask.fromMap({
+            'id': 'legacy-ocr-auth-echo-is-not-retried',
+            'type': 'ocr',
+            'title': 'failed OCR task',
+            'status': 'failed',
+            'error': 'request failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'rawRequest': {
+              'url': 'https://api.example.com/v1/chat/completions',
+              'headers': {'Authorization': apiKey},
+              'body': {
+                'model': 'vision-model',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {'type': 'text', 'text': instruction},
+                    ],
+                  },
+                ],
+              },
+            },
+          });
+          final retryInstruction =
+              OcrRetrySnapshot.fromMap(task.retryData!).instructionContent;
+          final persisted = jsonEncode(task.toMap());
+
+          expect(retryInstruction, isNot(contains(apiKey)));
+          expect(persisted, isNot(contains(apiKey)));
+        }
+      },
+    );
+
+    test(
       'failed OCR task persistence omits request and response diagnostics',
       () {
         const apiKey = 'persisted-ocr-api-key-7391';
