@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -36,6 +35,13 @@ Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
 @visibleForTesting
 Future<void> Function(File file, Uint8List bytes)?
     beforeAppAlbumPickerTempWriteForTesting;
+
+/// Supplies edited bytes without opening the editor in lifecycle tests.
+@visibleForTesting
+Future<Uint8List?> Function(String fileName, Uint8List imageBytes)?
+    appAlbumPickerEditImageForTesting;
+
+int _appAlbumPickerTempEditCounter = 0;
 
 class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
   const _AppAlbumPickerDialog();
@@ -626,45 +632,52 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     String fileName,
     Uint8List imageBytes,
   ) async {
-    // Show the fullscreen preview dialog with edit button
-    final shouldEdit = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: fileName,
-      ),
-    );
-
-    if (shouldEdit != true || !mounted) return;
-
-    // User tapped edit — open quick editor
-    final editedBytes = await Navigator.push<Uint8List>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
+    final editForTesting = appAlbumPickerEditImageForTesting;
+    final Uint8List? editedBytes;
+    if (editForTesting != null) {
+      editedBytes = await editForTesting(fileName, imageBytes);
+    } else {
+      // Show the fullscreen preview dialog with edit button
+      final shouldEdit = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => ImagePreviewDialog(
+          imageData: imageBytes,
           fileName: fileName,
         ),
-      ),
-    );
+      );
 
-    if (editedBytes == null || !mounted) return;
+      if (shouldEdit != true || !mounted) return;
+
+      // User tapped edit — open quick editor
+      editedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: imageBytes,
+            fileName: fileName,
+          ),
+        ),
+      );
+    }
+
+    final editedImageBytes = editedBytes;
+    if (editedImageBytes == null || !mounted) return;
 
     // Save edited bytes to temp cache directory instead of overwriting original
     String? tempPath;
     try {
       final tempDir = await getTemporaryDirectory();
       if (!mounted) return;
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final tempFileName = 'edited_${DateTime.now().millisecondsSinceEpoch}_'
+          '${_appAlbumPickerTempEditCounter++}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
       tempPath = tempFile.path;
       _tempEditFiles.add(tempPath);
       final write = beforeAppAlbumPickerTempWriteForTesting?.call(
             tempFile,
-            editedBytes,
+            editedImageBytes,
           ) ??
-          tempFile.writeAsBytes(editedBytes);
+          tempFile.writeAsBytes(editedImageBytes);
       _pendingTempEditWrites[tempFile.path] = write;
       try {
         await write;
@@ -693,7 +706,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
     // Update the selected item in-memory with edited bytes
     setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+      _selectedItems[recordKey] = MapEntry(fileName, editedImageBytes);
     });
   }
 

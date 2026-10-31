@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +10,6 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/album_picker_shared.dart';
 import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
-import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
@@ -63,6 +61,7 @@ void main() {
     ManifestDatabase.enableTestMode();
     ImageManifest.invalidateCache();
     beforeAppAlbumPickerTempWriteForTesting = null;
+    appAlbumPickerEditImageForTesting = null;
     tempDir = await Directory.systemTemp.createTemp('album_picker_temp_edit_');
     originalPathProvider = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _TestPathProvider(tempDir.path);
@@ -70,12 +69,13 @@ void main() {
 
   tearDown(() async {
     beforeAppAlbumPickerTempWriteForTesting = null;
+    appAlbumPickerEditImageForTesting = null;
     PathProviderPlatform.instance = originalPathProvider;
     ImageManifest.invalidateCache();
     await tempDir.delete(recursive: true);
   });
 
-  Future<Uint8List> openEditorForSeededImage(WidgetTester tester) async {
+  Future<Uint8List> openPickerWithSelectedImage(WidgetTester tester) async {
     final png = await tester.runAsync(_createEnginePng);
     await tester.runAsync(() async {
       await ImageManifest.writeFile('temp-edit-hash.png', png!);
@@ -117,23 +117,6 @@ void main() {
     );
     final originalBytes =
         tester.widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip)).bytes;
-
-    await tester.tap(find.byType(AlbumPreviewChip));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.crop));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await _pumpUntil(
-      tester,
-      () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
-    );
-    await tester.tap(find.text('保存'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await _pumpUntil(
-      tester,
-      () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
-    );
     return originalBytes;
   }
 
@@ -147,8 +130,12 @@ void main() {
         await finishWrite.future;
         await file.writeAsBytes(bytes);
       };
+      appAlbumPickerEditImageForTesting =
+          (_, _) async => Uint8List.fromList([10, 20, 30]);
 
-      await openEditorForSeededImage(tester);
+      await openPickerWithSelectedImage(tester);
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
       await _pumpUntil(tester, () => writeStarted.isCompleted);
       final tempFile = await writeStarted.future;
       expect(await tempFile.exists(), isFalse);
@@ -173,8 +160,12 @@ void main() {
         await file.writeAsBytes(bytes.sublist(0, 1));
         throw const FileSystemException('simulated temp write failure');
       };
+      appAlbumPickerEditImageForTesting =
+          (_, _) async => Uint8List.fromList([10, 20, 30]);
 
-      final originalBytes = await openEditorForSeededImage(tester);
+      final originalBytes = await openPickerWithSelectedImage(tester);
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
       await _pumpUntil(
         tester,
         () =>
@@ -189,6 +180,47 @@ void main() {
           .toList();
       expect(editedFiles, isEmpty);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'concurrent edits of the same image use separate temp files',
+    (tester) async {
+      final files = <File>[];
+      final writeGates = <Completer<void>>[];
+      final writesFinished = <Future<void>>[];
+      beforeAppAlbumPickerTempWriteForTesting = (file, bytes) async {
+        files.add(file);
+        final gate = Completer<void>();
+        final finished = Completer<void>();
+        writeGates.add(gate);
+        writesFinished.add(finished.future);
+        try {
+          await gate.future;
+          await file.writeAsBytes(bytes);
+        } finally {
+          finished.complete();
+        }
+      };
+      appAlbumPickerEditImageForTesting =
+          (_, _) async => Uint8List.fromList([10, 20, 30]);
+
+      await openPickerWithSelectedImage(tester);
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await _pumpUntil(tester, () => files.length == 2);
+      expect(files.map((file) => file.path).toSet(), hasLength(2));
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      for (final gate in writeGates) {
+        gate.complete();
+      }
+      await tester.runAsync(() => Future.wait(writesFinished));
+      await tester.pump();
+      expect(files.map((file) => file.existsSync()), everyElement(isFalse));
     },
   );
 }
