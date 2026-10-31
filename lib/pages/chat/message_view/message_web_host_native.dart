@@ -69,6 +69,18 @@ class _MessageWebHostState extends State<MessageWebHost> {
           useShouldOverrideUrlLoading: true,
           javaScriptHandlersForMainFrameOnly: true,
         ),
+        onConsoleMessage: (controller, message) {
+          if (kDebugMode) {
+            debugPrint('[MessageWebHost][console] ${message.message}');
+          }
+        },
+        onReceivedError: (controller, request, error) {
+          if (kDebugMode && request.isForMainFrame == true) {
+            debugPrint(
+              '[MessageWebHost][load-error] ${request.url}: ${error.description}',
+            );
+          }
+        },
         onWebViewCreated: (controller) {
           _controller = controller;
           controller.addJavaScriptHandler(
@@ -86,6 +98,22 @@ class _MessageWebHostState extends State<MessageWebHost> {
         onLoadStop: (controller, url) async {
           final ready = await controller.evaluateJavascript(
               source: '!!window.StroomMessageView');
+          if (kDebugMode && ready != true) {
+            try {
+              final state = await controller.evaluateJavascript(
+                source: '''
+JSON.stringify({
+  url: location.href,
+  state: document.readyState,
+  renderer: typeof window.StroomMessageView,
+  root: document.getElementById("root")?.textContent
+})''',
+              );
+              debugPrint('[MessageWebHost][not-ready] $url: $state');
+            } catch (error) {
+              debugPrint('[MessageWebHost][not-ready] $url: $error');
+            }
+          }
           if (mounted && ready == true) widget.onEvent({'type': 'ready'});
         },
         shouldOverrideUrlLoading: (controller, action) async =>
