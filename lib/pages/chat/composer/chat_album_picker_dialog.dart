@@ -32,6 +32,11 @@ Future<List<MapEntry<String, Uint8List>>?> showAppAlbumPickerDialog(
 @visibleForTesting
 Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
 
+/// Overrides edited-image temp writes in focused async lifecycle tests.
+@visibleForTesting
+Future<void> Function(File file, Uint8List bytes)?
+    beforeAppAlbumPickerTempWriteForTesting;
+
 class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
   const _AppAlbumPickerDialog();
 
@@ -57,6 +62,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
+  final Map<String, Future<void>> _pendingTempEditWrites = {};
 
   @override
   void initState() {
@@ -72,7 +78,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
-    for (final path in _tempEditFiles) {
+    final paths = List<String>.of(_tempEditFiles);
+    try {
+      await Future.wait<void>([
+        for (final path in paths) ?_pendingTempEditWrites[path],
+      ]);
+    } catch (_) {
+      // A failed write can still leave a partial file to remove below.
+    }
+    for (final path in paths) {
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -82,7 +96,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         // Non-critical cleanup
       }
     }
-    _tempEditFiles.clear();
+    _tempEditFiles.removeWhere(paths.contains);
   }
 
   Future<void> _loadData() async {
@@ -635,14 +649,36 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     if (editedBytes == null || !mounted) return;
 
     // Save edited bytes to temp cache directory instead of overwriting original
+    String? tempPath;
     try {
       final tempDir = await getTemporaryDirectory();
+      if (!mounted) return;
       final tempFileName =
           'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
+      tempPath = tempFile.path;
+      _tempEditFiles.add(tempPath);
+      final write = beforeAppAlbumPickerTempWriteForTesting?.call(
+            tempFile,
+            editedBytes,
+          ) ??
+          tempFile.writeAsBytes(editedBytes);
+      _pendingTempEditWrites[tempFile.path] = write;
+      try {
+        await write;
+      } finally {
+        _pendingTempEditWrites.remove(tempFile.path);
+      }
     } catch (_) {
+      if (tempPath != null) {
+        _tempEditFiles.remove(tempPath);
+        try {
+          final file = File(tempPath);
+          if (await file.exists()) await file.delete();
+        } catch (_) {
+          // Best-effort cleanup of a partial temp file.
+        }
+      }
       // Temp file save is best-effort; we keep the bytes in memory
     }
 
