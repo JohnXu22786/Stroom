@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/message_block.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -23,6 +24,7 @@ class _MockProvider extends BaseChatProvider {
 
   /// When non-null, the provider waits for this completer before yielding.
   final Completer<void>? waitForYield;
+  bool throwAfterYield = false;
 
   _MockProvider(this._rounds, {this.waitForYield});
 
@@ -56,6 +58,7 @@ class _MockProvider extends BaseChatProvider {
       for (final event in _rounds[_callCount - 1]) {
         yield event;
       }
+      if (throwAfterYield) throw Exception('Simulated provider interruption');
     } else {
       if (waitForYield != null) await waitForYield!.future;
       yield AIStreamEvent('Final response');

@@ -456,12 +456,10 @@ class ChatStreamManager {
         }
         // 用友好错误格式化（分类中文提示 + 保留原始异常）：
         // 未配置供应商/网络失败/超时等给出可操作的提示。
-        // 已流出的部分回复不能丢：拼接在错误文本之后，
-        // 用户仍可看到流中断前的回答内容。
+        // 保留已经流出的正文或思考内容，并把错误作为独立尾部块显示。
         final errorText = formatChatErrorMessage(e);
         final partial = state.fullReply;
-        state.fullReply =
-            partial.isEmpty ? errorText : '$errorText\n\n---\n$partial';
+        if (partial.isEmpty) state.fullReply = errorText;
         _pushToProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
         _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);

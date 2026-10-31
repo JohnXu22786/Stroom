@@ -321,6 +321,65 @@ void main() {
   });
 
   group('reload of roundStarts-era messages repairs misaligned blocks', () {
+    testWidgets('partial reasoning keeps one trailing red error after reload',
+        (tester) async {
+      const errorText = '错误: simulated interruption';
+      final partialError = ChatMessage(
+        id: 'a-error',
+        role: 'assistant',
+        content: errorText,
+        isError: true,
+        reasoningSections: ['partial reasoning'],
+        toolCallRoundStarts: [0],
+        blocks: const [
+          ReasoningBlock(text: 'partial reasoning', isComplete: true),
+          ErrorBlock(message: errorText),
+        ],
+      );
+
+      SharedPreferences.setMockInitialValues({});
+      final conversation = Conversation(
+        id: 'test-conv',
+        title: 'Test Conversation',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+        messages: [
+          ChatMessage(
+            id: 'u1',
+            role: 'user',
+            content: 'hello',
+            createdAt: DateTime(2025, 1, 1),
+          ),
+          partialError,
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(ref);
+              notifier.state = [conversation];
+              return notifier;
+            }),
+            activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
+            providerEntriesProvider
+                .overrideWith((ref) => ProviderEntriesNotifier()),
+          ],
+          child: const MaterialApp(home: ChatPage()),
+        ),
+      );
+      for (int i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('思考完成'), findsOneWidget);
+      expect(find.text(errorText), findsOneWidget);
+      expect(find.text('发送失败'), findsNothing);
+
+      await _flushPendingTimers(tester);
+    });
+
     testWidgets(
         'interior-empty reasoning sections render their buttons after '
         'reload', (tester) async {
