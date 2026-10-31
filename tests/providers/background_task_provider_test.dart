@@ -12734,6 +12734,63 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves reported authenticity but redacts a reported credential',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer auth…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {
+                          'type': 'text',
+                          'text': 'Read the receipt total carefully',
+                        },
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const safePrompt = 'Read the receipt total carefully';
+        const safeInstruction = 'The label reports authenticity';
+        final safeTask = taskFor(
+          'legacy-ocr-reported-authenticity-natural-word',
+          safeInstruction,
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          '$safePrompt\n$safeInstruction',
+        );
+
+        final credentialTask = taskFor(
+          'legacy-ocr-reported-credential-echo',
+          'The label reports authorization',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
+          safePrompt,
+        );
+        expect(credentialPersisted, contains(safePrompt));
+        expect(credentialPersisted, isNot(contains('authorization')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves ordinary prompts under open-ended ASCII masks',
       () {
         const prompt = 'Please review the documentation carefully';
