@@ -114,6 +114,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
             debugPrint(
               '[MessageWebHost][load-file-sent] macOS attempt=${attempt + 1}',
             );
+            try {
+              final currentUrl = await controller.getUrl();
+              final ready = await controller.evaluateJavascript(
+                source: '!!window.StroomMessageView',
+              );
+              debugPrint(
+                '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
+                'url=$currentUrl ready=$ready',
+              );
+            } catch (error) {
+              debugPrint(
+                '[MessageWebHost][load-file-state-error] macOS '
+                'attempt=${attempt + 1}: $error',
+              );
+            }
           }
         } catch (error) {
           if (kDebugMode) {
