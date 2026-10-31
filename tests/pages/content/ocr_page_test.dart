@@ -702,118 +702,53 @@ void main() {
       expect(find.text('GPT-4 Vision | OpenAI'), findsWidgets);
     });
 
-    testWidgets('uses the model selected while image preparation is pending', (
+    testWidgets('locks the model during OCR processing and unlocks on failure',
+        (
       tester,
     ) async {
-      final preparationStarted = Completer<void>();
-      final finishPreparation = Completer<OcrImagePayload>();
-      final adapter = _CapturingOcrAdapter();
-      final notifier = _InspectableBackgroundTaskNotifier();
-      OcrRetrySnapshot? cachedSnapshot;
-      final providerA = ProviderEntry(
-        id: 'provider_a',
-        type: 'ocr',
-        name: 'Provider A',
-        configs: [
-          ProviderConfigItem(
-            id: 'config_a',
-            providerName: 'Provider A',
-            host: 'https://provider-a.test/ocr',
-            key: 'provider-a-key',
-            models: [
-              ModelConfig(
-                id: 'model_a_record',
-                name: 'Model A',
-                modelId: 'model-a',
-              ),
-            ],
-          ),
-        ],
-      );
-      final providerB = ProviderEntry(
-        id: 'provider_b',
-        type: 'ocr',
-        name: 'Provider B',
-        configs: [
-          ProviderConfigItem(
-            id: 'config_b',
-            providerName: 'Provider B',
-            host: 'https://provider-b.test/ocr',
-            key: 'provider-b-key',
-            models: [
-              ModelConfig(
-                id: 'model_b_record',
-                name: 'Model B',
-                modelId: 'model-b',
-              ),
-            ],
-          ),
-        ],
-      );
+      final preflightStarted = Completer<void>();
+      final finishPreflight = Completer<int?>();
+      OcrConfig? preflightConfig;
+
       await tester.pumpWidget(
         _buildTestApp(
-          entries: [providerA, providerB],
+          entries: [_createOcrEntry(withModels: true)],
           testImages: [_createTestImage()],
-          backgroundTasksNotifier: notifier,
-          testImagePayloadPreparer: (bytes) {
-            preparationStarted.complete();
-            return finishPreparation.future;
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testRequestSizePreflight: (config, _) {
+            preflightConfig = config;
+            preflightStarted.complete();
+            return finishPreflight.future;
           },
-          testRetrySnapshotCacher: ({required taskId, required snapshot}) {
-            cachedSnapshot = snapshot;
-            return Future.value(null);
-          },
-          testOcrServiceFactory: (config) => OcrService(
-            config: config,
-            dio: Dio(
-              BaseOptions(
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ${config.apiKey}',
-                },
-              ),
-            )..httpClientAdapter = adapter,
-          ),
         ),
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(find.text('GPT-4o | OpenAI').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
+      await tester.pumpAndSettle();
+      expect(find.text('GPT-4o Mini | OpenAI'), findsOneWidget);
+
       await tester.tap(find.text('开始识别'));
       await tester.pump();
-      await preparationStarted.future;
+      await preflightStarted.future;
 
-      await tester.tap(find.text('Model A | Provider A').last);
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Model B | Provider B').last);
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Model B | Provider B'), findsOneWidget);
+      final modelSelector = tester
+          .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
+          .first;
+      expect(modelSelector.onChanged, isNull);
+      expect(preflightConfig?.model, 'gpt-4o-mini');
+      expect(find.text('GPT-4o Mini | OpenAI'), findsOneWidget);
 
-      finishPreparation.complete(
-        OcrImagePayload(
-          bytes: _createTestPngBytes(),
-          format: 'png',
-          width: 1,
-          height: 1,
-        ),
-      );
+      finishPreflight.complete(null);
       await tester.pump();
 
-      await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
-      final request = adapter.requests.single;
-      expect(request.uri.toString(), 'https://provider-b.test/ocr');
-      expect(request.headers['Authorization'], 'Bearer provider-b-key');
-      expect(
-        (request.data as Map<String, dynamic>)['model'],
-        'model-b',
-      );
-      expect(cachedSnapshot?.configId, 'config_b');
-      expect(cachedSnapshot?.modelId, 'model_b_record');
-      await _pumpUntil(
-        tester,
-        () => notifier.tasksForTest.any(
-          (task) => task.status == TaskStatus.completed,
-        ),
-      );
+      final unlockedModelSelector = tester
+          .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
+          .first;
+      expect(unlockedModelSelector.onChanged, isNotNull);
     });
 
     testWidgets(
