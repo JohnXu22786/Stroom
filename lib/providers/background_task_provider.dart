@@ -890,6 +890,8 @@ bool _legacyOcrHasCredentialUseContext(
         caseSensitive: false,
       ).hasMatch(after) ||
       credentialTargetAfterConsumedConnector;
+  final requestTargetAfterConsumedConnector = suffix.toLowerCase() == 'for' &&
+      RegExp(r'^(?:the )?request\b', caseSensitive: false).hasMatch(after);
   final credentialHeaderTarget = RegExp(
     r'^(?:in(?:to)?|to|for) (?:the )?(?:authorization|auth|api[\s_-]*key|key|token|secret|credential|password)(?: header)(?: value)?\b',
     caseSensitive: false,
@@ -900,6 +902,7 @@ bool _legacyOcrHasCredentialUseContext(
       ).hasMatch(after) ||
       _legacyOcrNaturalSourcePhrasePattern.hasMatch(after) ||
       explicitCredentialTarget ||
+      requestTargetAfterConsumedConnector ||
       credentialHeaderTarget;
   final naturalWord =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
