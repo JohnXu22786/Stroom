@@ -10,6 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../database/anki_database.dart';
+import 'anki_full_download_recovery.dart';
 import 'anki_sync_protocol_client.dart';
 
 /// Anki `/msync/` client backed by a small sidecar index. Media sync metadata
@@ -293,9 +294,7 @@ class AnkiMediaSync {
           }
           final length = await file.length();
           if (length == 0 || length > _maxMediaFileBytes) {
-            throw const AnkiSyncException(
-              '待上传媒体文件为空或超过 100 MB，请修复后重试同步',
-            );
+            throw const AnkiSyncException('待上传媒体文件为空或超过 100 MB，请修复后重试同步');
           }
           final bytes = await file.readAsBytes();
           batch.add(AnkiMediaUploadEntry(name, bytes));
@@ -357,33 +356,49 @@ class AnkiMediaSync {
     }
   }
 
-  /// Move aside local media and reset this destination's sync cursor before a
-  /// confirmed full collection download. This prevents old local files from
-  /// being treated as new uploads into the downloaded collection.
+  /// Move aside local media and reset media sync cursors before a confirmed
+  /// full collection download. The media directory is shared across sync
+  /// destinations, so keeping any old destination index could turn missing
+  /// local files into deletions on that server's next sync.
   static Future<AnkiMediaDownloadReset> prepareForFullDownload({
     required AnkiSyncProtocolClient client,
     String? documentsPath,
+    AnkiFullDownloadRecovery? recovery,
   }) async {
     final docs =
         documentsPath ?? (await getApplicationDocumentsDirectory()).path;
     final mediaPath = p.join(docs, 'collection.media');
     final folder = Directory(mediaPath);
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    final backupPath = '$mediaPath.pre-sync-$stamp';
+    final backupPath =
+        recovery?.mediaBackupPath ?? '$mediaPath.pre-sync-$stamp';
     final existed = await folder.exists();
-    final indexPath = _indexPath(docs, client.destinationIdentity);
-    final backupIndexPath = '$indexPath.pre-sync-$stamp';
+    final indexPath = recovery?.mediaIndexPath ??
+        _indexPath(docs, client.destinationIdentity);
+    final backupIndexPath =
+        recovery?.mediaIndexBackupPath ?? '$indexPath.pre-sync-$stamp';
     var moved = false;
     try {
+      await recovery?.markMediaResetStarted();
       if (existed) {
+        await recovery?.markMediaMoveStarted();
         await folder.rename(backupPath);
         moved = true;
+        await recovery?.markMediaMoved();
       }
       await Directory(mediaPath).create(recursive: true);
-      for (final suffix in _sqliteSuffixes) {
-        final indexFile = File('$indexPath$suffix');
-        if (await indexFile.exists()) {
-          await indexFile.rename('$backupIndexPath$suffix');
+      final indexPaths = recovery?.mediaIndexPaths ?? [indexPath];
+      for (final rootPath in indexPaths) {
+        for (final suffix in _sqliteSuffixes) {
+          final indexFile = File('$rootPath$suffix');
+          if (await indexFile.exists()) {
+            final targetPath =
+                recovery?.mediaIndexBackupPathFor(indexFile.path) ??
+                    '$rootPath.pre-sync-$stamp$suffix';
+            await recovery?.markMediaIndexFileMoveStarted(indexFile.path);
+            await indexFile.rename(targetPath);
+            await recovery?.markMediaIndexFileMoved(indexFile.path);
+          }
         }
       }
       await _deleteSqliteFiles(indexPath);
@@ -394,6 +409,7 @@ class AnkiMediaSync {
         backupIndexPath: backupIndexPath,
       );
     } catch (_) {
+      if (recovery != null) rethrow;
       if (moved) {
         final current = Directory(mediaPath);
         if (await current.exists()) await current.delete(recursive: true);
@@ -483,9 +499,7 @@ class AnkiMediaSync {
         throw const AnkiSyncException('本地媒体文件名不符合 Anki 同步规则，请先重命名后重试同步');
       }
       if (length == 0 || length > _maxMediaFileBytes) {
-        throw const AnkiSyncException(
-          '本地媒体文件为空或超过 100 MB，请修复后重试同步',
-        );
+        throw const AnkiSyncException('本地媒体文件为空或超过 100 MB，请修复后重试同步');
       }
       final bytes = await entity.readAsBytes();
       final hash = sha1.convert(bytes).toString();

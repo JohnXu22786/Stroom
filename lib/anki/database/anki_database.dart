@@ -14,6 +14,7 @@ import 'grave_dao.dart';
 import 'col_dao.dart';
 import '../models/note.dart';
 import '../../services/storage_service.dart';
+import '../sync/anki_full_download_recovery.dart';
 
 /// Manages the SQLite connection to collection.anki2.
 ///
@@ -78,6 +79,7 @@ class AnkiDatabase {
   Future<void> _open() async {
     final dir =
         _overridePath ?? (await getApplicationDocumentsDirectory()).path;
+    await AnkiFullDownloadRecovery.recoverIfNeeded(dir);
     final dbPath = p.join(dir, 'collection.anki2');
     final openedDb = await openDatabase(
       dbPath,
