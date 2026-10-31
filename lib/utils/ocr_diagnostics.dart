@@ -253,6 +253,7 @@ class OcrDiagnosticSnapshot {
     final safeExcludedValues = <String>{
       ...excludedValues,
       ...credentialValuesFromHeaders(source['headers']),
+      ..._credentialValuesFromBody(source['data']),
     };
     final data = source['data'];
     final safeRequestId = includeRequestId
