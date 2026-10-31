@@ -18,6 +18,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
+import '../utils/user_visible_export_archive.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -400,31 +401,48 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
+      final archiveFiles = <String, Uint8List>{};
+      final exportPaths = <String>{};
+      final selectedFiles = ids
+          .map((id) => records.firstWhere((record) => record.id == id))
+          .toList();
+      validateUserVisibleExportPaths(
+        files: selectedFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+      );
 
-      for (final id in ids) {
-        final file = records.firstWhere((r) => r.id == id);
+      for (final file in selectedFiles) {
         final data = await ImageManifest.readFile(file.storagePath);
-        if (data == null || data.isEmpty) continue;
+        if (data == null) continue;
 
         final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
 
         if (kIsWeb) {
-          // On web, we save individually; cancelled saves don't count
-          final saved = await saveFileWithType(
-            dialogTitle: '导出图片',
-            fileName: exportName,
-            extensions: [file.format],
-            bytes: data,
-            initialDirectory: SystemPickDirectories.pictures(),
-          );
-          // 用户取消保存时不计数
-          if (saved == null) continue;
+          archiveFiles[relativePath] = data;
         } else {
-          // Native: write directly to the selected directory
-          final outputPath = p.join(outputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsBytes(data);
         }
         exportedCount++;
+      }
+
+      if (kIsWeb && exportedCount > 0) {
+        final saved = await saveFileWithType(
+          dialogTitle: '导出图片',
+          fileName: '图片导出.zip',
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(files: archiveFiles),
+          initialDirectory: SystemPickDirectories.pictures(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
       }
 
       // Web 端全部保存被取消时返回 null（与原生端取消目录选择一致，
@@ -467,9 +485,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content: const Text(
-              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
-            ),
+            content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -479,7 +495,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               ElevatedButton(
                 key: const Key('fm_web_export_individual_btn'),
                 onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                child: const Text('逐个导出文件'),
+                child: const Text('下载 ZIP 文件'),
               ),
             ],
           ),
@@ -487,9 +503,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
         if (action != 'exportFiles' || !mounted) return null;
 
-        // Export all files in the folders one by one via save-file dialog
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
+        final archiveFiles = <String, Uint8List>{};
+        final exportPaths = <String>{};
         for (final folderName in names) {
           final folderFiles = records
               .where(
@@ -500,23 +517,39 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               .toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
-            if (data == null || data.isEmpty) continue;
+            if (data == null) continue;
             final exportName = '${file.name}.${file.format}';
-            // 用户取消保存时不计数
-            final saved = await saveFileWithType(
-              dialogTitle: '导出图片',
-              fileName: exportName,
-              extensions: [file.format],
-              bytes: data,
-              initialDirectory: SystemPickDirectories.pictures(),
-            );
-            if (saved == null) continue;
+            final relativePath = p.posix.join(file.folder, exportName);
+            if (!exportPaths.add(relativePath)) {
+              throw StateError('导出路径重复: $relativePath');
+            }
+            archiveFiles[relativePath] = data;
             exportedCount++;
           }
         }
+        exportedCount = archiveFiles.length;
         // 全部保存被取消时返回 null（保持选择模式不退出），
         // 且不显示「已导出 0 个文件」提示
-        if (exportedCount == 0) return null;
+        final saved = await saveFileWithType(
+          dialogTitle: '导出图片文件夹',
+          fileName: '图片文件夹导出.zip',
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(
+            files: archiveFiles,
+            folders: {
+              ...names,
+              ...ref
+                  .read(imageFolderListProvider)
+                  .where((folder) => names.any(
+                        (name) =>
+                            folder == name || folder.startsWith('$name/'),
+                      )),
+            },
+          ),
+          initialDirectory: SystemPickDirectories.pictures(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -541,27 +574,44 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
+      final exportPaths = <String>{};
 
-      for (final folderName in names) {
-        // 包含所有后代文件夹中的文件，完整保留层级
-        final folderFiles = records
-            .where(
-              (r) =>
-                  r.folder == folderName || r.folder.startsWith('$folderName/'),
-            )
-            .toList();
+      final selectedFolders = <String>{
+        ...names,
+        ...ref.read(imageFolderListProvider).where((folder) => names.any(
+              (name) => folder == name || folder.startsWith('$name/'),
+            )),
+      };
+      final folderFiles = records
+          .where((record) => names.any(
+                (name) =>
+                    record.folder == name || record.folder.startsWith('$name/'),
+              ))
+          .toList();
+      validateUserVisibleExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        folders: selectedFolders,
+      );
+      for (final folderName in selectedFolders) {
+        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+      }
 
-        for (final file in folderFiles) {
+      for (final file in folderFiles) {
           final data = await ImageManifest.readFile(file.storagePath);
-          if (data == null || data.isEmpty) continue;
+          if (data == null) continue;
 
           final exportName = '${file.name}.${file.format}';
+          final relativePath = p.posix.join(file.folder, exportName);
+          if (!exportPaths.add(relativePath)) {
+            throw StateError('导出路径重复: $relativePath');
+          }
           final fileDir = p.join(outputDir, file.folder);
           await Directory(fileDir).create(recursive: true);
           final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsBytes(data);
           exportedCount++;
-        }
       }
 
       if (mounted) {

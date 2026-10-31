@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../utils/batch_rename.dart';
@@ -8,6 +9,7 @@ import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/natural_sort.dart';
 import '../utils/sort_config.dart';
+import '../utils/user_visible_export_archive.dart';
 import 'batch_rename_dialog.dart';
 import 'batch_rename_run_dialog.dart';
 import 'file_manager_config.dart';
@@ -184,6 +186,10 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<String?> Function(List<String> names, String targetDirectory)?
       onExportFolders;
 
+  /// Builds the exported logical path when it differs from the stored record
+  /// name, such as audio whose actual format is detected from its bytes.
+  final Future<String> Function(T record)? userVisibleExportPathBuilder;
+
   /// 单个文件夹导出。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
   final Future<String?> Function(String name)? onExportFolder;
@@ -234,6 +240,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onExportFile,
     this.onExportFiles,
     this.onExportFolders,
+    this.userVisibleExportPathBuilder,
     this.onExportFolder,
     required this.onRenameFolder,
     required this.onMoveFolder,
@@ -1967,6 +1974,32 @@ class _FileManagerViewState<T extends FileRecord>
       fileIds,
       topLevelFolders,
     );
+
+    if (!kIsWeb && adjustedFileIds.isNotEmpty && topLevelFolders.isNotEmpty) {
+      final selectedFiles = widget.sortedRecords.where(
+        (record) => adjustedFileIds.contains(record.id),
+      ).toList();
+      final filePaths = <String>[];
+      for (final file in selectedFiles) {
+        filePaths.add(
+          await widget.userVisibleExportPathBuilder?.call(file) ??
+              (file.folder.isEmpty
+                  ? '${file.name}.${file.format}'
+                  : '${file.folder}/${file.name}.${file.format}'),
+        );
+      }
+      try {
+        validateUserVisibleExportPaths(
+          files: filePaths,
+          folders: topLevelFolders,
+        );
+      } on StateError {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('所选文件与文件夹的导出路径冲突')),
+          );
+          return;
+      }
+    }
 
     // 第一次导出选择的目录会传递给后续导出，
     // 避免混合选择（文件+文件夹）时弹出两次目录选择
