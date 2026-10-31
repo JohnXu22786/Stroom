@@ -219,7 +219,11 @@ void main() {
             .cast<Map<String, dynamic>>()
             .single;
     final persistedDiagnostics = jsonEncode(persistedTask);
-    expect(persistedDiagnostics, contains('req-ocr-123'));
+    expect(persistedTask['status'], 'completed');
+    expect(persistedTask['steps'], isNotEmpty);
+    expect(persistedTask.containsKey('rawRequest'), isFalse);
+    expect(persistedTask.containsKey('rawResponse'), isFalse);
+    expect(persistedDiagnostics, isNot(contains('req-ocr-123')));
     expect(persistedDiagnostics, isNot(contains('opaque-test-api-secret-83')));
     expect(persistedDiagnostics, isNot(contains('data:image')));
     expect(persistedDiagnostics, isNot(contains('choices')));

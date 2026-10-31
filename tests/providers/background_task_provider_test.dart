@@ -1292,6 +1292,172 @@ void main() {
     );
 
     test(
+      'legacy Authorization masks do not alter natural retry instructions',
+      () {
+        const instruction = 'Please keep secrets private';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-secrets-with-masked-authorization',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('secret…')));
+        expect(persisted, isNot(contains('rawRequest')));
+      },
+    );
+
+    test(
+      'legacy Authorization value matching a natural plural is redacted',
+      () {
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-secret-is-credential',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secrets'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Please keep secrets private'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          isNot('Please keep secrets private'),
+        );
+        expect(jsonEncode(task.retryData), isNot(contains('secrets')));
+        expect(persisted, isNot(contains('Bearer secrets')));
+      },
+    );
+
+    test(
+      'legacy Authorization values with internal ellipses are redacted',
+      () {
+        for (final apiKey in ['custom-auth-7391', 'custom-...-auth-7391']) {
+          final instruction = 'Please use $apiKey for this receipt';
+          final task = BackgroundTask.fromMap({
+            'id': 'legacy-ocr-auth-echo-is-not-retried',
+            'type': 'ocr',
+            'title': 'failed OCR task',
+            'status': 'failed',
+            'error': 'request failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'rawRequest': {
+              'url': 'https://api.example.com/v1/chat/completions',
+              'headers': {'Authorization': apiKey},
+              'body': {
+                'model': 'vision-model',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {'type': 'text', 'text': instruction},
+                    ],
+                  },
+                ],
+              },
+            },
+          });
+          final retryInstruction =
+              OcrRetrySnapshot.fromMap(task.retryData!).instructionContent;
+          final persisted = jsonEncode(task.toMap());
+
+          expect(retryInstruction, isNot(contains(apiKey)));
+          expect(persisted, isNot(contains(apiKey)));
+        }
+      },
+    );
+
+    test(
+      'failed OCR task persistence omits request and response diagnostics',
+      () {
+        const apiKey = 'persisted-ocr-api-key-7391';
+        const instruction = 'Please keep secrets private';
+        final retryData = OcrRetrySnapshot.capture(
+          configId: 'provider-config',
+          modelId: 'vision-model-record',
+          images: const [],
+          instructionContent: instruction,
+        ).toMap();
+        final task = BackgroundTask(
+          id: 'failed-ocr-diagnostics-are-not-persisted',
+          type: BackgroundTaskType.ocr,
+          title: 'failed OCR task',
+          status: TaskStatus.failed,
+          error: 'OCR request failed',
+          createdAt: DateTime(2025, 1, 1),
+          completedAt: DateTime(2025, 1, 1, 0, 1),
+          steps: const [
+            BgTaskStep(label: '识别', status: BgStepStatus.failed),
+          ],
+          retryData: retryData,
+          rawRequest: {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {'prompt': instruction},
+          },
+          rawResponse: {
+            'statusCode': 401,
+            'body': {'error': 'invalid $apiKey'},
+          },
+        );
+        final serialized = task.toMap();
+        final persisted = jsonEncode(serialized);
+
+        expect(serialized['status'], TaskStatus.failed.name);
+        expect(serialized['error'], 'OCR request failed');
+        expect(serialized['steps'], isNotEmpty);
+        expect(
+          OcrRetrySnapshot.fromMap(
+            serialized['retryData'] as Map<String, dynamic>,
+          ).instructionContent,
+          instruction,
+        );
+        expect(serialized.containsKey('rawRequest'), isFalse);
+        expect(serialized.containsKey('rawResponse'), isFalse);
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
       'legacy OCR migration omits model IDs matching an auth credential',
       () {
         const apiKey = 'opaque-provider-secret-value-92';
@@ -3026,6 +3192,82 @@ void main() {
         expect(serializedRetryData['instructionContent'], sanitizedInstruction);
         expect(persisted, isNot(contains(apiKey)));
         expect(persisted, contains('read the receipt total carefully'));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves receipt use context around echoed keys',
+      () {
+        const apiKey = 'secret123456';
+        const instruction = 'Use $apiKey for this receipt';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-use-receipt-instruction-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Use [redacted] for this receipt',
+        );
+        expect(persisted, contains('Use [redacted] for this receipt'));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves text boundaries around echoed keys',
+      () {
+        const apiKey = 'secret123456';
+        const instruction = 'Use $apiKey to process\u0000this image';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-use-instruction-key-echo-nul-boundary',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Use [redacted] to process this image',
+        );
+        expect(persisted, contains('Use [redacted] to process this image'));
+        expect(persisted, isNot(contains(apiKey)));
       },
     );
 
@@ -5876,6 +6118,57 @@ void main() {
               },
             });
 
+        final embeddedNulPromptTask = taskFor(
+          'legacy-ocr-embedded-nul-in-text-part',
+          ['Read\u0000the receipt total carefully'],
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulPromptTask.retryData!,
+          ).instructionContent,
+          safePrompt,
+        );
+
+        final embeddedNulCredentialTask = taskFor(
+          'legacy-ocr-embedded-nul-in-masked-secret-echo',
+          ['Use se\u0000cret123456789 to process this image'],
+          credentialPrefix: 'secret',
+        );
+        final embeddedNulCredentialPersisted =
+            jsonEncode(embeddedNulCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulCredentialTask.retryData!,
+          ).instructionContent,
+          'Use [redacted] to process this image',
+        );
+        expect(
+          embeddedNulCredentialPersisted,
+          isNot(contains('secret123456789')),
+        );
+
+        final embeddedNulSplitCredentialTask = taskFor(
+          'legacy-ocr-embedded-nul-split-across-text-parts',
+          [
+            safePrompt,
+            'Use se\u0000',
+            'cret123456789 to process this image',
+          ],
+          credentialPrefix: 'secret',
+        );
+        final embeddedNulSplitCredentialPersisted =
+            jsonEncode(embeddedNulSplitCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            embeddedNulSplitCredentialTask.retryData!,
+          ).instructionContent,
+          isNull,
+        );
+        expect(
+          embeddedNulSplitCredentialPersisted,
+          isNot(contains('secret123456789')),
+        );
+
         final echoedKeyTask = taskFor('legacy-ocr-short-prefix-echoed-key', [
           safePrompt,
           'Use $apiKey to process this image',
@@ -6047,14 +6340,158 @@ void main() {
           OcrRetrySnapshot.fromMap(
             secretPluralTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nPlease keep [redacted] private',
+          '$safePrompt\n$secretPluralPrompt',
         );
         expect(secretPluralPersisted, contains(safePrompt));
         expect(
           secretPluralPersisted,
+          contains(secretPluralPrompt),
+        );
+        expect(secretPluralPersisted, isNot(contains('[redacted] private')));
+
+        const echoedExactCredential = 'testCredential123456789';
+        final secretPluralWithExactCredential = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-plural-with-exact-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer $echoedExactCredential'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': safePrompt},
+                    {
+                      'type': 'text',
+                      'text':
+                          '$secretPluralPrompt. Use $echoedExactCredential for this receipt',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final secretPluralWithExactCredentialPersisted = jsonEncode(
+          secretPluralWithExactCredential.toMap(),
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralWithExactCredential.retryData!,
+          ).instructionContent,
+          safePrompt,
+        );
+        expect(
+          secretPluralWithExactCredentialPersisted,
+          contains(safePrompt),
+        );
+        expect(
+          secretPluralWithExactCredentialPersisted,
+          isNot(contains(echoedExactCredential)),
+        );
+
+        const secretPluralSafePrompt = 'Please keep secrets safe';
+        final secretPluralSafeTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-safe',
+          [safePrompt, secretPluralSafePrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralSafeTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralSafePrompt',
+        );
+
+        const secretPluralPronounPrompt = 'Please keep secrets to yourself';
+        final secretPluralPronounTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-pronoun',
+          [safePrompt, secretPluralPronounPrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralPronounTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralPronounPrompt',
+        );
+
+        const secretPluralIdiomPrompt = 'Please keep secrets under wraps';
+        final secretPluralIdiomTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-idiom',
+          [safePrompt, secretPluralIdiomPrompt],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretPluralIdiomTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\n$secretPluralIdiomPrompt',
+        );
+
+        final splitSecretPluralTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-split-parts',
+          [safePrompt, 'Please keep', 'secrets private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretPluralTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep\nsecrets private',
+        );
+
+        final splitSecretPluralWordTask = taskFor(
+          'legacy-ocr-short-credential-word-natural-plural-split-word',
+          [safePrompt, 'Please keep secret', 's private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretPluralWordTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep secret\ns private',
+        );
+
+        const secretEchoInPrivatePhrase = 'secrets123456789';
+        final secretEchoInPrivatePhraseTask = taskFor(
+          'legacy-ocr-short-credential-word-private-phrase-echo',
+          [safePrompt, 'Please keep $secretEchoInPrivatePhrase private'],
+          credentialPrefix: 'secret',
+        );
+        final secretEchoInPrivatePhrasePersisted =
+            jsonEncode(secretEchoInPrivatePhraseTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            secretEchoInPrivatePhraseTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep [redacted] private',
+        );
+        expect(
+          secretEchoInPrivatePhrasePersisted,
           contains('Please keep [redacted] private'),
         );
-        expect(secretPluralPersisted, isNot(contains('secrets')));
+        expect(
+          secretEchoInPrivatePhrasePersisted,
+          isNot(contains(secretEchoInPrivatePhrase)),
+        );
+
+        final splitSecretEchoTask = taskFor(
+          'legacy-ocr-short-credential-word-private-phrase-split-echo',
+          [safePrompt, 'Please keep secret', 's123456789 private'],
+          credentialPrefix: 'secret',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(
+            splitSecretEchoTask.retryData!,
+          ).instructionContent,
+          '$safePrompt\nPlease keep [redacted]\n private',
+        );
 
         const tokenizationKey = 'tokenization';
         const tokenizationPrompt =
@@ -14957,8 +15394,10 @@ void main() {
       final map = task.toMap();
       final restored = BackgroundTask.fromMap(map);
 
-      expect(restored.rawRequest, {'host': 'api.example.com'});
-      expect(restored.rawResponse, {'statusCode': 400});
+      expect(map, isNot(contains('rawRequest')));
+      expect(map, isNot(contains('rawResponse')));
+      expect(restored.rawRequest, isNull);
+      expect(restored.rawResponse, isNull);
       expect(restored.error, '识别失败');
     });
 
@@ -15208,7 +15647,7 @@ void main() {
       expect(serializedTask['steps'], [
         {'label': 'OCR request', 'status': 'failed', 'error': 'OCR 错误详情已隐藏'},
       ]);
-      expect(persistedSnapshot, contains('req-safe-auth-fallback-123'));
+      expect(persistedSnapshot, isNot(contains('req-safe-auth-fallback-123')));
     });
 
     test('legacy diagnostics fall back after an unsafe request ID field', () {
@@ -15232,7 +15671,7 @@ void main() {
         'statusCode': 503,
         'requestId': 'req-safe-123',
       });
-      expect(jsonEncode(task.toMap()), contains('req-safe-123'));
+      expect(jsonEncode(task.toMap()), isNot(contains('req-safe-123')));
     });
 
     test(
@@ -15263,7 +15702,7 @@ void main() {
           'statusCode': 503,
           'requestId': 'req-safe-after-key',
         });
-        expect(persisted, contains('req-safe-after-key'));
+        expect(persisted, isNot(contains('req-safe-after-key')));
         expect(persisted, isNot(contains(apiKey)));
       },
     );
@@ -15372,7 +15811,7 @@ void main() {
           'statusCode': 503,
           'requestId': safeRequestId,
         });
-        expect(persisted, contains(safeRequestId));
+        expect(persisted, isNot(contains(safeRequestId)));
         expect(persisted, isNot(contains(apiKey)));
       },
     );
@@ -15398,7 +15837,7 @@ void main() {
       final persisted = jsonEncode(task.toMap());
 
       expect(task.rawResponse, {'statusCode': 401, 'requestId': safeRequestId});
-      expect(persisted, contains(safeRequestId));
+      expect(persisted, isNot(contains(safeRequestId)));
       expect(persisted, isNot(contains(apiKey)));
     });
 
