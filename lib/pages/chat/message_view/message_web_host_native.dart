@@ -145,13 +145,15 @@ class _MessageWebHostState extends State<MessageWebHost> {
           mounted &&
           identical(controller, _controller) &&
           !_macDocumentNavigationStarted &&
-          !_macDocumentReady) {
+          !_macDocumentReady &&
+          !_macLoadFailed) {
         final deadline = DateTime.now().add(const Duration(seconds: 10));
         while (DateTime.now().isBefore(deadline) &&
             mounted &&
             identical(controller, _controller) &&
             !_macDocumentNavigationStarted &&
-            !_macDocumentReady) {
+            !_macDocumentReady &&
+            !_macLoadFailed) {
           await Future<void>.delayed(const Duration(milliseconds: 250));
         }
       }
