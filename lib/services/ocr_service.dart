@@ -136,7 +136,7 @@ class OcrRequestTooLargeException implements Exception {
       encodedBytes.toString() +
       ' 字节，超过 ' +
       budgetBytes.toString() +
-      ' 字节上限';
+      ' 字节配置值；请调整 OCR 供应商/模型请求大小设置或图片画质';
 }
 
 class OcrService {
@@ -783,6 +783,9 @@ OcrService createOcrServiceFromConfig({
       model: model,
       typeConfig: typeConfig,
       customParams: customParams,
+      requestSizeBudgetBytes: effectiveOcrRequestSizeBudgetBytes(
+        providerValue: typeConfig['requestSizeBudgetBytes'],
+      ),
     ),
   );
 }

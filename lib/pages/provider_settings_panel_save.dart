@@ -16,6 +16,18 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       return false;
     }
 
+    if (_isOcrType &&
+        _ocrRequestSizeBudgetController.text.trim().isNotEmpty &&
+        ocrRequestSizeBudgetBytesFromMib(
+              _ocrRequestSizeBudgetController.text,
+            ) ==
+            null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请求 JSON 大小必须是大于 0 的 MiB 数值')),
+      );
+      return false;
+    }
+
     // Validate custom params
     final seenNames = <String>{};
     for (final param in _customParams) {
@@ -220,6 +232,12 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       typeConfig['chunking'] = _chunking;
       typeConfig['compression'] = _compression;
       typeConfig['fallbackMethod'] = _fallbackMethod;
+    }
+
+    if (_isOcrType && _ocrRequestSizeBudgetController.text.trim().isNotEmpty) {
+      typeConfig['requestSizeBudgetBytes'] = ocrRequestSizeBudgetBytesFromMib(
+        _ocrRequestSizeBudgetController.text,
+      );
     }
 
     // 保存前规范化：boolean 类型无参数值（清空 options，与模型页一致）

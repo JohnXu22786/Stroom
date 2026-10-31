@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../services/asr_service.dart';
 import '../widgets/code_editor_field.dart';
@@ -87,6 +88,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
   double _maxFileSizeMb = 25.0;
   late final TextEditingController _maxFileSizeController;
+  late final TextEditingController _ocrRequestSizeBudgetController;
 
   // ASR preprocessing & chunking
   String _preprocessing = 'none'; // 'none' | 'resampleMono'
@@ -97,6 +99,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
+  bool get _isOcrType => widget.providerType == 'ocr';
 
   @override
   void initState() {
@@ -145,6 +148,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       }
     }
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
+    final ocrRequestBudget = c.typeConfig['requestSizeBudgetBytes'];
+    _ocrRequestSizeBudgetController = TextEditingController(
+      text: _isOcrType && ocrRequestBudget is num
+          ? (ocrRequestBudget / (1024 * 1024))
+              .toString()
+              .replaceFirst(RegExp(r'\.0$'), '')
+          : '',
+    );
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
@@ -187,6 +198,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _maxTokensController.dispose();
     _seedController.dispose();
     _maxFileSizeController.dispose();
+    _ocrRequestSizeBudgetController.dispose();
     super.dispose();
   }
 

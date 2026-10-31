@@ -1,5 +1,39 @@
-/// Default cap for the UTF-8 encoded JSON sent to an OCR endpoint.
+/// Fallback request-size budget when neither the OCR model nor provider sets one.
 const defaultOcrRequestSizeBudgetBytes = 20 * 1024 * 1024;
+
+/// Request-size configuration is optional at both levels. A model override
+/// takes precedence; otherwise use the provider value and finally the safe
+/// application fallback.
+int effectiveOcrRequestSizeBudgetBytes({
+  dynamic modelValue,
+  dynamic providerValue,
+}) {
+  if (modelValue is num && modelValue.isFinite && modelValue > 0) {
+    final bytes = modelValue.toInt();
+    if (bytes > 0) return bytes;
+  }
+  if (providerValue is num && providerValue.isFinite && providerValue > 0) {
+    final bytes = providerValue.toInt();
+    if (bytes > 0) return bytes;
+  }
+  return defaultOcrRequestSizeBudgetBytes;
+}
+
+int? ocrRequestSizeBudgetBytesFromMib(String value) {
+  final mebibytes = double.tryParse(value.trim());
+  if (mebibytes == null || !mebibytes.isFinite || mebibytes <= 0) return null;
+  final byteValue = mebibytes * 1024 * 1024;
+  if (!byteValue.isFinite || byteValue > 9007199254740991) return null;
+  final bytes = byteValue.round();
+  return bytes > 0 ? bytes : null;
+}
+
+String ocrRequestSizeBudgetMib(int bytes) {
+  final mebibytes = bytes / (1024 * 1024);
+  return mebibytes < 0.005
+      ? mebibytes.toStringAsFixed(8)
+      : mebibytes.toStringAsFixed(2);
+}
 
 /// How a selected set of images is submitted to the OCR model.
 enum OcrBatchMode { joint, perImage }
