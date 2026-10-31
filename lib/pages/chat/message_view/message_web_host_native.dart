@@ -24,11 +24,17 @@ class _MessageWebHostState extends State<MessageWebHost> {
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
 
-  bool _trustedDocument(Uri uri) =>
-      uri.path.endsWith('/assets/vendor/dsh_message_view/index.html') &&
-      (defaultTargetPlatform == TargetPlatform.macOS
-          ? uri.scheme == 'https' && uri.host == 'stroom.invalid'
-          : uri.scheme == 'file');
+  bool _trustedDocument(Uri uri) {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      // WKWebView can report about:blank while loading HTML supplied as data.
+      return uri.toString() == 'about:blank' ||
+          (uri.scheme == 'https' &&
+              uri.host == 'stroom.invalid' &&
+              uri.path.endsWith('/assets/vendor/dsh_message_view/index.html'));
+    }
+    return uri.scheme == 'file' &&
+        uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
+  }
 
   @override
   void initState() {
@@ -98,7 +104,11 @@ class _MessageWebHostState extends State<MessageWebHost> {
         },
         onWebViewCreated: (controller) {
           _controller = controller;
-          if (kDebugMode) debugPrint('[MessageWebHost][created]');
+          if (kDebugMode) {
+            debugPrint(
+              '[MessageWebHost][created] platform=$defaultTargetPlatform htmlLength=${widget.html.length}',
+            );
+          }
           controller.addJavaScriptHandler(
             handlerName: 'StroomMessageView',
             callback: (JavaScriptHandlerFunctionData data) {
@@ -153,9 +163,15 @@ JSON.stringify({
           }
           if (mounted && ready == true) widget.onEvent({'type': 'ready'});
         },
-        shouldOverrideUrlLoading: (controller, action) async =>
-            action.request.url != null && _trustedDocument(action.request.url!)
-                ? NavigationActionPolicy.ALLOW
-                : NavigationActionPolicy.CANCEL,
+        shouldOverrideUrlLoading: (controller, action) async {
+          final url = action.request.url;
+          final trusted = url != null && _trustedDocument(url);
+          if (kDebugMode) {
+            debugPrint('[MessageWebHost][navigation] $url trusted=$trusted');
+          }
+          return trusted
+              ? NavigationActionPolicy.ALLOW
+              : NavigationActionPolicy.CANCEL;
+        },
       );
 }
