@@ -71,7 +71,7 @@ class OcrDiagnosticSnapshot {
     caseSensitive: false,
   );
   static final _credentialQueryParameter = RegExp(
-    r'(?:(?:api|access|private|secret|subscription|client)[_-]?key|(?:^|[-_.])key(?:$|[-_.])|(?:^|[-_.])(?:access|refresh|id)?[_-]?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?(?:$|[-_.])|(?:^|[-_.])(?:client[_-]?)?secret(?:$|[-_.])|(?:^|[-_.])(?:pass(?:word|phrase)?|passwd|credentials?|cookie|signature|sig|jwt)(?:$|[-_.]))',
+    r'(?:(?:api|access|private|secret(?:[_-]?access)?|subscription|client)[_-]?key|(?:^|[-_.])key(?:$|[-_.])|(?:^|[-_.])(?:access|refresh|id)?[_-]?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?(?:$|[-_.])|(?:^|[-_.])(?:client[_-]?)?secret(?:$|[-_.])|(?:^|[-_.])(?:pass(?:word|phrase)?|passwd|credentials?|cookie|signature|sig|jwt)(?:$|[-_.]))',
     caseSensitive: false,
   );
 

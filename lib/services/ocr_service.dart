@@ -171,13 +171,20 @@ class OcrService {
   String? _lastErrorType;
 
   /// Safe diagnostic maps for task persistence and the error detail view.
+  List<String> get _diagnosticRequestCredentialValues =>
+      OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': lastRequestHeaders,
+        'url': lastRequestUrl,
+        'body': lastRequestBody,
+      });
+
   Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
         url: lastRequestUrl,
         imageCount: _lastImageCount,
         imageBytes: _lastImageBytes,
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
-        excludedValues: [config.apiKey],
+        excludedValues: [config.apiKey, ..._diagnosticRequestCredentialValues],
       );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
@@ -189,10 +196,7 @@ class OcrService {
         errorType: _lastErrorType ?? error?.runtimeType.toString(),
         headers: lastResponseHeaders,
         data: lastResponseData,
-        excludedValues: {
-          config.apiKey,
-          ...OcrDiagnosticSnapshot.credentialValuesFromUrl(lastRequestUrl),
-        },
+        excludedValues: [config.apiKey, ..._diagnosticRequestCredentialValues],
       );
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
