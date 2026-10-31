@@ -95,6 +95,26 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ..._buildOverrideRuleSection(cs),
+          if (_isOcrType) ...[
+            TextField(
+              key: const Key('ocr_provider_request_size_budget_mib'),
+              controller: _ocrRequestSizeBudgetController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: '请求 JSON 大小默认值',
+                hintText: '留空则使用应用默认值',
+                suffixText: 'MiB',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '模型可单独设置覆盖值；此处未设置且模型也未设置时，使用 20 MiB 默认值。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 20),
+          ],
           if (_isAsrType) ...[
             ..._buildAsrUploadSection(cs),
             const SizedBox(height: 32),

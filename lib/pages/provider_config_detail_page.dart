@@ -270,10 +270,18 @@ class _ProviderConfigDetailPageState
         }
       case ModelConfigStyle.ocr:
         {
+          final providerRequestSizeBudget =
+              _config?.typeConfig['requestSizeBudgetBytes'];
           final result = await Navigator.push<ModelConfig>(
             context,
             MaterialPageRoute(
-              builder: (_) => const OcrModelConfigPage(),
+              builder: (_) => OcrModelConfigPage(
+                providerRequestSizeBudgetBytes:
+                    providerRequestSizeBudget is num &&
+                            providerRequestSizeBudget > 0
+                        ? providerRequestSizeBudget.toInt()
+                        : null,
+              ),
             ),
           );
           if (result != null && mounted) {
@@ -445,6 +453,8 @@ class _ProviderConfigDetailPageState
         }
       case ModelConfigStyle.ocr:
         {
+          final providerRequestSizeBudget =
+              _config?.typeConfig['requestSizeBudgetBytes'];
           if (_isExistingConfig) {
             final config = _config;
             if (config == null ||
@@ -458,6 +468,11 @@ class _ProviderConfigDetailPageState
               MaterialPageRoute(
                 builder: (_) => OcrModelConfigPage(
                   model: config.models[modelIndex].copy(),
+                  providerRequestSizeBudgetBytes:
+                      providerRequestSizeBudget is num &&
+                              providerRequestSizeBudget > 0
+                          ? providerRequestSizeBudget.toInt()
+                          : null,
                 ),
               ),
             );
@@ -471,6 +486,11 @@ class _ProviderConfigDetailPageState
               MaterialPageRoute(
                 builder: (_) => OcrModelConfigPage(
                   model: _pendingModels[modelIndex].copy(),
+                  providerRequestSizeBudgetBytes:
+                      providerRequestSizeBudget is num &&
+                              providerRequestSizeBudget > 0
+                          ? providerRequestSizeBudget.toInt()
+                          : null,
                 ),
               ),
             );

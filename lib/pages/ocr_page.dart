@@ -45,6 +45,7 @@ class _ModelOption {
   final String providerName;
   final String host;
   final String apiKey;
+  final int requestSizeBudgetBytes;
   const _ModelOption(
     this.model,
     this.configId,
@@ -52,6 +53,7 @@ class _ModelOption {
     this.providerName,
     this.host,
     this.apiKey,
+    this.requestSizeBudgetBytes,
   );
 }
 
@@ -69,6 +71,10 @@ List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
         e.config.providerName,
         e.config.host,
         e.config.key,
+        effectiveOcrRequestSizeBudgetBytes(
+          modelValue: e.model.typeConfig['requestSizeBudgetBytes'],
+          providerValue: e.config.typeConfig['requestSizeBudgetBytes'],
+        ),
       ),
   ];
 }
@@ -205,8 +211,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   final List<SelectedImage> _selectedImages = [];
   late List<OcrPageOutcome> _retryPageOutcomes;
-  final TextEditingController _requestSizeBudgetMiBController =
-      TextEditingController(text: '20');
+  int? _retryRequestSizeBudgetBytes;
   OcrBatchMode _batchMode = OcrBatchMode.joint;
   int _perImageConcurrency = 1;
   bool _isProcessing = false;
@@ -346,7 +351,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   @override
   void dispose() {
-    _requestSizeBudgetMiBController.dispose();
     super.dispose();
   }
 
@@ -355,6 +359,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final data = widget.retryData;
     if (data == null) return;
     final snapshot = OcrRetrySnapshot.fromMap(data);
+    _retryRequestSizeBudgetBytes = snapshot.requestSizeBudgetBytes;
     _retryImageCountUnknown = snapshot.imageEntryCount == 0;
     _saveFolder = snapshot.saveFolder;
 
@@ -422,10 +427,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _batchMode =
           _hasReusablePageResults ? OcrBatchMode.perImage : snapshot.batchMode;
       _perImageConcurrency = snapshot.perImageConcurrency;
-      _requestSizeBudgetMiBController.text =
-          (snapshot.requestSizeBudgetBytes / (1024 * 1024))
-              .toString()
-              .replaceFirst(RegExp(r'\.0$'), '');
       _isRetryImagesLoading = false;
       _retryImagesUnavailable = !canUseRestoredImages;
       _retryImageCountUnknown =
@@ -515,11 +516,40 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         title: const Text('文字识别'),
         centerTitle: true,
         actions: [
-          IconButton(
-            key: const Key('ocr_request_budget_mib'),
-            tooltip: '请求 JSON 上限：${_requestSizeBudgetMiBController.text} MiB',
-            onPressed: _isProcessing ? null : _editRequestSizeBudget,
-            icon: const Icon(Icons.data_usage_outlined),
+          PopupMenuButton<bool>(
+            key: const Key('ocr_page_settings'),
+            tooltip: '图片画质设置',
+            enabled: !_isProcessing,
+            onSelected: (useOriginal) =>
+                setState(() => _useOriginalImageQuality = useOriginal),
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem<bool>(
+                value: false,
+                checked: !_useOriginalImageQuality,
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('标准画质'),
+                    Text('压缩尺寸，适合多数情况', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              CheckedPopupMenuItem<bool>(
+                value: true,
+                checked: _useOriginalImageQuality,
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('原图 / 高细节'),
+                    Text('保留更多细节，图片和请求更大',
+                        style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+            icon: const Icon(Icons.settings_outlined),
           ),
           if (_selectedImages.length > 1 &&
               !_isProcessing &&
@@ -562,7 +592,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           // Instruction selector (below the model selector)
           _buildInstructionSelector(cs),
 
-          // Batch mode and encoded request size limit
+          // Batch mode
           _buildBatchOptions(cs),
 
           // Photo source buttons
@@ -675,7 +705,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '识别模型',
+                  '模型',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -725,7 +755,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         child: Row(
           children: [
             Container(
@@ -744,7 +774,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              '识别模型',
+              '模型',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -874,7 +904,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         child: Row(
           children: [
             Container(
@@ -888,7 +918,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              '识别指令',
+              '指令',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -984,10 +1014,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 color: cs.onSurfaceVariant,
               ),
               tooltip: '管理识别指令',
-              // Keep the row height aligned with the model card (the
-              // default 48px tap target would inflate the card).
+              // Keep a usable hit target while matching the model card height.
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               onPressed: _hasReusablePageResults
                   ? null
                   : () {
@@ -1170,29 +1199,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 ),
               ),
             ],
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Tooltip(
-              message: '开启后，系统相机会和相册不限制图片尺寸或 JPEG 质量；应用相册使用原始文件。',
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _useOriginalImageQuality ? '原图 / 高细节' : '标准画质',
-                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                  ),
-                  Switch(
-                    key: const Key('ocr_high_detail_switch'),
-                    value: _useOriginalImageQuality,
-                    onChanged: _isProcessing
-                        ? null
-                        : (value) =>
-                            setState(() => _useOriginalImageQuality = value),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -2310,92 +2316,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // OCR Processing
   // ==================================================================
 
-  int? _requestSizeBudgetBytes(String value) {
-    final mebibytes = double.tryParse(value.trim());
-    if (mebibytes == null || !mebibytes.isFinite || mebibytes <= 0) {
-      return null;
-    }
-    final byteValue = mebibytes * 1024 * 1024;
-    if (!byteValue.isFinite || byteValue > 9007199254740991) return null;
-    final bytes = byteValue.round();
-    return bytes > 0 ? bytes : null;
-  }
-
-  String _formatRequestSizeMib(int bytes) {
-    final mebibytes = bytes / (1024 * 1024);
-    return mebibytes < 0.005
-        ? mebibytes.toStringAsFixed(8)
-        : mebibytes.toStringAsFixed(2);
-  }
-
-  Future<void> _editRequestSizeBudget() async {
-    final previousValue = _requestSizeBudgetMiBController.text;
-    var invalidInput = false;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('请求大小上限'),
-          content: TextField(
-            key: const Key('ocr_request_budget_editor_mib'),
-            controller: _requestSizeBudgetMiBController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'JSON 请求上限',
-              suffixText: 'MiB',
-              border: const OutlineInputBorder(),
-              errorText: invalidInput ? '请输入大于 0 的 MiB 数值' : null,
-            ),
-            onChanged: (_) {
-              if (invalidInput) setDialogState(() => invalidInput = false);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              key: const Key('ocr_save_request_budget'),
-              onPressed: () {
-                if (_requestSizeBudgetBytes(
-                      _requestSizeBudgetMiBController.text,
-                    ) ==
-                    null) {
-                  setDialogState(() => invalidInput = true);
-                  return;
-                }
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted) return;
-    if (accepted != true) {
-      _requestSizeBudgetMiBController.text = previousValue;
-      return;
-    }
-    setState(() => _errorMessage = null);
-  }
-
   Future<int?> _preflightRequestSize(
     OcrConfig config,
     List<SelectedImage> images,
   ) async {
-    final initialBudgetBytes = _requestSizeBudgetBytes(
-      _requestSizeBudgetMiBController.text,
-    );
-    if (initialBudgetBytes == null) {
-      if (mounted) {
-        setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
-      }
-      return null;
-    }
-    var budgetBytes = initialBudgetBytes;
-
+    final budgetBytes = config.requestSizeBudgetBytes;
     final imageBytesList =
         images.map((image) => (image.bytes, image.format)).toList();
     final reusablePageIndices = _retryPageOutcomes
@@ -2434,8 +2359,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       if (encodedBytes <= budgetBytes) return budgetBytes;
-      final budgetBeforeDialog = _requestSizeBudgetMiBController.text;
-      final choice = await _showRequestSizeLimitDialog(
+      final switchToPerImage = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
         canSwitchToPerImage: _batchMode == OcrBatchMode.joint &&
@@ -2443,85 +2367,43 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             !_hasReusablePageResults,
       );
       if (!mounted) return null;
-      if (choice == null) {
-        _requestSizeBudgetMiBController.text = budgetBeforeDialog;
-        setState(() => _errorMessage = '本次识别已取消；可切换识别方式或提高请求上限后重试。');
+      if (switchToPerImage != true) {
+        setState(() => _errorMessage = '本次识别已取消；请调整供应商/模型请求大小或图片画质后重试。');
         return null;
       }
-      if (choice.$1) {
-        final updatedBudget = _requestSizeBudgetBytes(choice.$2 ?? '');
-        if (updatedBudget == null) {
-          setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
-          return null;
-        }
-        _requestSizeBudgetMiBController.text = choice.$2!.trim();
-        budgetBytes = updatedBudget;
-        setState(() {
-          _batchMode = OcrBatchMode.perImage;
-          _errorMessage = null;
-        });
-        continue;
-      }
-
-      final updatedBudget = _requestSizeBudgetBytes(choice.$2 ?? '');
-      if (updatedBudget == null) {
-        setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
-        return null;
-      }
-      _requestSizeBudgetMiBController.text = choice.$2!.trim();
-      budgetBytes = updatedBudget;
+      setState(() {
+        _batchMode = OcrBatchMode.perImage;
+        _errorMessage = null;
+      });
     }
     return null;
   }
 
-  Future<(bool, String?)?> _showRequestSizeLimitDialog({
+  Future<bool?> _showRequestSizeLimitDialog({
     required int encodedBytes,
     required int budgetBytes,
     required bool canSwitchToPerImage,
   }) async {
-    var invalidInput = false;
-    return await showDialog<(bool, String?)>(
+    return await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('OCR 请求超过大小上限'),
+      builder: (dialogContext) => AlertDialog(
+          title: const Text('OCR 请求大小超过配置值'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 '当前 JSON 请求约为 ' +
-                    _formatRequestSizeMib(encodedBytes) +
+                    ocrRequestSizeBudgetMib(encodedBytes) +
                     ' MiB，超过 ' +
-                    _formatRequestSizeMib(budgetBytes) +
-                    ' MiB 上限。',
+                    ocrRequestSizeBudgetMib(budgetBytes) +
+                    ' MiB 配置值。',
               ),
               const SizedBox(height: 12),
-              TextField(
-                key: const Key('ocr_request_budget_dialog_mib'),
-                controller: _requestSizeBudgetMiBController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: '新上限',
-                  suffixText: 'MiB',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (_) {
-                  if (invalidInput) {
-                    setDialogState(() => invalidInput = false);
-                  }
-                },
+              const Text(
+                '可在供应商默认设置或模型覆盖值中调整请求大小，也可以切换图片画质。'
+                '更改画质后，请清空并重新导入图片。',
               ),
-              if (invalidInput)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text(
-                    '请输入大于 0 的 MiB 数值',
-                    style: TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ),
             ],
           ),
           actions: [
@@ -2529,43 +2411,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               TextButton(
                 key: const Key('ocr_switch_to_per_image'),
                 onPressed: () {
-                  if (_requestSizeBudgetBytes(
-                        _requestSizeBudgetMiBController.text,
-                      ) ==
-                      null) {
-                    setDialogState(() => invalidInput = true);
-                    return;
-                  }
-                  Navigator.pop(dialogContext, (
-                    true,
-                    _requestSizeBudgetMiBController.text.trim(),
-                  ));
+                  Navigator.pop(dialogContext, true);
                 },
                 child: const Text('改用逐张识别'),
               ),
             TextButton(
-              key: const Key('ocr_change_request_budget'),
-              onPressed: () {
-                if (_requestSizeBudgetBytes(
-                      _requestSizeBudgetMiBController.text,
-                    ) ==
-                    null) {
-                  setDialogState(() => invalidInput = true);
-                  return;
-                }
-                Navigator.pop(dialogContext, (
-                  false,
-                  _requestSizeBudgetMiBController.text.trim(),
-                ));
-              },
-              child: const Text('更改上限'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('知道了'),
             ),
           ],
-        ),
       ),
     );
   }
@@ -2725,20 +2579,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _selectedModelIndex = requestModelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
-    final requestSizeBudgetBytes = _requestSizeBudgetBytes(
-      _requestSizeBudgetMiBController.text,
-    );
-    if (requestSizeBudgetBytes == null) {
-      if (mounted) {
-        setState(() {
-          _ocrStarting = false;
-          _isProcessing = false;
-          _isPreparingRetryData = false;
-          _errorMessage = '请求上限必须是大于 0 的 MiB 数值';
-        });
-      }
-      return;
-    }
+    final requestSizeBudgetBytes = _retryRequestSizeBudgetBytes ??
+        selectedOption.requestSizeBudgetBytes;
     var effectiveConfig = OcrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,

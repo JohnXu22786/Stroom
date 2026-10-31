@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
@@ -12,8 +13,13 @@ import 'llm_model_config_shared.dart';
 /// 不再按模型设置。
 class OcrModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
+  final int? providerRequestSizeBudgetBytes;
 
-  const OcrModelConfigPage({super.key, this.model});
+  const OcrModelConfigPage({
+    super.key,
+    this.model,
+    this.providerRequestSizeBudgetBytes,
+  });
 
   @override
   State<OcrModelConfigPage> createState() => _OcrModelConfigPageState();
@@ -23,6 +29,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
+  late final TextEditingController _requestSizeBudgetController;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
@@ -55,6 +62,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
+      if (_requestSizeBudgetController.text.isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
       return false;
@@ -84,6 +92,15 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
         _maxTokensController.text) {
+      return true;
+    }
+    final originalRequestBudget = m.typeConfig['requestSizeBudgetBytes'];
+    final originalRequestBudgetText = originalRequestBudget is num
+        ? (originalRequestBudget / (1024 * 1024))
+            .toString()
+            .replaceFirst(RegExp(r'\.0$'), '')
+        : '';
+    if (originalRequestBudgetText != _requestSizeBudgetController.text) {
       return true;
     }
     // Custom params (simple check via serialization)
@@ -116,6 +133,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       text: maxTokens != null ? maxTokens.toString() : '',
     );
     _maxTokensController.addListener(_handleControllerChanged);
+    final requestSizeBudgetBytes = m?.typeConfig['requestSizeBudgetBytes'];
+    _requestSizeBudgetController = TextEditingController(
+      text: requestSizeBudgetBytes is num
+          ? (requestSizeBudgetBytes / (1024 * 1024))
+              .toString()
+              .replaceFirst(RegExp(r'\.0$'), '')
+          : '',
+    )..addListener(_handleControllerChanged);
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -133,9 +158,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _nameController.removeListener(_handleControllerChanged);
     _modelIdController.removeListener(_handleControllerChanged);
     _maxTokensController.removeListener(_handleControllerChanged);
+    _requestSizeBudgetController.removeListener(_handleControllerChanged);
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
+    _requestSizeBudgetController.dispose();
     super.dispose();
   }
 
@@ -325,6 +352,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       }
     }
 
+    final requestSizeBudgetText = _requestSizeBudgetController.text.trim();
+    if (requestSizeBudgetText.isNotEmpty) {
+      final budgetBytes = ocrRequestSizeBudgetBytesFromMib(
+        requestSizeBudgetText,
+      );
+      if (budgetBytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请求 JSON 大小必须是大于 0 的 MiB 数值')),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+      typeConfig['requestSizeBudgetBytes'] = budgetBytes;
+    }
+
     // Instructions are now generic (configured on the OCR page, not per
     // model), so nothing instruction-related is written here. However,
     // legacy per-model instructions still stored in the original config
@@ -488,6 +530,27 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               hintText: '如 4096',
               keyboardType: TextInputType.number,
               description: '每次响应最多生成的 token 数',
+            ),
+
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('ocr_model_request_size_budget_mib'),
+              controller: _requestSizeBudgetController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: '请求 JSON 大小覆盖值',
+                hintText: '留空则继承供应商设置',
+                suffixText: 'MiB',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.providerRequestSizeBudgetBytes == null
+                  ? '留空时继承供应商设置；供应商也未设置时使用 20 MiB 默认值。'
+                  : '留空时继承供应商设置（${ocrRequestSizeBudgetMib(widget.providerRequestSizeBudgetBytes!)} MiB）；供应商也未设置时使用 20 MiB 默认值。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
 
             const SizedBox(height: 24),

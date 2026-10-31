@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../../models/ocr_batch_execution.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -151,6 +152,10 @@ Future<String> executeOcrBlock({
           host: config.host,
           apiKey: config.key,
           model: model.modelId,
+          requestSizeBudgetBytes: effectiveOcrRequestSizeBudgetBytes(
+            modelValue: model.typeConfig['requestSizeBudgetBytes'],
+            providerValue: config.typeConfig['requestSizeBudgetBytes'],
+          ),
           typeConfig: model.typeConfig,
           customParams: model.customParams,
         ),
