@@ -52,7 +52,8 @@ void chatStreamManagerGroup2() {
       final manager = ChatStreamManager();
       final provider = _MockProvider([
         [AIStreamEvent('partial answer')],
-      ])..throwAfterYield = true;
+      ])
+        ..throwAfterYield = true;
       manager.adapter.forceService(_makeChatService(provider));
 
       final result = await manager.startStreaming(
@@ -77,7 +78,8 @@ void chatStreamManagerGroup2() {
       final manager = ChatStreamManager();
       final provider = _MockProvider([
         [AIStreamEvent('partial reasoning', isReasoning: true)],
-      ])..throwAfterYield = true;
+      ])
+        ..throwAfterYield = true;
       manager.adapter.forceService(_makeChatService(provider));
 
       final result = await manager.startStreaming(
