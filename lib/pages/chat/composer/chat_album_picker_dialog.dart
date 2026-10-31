@@ -81,7 +81,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     final paths = List<String>.of(_tempEditFiles);
     try {
       await Future.wait<void>([
-        for (final path in paths) ?_pendingTempEditWrites[path],
+        for (final path in paths)
+          if (_pendingTempEditWrites.containsKey(path))
+            _pendingTempEditWrites[path]!,
       ]);
     } catch (_) {
       // A failed write can still leave a partial file to remove below.

@@ -115,9 +115,8 @@ void main() {
       tester,
       () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
     );
-    final originalBytes = tester
-        .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
-        .bytes;
+    final originalBytes =
+        tester.widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip)).bytes;
 
     await tester.tap(find.byType(AlbumPreviewChip));
     await tester.pumpAndSettle();
