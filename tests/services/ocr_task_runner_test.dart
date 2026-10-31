@@ -1332,6 +1332,55 @@ void main() {
     }
   });
 
+  test('overlapping partial-result saves publish only one manifest row',
+      () async {
+    notifier.setResult(id, 'owned partial text', isComplete: false);
+    notifier.failTask(id, error: 'incomplete OCR result');
+    await notifier.pendingPersistence;
+
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final task = notifier.state.single;
+    final firstSaver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: task.title,
+      folder: task.resultFolder,
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        if (!writeStarted.isCompleted) writeStarted.complete();
+        await releaseWrite.future;
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+      },
+    );
+    final secondSaver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: task.title,
+      folder: task.resultFolder,
+      onSaved: () {},
+    );
+
+    final firstSave = firstSaver.retryTaskResult(allowPartial: true);
+    final secondSave = secondSaver.retryTaskResult(allowPartial: true);
+    try {
+      await writeStarted.future;
+    } finally {
+      if (!releaseWrite.isCompleted) releaseWrite.complete();
+    }
+
+    await firstSave;
+    await expectLater(secondSave, throwsStateError);
+
+    final records = await TextManifest.loadRecordsUncached();
+    expect(
+      records.where((record) => record.hash ==
+          computeTextHash(Uint8List.fromList(utf8.encode('owned partial text')))),
+      hasLength(1),
+    );
+    expect(notifier.state.single.status, TaskStatus.completed);
+  });
+
   test('cancelling save-only retry preserves an existing shared text file',
       () async {
     final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));

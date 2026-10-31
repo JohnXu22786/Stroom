@@ -3886,14 +3886,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Reopen the save step for a failed OCR task whose result is still present.
-  void startSaveRetry(String taskId) {
+  bool startSaveRetry(String taskId) {
+    final task = taskById(taskId);
+    if (task == null ||
+        task.type != BackgroundTaskType.ocr ||
+        task.status != TaskStatus.failed ||
+        task.result == null) {
+      return false;
+    }
     state = state.map((task) {
-      if (task.id != taskId ||
-          task.type != BackgroundTaskType.ocr ||
-          task.status != TaskStatus.failed ||
-          task.result == null) {
-        return task;
-      }
+      if (task.id != taskId) return task;
       final steps = [...task.steps];
       if (steps.length > 4) {
         steps[4] = steps[4].copyWith(
@@ -3911,6 +3913,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }).toList();
     _persistTasks();
     _syncIosContinuedTask();
+    return true;
   }
 
   /// Set the full step chain for a task.
