@@ -2771,6 +2771,71 @@ void main() {
     );
 
     test(
+      'legacy OCR retry preserves dotted token properties and redacts token echoes',
+      () {
+        const instruction = 'Use configuration.token for request';
+        BackgroundTask legacyTask(String id, String instructionText) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'token…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instructionText},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        final safeTask = legacyTask(
+          'legacy-ocr-dotted-token-property',
+          instruction,
+        );
+        final persistedSafeTask = jsonEncode(safeTask.toMap());
+        final restoredSafeInstruction = OcrRetrySnapshot.fromMap(
+          BackgroundTask.fromMap(
+            jsonDecode(persistedSafeTask) as Map<String, dynamic>,
+          ).retryData!,
+        ).instructionContent;
+
+        final echoTask = legacyTask(
+          'legacy-ocr-token-echoes',
+          'Use token for request\nAuthorization: token',
+        );
+        final persistedEchoTask = jsonEncode(echoTask.toMap());
+        final restoredEchoTask = BackgroundTask.fromMap(
+          jsonDecode(persistedEchoTask) as Map<String, dynamic>,
+        );
+        final restoredEchoInstruction = OcrRetrySnapshot.fromMap(
+          restoredEchoTask.retryData!,
+        ).instructionContent;
+
+        expect(restoredSafeInstruction, contains(instruction));
+        expect(persistedSafeTask, contains(instruction));
+        expect(restoredEchoTask.id, 'legacy-ocr-token-echoes');
+        expect(restoredEchoTask.title, 'legacy OCR request');
+        expect(restoredEchoTask.retryData, isNotNull);
+        expect(
+            restoredEchoInstruction, isNot(contains('Use token for request')));
+        expect(
+            restoredEchoInstruction, isNot(contains('Authorization: token')));
+        expect(persistedEchoTask, isNot(contains('Use token for request')));
+        expect(persistedEchoTask, isNot(contains('Authorization: token')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a short masked prefix embedded in an echoed key',
       () {
         const apiKey = 'xsecretQwrtyPSDF89';

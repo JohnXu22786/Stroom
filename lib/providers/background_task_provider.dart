@@ -890,6 +890,8 @@ bool _legacyOcrHasCredentialUseContext(
         caseSensitive: false,
       ).hasMatch(after) ||
       credentialTargetAfterConsumedConnector;
+  final requestTargetAfterConsumedConnector = suffix.toLowerCase() == 'for' &&
+      RegExp(r'^(?:the )?request\b', caseSensitive: false).hasMatch(after);
   final credentialHeaderTarget = RegExp(
     r'^(?:in(?:to)?|to|for) (?:the )?(?:authorization|auth|api[\s_-]*key|key|token|secret|credential|password)(?: header)(?: value)?\b',
     caseSensitive: false,
@@ -913,7 +915,7 @@ bool _legacyOcrHasCredentialUseContext(
       matchedPrefix == null ? -1 : match.start + matchedPrefix.start;
   final maskPrefixIsEmbedded = absolutePrefixStart > 0 &&
       RegExp(
-        r'[\p{L}\p{M}\p{N}._/+~-]',
+        r'[\p{L}\p{M}\p{N}_/+~-]',
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
   final shortNaturalWordEcho =
@@ -927,6 +929,9 @@ bool _legacyOcrHasCredentialUseContext(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
+      useVerb &&
+      requestTargetAfterConsumedConnector;
   final bareSecretBasedUseContext = useVerb &&
       prefix.toLowerCase() == 'secret' &&
       suffix.toLowerCase() == '-based' &&
@@ -992,6 +997,7 @@ bool _legacyOcrHasCredentialUseContext(
               maskPrefixIsEmbedded) &&
           RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
+      tokenRequestEchoContext ||
       bareSecretBasedUseContext ||
       assignmentContext ||
       setToCredentialContext ||
