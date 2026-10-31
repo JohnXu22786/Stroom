@@ -15,6 +15,7 @@ import '../../../utils/http_timeout.dart';
 import '../../../utils/ocr_image_payload.dart';
 import '../../../utils/ocr_diagnostics.dart';
 import '../../../utils/provider_models.dart';
+import '../../models/flow_payload.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -30,6 +31,14 @@ int _encodedBodyLength(Uint8List imageBytes, String imageFormat) {
   return dataUri + 512; // JSON envelope overhead (model, messages, etc.)
 }
 
+Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
+  final bytes = BytesBuilder(copy: false);
+  await for (final chunk in file.openRead(0, maxBytes + 1)) {
+    bytes.add(chunk);
+  }
+  return bytes.takeBytes();
+}
+
 Future<String> executeOcrBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -43,6 +52,9 @@ Future<String> executeOcrBlock({
 
   /// Allows the response to be held and released in cancellation tests.
   Future<String> Function(Uint8List, String)? requestOcr,
+
+  /// Allows bounded reads to be observed in preflight limit tests.
+  Future<Uint8List> Function(File, int)? readInputBytes,
 
   /// Controlled Dio client for request/response contract tests.
   Dio? ocrDio,
@@ -62,8 +74,8 @@ Future<String> executeOcrBlock({
 
   Uint8List imageBytes;
   String imageFormat;
+  final file = File(input);
   try {
-    final file = File(input);
     if (!await file.exists()) {
       failSubTask(
         bgNotifier,
@@ -79,7 +91,121 @@ Future<String> executeOcrBlock({
         blockTitle: def.label,
       );
     }
-    imageBytes = await file.readAsBytes();
+  } catch (e) {
+    if (e is BlockExecutionException) rethrow;
+    failSubTask(
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '读取文件失败: $e',
+    );
+    throw BlockExecutionException(
+      '读取文件失败',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+
+  // Resolve the configured OCR budget before reading bytes. Estimate the
+  // request with the actual JSON envelope, then apply the flow image ceiling.
+  final selected =
+      resolveProviderModel(providerEntries, 'ocr', block.params['modelRef']);
+  if (selected == null) {
+    failSubTask(
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '未配置OCR模型或模型引用已失效，请重新选择',
+    );
+    throw BlockExecutionException(
+      '未配置OCR模型',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+  final config = selected.config;
+  final model = selected.model;
+  final requestSizeBudgetBytes = effectiveOcrRequestSizeBudgetBytes(
+    modelValue: model.typeConfig['requestSizeBudgetBytes'],
+    providerValue: config.typeConfig['requestSizeBudgetBytes'],
+  );
+  final ocrConfig = OcrConfig(
+    host: config.host,
+    apiKey: config.key,
+    model: model.modelId,
+    requestSizeBudgetBytes: requestSizeBudgetBytes,
+    typeConfig: model.typeConfig,
+    customParams: model.customParams,
+  );
+  final sizeEstimator = OcrService(config: ocrConfig);
+  late final int maxRequestImageBytes;
+  late final int maxReencodedPngBytes;
+  try {
+    maxRequestImageBytes = sizeEstimator.maxRawImageBytesWithinRequestBudget();
+    maxReencodedPngBytes = sizeEstimator.maxRawImageBytesWithinRequestBudget(
+      imageFormat: 'png',
+    );
+  } catch (e) {
+    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          e.toString(),
+          excludedValues: [config.key],
+        ) ??
+        OcrDiagnosticSnapshot.safeTaskError(e, excludedValues: [config.key]);
+    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
+    failSubTask(
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '识别失败: $safeError',
+    );
+    throw BlockExecutionException(
+      safeError,
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  } finally {
+    sizeEstimator.close();
+  }
+  final maxInputBytes = maxRequestImageBytes < maxFlowImageInputBytes
+      ? maxRequestImageBytes
+      : maxFlowImageInputBytes;
+
+  BlockExecutionException oversizedInputException() {
+    final limitLabel = maxRequestImageBytes < maxFlowImageInputBytes
+        ? 'OCR 请求大小预算（${ocrRequestSizeBudgetMib(requestSizeBudgetBytes)} MiB）'
+        : '任务流图片输入上限（${ocrRequestSizeBudgetMib(maxFlowImageInputBytes)} MiB）';
+    final error = 'OCR 输入图片超过$limitLabel允许的范围，请缩小图片后重试';
+    failSubTask(
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      error,
+    );
+    return BlockExecutionException(
+      error,
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+
+  try {
+    final inputLength = await file.length();
+    if (inputLength > maxInputBytes) {
+      throw oversizedInputException();
+    }
+    imageBytes =
+        await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
+    if (imageBytes.length > maxInputBytes) {
+      throw oversizedInputException();
+    }
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -99,7 +225,10 @@ Future<String> executeOcrBlock({
 
   late final OcrImagePayload payload;
   try {
-    payload = await prepareOcrImagePayload(imageBytes);
+    payload = await prepareOcrImagePayload(
+      imageBytes,
+      maxReencodedPngBytes: maxReencodedPngBytes,
+    );
   } on FormatException catch (error) {
     failSubTask(
       bgNotifier,
@@ -118,29 +247,6 @@ Future<String> executeOcrBlock({
   imageBytes = payload.bytes;
   imageFormat = payload.format;
 
-  // Model-level selection, same granularity as the OCR page: the shared
-  // flattened list (configs without host/key are excluded).
-  final selected =
-      resolveProviderModel(providerEntries, 'ocr', block.params['modelRef']);
-  if (selected == null) {
-    failSubTask(
-      bgNotifier,
-      taskId,
-      execNotifier,
-      execId,
-      flowSubTask.id,
-      '未配置OCR模型或模型引用已失效，请重新选择',
-    );
-    throw BlockExecutionException(
-      '未配置OCR模型',
-      blockType: def.typeKey.name,
-      blockTitle: def.label,
-    );
-  }
-
-  final config = selected.config;
-  final model = selected.model;
-
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
     final String result;
@@ -148,17 +254,7 @@ Future<String> executeOcrBlock({
       result = await requestOcr(imageBytes, imageFormat);
     } else {
       final service = OcrService(
-        config: OcrConfig(
-          host: config.host,
-          apiKey: config.key,
-          model: model.modelId,
-          requestSizeBudgetBytes: effectiveOcrRequestSizeBudgetBytes(
-            modelValue: model.typeConfig['requestSizeBudgetBytes'],
-            providerValue: config.typeConfig['requestSizeBudgetBytes'],
-          ),
-          typeConfig: model.typeConfig,
-          customParams: model.customParams,
-        ),
+        config: ocrConfig,
         dio: ocrDio,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
