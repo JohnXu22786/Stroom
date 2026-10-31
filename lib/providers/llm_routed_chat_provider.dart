@@ -16,7 +16,7 @@ import '../services/conversation_media_storage.dart';
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
       'anthropic' => const {'claude'},
-      'google.gemini.generate_content' => const {'gemini'},
+      'google.gemini.generate_content' => const {'gemini', 'aistudio'},
       'google.gemini.interactions' => const {'gemini-interactions'},
       'ollama.chat' => const {'ollama'},
       _ => const {

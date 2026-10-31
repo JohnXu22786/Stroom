@@ -14,6 +14,46 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('legacy AI Studio relay account can be explicitly reconfigured', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences()
+      ..values[LlmAccountMigrationService.accountsPreferenceKey] = jsonEncode({
+        'version': 1,
+        'items': [
+          {
+            'id': 'legacy-aistudio-relay-editor',
+            'connectorType': 'aistudio',
+            'authType': 'relay',
+            'displayName': 'Legacy AI Studio session',
+          },
+        ],
+      });
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。'),
+        findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('API Key').last, findsOneWidget);
+    expect(find.text('订阅 OAuth').last, findsOneWidget);
+    expect(find.text('旧版 AI Studio relay（已停用）').last, findsOneWidget);
+  });
+
   testWidgets('failed account deletion does not run legacy config cleanup', (
     tester,
   ) async {

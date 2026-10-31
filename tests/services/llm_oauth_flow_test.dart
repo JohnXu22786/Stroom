@@ -173,6 +173,10 @@ void main() {
         );
         expect(LlmOAuthProviderPolicy.forProvider('gemini').supported, isTrue);
         expect(
+          LlmOAuthProviderPolicy.forProvider('aistudio').supported,
+          isTrue,
+        );
+        expect(
           attempt
               .consumeCallback(
                 Uri.parse('http://127.0.0.1:49661/').replace(

@@ -8,9 +8,9 @@ Stroom 将上游账号、凭据和会话中保存的模型名称分别管理。�
 2. 填写账号名称、需要的端点、凭据和上游模型 ID。`streaming`、`vision`、`tools` 等能力字段是显式声明；未填写的能力仍为未知。
 3. 保存账号后，把它的上游模型加入模型组，再在聊天或 Task Flow 中选择该模型组。
 
-编辑账号时，凭据栏留空会保留当前安全凭据。删除账号会将其从模型组移除；只有没有其他账号引用该凭据时，Stroom 才删除本地安全存储中的值。删除不会撤销上游 OAuth 授权，也不会让上游账号退出登录。
+编辑账号时，凭据栏留空会保留当前安全凭据。删除账号会将其从模型组移除；只有没有其他账号引用该凭据时，Stroom 才删除本地安全存储中的值。对于支持撤销的 OAuth 连接器，删除时会尝试撤销授权；撤销失败不会阻止删除，也不会让上游账号退出登录。
 
-当前表单是本地账号编辑器，不会发起 OAuth 同意页或设备登录流程。请按连接器支持的方式准备凭据；账号保存成功不代表已通过上游实时验证。状态为 `unknown` 表示 Stroom 没有已验证的结果，路由仍可能尝试该账号；`paused` 和 `needs attention` 账号不会参与路由。
+请按连接器支持的方式准备凭据。Gemini Developer API 和 AI Studio OAuth 会打开 Google OAuth 同意页，并要求配置桌面客户端及 Cloud 项目；账号保存成功不代表已通过上游实时验证。状态为 `unknown` 表示 Stroom 没有已验证的结果，路由仍可能尝试该账号；`paused` 和 `needs attention` 账号不会参与路由。
 
 ## 模型组和路由
 
@@ -22,11 +22,12 @@ Stroom 将上游账号、凭据和会话中保存的模型名称分别管理。�
 
 仓库中的 [v0.6 连接器矩阵](roadmap/v0.6-connector-matrix-and-callsite-audit.md)以 CLIProxyAPI `d318bcc3afb9ea8782862f5e8cdb541afdc9dfa5` 版本的代码为依据，记录连接器行为及尚未进行的实时验证。主要区别如下：
 
-- 固定的上游版本没有 Gemini CLI 认证器，也没有 Google AI Studio 的第一方账号登录。Stroom 的 AI Studio 连接器使用当前应用内 WebView 会话。
+- AI Studio 连接器使用 Google Generative Language API HTTP 接口。API Key 通过 `x-goog-api-key` 发送；受支持的 OAuth 使用 Google Gemini Developer API OAuth、bearer token 和 Cloud 项目归属。它不读取 WebView 页面、Cookie 或浏览器会话。
+- 旧版 AI Studio WebView relay 账号会保留以便迁移，但不会再发送请求；编辑账号时请显式改为 API Key 或受支持的 OAuth。
 - Kimi 原生账号连接器使用 OAuth。若使用 Kimi API Key，应通过 OpenAI 兼容端点账号配置。
 - OAuth 刷新能力由连接器实现决定；通常在请求遇到认证失败时尝试刷新。Devin 使用会话令牌，并刷新账号状态，不交换 refresh token。API Key 账号不会执行 OAuth 刷新。
 - 当前实现中，Codex 和 Antigravity 会报告账号额度信号，Devin 会报告账号状态额度。其他连接器可能只提供请求用量，没有查询剩余额度的接口。实时可用性、模型权限和方案限制仍需真实上游账号验证。
-- 当前 ChatAdapter 和 Task Flow 模型选择器可路由 Claude（Anthropic 端点）、OpenAI 兼容模型和 Kimi 聊天模型。其他原生连接器可在账号设置中配置，但目前不能通过这些选择器路由；账号页面也会提示此限制。
+- ChatAdapter 和 Task Flow 模型选择器通过协议桥接路由 Claude、Google Generative Language、OpenAI 兼容和其他已接入的原生聊天连接器。连接器的可用模型及媒体能力以其模型目录和协议桥接结果为准。
 
 ## 凭据、备份和日志
 
@@ -35,9 +36,5 @@ Stroom 将上游账号、凭据和会话中保存的模型名称分别管理。�
 配置备份会从导出记录中移除凭据值，但保留非机密的引用元数据。备份不包含平台密钥库；恢复到其他设备或浏览器来源后，请检查账号，并为无法访问的凭据重新输入或建立连接。本地确定性测试覆盖了备份处理；恢复后的上游访问尚未验证。
 
 连接器异常和路由诊断会避免包含凭据或请求内容。`AppLogService` 会原样保存调用方传入的日志消息，不会进行通用机密信息清理；自定义日志和导出日志中不要写入 API Key、token 或敏感提示词。
-
-## AI Studio 应用内 WebView
-
-AI Studio relay 绑定到 Stroom 应用内浏览器中当前打开的 `https://aistudio.google.com` 页面。桥接只接受发往 `generativelanguage.googleapis.com` 的 Gemini `generateContent` 和 `streamGenerateContent` POST 请求，并限制请求头。请求使用 WebView 自己的会话；Stroom 不读取或复制 cookie、token 或浏览器存储。离开该页面或关闭浏览器会分离会话；账号绑定会阻止其他账号使用该会话。此路径需要浏览器已有登录状态，且目前不在 ChatAdapter 模型选择器中提供。
 
 迁移、备份和恢复详情见[数据安全架构](data-safety-architecture.md)和 [v0.6 发布验收记录](roadmap/v0.6-release-acceptance.md)。

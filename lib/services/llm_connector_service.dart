@@ -36,14 +36,11 @@ enum LlmNativeProtocol {
   metaResponses,
   geminiGenerateContent,
   geminiInteractions,
-  aiStudioRelay,
   vertexGenerateContent,
   openAIChatCompletions,
   ollamaChat,
   bedrockConverse,
 }
-
-enum LlmNativeTransport { http, websocketRelay }
 
 enum LlmQuotaAvailability { accountQuota, requestUsageOnly, unknown }
 
@@ -225,10 +222,11 @@ abstract final class LlmConnectorRegistry {
     ),
     LlmConnectorDefinition(
       id: 'aistudio',
-      displayName: 'Google AI Studio relay',
-      protocol: LlmNativeProtocol.aiStudioRelay,
-      authTypes: {'relay'},
+      displayName: 'Google AI Studio',
+      protocol: LlmNativeProtocol.geminiGenerateContent,
+      authTypes: {'api_key', 'oauth'},
       modelCatalog: kPinnedAistudioModels,
+      canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
@@ -273,6 +271,7 @@ abstract final class LlmConnectorRegistry {
       switch (canonicalId(connectorType)) {
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
+        'aistudio' => 'google.gemini.generate_content',
         'gemini-interactions' => 'google.gemini.interactions',
         'ollama' => 'ollama.chat',
         'bedrock' => 'openai',
@@ -991,6 +990,7 @@ class LlmAccountConnectorService {
       if (account.connectorType == 'claude' && account.authType == 'api_key')
         'claude',
       'gemini',
+      'aistudio',
       'gemini-interactions',
       'moonshot',
       'glm',
@@ -1433,7 +1433,7 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
-      case 'gemini':
+      case 'gemini' || 'aistudio':
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
         final clientSecret = _firstString(bundle, const [
           'client_secret',
@@ -1534,6 +1534,7 @@ class LlmAccountConnectorService {
       throw const LlmAccountConnectorException();
     }
     final isGemini = account.connectorType == 'gemini' ||
+        account.connectorType == 'aistudio' ||
         account.connectorType == 'gemini-interactions';
     if (account.connectorType == 'bedrock') {
       return _discoverBedrockModels(account);
@@ -1542,6 +1543,7 @@ class LlmAccountConnectorService {
       'openai-api' => 'https://api.openai.com/v1',
       'claude' => 'https://api.anthropic.com/v1',
       'gemini' ||
+      'aistudio' ||
       'gemini-interactions' =>
         'https://generativelanguage.googleapis.com',
       'moonshot' => 'https://api.moonshot.ai/v1',
@@ -1571,8 +1573,9 @@ class LlmAccountConnectorService {
             : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
-    final usesGeminiOAuth =
-        account.authType == 'oauth' && account.connectorType == 'gemini';
+    final usesGeminiOAuth = account.authType == 'oauth' &&
+        (account.connectorType == 'gemini' ||
+            account.connectorType == 'aistudio');
     final configuredHeaders = account.endpointConfig['headers'];
     if (configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
@@ -2962,14 +2965,12 @@ class LlmPreparedNativeRequest {
   final String method;
   final Map<String, String> headers;
   final Object? body;
-  final LlmNativeTransport transport;
 
   LlmPreparedNativeRequest({
     required this.uri,
     required this.method,
     required Map<String, String> headers,
     required this.body,
-    this.transport = LlmNativeTransport.http,
   }) : headers = Map.unmodifiable(headers);
 
   @override
@@ -3065,7 +3066,7 @@ class LlmNativeRequestBuilder {
         }
         if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
         break;
-      case 'gemini':
+      case 'gemini' || 'aistudio':
         if (account.authType == 'api_key') {
           headers['x-goog-api-key'] = secret;
         } else if (account.authType == 'oauth') {
@@ -3106,8 +3107,6 @@ class LlmNativeRequestBuilder {
         headers['Connect-Protocol-Version'] = '1';
         headers['Content-Type'] = 'application/connect+proto';
         headers['Accept'] = 'application/connect+proto';
-        break;
-      case 'aistudio':
         break;
       case 'bedrock':
         break;
@@ -3162,9 +3161,6 @@ class LlmNativeRequestBuilder {
       method: 'POST',
       headers: requestHeaders,
       body: requestBody,
-      transport: account.connectorType == 'aistudio'
-          ? LlmNativeTransport.websocketRelay
-          : LlmNativeTransport.http,
     );
   }
 
@@ -3211,7 +3207,7 @@ class LlmNativeRequestBuilder {
       };
 
   static String _credentialValue(LlmAccount account, String? credential) {
-    if (account.authType == 'none' || account.authType == 'relay') return '';
+    if (account.authType == 'none') return '';
     if (credential == null || credential.trim().isEmpty) {
       throw const LlmAccountConnectorException();
     }
@@ -3434,7 +3430,7 @@ class LlmNativeRequestBuilder {
           _metaBaseUrl(credential) ?? 'https://api.meta.ai/v1',
         );
         path = '/responses';
-      case 'gemini':
+      case 'gemini' || 'aistudio':
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
         path = '/v1beta/models/${Uri.encodeComponent(modelId)}:'
             '${stream ? 'streamGenerateContent' : 'generateContent'}';
@@ -3476,11 +3472,6 @@ class LlmNativeRequestBuilder {
       case 'ollama':
         baseUrl = _baseUrl(config, '');
         path = '/api/chat';
-      case 'aistudio':
-        baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
-        path = '/v1beta/models/${Uri.encodeComponent(modelId)}:'
-            '${stream ? 'streamGenerateContent' : 'generateContent'}';
-        if (stream) query = 'alt=sse';
       case 'vertex':
         if (_usesVertexInteractions(config, nativeFormat)) {
           final projectId = _configString(config, 'projectId') ??

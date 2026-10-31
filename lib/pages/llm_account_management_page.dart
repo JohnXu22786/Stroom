@@ -175,7 +175,8 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     final deletionMessage =
         switch (account.authType == 'oauth' ? account.connectorType : '') {
       'codex' ||
-      'gemini' =>
+      'gemini' ||
+      'aistudio' =>
         '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
       _ => '删除“${account.displayName}”并从模型组中移除该账号？',
     };
@@ -916,7 +917,7 @@ String _authLabel(String type, {String? connectorType}) {
     'aws_credentials' => 'AWS Access + Secret Key（Session Token 可选）',
     'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '会话令牌',
-    'relay' => '应用内中继',
+    'relay' => '旧版 AI Studio relay（已停用）',
     'none' => '无认证',
     _ => type,
   };
@@ -938,7 +939,7 @@ String _authSourceLabel(
     'aws_credentials' => 'AWS Bedrock 用户提供的静态凭据',
     'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '$provider 用户提供的会话令牌',
-    'relay' => 'Stroom 应用内 AI Studio 中继',
+    'relay' => '旧版 AI Studio relay 已停用；请改用 API Key 或受支持的 OAuth。',
     'none' => '本地兼容端点，无凭据',
     _ => '$provider 提供的凭据',
   };
@@ -1142,6 +1143,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       // rewrite it to another credential type before the user chooses one.
       authTypes.add('oauth');
     }
+    if (widget.account?.connectorType == 'aistudio' &&
+        widget.account?.authType == 'relay' &&
+        !authTypes.contains('relay')) {
+      // Keep the retired auth mode visible until the account is explicitly
+      // reconfigured; never reinterpret its page-session record as an API key.
+      authTypes.add('relay');
+    }
     authTypes.sort();
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
@@ -1221,8 +1229,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   for (final type in authTypes)
                     DropdownMenuItem(
                       value: type,
-                      enabled: type != 'oauth' ||
-                          connector.authTypeLimitations[type] == null,
+                      enabled: type != 'relay' &&
+                          (type != 'oauth' ||
+                              connector.authTypeLimitations[type] == null),
                       child: Text(
                         _authLabel(type, connectorType: _connectorType),
                       ),
@@ -1256,10 +1265,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   padding: EdgeInsets.only(top: 6),
                   child: Text('请选择受支持的认证方式后再保存此账号。'),
                 ),
-              if (_connectorType == 'gemini' && _authType == 'oauth') ...[
+              if (_connectorType == 'aistudio' && _authType == 'relay')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。',
+                  ),
+                ),
+              if ((_connectorType == 'gemini' ||
+                      _connectorType == 'aistudio') &&
+                  _authType == 'oauth') ...[
                 const SizedBox(height: 8),
                 const Text(
-                  '此连接使用 Gemini Developer API OAuth；需要你管理的 Google Cloud 项目、已启用 Generative Language API 和配置好的 OAuth Desktop 客户端。请求会按此项目计量。它不使用 Code Assist 或 AI Studio 登录。',
+                  '此连接使用 Google Generative Language API OAuth；需要你管理的 Google Cloud 项目、已启用 Generative Language API 和配置好的 OAuth Desktop 客户端。请求会按此项目计量，不使用 Code Assist 或 AI Studio 网页登录。',
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -1465,18 +1483,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     final previousGoogleClientId = widget.account?.endpointConfig['clientId'];
-    final geminiOAuthClientChanged =
-        widget.account?.connectorType == 'gemini' &&
-            widget.account?.authType == 'oauth' &&
-            _connectorType == 'gemini' &&
-            _authType == 'oauth' &&
-            previousGoogleClientId != _oauthClientId.text.trim();
-    final geminiOAuthClientSecretChanged =
-        widget.account?.connectorType == 'gemini' &&
-            widget.account?.authType == 'oauth' &&
-            _connectorType == 'gemini' &&
-            _authType == 'oauth' &&
-            _oauthClientSecret.text.trim().isNotEmpty;
+    final isGoogleGenerativeLanguageAccount =
+        _connectorType == 'gemini' || _connectorType == 'aistudio';
+    final wasGoogleGenerativeLanguageAccount =
+        widget.account?.connectorType == 'gemini' ||
+            widget.account?.connectorType == 'aistudio';
+    final geminiOAuthClientChanged = wasGoogleGenerativeLanguageAccount &&
+        widget.account?.authType == 'oauth' &&
+        isGoogleGenerativeLanguageAccount &&
+        _authType == 'oauth' &&
+        previousGoogleClientId != _oauthClientId.text.trim();
+    final geminiOAuthClientSecretChanged = wasGoogleGenerativeLanguageAccount &&
+        widget.account?.authType == 'oauth' &&
+        isGoogleGenerativeLanguageAccount &&
+        _authType == 'oauth' &&
+        _oauthClientSecret.text.trim().isNotEmpty;
     final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
@@ -1566,12 +1587,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final endpointConfig = Map<String, dynamic>.from(
       widget.account?.endpointConfig ?? const <String, dynamic>{},
     );
-    if (_connectorType == 'gemini' &&
+    if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _oauthClientId.text.trim().isNotEmpty) {
       endpointConfig['clientId'] = _oauthClientId.text.trim();
     }
-    if (_connectorType == 'gemini' &&
+    if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _googleCloudProjectId.text.trim().isNotEmpty) {
       endpointConfig['googleCloudProjectId'] =
@@ -1635,14 +1656,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       if (_oauthClientSecret.text.trim().isNotEmpty)
         'clientSecret': _oauthClientSecret.text.trim(),
     };
+    if (_connectorType == 'aistudio' && _authType == 'relay') {
+      setState(
+        () => _error = '旧版 AI Studio 网页会话连接已停用，请改用 API Key 或受支持的 OAuth。',
+      );
+      return;
+    }
     if (requiresOAuthAuthorization &&
-        _connectorType == 'gemini' &&
+        isGoogleGenerativeLanguageAccount &&
         (!RegExp(
               r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$',
             ).hasMatch(_googleCloudProjectId.text.trim()) ||
             oauthConfiguration['clientId'] == null ||
             ((widget.account == null ||
-                    widget.account!.connectorType != 'gemini' ||
+                    !wasGoogleGenerativeLanguageAccount ||
                     widget.account!.authType != 'oauth' ||
                     !widget.hasCredential ||
                     geminiOAuthClientChanged) &&

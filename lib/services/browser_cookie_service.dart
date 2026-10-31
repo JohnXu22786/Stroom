@@ -1158,8 +1158,9 @@ class BrowserCookieService {
     'googleusercontent.com',
   ];
 
-  /// Google login and AI Studio API cookies remain in the platform WebView
-  /// store and must never enter Stroom's cookie snapshot files or backups.
+  /// Google sign-in cookies remain in the platform WebView store and must
+  /// never enter Stroom's cookie snapshot files or backups. LLM connectors use
+  /// stored API credentials independently of browser cookies.
   static bool _isGoogleSessionCookie(Map<String, dynamic> cookie) {
     final rawDomain = cookie['domain'];
     if (rawDomain is! String) return false;

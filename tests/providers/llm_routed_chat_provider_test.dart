@@ -14,6 +14,13 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  test('routes Google Generative Language accounts through Gemini chat', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),
+      containsAll({'gemini', 'aistudio'}),
+    );
+  });
+
   test('non-streaming image output is stored and exposed to callers', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(

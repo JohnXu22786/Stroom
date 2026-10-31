@@ -9,7 +9,6 @@ import 'aws_bedrock_converse.dart';
 import 'aws_bedrock_event_stream.dart';
 import 'aws_credential_chain.dart';
 import 'aws_sigv4.dart';
-import 'llm_ai_studio_webview_session_bridge.dart';
 import 'llm_connector_service.dart';
 import 'llm_oauth_flow.dart';
 
@@ -39,13 +38,11 @@ class LlmConnectorHttpClient {
   final LlmAccountConnectorService accountService;
   final Dio _dio;
   final LlmNativeRequestBuilder _requestBuilder;
-  final LlmAiStudioWebViewSessionBridge _aiStudioWebViewSessionBridge;
 
   LlmConnectorHttpClient({
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-    LlmAiStudioWebViewSessionBridge? aiStudioWebViewSessionBridge,
   })  : _dio = dio ??
             Dio(
               BaseOptions(
@@ -53,9 +50,7 @@ class LlmConnectorHttpClient {
                 receiveTimeout: const Duration(seconds: 60),
               ),
             ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder(),
-        _aiStudioWebViewSessionBridge = aiStudioWebViewSessionBridge ??
-            LlmAiStudioWebViewSessionBridge.instance;
+        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -111,6 +106,10 @@ class LlmConnectorHttpClient {
             LlmConnectorRegistry.canonicalId(account.connectorType)) {
       throw const LlmConnectorHttpException();
     }
+    if (storedAccount.connectorType == 'aistudio' &&
+        storedAccount.authType == 'relay') {
+      throw const LlmConnectorAuthenticationRequired();
+    }
     if (storedAccount.authType == 'oauth' &&
         !LlmOAuthProviderPolicy.forProvider(
           storedAccount.connectorType,
@@ -132,101 +131,6 @@ class LlmConnectorHttpClient {
         throw const LlmConnectorHttpException();
       }
     }
-    if (storedAccount.connectorType == 'aistudio') {
-      final requestCancelToken = _requestCancelToken(cancelToken);
-      final prepared = _requestBuilder.build(
-        account: storedAccount,
-        credential: null,
-        modelId: modelId,
-        body: body,
-        stream: stream,
-        nativeFormat: nativeFormat,
-      );
-      try {
-        final response = await _aiStudioWebViewSessionBridge.execute(
-          storedAccount.id,
-          prepared,
-          cancelToken: requestCancelToken,
-        );
-        markRequestSent();
-        await waitForRequestSentMarker();
-        if (response.statusCode == 401) {
-          throw const LlmConnectorAuthenticationRequired();
-        }
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw await _failureFromResponse(
-            response.statusCode,
-            response.headers,
-            stream ? response.stream : response.body,
-            discardBody: stream,
-            onErrorBodyLimitReached: () {
-              requestCancelToken.cancel('Error response body limit reached');
-            },
-          );
-        }
-        final headerObservation = parseLlmConnectorHeaderObservation(
-          storedAccount.connectorType,
-          response.headers,
-        );
-        if (stream) {
-          final source = response.stream ?? Stream<List<int>>.empty();
-          final completed = Completer<LlmConnectorObservation>();
-          final chunks = _observeResponseStream(
-            storedAccount.connectorType,
-            source,
-            headerObservation,
-            completed,
-          );
-          return LlmConnectorResponse(
-            statusCode: response.statusCode,
-            headers: response.headers,
-            body: chunks,
-            observation: headerObservation,
-            completedObservation: completed.future,
-          );
-        }
-        final decoded = _decodeResponseBody(response.body);
-        final bodyObservation = decoded is Uint8List || decoded is List<int>
-            ? mergeLlmConnectorObservations(
-                parseLlmConnectorObservation(
-                  storedAccount.connectorType,
-                  decoded,
-                ),
-                parseLlmConnectorSseObservation(
-                  storedAccount.connectorType,
-                  decoded as List<int>,
-                ),
-              )
-            : parseLlmConnectorObservation(
-                storedAccount.connectorType,
-                decoded,
-              );
-        return LlmConnectorResponse(
-          statusCode: response.statusCode,
-          headers: response.headers,
-          body: decoded,
-          observation: mergeLlmConnectorObservations(
-            headerObservation,
-            bodyObservation,
-          ),
-        );
-      } on LlmConnectorHttpException {
-        rethrow;
-      } on LlmConnectorAuthenticationRequired {
-        rethrow;
-      } on LlmConnectorRequestCancelled {
-        rethrow;
-      } on LlmAiStudioWebViewRequestCancelled {
-        throw const LlmConnectorRequestCancelled();
-      } on LlmAiStudioWebViewNetworkException {
-        throw const LlmConnectorHttpException();
-      } on LlmAiStudioWebViewBridgeException {
-        throw const LlmConnectorTransportUnavailable();
-      } catch (_) {
-        throw const LlmConnectorHttpException();
-      }
-    }
-
     var didPrepareCredential = false;
     var didRetry = false;
     while (true) {
@@ -608,8 +512,6 @@ class LlmConnectorHttpClient {
         partialLine = '';
       }
       observeFrame();
-    } on LlmAiStudioWebViewRequestCancelled {
-      throw const LlmConnectorRequestCancelled();
     } on LlmConnectorRequestCancelled {
       rethrow;
     } on DioException catch (error) {
@@ -838,22 +740,12 @@ class LlmConnectorHttpException implements Exception {
       : 'LLM connector request failed with status $statusCode.';
 }
 
-/// AI Studio's pinned executor is a WebSocket relay. It requires the local
-/// relay provider to be connected before it can execute requests.
-class LlmConnectorTransportUnavailable implements Exception {
-  const LlmConnectorTransportUnavailable();
-
-  @override
-  String toString() =>
-      'Google AI Studio needs a signed-in Stroom in-app browser session.';
-}
-
 class LlmConnectorAuthenticationRequired implements Exception {
   const LlmConnectorAuthenticationRequired();
 
   @override
   String toString() =>
-      'Google AI Studio session expired or needs sign-in in the in-app browser.';
+      'The provider account needs valid API credentials or OAuth authorization.';
 }
 
 class LlmConnectorRequestCancelled implements Exception {

@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../catcatch/engine/js_hook_script.dart';
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
-import '../services/llm_ai_studio_webview_session_bridge.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
@@ -270,7 +269,6 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
-  final String? aiStudioAccountId;
 
   /// Builds a test body with the real capture callback, without a native WebView.
   @visibleForTesting
@@ -279,7 +277,6 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
-    this.aiStudioAccountId,
     this.testBodyBuilder,
   });
 
@@ -289,7 +286,6 @@ class BrowserPage extends StatefulWidget {
 
 class _BrowserPageState extends State<BrowserPage> {
   InAppWebViewController? _webViewController;
-  String? _aiStudioSessionRegistration;
   final _urlController = TextEditingController();
   bool _isLoading = false;
   double _progress = 0;
@@ -376,27 +372,9 @@ class _BrowserPageState extends State<BrowserPage> {
   Future<bool> _ensureCookieStorePrepared() =>
       _cookieStorePreparation.ensurePrepared();
 
-  void _detachAiStudioSession() {
-    LlmAiStudioWebViewSessionBridge.instance.detach(
-      _aiStudioSessionRegistration,
-    );
-    _aiStudioSessionRegistration = null;
-  }
-
-  void _attachAiStudioSession(InAppWebViewController controller, String url) {
-    _detachAiStudioSession();
-    final registration = LlmAiStudioWebViewSessionBridge.instance.attach(
-      pageUrl: url,
-      driver: LlmAiStudioInAppWebViewDriver(controller),
-      accountId: widget.aiStudioAccountId,
-    );
-    _aiStudioSessionRegistration = registration;
-  }
-
   @override
   void dispose() {
     _cancelPendingMainFrameError();
-    _detachAiStudioSession();
     _urlController.dispose();
 
     // Queue the final preference decision after any in-flight toggle.
@@ -707,7 +685,6 @@ class _BrowserPageState extends State<BrowserPage> {
                         }
                       },
                       onLoadStart: (controller, url) {
-                        _detachAiStudioSession();
                         final urlString = url.toString();
                         _cancelPendingMainFrameError();
                         // Record the requested host before a redirect replaces
@@ -729,7 +706,6 @@ class _BrowserPageState extends State<BrowserPage> {
                         _cancelPendingMainFrameError();
                         setState(() => _isLoading = false);
                         _currentUrl = url.toString();
-                        _attachAiStudioSession(controller, _currentUrl);
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
                         noteBrowserPageNavigationUrl(url.toString());
