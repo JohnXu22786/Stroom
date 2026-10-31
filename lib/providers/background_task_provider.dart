@@ -2909,7 +2909,8 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
       return false;
     }
 
-    if (!malformedSnapshot.hasUnknownFields &&
+    if (malformedRetryData['version'] is int &&
+        !malformedSnapshot.hasUnknownFields &&
         !containsCredential(malformedRetryData)) {
       return malformedRetryData;
     }

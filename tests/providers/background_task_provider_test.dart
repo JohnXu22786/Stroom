@@ -1820,6 +1820,38 @@ void main() {
       expect(snapshot.legacyModelIndex, 1);
     });
 
+    test('malformed OCR retry version recovers legacy image count', () {
+      final task = BackgroundTask.fromMap({
+        'id': 'malformed-ocr-retry-version-image-count',
+        'type': 'ocr',
+        'title': 'Failed OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'retryData': {'version': 'bad'},
+        'rawRequest': {
+          'imageCount': 2,
+          'body': {
+            'model': 'legacy-ocr-model',
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': 'Extract the invoice total.'},
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+
+      expect(snapshot.version, -1);
+      expect(snapshot.imageEntryCount, 2);
+      expect(snapshot.modelId, 'legacy-ocr-model');
+      expect(snapshot.instructionContent, 'Extract the invoice total.');
+    });
+
     test('safe unsupported OCR retry data keeps existing migration inputs', () {
       final bytes = base64Encode([1, 2, 3, 4]);
       final storageRef = 'ocr_retry_cache/${'c' * 64}.bin';
