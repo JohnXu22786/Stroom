@@ -57,22 +57,15 @@ jobs:
       - name: Verify bundled assets are current
         run: git diff --exit-code -- assets/vendor/dsh_message_view
 
-  message-platform-builds:
-    name: Message view ${{ matrix.platform }} build
+  message-platform-linux:
+    name: Message view Linux build and smoke test
     runs-on: ubuntu-24.04
-    container: ${{ matrix.container }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Debian 13 packages the WPE 2.0 API required by the Linux plugin.
-          - platform: linux
-            container: debian:trixie
-          - platform: web
-            container: ""
+    # WPE WebKit's bubblewrap sandbox requires these permissions inside Docker.
+    container:
+      image: debian:trixie
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined
     steps:
       - name: Install Linux WebView dependencies
-        if: matrix.platform == 'linux'
         run: |
           apt-get update -y
           apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
@@ -83,21 +76,30 @@ jobs:
           cache: true
           pub-cache: true
       - name: Trust the restored Flutter SDK in the container
-        if: matrix.platform == 'linux'
         run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
-      - run: flutter build ${{ matrix.platform }} --release
-      - name: Run native Linux message view smoke test
-        if: matrix.platform == 'linux'
-        run: xvfb-run flutter test -d linux integration_test/message_view_smoke_test.dart --reporter expanded
+      - run: flutter build linux --release
+      - run: xvfb-run flutter test -d linux integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-web:
+    name: Message view Web build and smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build web --release
       - uses: browser-actions/setup-chrome@v2
-        if: matrix.platform == 'web'
+        id: setup-chrome
         with:
           install-chromedriver: true
-      - name: Run web message view smoke test
-        if: matrix.platform == 'web'
+      - name: Run browser-driven Web message view smoke test
         run: |
-          chromedriver --port=4444 > /tmp/chromedriver.log 2>&1 &
+          "${{ steps.setup-chrome.outputs.chromedriver-path }}" --port=4444 > /tmp/chromedriver.log 2>&1 &
           chromedriver_pid=$!
           trap 'kill "$chromedriver_pid" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
@@ -107,7 +109,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:4444/status >/dev/null || { cat /tmp/chromedriver.log; exit 1; }
-          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d web-server --browser-name=chrome --driver-port=4444
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d web-server --browser-name=chrome --chrome-binary="${{ steps.setup-chrome.outputs.chrome-path }}" --driver-port=4444
 
   message-platform-android:
     name: Message view Android build and smoke test
@@ -146,8 +148,8 @@ jobs:
       - run: flutter build windows --release
       - run: flutter test -d windows integration_test/message_view_smoke_test.dart --reporter expanded
 
-  message-platform-macos-ios:
-    name: Message view macOS and iOS build and smoke tests
+  message-platform-macos:
+    name: Message view macOS build and smoke test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -159,12 +161,27 @@ jobs:
       - run: flutter pub get
       - run: flutter build macos --release
       - run: flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-ios:
+    name: Message view iOS simulator build and smoke test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
       - run: flutter build ios --simulator --debug --no-codesign
       - name: Boot an available iOS simulator
         shell: bash
         run: |
           simulator_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")))')"
-          xcrun simctl boot "$simulator_id"
+          simulator_state="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["state"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")))')"
+          if [ "$simulator_state" != "Booted" ]; then
+            xcrun simctl boot "$simulator_id"
+          fi
           xcrun simctl bootstatus "$simulator_id" -b
           echo "IOS_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
       - name: Run iOS message view smoke test
