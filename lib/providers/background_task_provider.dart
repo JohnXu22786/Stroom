@@ -555,52 +555,6 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
-Iterable<String> _legacyOcrInstructionCredentialValues(
-  Map<String, dynamic>? rawRequest,
-) {
-  if (rawRequest == null) return const [];
-  final requestForInstruction = Map<String, dynamic>.from(rawRequest);
-  final headers = requestForInstruction['headers'];
-  if (headers is Map) {
-    final instructionHeaders = <dynamic, dynamic>{};
-    for (final entry in headers.entries) {
-      if (entry.key is! String ||
-          (entry.key as String).toLowerCase() != 'authorization') {
-        instructionHeaders[entry.key] = entry.value;
-        continue;
-      }
-      final values = entry.value is List ? entry.value as List : [entry.value];
-      final unmaskedValues = values
-          .where((value) =>
-              value is! String || !_legacyOcrAuthorizationValueIsMasked(value))
-          .toList();
-      if (unmaskedValues.isEmpty) continue;
-      instructionHeaders[entry.key] = entry.value is List
-          ? unmaskedValues
-          : unmaskedValues.single;
-    }
-    requestForInstruction['headers'] = instructionHeaders;
-  }
-  // A masked prefix such as `Bearer secret…` must not classify ordinary
-  // retry instructions, while unmasked authorization values must still be
-  // available to redact an exact credential echoed in legacy prompt text.
-  return _legacyOcrCredentialValues(requestForInstruction);
-}
-
-bool _legacyOcrAuthorizationValueIsMasked(String value) {
-  final token = value
-      .trim()
-      .replaceFirst(
-        RegExp(r'^(?:Bearer|Basic|Token)\s+', caseSensitive: false),
-        '',
-      );
-  return RegExp(
-    r'^(?:[A-Za-z0-9_-]+\s*(?:…|\.{3})|'
-    r'[A-Za-z0-9_-]{8,}\.{3}[A-Za-z0-9_-]{4}|'
-    r'[A-Za-z0-9_-]\*{3}|[A-Za-z0-9_-]{4}\*{4})$',
-  ).hasMatch(token);
-}
-
 bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
@@ -2047,8 +2001,7 @@ bool _legacyOcrShouldPreserveBareRedactedAction(String sourceText) {
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final body = rawRequest?['body'];
   if (body is! Map || body['messages'] is! List) return null;
-  final credentialValues =
-      _legacyOcrInstructionCredentialValues(rawRequest).toList();
+  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
   final sourceTextParts = <String>[];
   for (final message in body['messages'] as List) {
     if (message is! Map ||

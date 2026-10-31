@@ -1385,7 +1385,7 @@ void main() {
           type: BackgroundTaskType.ocr,
           title: 'failed OCR task',
           status: TaskStatus.failed,
-          error: 'provider request failed',
+          error: 'OCR request failed',
           createdAt: DateTime(2025, 1, 1),
           completedAt: DateTime(2025, 1, 1, 0, 1),
           steps: const [
@@ -1405,7 +1405,7 @@ void main() {
         final persisted = jsonEncode(serialized);
 
         expect(serialized['status'], TaskStatus.failed.name);
-        expect(serialized['error'], 'provider request failed');
+        expect(serialized['error'], 'OCR request failed');
         expect(serialized['steps'], isNotEmpty);
         expect(
           OcrRetrySnapshot.fromMap(
