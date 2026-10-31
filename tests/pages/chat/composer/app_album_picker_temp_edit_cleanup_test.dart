@@ -40,9 +40,11 @@ Future<Uint8List> _createEnginePng() async {
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
-  final end = DateTime.now().add(const Duration(seconds: 10));
+  final stopwatch = Stopwatch()..start();
   while (!condition()) {
-    if (DateTime.now().isAfter(end)) fail('Timed out waiting for condition');
+    if (stopwatch.elapsed > const Duration(seconds: 10)) {
+      fail('Timed out waiting for condition');
+    }
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
@@ -138,9 +140,14 @@ void main() {
       await tester.pump();
       await _pumpUntil(tester, () => writeStarted.isCompleted);
       final tempFile = await writeStarted.future;
-      expect(await tempFile.exists(), isFalse);
+      expect(await tester.runAsync(tempFile.exists), isFalse);
 
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(AppBar, '应用内相册'),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('应用内相册'), findsNothing);
 
@@ -149,7 +156,7 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );
       await tester.pump();
-      expect(await tempFile.exists(), isFalse);
+      expect(await tester.runAsync(tempFile.exists), isFalse);
     },
   );
 
@@ -174,10 +181,12 @@ void main() {
                 .bytes !=
             originalBytes,
       );
-      final editedFiles = await tempDir
-          .list()
-          .where((file) => file.path.split('/').last.startsWith('edited_'))
-          .toList();
+      final editedFiles = await tester.runAsync(
+        () => tempDir
+            .list()
+            .where((file) => file.path.split('/').last.startsWith('edited_'))
+            .toList(),
+      );
       expect(editedFiles, isEmpty);
       expect(tester.takeException(), isNull);
     },
@@ -213,7 +222,12 @@ void main() {
       await _pumpUntil(tester, () => files.length == 2);
       expect(files.map((file) => file.path).toSet(), hasLength(2));
 
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(AppBar, '应用内相册'),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
       await tester.pumpAndSettle();
       for (final gate in writeGates) {
         gate.complete();
