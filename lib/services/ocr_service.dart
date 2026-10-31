@@ -487,9 +487,18 @@ class OcrService {
   }
 
   Options _requestOptions({required int encodedBytes}) => Options(
+        headers: _requestAuthorizationHeaders,
         sendTimeout: _sendTimeoutOverride ?? sendTimeoutForBytes(encodedBytes),
         receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
       );
+
+  Map<String, dynamic>? get _requestAuthorizationHeaders {
+    final hasCallerAuthorization = _dio.options.headers.keys.any(
+      (header) => header.toLowerCase() == 'authorization',
+    );
+    if (hasCallerAuthorization || config.apiKey.isEmpty) return null;
+    return {'Authorization': 'Bearer ${config.apiKey}'};
+  }
 
   ProgressCallback _uploadProgress(
           ProgressCallback? progress, void Function(OcrRequestStage)? stage) =>

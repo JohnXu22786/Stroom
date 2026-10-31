@@ -155,6 +155,111 @@ void main() {
         expect(service.receiveTimeout, const Duration(minutes: 60));
       });
 
+      test('injected Dio sends configured auth and keeps caller options',
+          () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio(BaseOptions(headers: {'X-Client-Option': 'kept'}))
+          ..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests.add(options);
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(requests, hasLength(1));
+        expect(requests.single.headers['Authorization'], 'Bearer test-key');
+        expect(requests.single.headers['X-Client-Option'], 'kept');
+      });
+
+      test('injected Dio uses the key from each current OCR config', () async {
+        final authorizationHeaders = <Object?>[];
+        final dio = Dio()
+          ..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                authorizationHeaders.add(options.headers['Authorization']);
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+        final imageBytes = Uint8List.fromList([1, 2, 3]);
+
+        await OcrService(
+          config: _testOcrConfig.copyWith(apiKey: 'old-key'),
+          dio: dio,
+        ).recognize(imageBytes: imageBytes);
+        await OcrService(
+          config: _testOcrConfig.copyWith(apiKey: 'new-key'),
+          dio: dio,
+        ).recognize(imageBytes: imageBytes);
+
+        expect(authorizationHeaders, ['Bearer old-key', 'Bearer new-key']);
+      });
+
+      test('injected Dio preserves an explicit caller auth header', () async {
+        Object? authorizationHeader;
+        final dio = Dio(
+          BaseOptions(headers: {'Authorization': 'Bearer caller-key'}),
+        )..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                authorizationHeader = options.headers['Authorization'];
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+
+        await OcrService(config: _testOcrConfig, dio: dio).recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(authorizationHeader, 'Bearer caller-key');
+      });
+
       test('recognize throws on empty host', () async {
         const config = OcrConfig(model: 'gpt-4o', apiKey: 'test-key', host: '');
         final service = OcrService(config: config);
