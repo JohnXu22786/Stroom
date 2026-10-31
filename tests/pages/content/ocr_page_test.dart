@@ -211,7 +211,10 @@ class _CapturingOcrAdapter implements HttpClientAdapter {
 // Helper: Create a sample OCR provider entry with models
 // ============================================================================
 
-ProviderEntry _createOcrEntry({bool withModels = true}) {
+ProviderEntry _createOcrEntry({
+  bool withModels = true,
+  int? providerBudgetBytes,
+}) {
   return ProviderEntry(
     id: 'test_ocr',
     type: 'ocr',
@@ -221,6 +224,10 @@ ProviderEntry _createOcrEntry({bool withModels = true}) {
         providerName: 'OpenAI',
         host: 'https://api.openai.com',
         key: 'test-key',
+        typeConfig: {
+          if (providerBudgetBytes != null)
+            'requestSizeBudgetBytes': providerBudgetBytes,
+        },
         models: withModels
             ? [
                 ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
@@ -557,8 +564,6 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
-      await tester.pump();
 
       Future<void> chooseSystemGallery() async {
         await tester.tap(find.text('相册选择'));
@@ -629,8 +634,6 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
-      await tester.pump();
 
       Future<void> chooseSystemGallery() async {
         await tester.tap(find.text('相册选择'));
@@ -2708,7 +2711,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The selector is always visible regardless of configuration.
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('默认（仅发送图片）'), findsOneWidget);
     });
 
@@ -2784,7 +2787,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Selected Model | Stable Provider'), findsOneWidget);
-        expect(find.text('识别指令'), findsOneWidget);
+        expect(find.text('指令'), findsOneWidget);
         await tester.tap(find.text('默认（仅发送图片）'));
         await tester.pumpAndSettle();
         expect(find.text('Test instruction'), findsWidgets);
@@ -2810,7 +2813,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('默认（仅发送图片）'), findsOneWidget);
 
       // Open the dropdown — both instruction names are listed.
@@ -3085,7 +3088,7 @@ void main() {
       await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('发票提取'), findsOneWidget);
     });
 
@@ -3859,7 +3862,12 @@ void main() {
       await pickFromSystemGallery();
       expect(calls.single, (maxWidth: 2048, maxHeight: 2048, quality: 90));
 
-      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
+      await tester.tap(find.byKey(const Key('ocr_page_settings')));
+      await tester.pumpAndSettle();
+      expect(find.text('标准画质'), findsOneWidget);
+      expect(find.text('原图 / 高细节'), findsOneWidget);
+      expect(find.byKey(const Key('ocr_request_budget_mib')), findsNothing);
+      await tester.tap(find.text('原图 / 高细节'));
       await tester.pumpAndSettle();
       await pickFromSystemGallery();
       expect(calls.last, (maxWidth: null, maxHeight: null, quality: null));
@@ -4442,7 +4450,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         _buildTestApp(
-          entries: [_createOcrEntry()],
+          entries: [_createOcrEntry(providerBudgetBytes: 3146)],
           testImages: [
             SelectedImage.fromPayload(
               payload: OcrImagePayload(
@@ -4458,27 +4466,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      Future<void> pumpDialogTransition() async {
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-      }
-
-      await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
-      await pumpDialogTransition();
-      await tester.enterText(
-        find.byKey(const Key('ocr_request_budget_editor_mib')),
-        '0.003',
-      );
-      await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
-      await pumpDialogTransition();
-
       await tester.tap(find.text('开始识别'));
-      await pumpDialogTransition();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       final warning = tester.widget<Text>(
         find.textContaining('当前 JSON 请求约为'),
       );
-      expect(warning.data, contains('0.00300026 MiB 上限。'));
+      expect(warning.data, contains('0.00299931 MiB 配置值。'));
       final displayedSizes = RegExp(r'(\d+\.\d{8}) MiB')
           .allMatches(warning.data!)
           .map((match) => double.parse(match.group(1)!))
@@ -4486,8 +4481,9 @@ void main() {
       expect(displayedSizes, hasLength(2));
       expect(displayedSizes.every((size) => size < 0.005), isTrue);
       expect(displayedSizes[0], greaterThan(displayedSizes[1]));
-      await tester.tap(find.text('取消').last);
-      await pumpDialogTransition();
+      await tester.tap(find.text('知道了'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testWidgets('reused per-image results skip request size preflight', (
@@ -4513,7 +4509,7 @@ void main() {
         ],
         'batchMode': 'perImage',
         'perImageConcurrency': 1,
-        'requestSizeBudgetBytes': defaultOcrRequestSizeBudgetBytes,
+        'requestSizeBudgetBytes': 1,
       };
       final taskNotifier = _InspectableBackgroundTaskNotifier();
 
@@ -4552,17 +4548,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.enterText(
-        find.byKey(const Key('ocr_request_budget_editor_mib')),
-        '0.001',
-      );
-      await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
       final startButton = find.widgetWithText(FilledButton, '开始识别');
       expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
       await tester.ensureVisible(startButton);
@@ -4572,14 +4557,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(
-        find.byKey(const Key('ocr_request_budget_dialog_mib')),
+        find.textContaining('当前 JSON 请求约为'),
         findsNothing,
       );
       expect(taskNotifier.tasksForTest, hasLength(1));
     });
 
     testWidgets(
-      'oversized joint requests offer budget changes and per-image mode',
+      'oversized joint requests show configuration guidance and offer per-image mode',
       (tester) async {
         final bytes = Uint8List.fromList(List<int>.generate(300, (i) => i));
         final imagePayload = OcrImagePayload(
@@ -4591,7 +4576,7 @@ void main() {
         final taskNotifier = _InspectableBackgroundTaskNotifier();
         await tester.pumpWidget(
           _buildTestApp(
-            entries: [_createOcrEntry()],
+            entries: [_createOcrEntry(providerBudgetBytes: 1)],
             testImages: [
               SelectedImage.fromPayload(
                 payload: imagePayload,
@@ -4607,24 +4592,12 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        Future<void> pumpDialogTransition() async {
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 300));
-        }
-
-        await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
-        await pumpDialogTransition();
-        await tester.enterText(
-          find.byKey(const Key('ocr_request_budget_editor_mib')),
-          '0.0001',
-        );
-        await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
-        await pumpDialogTransition();
         await tester.tap(find.text('开始识别'));
-        await pumpDialogTransition();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
         expect(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
+          find.textContaining('当前 JSON 请求约为'),
           findsOneWidget,
         );
         expect(
@@ -4632,38 +4605,33 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.byKey(const Key('ocr_change_request_budget')),
+          find.textContaining('供应商默认设置或模型覆盖值'),
           findsOneWidget,
         );
-
-        await tester.enterText(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
-          '0.0002',
-        );
-        await tester.tap(find.byKey(const Key('ocr_change_request_budget')));
-        await pumpDialogTransition();
-        expect(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
-          findsOneWidget,
-        );
+        expect(find.textContaining('图片画质'), findsOneWidget);
 
         await tester.tap(find.byKey(const Key('ocr_switch_to_per_image')));
-        await pumpDialogTransition();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
+          find.textContaining('当前 JSON 请求约为'),
           findsOneWidget,
         );
         expect(find.byKey(const Key('ocr_switch_to_per_image')), findsNothing);
 
-        await tester.tap(find.text('取消').last);
-        await pumpDialogTransition();
-        expect(find.byTooltip('请求 JSON 上限：0.0002 MiB'), findsOneWidget);
+        await tester.tap(find.text('知道了'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          find.text('本次识别已取消；请调整供应商/模型请求大小或图片画质后重试。'),
+          findsOneWidget,
+        );
         expect(taskNotifier.tasksForTest, isEmpty);
       },
     );
 
     testWidgets(
-      'cancelling an edited oversized request restores the previous budget',
+      'cancelling an oversized request preserves its configured budget',
       (tester) async {
         final bytes = Uint8List.fromList(List<int>.generate(300, (i) => i));
         final imagePayload = OcrImagePayload(
@@ -4675,7 +4643,7 @@ void main() {
         final taskNotifier = _InspectableBackgroundTaskNotifier();
         await tester.pumpWidget(
           _buildTestApp(
-            entries: [_createOcrEntry()],
+            entries: [_createOcrEntry(providerBudgetBytes: 1)],
             testImages: [
               SelectedImage.fromPayload(
                 payload: imagePayload,
@@ -4687,59 +4655,30 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        Future<void> pumpDialogTransition() async {
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 300));
-        }
-
-        await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
-        await pumpDialogTransition();
-        await tester.enterText(
-          find.byKey(const Key('ocr_request_budget_editor_mib')),
-          '0.0001',
-        );
-        await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
-        await pumpDialogTransition();
-
         await tester.tap(find.text('开始识别'));
-        await pumpDialogTransition();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(
-          tester
-              .widget<TextField>(
-                find.byKey(const Key('ocr_request_budget_dialog_mib')),
-              )
-              .controller!
-              .text,
-          '0.0001',
+          find.textContaining('供应商默认设置或模型覆盖值'),
+          findsOneWidget,
         );
-
-        await tester.enterText(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
-          '0.0002',
-        );
-        await tester.tap(find.text('取消').last);
-        await pumpDialogTransition();
-
-        expect(find.byTooltip('请求 JSON 上限：0.0001 MiB'), findsOneWidget);
+        await tester.tap(find.text('知道了'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(
-          find.text('本次识别已取消；可切换识别方式或提高请求上限后重试。'),
+          find.text('本次识别已取消；请调整供应商/模型请求大小或图片画质后重试。'),
           findsOneWidget,
         );
         expect(taskNotifier.tasksForTest, isEmpty);
 
         await tester.tap(find.text('开始识别'));
-        await pumpDialogTransition();
-        expect(
-          tester
-              .widget<TextField>(
-                find.byKey(const Key('ocr_request_budget_dialog_mib')),
-              )
-              .controller!
-              .text,
-          '0.0001',
-        );
-        await tester.tap(find.text('取消').last);
-        await pumpDialogTransition();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.textContaining('当前 JSON 请求约为'), findsOneWidget);
+        expect(find.text('知道了'), findsOneWidget);
+        await tester.tap(find.text('知道了'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(taskNotifier.tasksForTest, isEmpty);
       },
     );
@@ -5687,7 +5626,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt instead of hiding the selector
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
 
@@ -5711,7 +5650,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
 
@@ -5722,7 +5661,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
   });
