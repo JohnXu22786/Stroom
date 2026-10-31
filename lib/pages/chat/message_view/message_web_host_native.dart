@@ -63,6 +63,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
       var documentUri = _macDocumentUri;
       if (documentDirectory == null || documentUri == null) {
         final directory = await getTemporaryDirectory();
+        await directory.create(recursive: true);
         documentDirectory = await directory.createTemp('stroom-message-');
         createdDirectory = documentDirectory;
         if (!mounted || !identical(controller, _controller)) {
