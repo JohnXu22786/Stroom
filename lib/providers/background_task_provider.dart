@@ -590,9 +590,14 @@ Iterable<String> _legacyOcrInstructionCredentialValues(
 bool _legacyOcrAuthorizationValueIsMasked(String value) {
   final token = value
       .trim()
-      .replaceFirst(RegExp(r'^(?:Bearer|Basic)\s+', caseSensitive: false), '');
+      .replaceFirst(
+        RegExp(r'^(?:Bearer|Basic|Token)\s+', caseSensitive: false),
+        '',
+      );
   return RegExp(
-    r'^(?:[A-Za-z0-9_-]+(?:…|\.{3})|[A-Za-z0-9_-]{8,}\.{3}[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]\*{3}|[A-Za-z0-9_-]{4}\*{4})$',
+    r'^(?:[A-Za-z0-9_-]+\s*(?:…|\.{3})|'
+    r'[A-Za-z0-9_-]{8,}\.{3}[A-Za-z0-9_-]{4}|'
+    r'[A-Za-z0-9_-]\*{3}|[A-Za-z0-9_-]{4}\*{4})$',
   ).hasMatch(token);
 }
 
