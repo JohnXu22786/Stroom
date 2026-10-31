@@ -45,22 +45,22 @@ class AnthropicChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'Anthropic',
-  }) : _baseUrl = baseUrl,
-       _apiKey = apiKey,
-       _name = name,
-       _dio = Dio(
-         BaseOptions(
-           baseUrl: '',
-           headers: {
-             'Content-Type': 'application/json',
-             'anthropic-version': kAnthropicApiVersion,
-             if (apiKey.isNotEmpty) 'x-api-key': apiKey,
-             ...openRouterAppHeaders,
-           },
-           connectTimeout: const Duration(seconds: 10),
-           receiveTimeout: const Duration(seconds: 60),
-         ),
-       );
+  })  : _baseUrl = baseUrl,
+        _apiKey = apiKey,
+        _name = name,
+        _dio = Dio(
+          BaseOptions(
+            baseUrl: '',
+            headers: {
+              'Content-Type': 'application/json',
+              'anthropic-version': kAnthropicApiVersion,
+              if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+              ...openRouterAppHeaders,
+            },
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 60),
+          ),
+        );
 
   @override
   String get name => _name;
@@ -106,8 +106,7 @@ class AnthropicChatProvider extends BaseChatProvider {
     if (inputTotal > 0) localUsage['inputTokens'] = inputTotal;
     final output = usageNumberToDouble(usage['output_tokens'])?.toInt();
     if (output != null) localUsage['outputTokens'] = output;
-    final cost =
-        usageNumberToDouble(usage['total_cost']) ??
+    final cost = usageNumberToDouble(usage['total_cost']) ??
         usageNumberToDouble(usage['cost']);
     if (cost != null) {
       final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
@@ -195,12 +194,12 @@ class AnthropicChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    // 仅作模型 ID 缺省兜底；当前默认模型建议改为
-    // claude-sonnet-4-* 系列（claude-3-5-sonnet 已下线）。
-    'model': 'claude-3-5-sonnet',
-    'max_tokens': 4096,
-    'temperature': 1.0,
-  };
+        // 仅作模型 ID 缺省兜底；当前默认模型建议改为
+        // claude-sonnet-4-* 系列（claude-3-5-sonnet 已下线）。
+        'model': 'claude-3-5-sonnet',
+        'max_tokens': 4096,
+        'temperature': 1.0,
+      };
 
   // ── 非流式对话 ──────────────────────────────────────────────────
 
@@ -256,9 +255,8 @@ class AnthropicChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
       // 收集实际 token 计量（非流式响应体 usage 字段）
-      final usage = response.data is Map
-          ? (response.data as Map)['usage']
-          : null;
+      final usage =
+          response.data is Map ? (response.data as Map)['usage'] : null;
       if (usage is Map) {
         _lastUsage = {};
         mergeAnthropicUsage(_lastUsage!, usage);
@@ -448,8 +446,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         // 写入，见上方 `_lastResponseData = data`），保留它用于诊断，
         // 否则清空陈旧的成功流数据。错误帧判断用 type 字段（网关
         // 变体可能缺 error 字段，如 {"type":"error"}）。
-        final isErrorFrame =
-            _lastResponseData?['error'] != null ||
+        final isErrorFrame = _lastResponseData?['error'] != null ||
             _lastResponseData?['type'] == 'error';
         if (!isErrorFrame) {
           _lastResponseData = null;

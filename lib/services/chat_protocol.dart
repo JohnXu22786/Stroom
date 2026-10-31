@@ -90,9 +90,8 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
   return NeutralToolCall(
     id: tc['id'] as String? ?? '',
     name: tc['name'] as String? ?? 'unknown',
-    argumentsJson: input is Map
-        ? jsonEncode(input)
-        : (input?.toString() ?? '{}'),
+    argumentsJson:
+        input is Map ? jsonEncode(input) : (input?.toString() ?? '{}'),
     thoughtSignature: tc['thoughtSignature'] as String?,
   );
 }

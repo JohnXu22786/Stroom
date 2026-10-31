@@ -805,12 +805,12 @@ void main() {
     });
 
     test('object tool results encode as JSON for Responses and Anthropic', () {
-      final toolResult = AiGatewayProtocolBridges.openAiChatCompletions
-          .toStroom({
-            'role': 'tool',
-            'tool_call_id': 'call-object',
-            'content': {'temperature': 18},
-          });
+      final toolResult =
+          AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+        'role': 'tool',
+        'tool_call_id': 'call-object',
+        'content': {'temperature': 18},
+      });
 
       final responses = AiGatewayProtocolBridges.buildRequest(
         'openai.responses',
@@ -876,16 +876,16 @@ void main() {
         },
       ]);
 
-      final httpsImage = AiGatewayProtocolBridges.openAiChatCompletions
-          .toStroom({
-            'role': 'user',
-            'content': [
-              {
-                'type': 'image_url',
-                'image_url': {'url': 'https://example.test/image.png'},
-              },
-            ],
-          });
+      final httpsImage =
+          AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+        'role': 'user',
+        'content': [
+          {
+            'type': 'image_url',
+            'image_url': {'url': 'https://example.test/image.png'},
+          },
+        ],
+      });
       final httpsRequest = AiGatewayProtocolBridges.buildRequest(
         'anthropic.messages',
         AiGatewayProtocolRequest(modelId: 'claude', messages: [httpsImage]),
@@ -948,12 +948,12 @@ void main() {
     });
 
     test('Ollama encodes neutral tool results as tool messages', () {
-      final toolResult = AiGatewayProtocolBridges.openAiChatCompletions
-          .toStroom({
-            'role': 'tool',
-            'tool_call_id': 'call-1',
-            'content': '{"temperature":18}',
-          });
+      final toolResult =
+          AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+        'role': 'tool',
+        'tool_call_id': 'call-1',
+        'content': '{"temperature":18}',
+      });
 
       final request = AiGatewayProtocolBridges.buildRequest(
         'ollama.chat',
@@ -1178,8 +1178,8 @@ void main() {
       final interactions = AiGatewayProtocolBridges.geminiInteractions;
       final interactionNeutral = interactions.toStroom(interaction);
       expect(
-        interactionNeutral
-            .extensions['google.gemini.interactions']['previous_interaction_id'],
+        interactionNeutral.extensions['google.gemini.interactions']
+            ['previous_interaction_id'],
         'interaction_upstream_0',
       );
       expect(interactionNeutral.id, isEmpty);
@@ -1433,16 +1433,16 @@ void main() {
           },
         ]);
 
-        final unsupportedFile = AiGatewayProtocolBridges.openAiChatCompletions
-            .toStroom({
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'file',
-                  'file': {'file_id': 'file-1'},
-                },
-              ],
-            });
+        final unsupportedFile =
+            AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
+          'role': 'user',
+          'content': [
+            {
+              'type': 'file',
+              'file': {'file_id': 'file-1'},
+            },
+          ],
+        });
         expect(
           () => AiGatewayProtocolBridges.buildRequest(
             'google.gemini.generate_content',
@@ -1470,10 +1470,10 @@ void main() {
       };
       final openAiTool = {'type': 'function', 'function': function};
       AiGatewayProtocolRequest request() => AiGatewayProtocolRequest(
-        modelId: 'model-1',
-        messages: const [],
-        tools: [openAiTool],
-      );
+            modelId: 'model-1',
+            messages: const [],
+            tools: [openAiTool],
+          );
 
       final responses = AiGatewayProtocolBridges.buildRequest(
         'openai.responses',
@@ -1555,9 +1555,9 @@ void main() {
     test('Responses refusal deltas become visible text events', () {
       final refusal =
           AiGatewayProtocolStreamBridge.mapEvent('openai.responses', {
-            'type': 'response.refusal.delta',
-            'delta': 'I cannot help with that request.',
-          });
+        'type': 'response.refusal.delta',
+        'delta': 'I cannot help with that request.',
+      });
 
       expect(refusal.kind, AiGatewayProtocolStreamEventKind.textDelta);
       expect(refusal.delta, 'I cannot help with that request.');
@@ -1829,21 +1829,26 @@ void main() {
           },
         );
         final responseState = AiGatewayProtocolStreamState();
-        AiGatewayProtocolStreamBridge.mapEvents('openai.responses', {
-          'type': 'response.output_item.added',
-          'item': {
-            'type': 'function_call',
-            'id': 'fc_item_1',
-            'call_id': 'call_real_1',
-            'name': 'lookup',
-          },
-        }, state: responseState);
-        final responseArguments =
-            AiGatewayProtocolStreamBridge.mapEvents('openai.responses', {
+        AiGatewayProtocolStreamBridge.mapEvents(
+            'openai.responses',
+            {
+              'type': 'response.output_item.added',
+              'item': {
+                'type': 'function_call',
+                'id': 'fc_item_1',
+                'call_id': 'call_real_1',
+                'name': 'lookup',
+              },
+            },
+            state: responseState);
+        final responseArguments = AiGatewayProtocolStreamBridge.mapEvents(
+            'openai.responses',
+            {
               'type': 'response.function_call_arguments.delta',
               'item_id': 'fc_item_1',
               'delta': '{"q":1}',
-            }, state: responseState);
+            },
+            state: responseState);
 
         expect(multiToolDeltas.map((event) => event.toolCallId), [
           'call-a',

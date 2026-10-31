@@ -64,9 +64,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultHeaders => const {
-    'Content-Type': 'application/json',
-    'Accept': 'text/event-stream',
-  };
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      };
 
   @override
   Future<String> chat(
@@ -278,24 +278,24 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   Set<String> get _supportedConnectorTypes => switch (endpointType) {
-    'anthropic' => const {'claude'},
-    'google.gemini.generate_content' => const {'gemini'},
-    'google.gemini.interactions' => const {'gemini-interactions'},
-    'ollama.chat' => const {'ollama'},
-    _ => const {
-      'openai-compatibility',
-      'openai-api',
-      'bedrock',
-      'kimi',
-      'kimi-ai',
-      'kimi.ai',
-      'moonshot',
-      'glm',
-      'deepseek',
-      'minimax',
-      'qwen',
-    },
-  };
+        'anthropic' => const {'claude'},
+        'google.gemini.generate_content' => const {'gemini'},
+        'google.gemini.interactions' => const {'gemini-interactions'},
+        'ollama.chat' => const {'ollama'},
+        _ => const {
+            'openai-compatibility',
+            'openai-api',
+            'bedrock',
+            'kimi',
+            'kimi-ai',
+            'kimi.ai',
+            'moonshot',
+            'glm',
+            'deepseek',
+            'minimax',
+            'qwen',
+          },
+      };
 
   String _protocolFor(AiGatewayAccount account) {
     if (endpointType == 'anthropic' ||
@@ -396,8 +396,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final requestTools = _effectiveTools(tools, extraParams);
     final previousInteractionValue = extraParams?['previous_interaction_id'];
-    final previousInteractionId =
-        protocolId == 'google.gemini.interactions' &&
+    final previousInteractionId = protocolId == 'google.gemini.interactions' &&
             previousInteractionValue is String
         ? previousInteractionValue
         : null;
@@ -414,8 +413,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         : system;
     final thinking = extraParams?['thinking'];
     final thinkingType = thinking is Map ? thinking['type'] : null;
-    final extendedThinking =
-        thinkingType is String &&
+    final extendedThinking = thinkingType is String &&
         const {
           'enabled',
           'adaptive',
@@ -455,8 +453,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required bool stream,
   }) {
     _lastRequestBody = body;
-    final baseUrl =
-        account.endpointConfig['baseUrl'] ??
+    final baseUrl = account.endpointConfig['baseUrl'] ??
         account.endpointConfig['host'] ??
         account.endpointConfig['apiBase'];
     _lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -497,9 +494,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     final parsedEvents = StreamController<AIStreamEvent>();
     unawaited(() async {
       try {
-        final payloads = protocolId == 'ollama.chat'
-            ? _ndjsonData(body)
-            : _sseData(body);
+        final payloads =
+            protocolId == 'ollama.chat' ? _ndjsonData(body) : _sseData(body);
         await for (final payload in payloads) {
           final trimmedPayload = payload.trim();
           if (trimmedPayload.isEmpty) continue;
@@ -675,8 +671,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .whereType<String>()
           .join();
       final hasToolUse = blocks.whereType<Map>().any(
-        (block) => block['type'] == 'tool_use',
-      );
+            (block) => block['type'] == 'tool_use',
+          );
       if (text.trim().isEmpty && !hasToolUse) {
         throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
       }
@@ -744,10 +740,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       final parts = content is Map ? content['parts'] : null;
       return parts is List
           ? parts
-                .whereType<Map>()
-                .where((part) => part['thought'] != true)
-                .map((part) => part['text'])
-                .whereType<String>()
+              .whereType<Map>()
+              .where((part) => part['thought'] != true)
+              .map((part) => part['text'])
+              .whereType<String>()
           : const <String>[];
     }).join();
   }
@@ -773,18 +769,19 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   static Map<String, dynamic> _rawProtocolUsage(
     Map<String, dynamic> data,
     String protocolId,
-  ) => switch (protocolId) {
-    'google.gemini.generate_content' =>
-      _jsonMap(data['usageMetadata']) ?? const {},
-    'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
-    'ollama.chat' => {
-      if (data['prompt_eval_count'] is num)
-        'prompt_eval_count': data['prompt_eval_count'],
-      if (data['eval_count'] is num) 'eval_count': data['eval_count'],
-    },
-    'openai.responses' => _jsonMap(data['usage']) ?? const {},
-    _ => _jsonMap(data['usage']) ?? const {},
-  };
+  ) =>
+      switch (protocolId) {
+        'google.gemini.generate_content' =>
+          _jsonMap(data['usageMetadata']) ?? const {},
+        'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
+        'ollama.chat' => {
+            if (data['prompt_eval_count'] is num)
+              'prompt_eval_count': data['prompt_eval_count'],
+            if (data['eval_count'] is num) 'eval_count': data['eval_count'],
+          },
+        'openai.responses' => _jsonMap(data['usage']) ?? const {},
+        _ => _jsonMap(data['usage']) ?? const {},
+      };
 
   static Map<String, dynamic> _normalizeProtocolUsage(
     Map<String, dynamic> raw,
@@ -798,12 +795,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (protocolId == 'openai.chat_completions') {
       return OpenAICompatibleChatProvider.normalizeUsage(raw) ?? const {};
     }
-    final input =
-        raw['input_tokens'] ??
+    final input = raw['input_tokens'] ??
         raw['promptTokenCount'] ??
         raw['prompt_eval_count'];
-    final output =
-        raw['output_tokens'] ??
+    final output = raw['output_tokens'] ??
         raw['candidatesTokenCount'] ??
         raw['eval_count'];
     return {
@@ -816,8 +811,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     AiGatewayProtocolStreamEvent event,
     Map<int, Map<String, dynamic>> accumulators,
   ) {
-    final index =
-        event.toolCallIndex ??
+    final index = event.toolCallIndex ??
         (event.toolCallId == null
             ? accumulators.length
             : accumulators.keys.firstWhere(
@@ -826,9 +820,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               ));
     final entry = accumulators.putIfAbsent(index, () => {});
     if (event.toolCallId != null) entry['id'] = event.toolCallId;
-    final function =
-        entry.putIfAbsent('function', () => <String, dynamic>{})
-            as Map<String, dynamic>;
+    final function = entry.putIfAbsent('function', () => <String, dynamic>{})
+        as Map<String, dynamic>;
     if (event.toolName != null) function['name'] = event.toolName;
     if (event.thoughtSignature != null) {
       entry['thoughtSignature'] = event.thoughtSignature;
@@ -951,9 +944,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       if (call['type'] is String) entry['type'] = call['type'];
       final function = call['function'];
       if (function is! Map) continue;
-      final target =
-          entry.putIfAbsent('function', () => <String, dynamic>{})
-              as Map<String, dynamic>;
+      final target = entry.putIfAbsent('function', () => <String, dynamic>{})
+          as Map<String, dynamic>;
       if (function['name'] is String) target['name'] = function['name'];
       if (function['arguments'] is String) {
         target['arguments'] =
@@ -989,9 +981,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static AiGatewayExecutionException _streamRequestError(Object? apiError) {
-    final rawCode = apiError is Map
-        ? apiError['code'] ?? apiError['type']
-        : null;
+    final rawCode =
+        apiError is Map ? apiError['code'] ?? apiError['type'] : null;
     return AiGatewayExecutionException(
       kind: AiGatewayFailureKind.request,
       code: rawCode is String ? rawCode : null,
@@ -1002,15 +993,16 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 AiGatewayConnectorObservation _mergeGatewayObservations(
   AiGatewayConnectorObservation first,
   AiGatewayConnectorObservation second,
-) => AiGatewayConnectorObservation(
-  requestUsage: second.requestUsage.isKnown
-      ? second.requestUsage
-      : first.requestUsage,
-  remainingQuota: second.remainingQuota.isKnown
-      ? second.remainingQuota
-      : first.remainingQuota,
-  quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
-);
+) =>
+    AiGatewayConnectorObservation(
+      requestUsage: second.requestUsage.isKnown
+          ? second.requestUsage
+          : first.requestUsage,
+      remainingQuota: second.remainingQuota.isKnown
+          ? second.remainingQuota
+          : first.remainingQuota,
+      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+    );
 
 class _LlmCompletionResult {
   final Map<String, dynamic> data;

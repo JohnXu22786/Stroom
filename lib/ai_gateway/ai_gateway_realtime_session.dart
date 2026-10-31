@@ -7,8 +7,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'realtime_channel_unsupported.dart'
-    if (dart.library.io) 'realtime_channel_io.dart'
-    as realtime_channel;
+    if (dart.library.io) 'realtime_channel_io.dart' as realtime_channel;
 
 class AiGatewayRealtimeConnectionOptions {
   final String providerId;
@@ -57,16 +56,17 @@ abstract final class AiGatewayRealtimeProtocol {
   }) {
     return switch (providerId) {
       'openai' ||
-      'openai-api' => AiGatewayOpenAiRealtimeAdapter.prepareConnection(
-        authType: authType,
-        apiKey: apiKey,
-        modelId: modelId,
-      ),
+      'openai-api' =>
+        AiGatewayOpenAiRealtimeAdapter.prepareConnection(
+          authType: authType,
+          apiKey: apiKey,
+          modelId: modelId,
+        ),
       'xai' => AiGatewayXaiVoiceRealtimeAdapter.prepareConnection(
-        authType: authType,
-        apiKey: apiKey,
-        modelId: modelId,
-      ),
+          authType: authType,
+          apiKey: apiKey,
+          modelId: modelId,
+        ),
       _ => throw ArgumentError.value(providerId, 'providerId'),
     };
   }
@@ -97,9 +97,8 @@ abstract final class AiGatewayRealtimeProtocol {
       return AiGatewayRealtimeEvent(
         kind: AiGatewayRealtimeEventKind.textComplete,
         type: type,
-        text: event['transcript'] is String
-            ? event['transcript'] as String
-            : '',
+        text:
+            event['transcript'] is String ? event['transcript'] as String : '',
         raw: Map.unmodifiable(event),
       );
     }
@@ -174,13 +173,14 @@ abstract final class AiGatewayOpenAiRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => _prepareRealtimeConnection(
-    providerId: 'openai',
-    host: 'api.openai.com',
-    authType: authType,
-    apiKey: apiKey,
-    modelId: modelId,
-  );
+  }) =>
+      _prepareRealtimeConnection(
+        providerId: 'openai',
+        host: 'api.openai.com',
+        authType: authType,
+        apiKey: apiKey,
+        modelId: modelId,
+      );
 
   static AiGatewayRealtimeEvent mapEvent(Map<String, dynamic> event) =>
       AiGatewayRealtimeProtocol.mapEvent('openai', event);
@@ -189,9 +189,10 @@ abstract final class AiGatewayOpenAiRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => AiGatewayRealtimeProtocol.connect(
-    prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
-  );
+  }) =>
+      AiGatewayRealtimeProtocol.connect(
+        prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
+      );
 }
 
 /// xAI Voice Realtime's independent API-key contract. OAuth credentials used
@@ -201,13 +202,14 @@ abstract final class AiGatewayXaiVoiceRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => _prepareRealtimeConnection(
-    providerId: 'xai',
-    host: 'api.x.ai',
-    authType: authType,
-    apiKey: apiKey,
-    modelId: modelId,
-  );
+  }) =>
+      _prepareRealtimeConnection(
+        providerId: 'xai',
+        host: 'api.x.ai',
+        authType: authType,
+        apiKey: apiKey,
+        modelId: modelId,
+      );
 
   static AiGatewayRealtimeEvent mapEvent(Map<String, dynamic> event) =>
       AiGatewayRealtimeProtocol.mapEvent('xai', event);
@@ -216,9 +218,10 @@ abstract final class AiGatewayXaiVoiceRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => AiGatewayRealtimeProtocol.connect(
-    prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
-  );
+  }) =>
+      AiGatewayRealtimeProtocol.connect(
+        prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
+      );
 }
 
 AiGatewayRealtimeConnectionOptions _prepareRealtimeConnection({
@@ -256,15 +259,15 @@ class AiGatewayRealtimeSession {
   }) : _channel = channel;
 
   Stream<AiGatewayRealtimeEvent> get events => _channel.stream.map((frame) {
-    final decoded = jsonDecode(frame as String);
-    if (decoded is! Map) {
-      throw const FormatException('Realtime event must be a JSON object.');
-    }
-    return AiGatewayRealtimeProtocol.mapEvent(
-      providerId,
-      Map<String, dynamic>.from(decoded),
-    );
-  });
+        final decoded = jsonDecode(frame as String);
+        if (decoded is! Map) {
+          throw const FormatException('Realtime event must be a JSON object.');
+        }
+        return AiGatewayRealtimeProtocol.mapEvent(
+          providerId,
+          Map<String, dynamic>.from(decoded),
+        );
+      });
 
   void sendEvent(Map<String, dynamic> event) {
     if (_closed) throw StateError('Realtime session is closed.');

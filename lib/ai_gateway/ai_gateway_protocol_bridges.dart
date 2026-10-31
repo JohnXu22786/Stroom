@@ -23,22 +23,24 @@ abstract final class AiGatewayProtocolBridges {
 
   static AiGatewayProtocolBridge<Map<String, dynamic>>? forProtocol(
     String protocolId,
-  ) => switch (protocolId) {
-    'openai.chat_completions' => openAiChatCompletions,
-    'openai.responses' => openAiResponses,
-    'anthropic.messages' => anthropicMessages,
-    'google.gemini.generate_content' => geminiGenerateContent,
-    'google.gemini.interactions' => geminiInteractions,
-    'ollama.chat' => ollamaChat,
-    _ => null,
-  };
+  ) =>
+      switch (protocolId) {
+        'openai.chat_completions' => openAiChatCompletions,
+        'openai.responses' => openAiResponses,
+        'anthropic.messages' => anthropicMessages,
+        'google.gemini.generate_content' => geminiGenerateContent,
+        'google.gemini.interactions' => geminiInteractions,
+        'ollama.chat' => ollamaChat,
+        _ => null,
+      };
 
   static AiGatewayEncodedProtocolRequest? buildRequest(
     String protocolId,
     AiGatewayProtocolRequest request,
-  ) => forProtocol(protocolId) is _MapBridge
-      ? (forProtocol(protocolId)! as _MapBridge).buildRequest(request)
-      : null;
+  ) =>
+      forProtocol(protocolId) is _MapBridge
+          ? (forProtocol(protocolId)! as _MapBridge).buildRequest(request)
+          : null;
 }
 
 enum AiGatewayProtocolStreamEventKind {
@@ -111,18 +113,19 @@ abstract final class AiGatewayProtocolStreamBridge {
       String? toolName,
       String? thoughtSignature,
       Map<String, dynamic>? usage,
-    }) => AiGatewayProtocolStreamEvent(
-      kind: kind,
-      type: type,
-      raw: raw,
-      delta: delta,
-      toolCallId: toolCallId,
-      toolCallIndex: toolCallIndex,
-      toolItemId: toolItemId,
-      toolName: toolName,
-      thoughtSignature: thoughtSignature,
-      usage: usage == null ? null : Map.unmodifiable(usage),
-    );
+    }) =>
+        AiGatewayProtocolStreamEvent(
+          kind: kind,
+          type: type,
+          raw: raw,
+          delta: delta,
+          toolCallId: toolCallId,
+          toolCallIndex: toolCallIndex,
+          toolItemId: toolItemId,
+          toolName: toolName,
+          thoughtSignature: thoughtSignature,
+          usage: usage == null ? null : Map.unmodifiable(usage),
+        );
 
     if (protocolId == 'openai.chat_completions') {
       final usage = _objectMap(event['usage']);
@@ -132,8 +135,8 @@ abstract final class AiGatewayProtocolStreamBridge {
       final choices = event['choices'];
       final delta =
           choices is List && choices.isNotEmpty && choices.first is Map
-          ? (choices.first as Map)['delta']
-          : null;
+              ? (choices.first as Map)['delta']
+              : null;
       if (delta is Map) {
         final mapped = <AiGatewayProtocolStreamEvent>[];
         if (delta['content'] is String) {
@@ -156,9 +159,8 @@ abstract final class AiGatewayProtocolStreamBridge {
         if (calls is List) {
           for (final rawCall in calls.whereType<Map>()) {
             final call = Map<String, dynamic>.from(rawCall);
-            final index = call['index'] is num
-                ? (call['index'] as num).toInt()
-                : null;
+            final index =
+                call['index'] is num ? (call['index'] as num).toInt() : null;
             final id = _stringValue(call['id']);
             if (index != null && id != null) {
               state?._openAiToolIdsByIndex[index] = id;
@@ -168,8 +170,7 @@ abstract final class AiGatewayProtocolStreamBridge {
               create(
                 AiGatewayProtocolStreamEventKind.toolCallDelta,
                 delta: _stringValue(function['arguments']),
-                toolCallId:
-                    id ??
+                toolCallId: id ??
                     (index == null
                         ? null
                         : state?._openAiToolIdsByIndex[index]),
@@ -209,8 +210,7 @@ abstract final class AiGatewayProtocolStreamBridge {
           create(
             AiGatewayProtocolStreamEventKind.toolCallDelta,
             delta: _stringValue(event['delta']),
-            toolCallId:
-                _stringValue(event['call_id']) ??
+            toolCallId: _stringValue(event['call_id']) ??
                 (itemId == null
                     ? null
                     : state?._responseToolIdsByItemId[itemId]),
@@ -228,11 +228,9 @@ abstract final class AiGatewayProtocolStreamBridge {
       final candidates = event['candidates'];
       if (candidates is List) {
         final mapped = <AiGatewayProtocolStreamEvent>[];
-        for (
-          var candidateIndex = 0;
-          candidateIndex < candidates.length;
-          candidateIndex++
-        ) {
+        for (var candidateIndex = 0;
+            candidateIndex < candidates.length;
+            candidateIndex++) {
           final candidate = _objectMap(candidates[candidateIndex]);
           final parts = _objectMap(candidate['content'])['parts'];
           if (parts is! List) continue;
@@ -361,16 +359,17 @@ abstract final class AiGatewayProtocolStreamBridge {
       int? toolCallIndex,
       String? toolName,
       Map<String, dynamic>? usage,
-    }) => AiGatewayProtocolStreamEvent(
-      kind: kind,
-      type: type,
-      raw: raw,
-      delta: delta,
-      toolCallId: toolCallId,
-      toolCallIndex: toolCallIndex,
-      toolName: toolName,
-      usage: usage == null ? null : Map.unmodifiable(usage),
-    );
+    }) =>
+        AiGatewayProtocolStreamEvent(
+          kind: kind,
+          type: type,
+          raw: raw,
+          delta: delta,
+          toolCallId: toolCallId,
+          toolCallIndex: toolCallIndex,
+          toolName: toolName,
+          usage: usage == null ? null : Map.unmodifiable(usage),
+        );
 
     if (event['error'] != null || type == 'error') {
       return make(AiGatewayProtocolStreamEventKind.error);
@@ -384,8 +383,8 @@ abstract final class AiGatewayProtocolStreamBridge {
         final choices = event['choices'];
         final delta =
             choices is List && choices.isNotEmpty && choices.first is Map
-            ? (choices.first as Map)['delta']
-            : null;
+                ? (choices.first as Map)['delta']
+                : null;
         if (delta is Map && delta['content'] is String) {
           return make(
             AiGatewayProtocolStreamEventKind.textDelta,
@@ -410,8 +409,8 @@ abstract final class AiGatewayProtocolStreamBridge {
             toolCallId: call['id'] is String
                 ? call['id'] as String
                 : call['index'] is num
-                ? call['index'].toString()
-                : null,
+                    ? call['index'].toString()
+                    : null,
             toolName: function is Map && function['name'] is String
                 ? function['name'] as String
                 : null,
@@ -488,24 +487,21 @@ abstract final class AiGatewayProtocolStreamBridge {
           );
         }
         if (deltaType == 'input_json_delta') {
-          final index = event['index'] is num
-              ? (event['index'] as num).toInt()
-              : null;
+          final index =
+              event['index'] is num ? (event['index'] as num).toInt() : null;
           return make(
             AiGatewayProtocolStreamEventKind.toolCallDelta,
             delta: _stringValue(contentDelta['partial_json']),
-            toolCallId: index == null
-                ? null
-                : state?.anthropicToolIdForIndex(index),
+            toolCallId:
+                index == null ? null : state?.anthropicToolIdForIndex(index),
             toolCallIndex: index,
           );
         }
         if (type == 'content_block_start') {
           final block = _objectMap(event['content_block']);
           if (block['type'] == 'tool_use') {
-            final index = event['index'] is num
-                ? (event['index'] as num).toInt()
-                : null;
+            final index =
+                event['index'] is num ? (event['index'] as num).toInt() : null;
             final id = _stringValue(block['id']);
             if (index != null && id != null) {
               state?._anthropicToolIdsByIndex[index] = id;
@@ -527,8 +523,7 @@ abstract final class AiGatewayProtocolStreamBridge {
           return make(AiGatewayProtocolStreamEventKind.usage, usage: usage);
         }
         final candidates = event['candidates'];
-        final parts =
-            candidates is List &&
+        final parts = candidates is List &&
                 candidates.isNotEmpty &&
                 candidates.first is Map
             ? _objectMap((candidates.first as Map)['content'])['parts']
@@ -674,9 +669,9 @@ class AiGatewayProtocolRequest {
     this.temperature,
     Map<String, dynamic> options = const {},
     this.previousInteractionId,
-  }) : messages = List.unmodifiable(messages),
-       tools = List.unmodifiable(tools),
-       options = Map.unmodifiable(options);
+  })  : messages = List.unmodifiable(messages),
+        tools = List.unmodifiable(tools),
+        options = Map.unmodifiable(options);
 }
 
 /// Provider-specific request body, before authentication and HTTP execution.
@@ -718,8 +713,7 @@ abstract base class _MapBridge
   AiGatewayEncodedProtocolRequest buildRequest(
     AiGatewayProtocolRequest request,
   ) {
-    final countTokens =
-        protocolId == 'anthropic.messages' &&
+    final countTokens = protocolId == 'anthropic.messages' &&
         request.operation == 'count_tokens';
     if (request.operation != 'generate' && !countTokens) {
       throw ArgumentError.value(request.operation, 'operation');
@@ -749,8 +743,7 @@ abstract base class _MapBridge
     }
     final systemText = systemTexts.join('\n');
     final systemInstruction = systemText.isEmpty ? null : systemText;
-    final explicitSystemIsInMessages =
-        request.system?.isNotEmpty == true &&
+    final explicitSystemIsInMessages = request.system?.isNotEmpty == true &&
         request.messages.any((message) {
           if (message.role != 'system') return false;
           final text = message.content
@@ -811,107 +804,113 @@ abstract base class _MapBridge
     final generationOptions = _asMap(options.remove('generationConfig'));
     final body = switch (protocolId) {
       'openai.chat_completions' => {
-        'messages': [
-          if (request.system?.isNotEmpty == true && !explicitSystemIsInMessages)
-            {'role': 'system', 'content': request.system},
-          ...messages,
-        ],
-        if (request.maxOutputTokens != null)
-          'max_tokens': request.maxOutputTokens,
-        if (request.temperature != null) 'temperature': request.temperature,
-        if (request.tools.isNotEmpty) 'tools': request.tools,
-        'stream': request.stream,
-        ...options,
-        'model': request.modelId,
-      },
-      'openai.responses' => {
-        'input': messages,
-        'instructions': ?systemInstruction,
-        if (request.maxOutputTokens != null)
-          'max_output_tokens': request.maxOutputTokens,
-        if (request.temperature != null) 'temperature': request.temperature,
-        if (request.tools.isNotEmpty)
-          'tools': _toolsForProtocol(request.tools, 'openai.responses'),
-        'stream': request.stream,
-        ...options,
-        'model': request.modelId,
-      },
-      'anthropic.messages' => {
-        'messages': messages,
-        ...?anthropicSystemFields,
-        if (!countTokens) 'max_tokens': request.maxOutputTokens ?? 4096,
-        if (!countTokens && request.temperature != null)
-          'temperature': request.temperature,
-        if (request.tools.isNotEmpty)
-          'tools': _toolsForProtocol(request.tools, 'anthropic.messages'),
-        if (!countTokens) 'stream': request.stream,
-        ...options,
-        'model': request.modelId,
-      },
-      'google.gemini.generate_content' => {
-        'contents': messages,
-        ...?geminiSystemFields,
-        if (request.maxOutputTokens != null ||
-            request.temperature != null ||
-            generationOptions.isNotEmpty)
-          'generationConfig': {
-            if (request.maxOutputTokens != null)
-              'maxOutputTokens': request.maxOutputTokens,
-            if (request.temperature != null) 'temperature': request.temperature,
-            ...generationOptions,
-          },
-        if (request.tools.isNotEmpty)
-          'tools': _toolsForProtocol(
-            request.tools,
-            'google.gemini.generate_content',
-          ),
-        ...options,
-      },
-      'google.gemini.interactions' => {
-        'input': _interactionInputs(
-          request.previousInteractionId == null || request.messages.isEmpty
-              ? request.messages
-              : [request.messages.last],
-        ),
-        ...?interactionsSystemFields,
-        if (request.previousInteractionId != null)
-          'previous_interaction_id': request.previousInteractionId,
-        if (request.tools.isNotEmpty)
-          'tools': _toolsForProtocol(
-            request.tools,
-            'google.gemini.interactions',
-          ),
-        if (request.maxOutputTokens != null ||
-            request.temperature != null ||
-            generationOptions.isNotEmpty)
-          'generation_config': {
-            if (request.maxOutputTokens != null)
-              'max_output_tokens': request.maxOutputTokens,
-            if (request.temperature != null) 'temperature': request.temperature,
-            ...generationOptions,
-          },
-        'stream': request.stream,
-        ...options,
-        'model': request.modelId,
-      },
-      'ollama.chat' => {
-        'messages': [
-          if (request.system?.isNotEmpty == true && !explicitSystemIsInMessages)
-            {'role': 'system', 'content': request.system},
-          ...messages,
-        ],
-        ...ollamaRootFields,
-        if (request.tools.isNotEmpty) 'tools': request.tools,
-        'stream': request.stream,
-        'options': {
-          if (request.temperature != null) 'temperature': request.temperature,
-          ...ollamaOptions,
-          ...options,
+          'messages': [
+            if (request.system?.isNotEmpty == true &&
+                !explicitSystemIsInMessages)
+              {'role': 'system', 'content': request.system},
+            ...messages,
+          ],
           if (request.maxOutputTokens != null)
-            'num_predict': request.maxOutputTokens,
+            'max_tokens': request.maxOutputTokens,
+          if (request.temperature != null) 'temperature': request.temperature,
+          if (request.tools.isNotEmpty) 'tools': request.tools,
+          'stream': request.stream,
+          ...options,
+          'model': request.modelId,
         },
-        'model': request.modelId,
-      },
+      'openai.responses' => {
+          'input': messages,
+          // The formatter CI intentionally parses this file as Dart 3.0.
+          // ignore: use_null_aware_elements
+          if (systemInstruction != null) 'instructions': systemInstruction,
+          if (request.maxOutputTokens != null)
+            'max_output_tokens': request.maxOutputTokens,
+          if (request.temperature != null) 'temperature': request.temperature,
+          if (request.tools.isNotEmpty)
+            'tools': _toolsForProtocol(request.tools, 'openai.responses'),
+          'stream': request.stream,
+          ...options,
+          'model': request.modelId,
+        },
+      'anthropic.messages' => {
+          'messages': messages,
+          ...?anthropicSystemFields,
+          if (!countTokens) 'max_tokens': request.maxOutputTokens ?? 4096,
+          if (!countTokens && request.temperature != null)
+            'temperature': request.temperature,
+          if (request.tools.isNotEmpty)
+            'tools': _toolsForProtocol(request.tools, 'anthropic.messages'),
+          if (!countTokens) 'stream': request.stream,
+          ...options,
+          'model': request.modelId,
+        },
+      'google.gemini.generate_content' => {
+          'contents': messages,
+          ...?geminiSystemFields,
+          if (request.maxOutputTokens != null ||
+              request.temperature != null ||
+              generationOptions.isNotEmpty)
+            'generationConfig': {
+              if (request.maxOutputTokens != null)
+                'maxOutputTokens': request.maxOutputTokens,
+              if (request.temperature != null)
+                'temperature': request.temperature,
+              ...generationOptions,
+            },
+          if (request.tools.isNotEmpty)
+            'tools': _toolsForProtocol(
+              request.tools,
+              'google.gemini.generate_content',
+            ),
+          ...options,
+        },
+      'google.gemini.interactions' => {
+          'input': _interactionInputs(
+            request.previousInteractionId == null || request.messages.isEmpty
+                ? request.messages
+                : [request.messages.last],
+          ),
+          ...?interactionsSystemFields,
+          if (request.previousInteractionId != null)
+            'previous_interaction_id': request.previousInteractionId,
+          if (request.tools.isNotEmpty)
+            'tools': _toolsForProtocol(
+              request.tools,
+              'google.gemini.interactions',
+            ),
+          if (request.maxOutputTokens != null ||
+              request.temperature != null ||
+              generationOptions.isNotEmpty)
+            'generation_config': {
+              if (request.maxOutputTokens != null)
+                'max_output_tokens': request.maxOutputTokens,
+              if (request.temperature != null)
+                'temperature': request.temperature,
+              ...generationOptions,
+            },
+          'stream': request.stream,
+          ...options,
+          'model': request.modelId,
+        },
+      'ollama.chat' => {
+          'messages': [
+            if (request.system?.isNotEmpty == true &&
+                !explicitSystemIsInMessages)
+              {'role': 'system', 'content': request.system},
+            ...messages,
+          ],
+          ...ollamaRootFields,
+          if (request.tools.isNotEmpty) 'tools': request.tools,
+          'stream': request.stream,
+          'options': {
+            if (request.temperature != null) 'temperature': request.temperature,
+            ...ollamaOptions,
+            ...options,
+            if (request.maxOutputTokens != null)
+              'num_predict': request.maxOutputTokens,
+          },
+          'model': request.modelId,
+        },
       _ => throw ArgumentError.value(protocolId, 'protocolId'),
     };
     final path = switch (protocolId) {
@@ -950,66 +949,67 @@ abstract base class _MapBridge
 
     return switch (targetProtocol) {
       'openai.responses' => [
-        for (final tool in tools)
-          if (tool['type'] == 'function' && tool['function'] is Map)
-            {'type': 'function', ...functionOf(tool)}
-          else
-            Map<String, dynamic>.from(tool),
-      ],
+          for (final tool in tools)
+            if (tool['type'] == 'function' && tool['function'] is Map)
+              {'type': 'function', ...functionOf(tool)}
+            else
+              Map<String, dynamic>.from(tool),
+        ],
       'anthropic.messages' => [
-        for (final tool in tools)
-          if (tool['type'] == 'function' && tool['function'] is Map)
-            _anthropicTool(functionOf(tool))
-          else if (tool['name'] is String && tool['input_schema'] is Map)
-            Map<String, dynamic>.from(tool)
-          else
-            Map<String, dynamic>.from(tool),
-      ],
+          for (final tool in tools)
+            if (tool['type'] == 'function' && tool['function'] is Map)
+              _anthropicTool(functionOf(tool))
+            else if (tool['name'] is String && tool['input_schema'] is Map)
+              Map<String, dynamic>.from(tool)
+            else
+              Map<String, dynamic>.from(tool),
+        ],
       'google.gemini.generate_content' => [
-        if (tools.every((tool) => tool['functionDeclarations'] is List))
-          ...tools.map(Map<String, dynamic>.from)
-        else
-          {
-            'functionDeclarations': [
-              for (final tool in tools)
-                if (tool['type'] == 'function' && tool['function'] is Map)
-                  {
-                    'name': functionOf(tool)['name'],
-                    if (functionOf(tool)['description'] != null)
-                      'description': functionOf(tool)['description'],
-                    if (functionOf(tool)['parameters'] is Map)
-                      'parameters': functionOf(tool)['parameters'],
-                  }
-                else
-                  Map<String, dynamic>.from(tool),
-            ],
-          },
-      ],
-      'google.gemini.interactions' => [
-        for (final tool in tools)
-          if (tool['type'] == 'function' && tool['function'] is Map)
-            {'type': 'function', ...functionOf(tool)}
+          if (tools.every((tool) => tool['functionDeclarations'] is List))
+            ...tools.map(Map<String, dynamic>.from)
           else
-            Map<String, dynamic>.from(tool),
-      ],
+            {
+              'functionDeclarations': [
+                for (final tool in tools)
+                  if (tool['type'] == 'function' && tool['function'] is Map)
+                    {
+                      'name': functionOf(tool)['name'],
+                      if (functionOf(tool)['description'] != null)
+                        'description': functionOf(tool)['description'],
+                      if (functionOf(tool)['parameters'] is Map)
+                        'parameters': functionOf(tool)['parameters'],
+                    }
+                  else
+                    Map<String, dynamic>.from(tool),
+              ],
+            },
+        ],
+      'google.gemini.interactions' => [
+          for (final tool in tools)
+            if (tool['type'] == 'function' && tool['function'] is Map)
+              {'type': 'function', ...functionOf(tool)}
+            else
+              Map<String, dynamic>.from(tool),
+        ],
       _ => [for (final tool in tools) Map<String, dynamic>.from(tool)],
     };
   }
 
   Map<String, dynamic> _anthropicTool(Map<String, dynamic> function) => {
-    for (final entry in function.entries)
-      if (!const {'parameters'}.contains(entry.key)) entry.key: entry.value,
-    'input_schema': function['parameters'] is Map
-        ? function['parameters']
-        : const {'type': 'object', 'properties': <String, dynamic>{}},
-  };
+        for (final entry in function.entries)
+          if (!const {'parameters'}.contains(entry.key)) entry.key: entry.value,
+        'input_schema': function['parameters'] is Map
+            ? function['parameters']
+            : const {'type': 'object', 'properties': <String, dynamic>{}},
+      };
 
   Map<String, dynamic> _asMap(Object? value) =>
       value is Map ? Map<String, dynamic>.from(value) : const {};
 
   List<Map<String, dynamic>> _interactionInputs(
     Iterable<StroomMessage> messages,
-  ) => [for (final message in messages) ..._interactionMessage(message)];
+  ) =>
+      [for (final message in messages) ..._interactionMessage(message)];
 
   List<Map<String, dynamic>> _interactionMessage(StroomMessage message) {
     final source = message.extensions['google.gemini.interactions'];
@@ -1116,12 +1116,12 @@ abstract base class _MapBridge
   }
 
   Map<String, dynamic> _snapshot(StroomMessage message) => {
-    'id': message.id,
-    'role': message.role,
-    'content': message.content.map((part) => part.toMap()).toList(),
-    if (message.finishReason != null) 'finishReason': message.finishReason,
-    if (message.usage != null) 'usage': message.usage,
-  };
+        'id': message.id,
+        'role': message.role,
+        'content': message.content.map((part) => part.toMap()).toList(),
+        if (message.finishReason != null) 'finishReason': message.finishReason,
+        if (message.usage != null) 'usage': message.usage,
+      };
 
   List<StroomContentPart> _textParts(Object? value) {
     if (value is String) {
@@ -1202,17 +1202,19 @@ abstract base class _MapBridge
   Map<String, dynamic> _targetSource(
     StroomMessage message,
     StroomContentPart part,
-  ) => message.extensions[_extensionKey] is Map ? _sourceOf(part) : {};
+  ) =>
+      message.extensions[_extensionKey] is Map ? _sourceOf(part) : {};
 
   Map<String, dynamic> _overlaySource(
     Map<String, dynamic> source,
     Map<String, dynamic> fields,
-  ) => source..addAll(fields);
+  ) =>
+      source..addAll(fields);
 
   StroomContentPart _genericPart(Map item) => StroomContentPart(
-    type: _string(item['type'], 'unknown'),
-    data: {'source': _copyMap(item)},
-  );
+        type: _string(item['type'], 'unknown'),
+        data: {'source': _copyMap(item)},
+      );
 }
 
 final class _OpenAiChatCompletionsBridge extends _MapBridge {
@@ -1235,9 +1237,8 @@ final class _OpenAiChatCompletionsBridge extends _MapBridge {
     final results = _partsOfType(message, 'tool_result');
     if (results.isEmpty) return [fromStroom(message)];
 
-    final remainingContent = message.content
-        .where((part) => part.type != 'tool_result')
-        .toList();
+    final remainingContent =
+        message.content.where((part) => part.type != 'tool_result').toList();
     final encoded = <Map<String, dynamic>>[];
     if (remainingContent.isNotEmpty) {
       encoded.add(
@@ -1519,8 +1520,8 @@ final class _OpenAiResponsesBridge extends _MapBridge {
     final url = imageUrl is Map
         ? imageUrl['url']
         : imageUrl is String
-        ? imageUrl
-        : part.data['reference'];
+            ? imageUrl
+            : part.data['reference'];
     final detail = imageUrl is Map ? imageUrl['detail'] : null;
     if (detail is String && !const {'auto', 'low', 'high'}.contains(detail)) {
       throw UnsupportedError(
@@ -1602,36 +1603,36 @@ final class _OpenAiResponsesBridge extends _MapBridge {
 
   @override
   Map<String, dynamic> _encodeNeutral(StroomMessage message) => {
-    if (_partsOfType(message, 'tool_call').isNotEmpty)
-      ..._overlaySource(
-        _targetSource(message, _partsOfType(message, 'tool_call').first),
-        {
-          'type': 'function_call',
-          'call_id': _string(
-            _partsOfType(message, 'tool_call').first.data['id'],
-          ),
-          'name': _string(
-            _partsOfType(message, 'tool_call').first.data['name'],
-          ),
-          'arguments': jsonEncode(
-            _copyValueMap(
-              _partsOfType(message, 'tool_call').first.data['arguments'],
-            ),
-          ),
+        if (_partsOfType(message, 'tool_call').isNotEmpty)
+          ..._overlaySource(
+            _targetSource(message, _partsOfType(message, 'tool_call').first),
+            {
+              'type': 'function_call',
+              'call_id': _string(
+                _partsOfType(message, 'tool_call').first.data['id'],
+              ),
+              'name': _string(
+                _partsOfType(message, 'tool_call').first.data['name'],
+              ),
+              'arguments': jsonEncode(
+                _copyValueMap(
+                  _partsOfType(message, 'tool_call').first.data['arguments'],
+                ),
+              ),
+            },
+          )
+        else ...{
+          'type': 'message',
+          'role': message.role,
+          'content': [
+            for (final part in message.content)
+              if (part.type == 'text')
+                {'type': 'output_text', 'text': part.data['text']}
+              else if (part.type == 'image')
+                _responsesImageContent(part, message),
+          ],
         },
-      )
-    else ...{
-      'type': 'message',
-      'role': message.role,
-      'content': [
-        for (final part in message.content)
-          if (part.type == 'text')
-            {'type': 'output_text', 'text': part.data['text']}
-          else if (part.type == 'image')
-            _responsesImageContent(part, message),
-      ],
-    },
-  };
+      };
 }
 
 final class _AnthropicMessagesBridge extends _MapBridge {
@@ -1719,42 +1720,42 @@ final class _AnthropicMessagesBridge extends _MapBridge {
 
   @override
   Map<String, dynamic> _encodeNeutral(StroomMessage message) => {
-    'role': message.role == 'tool' ? 'user' : message.role,
-    'content': [
-      for (final part in message.content)
-        if (part.type == 'text')
-          _overlaySource(_targetSource(message, part), {
-            'type': 'text',
-            'text': part.data['text'],
-          })
-        else if (part.type == 'reasoning')
-          _encodeAnthropicReasoning(message, part)
-        else if (part.type == 'tool_call')
-          _overlaySource(_targetSource(message, part), {
-            'type': 'tool_use',
-            'id': part.data['id'],
-            'name': part.data['name'],
-            'input': part.data['arguments'],
-          })
-        else if (part.type == 'tool_result')
-          _overlaySource(_targetSource(message, part), {
-            'type': 'tool_result',
-            'tool_use_id': part.data['toolCallId'],
-            'content': _toolResultText(part.data['result']),
-            if (part.data['isError'] == true) 'is_error': true,
-          })
-        else if (part.type == 'image')
-          _encodeAnthropicImage(message, part)
-        else if (part.type == 'document' && part.data['source'] is Map)
-          _copyValueMap(part.data['source'])
-        else if (_targetSource(message, part).isNotEmpty)
-          _targetSource(message, part)
-        else
-          throw UnsupportedError(
-            'Anthropic Messages cannot map ${part.type} content.',
-          ),
-    ],
-  };
+        'role': message.role == 'tool' ? 'user' : message.role,
+        'content': [
+          for (final part in message.content)
+            if (part.type == 'text')
+              _overlaySource(_targetSource(message, part), {
+                'type': 'text',
+                'text': part.data['text'],
+              })
+            else if (part.type == 'reasoning')
+              _encodeAnthropicReasoning(message, part)
+            else if (part.type == 'tool_call')
+              _overlaySource(_targetSource(message, part), {
+                'type': 'tool_use',
+                'id': part.data['id'],
+                'name': part.data['name'],
+                'input': part.data['arguments'],
+              })
+            else if (part.type == 'tool_result')
+              _overlaySource(_targetSource(message, part), {
+                'type': 'tool_result',
+                'tool_use_id': part.data['toolCallId'],
+                'content': _toolResultText(part.data['result']),
+                if (part.data['isError'] == true) 'is_error': true,
+              })
+            else if (part.type == 'image')
+              _encodeAnthropicImage(message, part)
+            else if (part.type == 'document' && part.data['source'] is Map)
+              _copyValueMap(part.data['source'])
+            else if (_targetSource(message, part).isNotEmpty)
+              _targetSource(message, part)
+            else
+              throw UnsupportedError(
+                'Anthropic Messages cannot map ${part.type} content.',
+              ),
+        ],
+      };
 
   Map<String, dynamic> _encodeAnthropicReasoning(
     StroomMessage message,
@@ -1899,9 +1900,8 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
   StroomMessage toStroom(Map<String, dynamic> contentRecord) {
     final content = <StroomContentPart>[];
     final candidates = contentRecord['candidates'];
-    final candidate = candidates is List
-        ? candidates.whereType<Map>().firstOrNull
-        : null;
+    final candidate =
+        candidates is List ? candidates.whereType<Map>().firstOrNull : null;
     final candidateContent = candidate?['content'];
     final parts = candidateContent is Map
         ? candidateContent['parts']
@@ -1926,8 +1926,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
           final data = _copyValueMap(raw['inlineData']);
           content.add(
             StroomContentPart(
-              type:
-                  data['mimeType'] is String &&
+              type: data['mimeType'] is String &&
                       (data['mimeType'] as String).startsWith('image/')
                   ? 'image'
                   : 'media',
@@ -1987,62 +1986,63 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
 
   @override
   Map<String, dynamic> _encodeNeutral(StroomMessage message) => {
-    'role': switch (message.role) {
-      'assistant' => 'model',
-      'tool' => 'user',
-      final role => role,
-    },
-    'parts': [
-      for (final part in message.content)
-        if (part.type == 'text')
-          _overlaySource(_targetSource(message, part), {
-            'text': part.data['text'],
-          })
-        else if (part.type == 'reasoning')
-          _overlaySource(_targetSource(message, part), {
-            'text': part.data['text'],
-            'thought': true,
-            if (part.data['thoughtSignature'] != null)
-              'thoughtSignature': part.data['thoughtSignature'],
-          })
-        else if (part.type == 'image' || part.type == 'media')
-          _geminiMediaPart(message, part)
-        else if (part.type == 'tool_call')
-          _overlaySource(_targetSource(message, part), {
-            'functionCall': {
-              ..._copyValueMap(_targetSource(message, part)['functionCall']),
-              'id': part.data['id'],
-              'name': part.data['name'],
-              'args': part.data['arguments'],
-            },
-            if (_sourceOf(part)['thoughtSignature'] != null)
-              'thoughtSignature': _sourceOf(part)['thoughtSignature'],
-          })
-        else if (part.type == 'tool_result')
-          _overlaySource(_targetSource(message, part), {
-            'functionResponse': {
-              ..._copyValueMap(
-                _targetSource(message, part)['functionResponse'],
-              ),
-              'id': part.data['toolCallId'],
-              if (part.data['name'] != null) 'name': part.data['name'],
-              'response': part.data['result'],
-            },
-          })
-        else if (const {
-          'input_audio',
-          'audio_url',
-          'video_url',
-          'file',
-          'document',
-        }.contains(part.type))
-          _geminiGenericMediaPart(part)
-        else if (_targetSource(message, part).isNotEmpty)
-          _targetSource(message, part)
-        else
-          _rejectUnsupportedGeminiPart(part),
-    ],
-  };
+        'role': switch (message.role) {
+          'assistant' => 'model',
+          'tool' => 'user',
+          final role => role,
+        },
+        'parts': [
+          for (final part in message.content)
+            if (part.type == 'text')
+              _overlaySource(_targetSource(message, part), {
+                'text': part.data['text'],
+              })
+            else if (part.type == 'reasoning')
+              _overlaySource(_targetSource(message, part), {
+                'text': part.data['text'],
+                'thought': true,
+                if (part.data['thoughtSignature'] != null)
+                  'thoughtSignature': part.data['thoughtSignature'],
+              })
+            else if (part.type == 'image' || part.type == 'media')
+              _geminiMediaPart(message, part)
+            else if (part.type == 'tool_call')
+              _overlaySource(_targetSource(message, part), {
+                'functionCall': {
+                  ..._copyValueMap(
+                      _targetSource(message, part)['functionCall']),
+                  'id': part.data['id'],
+                  'name': part.data['name'],
+                  'args': part.data['arguments'],
+                },
+                if (_sourceOf(part)['thoughtSignature'] != null)
+                  'thoughtSignature': _sourceOf(part)['thoughtSignature'],
+              })
+            else if (part.type == 'tool_result')
+              _overlaySource(_targetSource(message, part), {
+                'functionResponse': {
+                  ..._copyValueMap(
+                    _targetSource(message, part)['functionResponse'],
+                  ),
+                  'id': part.data['toolCallId'],
+                  if (part.data['name'] != null) 'name': part.data['name'],
+                  'response': part.data['result'],
+                },
+              })
+            else if (const {
+              'input_audio',
+              'audio_url',
+              'video_url',
+              'file',
+              'document',
+            }.contains(part.type))
+              _geminiGenericMediaPart(part)
+            else if (_targetSource(message, part).isNotEmpty)
+              _targetSource(message, part)
+            else
+              _rejectUnsupportedGeminiPart(part),
+        ],
+      };
 
   Map<String, dynamic> _rejectUnsupportedGeminiPart(StroomContentPart part) =>
       throw UnsupportedError(
@@ -2109,8 +2109,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         dotAll: true,
       ).firstMatch(rawData);
       final format = _string(audio['format']).toLowerCase();
-      final mimeType =
-          dataUri?.group(1) ??
+      final mimeType = dataUri?.group(1) ??
           (audio['mime_type'] is String
               ? audio['mime_type'] as String
               : switch (format) {
@@ -2141,8 +2140,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         : null;
     final explicitMime =
         media['mime_type'] ?? media['mimeType'] ?? media['mimetype'];
-    final mimeType =
-        dataUrl?.group(1) ??
+    final mimeType = dataUrl?.group(1) ??
         (explicitMime is String
             ? explicitMime
             : _geminiMimeType(media['filename'] ?? media['name']));
@@ -2160,9 +2158,8 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
       if (uri != null &&
           (uri.scheme == 'https' || uri.scheme == 'gs') &&
           uri.host.isNotEmpty) {
-        final videoMime = sourceType == 'video_url'
-            ? _geminiMimeType(uri.path)
-            : null;
+        final videoMime =
+            sourceType == 'video_url' ? _geminiMimeType(uri.path) : null;
         final resolvedMime = mimeType ?? videoMime;
         if (resolvedMime == null) {
           throw UnsupportedError(
@@ -2284,33 +2281,33 @@ final class _GeminiInteractionsBridge extends _MapBridge {
 
   @override
   Map<String, dynamic> _encodeNeutral(StroomMessage message) => {
-    'outputs': [
-      for (final part in message.content)
-        if (part.type == 'text')
-          {'type': 'text', 'text': part.data['text']}
-        else if (part.type == 'tool_call')
-          {
-            'type': 'function_call',
-            'id': part.data['id'],
-            'name': part.data['name'],
-            'arguments': part.data['arguments'],
-          }
-        else if (part.type == 'tool_result')
-          {
-            'type': 'function_result',
-            'call_id': part.data['toolCallId'],
-            'name': part.data['name'],
-            'result': part.data['result'],
-            'is_error': part.data['isError'],
-          }
-        else if (_targetSource(message, part).isNotEmpty)
-          _targetSource(message, part)
-        else
-          throw UnsupportedError(
-            'Gemini Interactions cannot map ${part.type} content.',
-          ),
-    ],
-  };
+        'outputs': [
+          for (final part in message.content)
+            if (part.type == 'text')
+              {'type': 'text', 'text': part.data['text']}
+            else if (part.type == 'tool_call')
+              {
+                'type': 'function_call',
+                'id': part.data['id'],
+                'name': part.data['name'],
+                'arguments': part.data['arguments'],
+              }
+            else if (part.type == 'tool_result')
+              {
+                'type': 'function_result',
+                'call_id': part.data['toolCallId'],
+                'name': part.data['name'],
+                'result': part.data['result'],
+                'is_error': part.data['isError'],
+              }
+            else if (_targetSource(message, part).isNotEmpty)
+              _targetSource(message, part)
+            else
+              throw UnsupportedError(
+                'Gemini Interactions cannot map ${part.type} content.',
+              ),
+        ],
+      };
 }
 
 final class _OllamaChatBridge extends _MapBridge {
@@ -2359,29 +2356,29 @@ final class _OllamaChatBridge extends _MapBridge {
 
   @override
   Map<String, dynamic> _encodeNeutral(StroomMessage message) => {
-    'role': message.role,
-    'content': _ollamaContent(message),
-    if (_partsOfType(message, 'reasoning').isNotEmpty)
-      'thinking': _partsOfType(
-        message,
-        'reasoning',
-      ).map((part) => part.data['text']).whereType<String>().join(),
-    if (_partsOfType(message, 'image').isNotEmpty)
-      'images': [
-        for (final part in _partsOfType(message, 'image'))
-          _ollamaImageData(message, part),
-      ],
-    if (_partsOfType(message, 'tool_call').isNotEmpty)
-      'tool_calls': [
-        for (final part in _partsOfType(message, 'tool_call'))
-          {
-            'function': {
-              'name': part.data['name'],
-              'arguments': part.data['arguments'],
-            },
-          },
-      ],
-  };
+        'role': message.role,
+        'content': _ollamaContent(message),
+        if (_partsOfType(message, 'reasoning').isNotEmpty)
+          'thinking': _partsOfType(
+            message,
+            'reasoning',
+          ).map((part) => part.data['text']).whereType<String>().join(),
+        if (_partsOfType(message, 'image').isNotEmpty)
+          'images': [
+            for (final part in _partsOfType(message, 'image'))
+              _ollamaImageData(message, part),
+          ],
+        if (_partsOfType(message, 'tool_call').isNotEmpty)
+          'tool_calls': [
+            for (final part in _partsOfType(message, 'tool_call'))
+              {
+                'function': {
+                  'name': part.data['name'],
+                  'arguments': part.data['arguments'],
+                },
+              },
+          ],
+      };
 
   String _ollamaContent(StroomMessage message) => message.content
       .map((part) {

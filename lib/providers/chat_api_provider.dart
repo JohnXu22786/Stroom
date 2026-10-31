@@ -35,21 +35,21 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'OpenAI Compatible',
-  }) : _baseUrl = baseUrl,
-       _apiKey = apiKey,
-       _name = name,
-       _dio = Dio(
-         BaseOptions(
-           baseUrl: '',
-           headers: {
-             'Content-Type': 'application/json',
-             if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-             ...openRouterAppHeaders,
-           },
-           connectTimeout: const Duration(seconds: 10),
-           receiveTimeout: const Duration(seconds: 60),
-         ),
-       );
+  })  : _baseUrl = baseUrl,
+        _apiKey = apiKey,
+        _name = name,
+        _dio = Dio(
+          BaseOptions(
+            baseUrl: '',
+            headers: {
+              'Content-Type': 'application/json',
+              if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+              ...openRouterAppHeaders,
+            },
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 60),
+          ),
+        );
 
   @override
   String get name => _name;
@@ -95,8 +95,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     );
     // API 返回的计费（美元）；OpenRouter 为 usage.total_cost，
     // 部分兼容端点用 usage.cost；total_cost 存在但不可解析时回退 cost
-    final costD =
-        usageNumberToDouble(usage['total_cost']) ??
+    final costD = usageNumberToDouble(usage['total_cost']) ??
         usageNumberToDouble(usage['cost']);
     final result = <String, dynamic>{};
     if (inputD != null) result['inputTokens'] = inputD.toInt();
@@ -237,10 +236,10 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'model': 'gpt-4o',
-    'max_tokens': 4096,
-    'temperature': 0.7,
-  };
+        'model': 'gpt-4o',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
 
   // ── 非流式对话 ──────────────────────────────────────────────────
 

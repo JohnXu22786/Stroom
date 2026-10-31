@@ -874,17 +874,18 @@ LlmModelGroup _group(
   String accountId,
   String localModelId, [
   String upstreamModelId = 'gpt-4o',
-]) => LlmModelGroup(
-  id: id,
-  displayName: id,
-  members: [
-    LlmModelGroupMember(
-      accountId: accountId,
-      localModelId: localModelId,
-      upstreamModelId: upstreamModelId,
-    ),
-  ],
-);
+]) =>
+    LlmModelGroup(
+      id: id,
+      displayName: id,
+      members: [
+        LlmModelGroupMember(
+          accountId: accountId,
+          localModelId: localModelId,
+          upstreamModelId: upstreamModelId,
+        ),
+      ],
+    );
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};
