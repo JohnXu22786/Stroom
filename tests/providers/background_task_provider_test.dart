@@ -1579,6 +1579,59 @@ void main() {
     );
 
     test(
+      'malformed OCR retry migration omits instructions echoing legacy credentials',
+      () {
+        const credential = 'legacy-authorization-secret-7391';
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final task = BackgroundTask.fromMap({
+          'id': 'malformed-ocr-retry-credential-echo',
+          'type': 'ocr',
+          'title': 'OCR retry with a credential echo',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': [
+              {'bytes': base64Encode(imageBytes), 'format': 'png'},
+            ],
+            'instructionContent': 'Read this image using $credential',
+            'futureMetadata': true,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $credential'},
+            'url': 'https://api.example.com/v1/chat/completions',
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the receipt total.'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.id, 'malformed-ocr-retry-credential-echo');
+        expect(task.title, 'OCR retry with a credential echo');
+        expect(task.error, 'OCR request failed');
+        expect(snapshot.images, hasLength(1));
+        expect(snapshot.images.single.bytes, imageBytes);
+        expect(snapshot.instructionContent, 'Read the receipt total.');
+        expect(persisted, isNot(contains(credential)));
+        expect(persisted, isNot(contains('Read this image using')));
+        expect(persisted, contains('Read the receipt total.'));
+      },
+    );
+
+    test(
       'malformed OCR retry migration retains safe settings and missing images',
       () async {
         WebFileStore.enableTestMode();

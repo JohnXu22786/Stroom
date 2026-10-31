@@ -2719,12 +2719,20 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
         malformedSnapshot.imageEntryCount > unavailableImages.length
             ? malformedSnapshot.imageEntryCount
             : unavailableImages.length;
+    final malformedInstruction = malformedSnapshot.instructionContent;
+    final safeMalformedInstruction = malformedInstruction != null &&
+            _legacyOcrTextContainsCredential(
+              malformedInstruction,
+              _legacyOcrCredentialValues(request),
+            )
+        ? null
+        : malformedInstruction;
     final retryData = OcrRetryStorage.unavailableSnapshotForCount(
       taskId: taskId,
       imageCount: imageCount,
       configId: malformedSnapshot.configId,
       modelId: malformedSnapshot.modelId ?? unavailableSnapshot.modelId,
-      instructionContent: malformedSnapshot.instructionContent ??
+      instructionContent: safeMalformedInstruction ??
           unavailableSnapshot.instructionContent,
       saveFolder: malformedSnapshot.saveFolder,
       batchMode: malformedSnapshot.batchMode,
