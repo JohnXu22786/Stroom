@@ -2130,7 +2130,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           candidate.trimRight().endsWith('...')) {
         return false;
       }
-      return textWithoutNaturalPlural.contains(candidate);
+      return text.contains(candidate);
     });
     if (containsUnmaskedExactCredential ||
         _legacyOcrTextContainsCredential(

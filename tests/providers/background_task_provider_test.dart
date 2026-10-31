@@ -1332,6 +1332,43 @@ void main() {
     );
 
     test(
+      'legacy Authorization value matching a natural plural is redacted',
+      () {
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-secret-is-credential',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secrets'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Please keep secrets private'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          isNot('Please keep secrets private'),
+        );
+        expect(jsonEncode(task.retryData), isNot(contains('secrets')));
+        expect(persisted, isNot(contains('Bearer secrets')));
+      },
+    );
+
+    test(
       'legacy Authorization values with internal ellipses are redacted',
       () {
         for (final apiKey in ['custom-auth-7391', 'custom-...-auth-7391']) {
