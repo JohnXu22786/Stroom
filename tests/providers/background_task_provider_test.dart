@@ -2814,18 +2814,20 @@ void main() {
           'Use token for request\nAuthorization: token',
         );
         final persistedEchoTask = jsonEncode(echoTask.toMap());
+        final restoredEchoTask = BackgroundTask.fromMap(
+          jsonDecode(persistedEchoTask) as Map<String, dynamic>,
+        );
         final restoredEchoInstruction = OcrRetrySnapshot.fromMap(
-          BackgroundTask.fromMap(
-            jsonDecode(persistedEchoTask) as Map<String, dynamic>,
-          ).retryData!,
+          restoredEchoTask.retryData!,
         ).instructionContent;
 
         expect(restoredSafeInstruction, contains(instruction));
         expect(persistedSafeTask, contains(instruction));
+        expect(restoredEchoTask.id, 'legacy-ocr-token-echoes');
+        expect(restoredEchoTask.title, 'legacy OCR request');
+        expect(restoredEchoTask.retryData, isNotNull);
         expect(
-          restoredEchoInstruction,
-          contains('Use [redacted] for request'),
-        );
+            restoredEchoInstruction, isNot(contains('Use token for request')));
         expect(
             restoredEchoInstruction, isNot(contains('Authorization: token')));
         expect(persistedEchoTask, isNot(contains('Use token for request')));
