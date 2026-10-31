@@ -2292,10 +2292,20 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
         '',
       );
-      final lineBrokenCarefulActionEcho = naturalCarefulInstructionLead &&
-          rawEcho.contains(RegExp(r'[\r\n]')) &&
-          echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
-              '${prefix.toLowerCase()}carefully';
+      final ordinaryTerminalReadCarefullyInstruction =
+          naturalCarefulInstructionLead &&
+              prefix.toLowerCase() == 'read' &&
+              RegExp(r'^\s*please\s+$', caseSensitive: false)
+                  .hasMatch(beforeEcho) &&
+              RegExp(r'^[.!?\s]*$').hasMatch(afterEcho) &&
+              echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
+                  'readcarefully';
+      final lineBrokenCarefulActionEcho =
+          !ordinaryTerminalReadCarefullyInstruction &&
+              naturalCarefulInstructionLead &&
+              rawEcho.contains(RegExp(r'[\r\n]')) &&
+              echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
+                  '${prefix.toLowerCase()}carefully';
       final prefixOffset = echo.indexOf(prefix);
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);

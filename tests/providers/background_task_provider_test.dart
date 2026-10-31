@@ -12174,7 +12174,7 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration redacts a terminal line-broken read key',
+      'legacy OCR instruction migration preserves a terminal line-broken read instruction',
       () {
         const prompt = 'Please read\ncarefully.';
         final task = BackgroundTask.fromMap({
@@ -12207,10 +12207,10 @@ void main() {
             migratedInstruction.replaceAll(RegExp(r'\s+'), '');
         final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
 
-        expect(migratedInstruction, 'Please read [redacted].');
-        expect(persisted, contains(jsonEncode('Please read [redacted].')));
-        expect(compactInstruction, isNot(contains('readcarefully')));
-        expect(compactPersisted, isNot(contains('readcarefully')));
+        expect(migratedInstruction, prompt);
+        expect(persisted, contains(jsonEncode(prompt)));
+        expect(compactInstruction, contains('readcarefully'));
+        expect(compactPersisted, contains('readcarefully'));
       },
     );
 
