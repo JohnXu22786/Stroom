@@ -555,6 +555,27 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
+bool _legacyOcrIsOrdinaryTerminalReadCarefullyPrompt(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  if (!RegExp(
+    r'^\s*please\s+read[\r\n]+\s*carefully[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(text)) {
+    return false;
+  }
+  return credentialValues.any((value) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) {
+      return false;
+    }
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    return prefix.toLowerCase() == 'read';
+  });
+}
+
 bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
@@ -1396,6 +1417,9 @@ bool _legacyOcrTextContainsMaskedCredential(
   String text,
   Iterable<String> credentialValues,
 ) {
+  if (_legacyOcrIsOrdinaryTerminalReadCarefullyPrompt(text, credentialValues)) {
+    return false;
+  }
   // Legacy request headers may contain only a masked key; compare its visible
   // edges before preserving any persisted text or diagnostic value.
   final compactedText = text.replaceAll(RegExp(r'\s+'), '');
@@ -2292,20 +2316,10 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
         '',
       );
-      final ordinaryTerminalReadCarefullyInstruction =
-          naturalCarefulInstructionLead &&
-              prefix.toLowerCase() == 'read' &&
-              RegExp(r'^\s*please\s+$', caseSensitive: false)
-                  .hasMatch(beforeEcho) &&
-              RegExp(r'^[.!?\s]*$').hasMatch(afterEcho) &&
-              echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
-                  'readcarefully';
-      final lineBrokenCarefulActionEcho =
-          !ordinaryTerminalReadCarefullyInstruction &&
-              naturalCarefulInstructionLead &&
-              rawEcho.contains(RegExp(r'[\r\n]')) &&
-              echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
-                  '${prefix.toLowerCase()}carefully';
+      final lineBrokenCarefulActionEcho = naturalCarefulInstructionLead &&
+          rawEcho.contains(RegExp(r'[\r\n]')) &&
+          echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
+              '${prefix.toLowerCase()}carefully';
       final prefixOffset = echo.indexOf(prefix);
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
