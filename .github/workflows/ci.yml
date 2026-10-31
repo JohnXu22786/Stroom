@@ -224,10 +224,21 @@ jobs:
             if grep -q 'Failed to foreground app; open returned 1' "$log" 2>/dev/null; then
               app="$(find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' -print -quit)"
               if [ -n "$app" ]; then
-                for _ in $(seq 1 8); do
-                  open "$app" && break
-                  sleep 0.1
+                activation_log="$RUNNER_TEMP/macos-activation.log"
+                : > "$activation_log"
+                activated=0
+                for attempt in $(seq 1 40); do
+                  if open "$app" >>"$activation_log" 2>&1; then
+                    printf 'macOS foreground request succeeded on attempt %s\n' "$attempt" >> "$log"
+                    activated=1
+                    break
+                  fi
+                  sleep 0.25
                 done
+                if [ "$activated" -eq 0 ]; then
+                  printf 'macOS foreground request failed after 10 seconds\n' >> "$log"
+                  cat "$activation_log" >> "$log"
+                fi
               fi
               break
             fi
