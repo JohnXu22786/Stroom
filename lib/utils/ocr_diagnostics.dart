@@ -250,39 +250,47 @@ class OcrDiagnosticSnapshot {
     bool includeFinishReason = true,
   }) {
     if (source == null) return null;
+    final safeExcludedValues = <String>{
+      ...excludedValues,
+      ...credentialValuesFromHeaders(source['headers']),
+    };
     final data = source['data'];
     final safeRequestId = includeRequestId
-        ? _safeRequestId(source['requestId'], excludedValues: excludedValues) ??
+        ? _safeRequestId(
+              source['requestId'],
+              excludedValues: safeExcludedValues,
+            ) ??
             _safeRequestId(
               requestIdFromHeaders(
                 source['headers'],
-                excludedValues: excludedValues,
+                excludedValues: safeExcludedValues,
               ),
-              excludedValues: excludedValues,
+              excludedValues: safeExcludedValues,
             ) ??
             _safeRequestId(
-              requestIdFromData(data, excludedValues: excludedValues),
-              excludedValues: excludedValues,
+              requestIdFromData(data, excludedValues: safeExcludedValues),
+              excludedValues: safeExcludedValues,
             )
         : null;
     final safeFinishReason = includeFinishReason
         ? _safeReason(
               source['finishReason'] ?? source['finish_reason'],
-              excludedValues: excludedValues,
+              excludedValues: safeExcludedValues,
             ) ??
-            _finishReasonFromData(data, excludedValues: excludedValues)
+            _finishReasonFromData(data, excludedValues: safeExcludedValues)
         : null;
     final result = <String, dynamic>{
-      if (_smallInt(source['statusCode'], excludedValues: excludedValues) ??
-              _smallInt(source['status'], excludedValues: excludedValues)
+      if (_smallInt(source['statusCode'], excludedValues: safeExcludedValues) ??
+              _smallInt(source['status'], excludedValues: safeExcludedValues)
           case final status?)
         'statusCode': status,
       if (safeFinishReason != null) 'finishReason': safeFinishReason,
       if (safeRequestId != null) 'requestId': safeRequestId,
-      if (_smallInt(source['durationMs'], excludedValues: excludedValues)
+      if (_smallInt(source['durationMs'], excludedValues: safeExcludedValues)
           case final duration?)
         'durationMs': duration,
-      if (_safeErrorType(source['errorType'], excludedValues: excludedValues)
+      if (_safeErrorType(source['errorType'],
+              excludedValues: safeExcludedValues)
           case final errorType?)
         'errorType': errorType,
     };
@@ -312,6 +320,7 @@ class OcrDiagnosticSnapshot {
     required int? durationMs,
     required String? requestId,
     required String? errorType,
+    Map<String, dynamic>? headers,
     Map<String, dynamic>? data,
     Iterable<String> excludedValues = const [],
   }) =>
@@ -321,6 +330,7 @@ class OcrDiagnosticSnapshot {
         'durationMs': durationMs,
         'requestId': requestId,
         'errorType': errorType,
+        'headers': headers,
         'data': data,
       }, excludedValues: excludedValues)!;
 

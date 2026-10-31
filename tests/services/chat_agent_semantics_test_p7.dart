@@ -89,7 +89,7 @@ void chatAgentSemanticsGroup7() {
       );
 
       // 错误被标记（错误轮），但计费已发生
-      expect(result.fullReply.startsWith('错误:'), isTrue);
+      expect(result.fullReply, 'partial text');
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-err')

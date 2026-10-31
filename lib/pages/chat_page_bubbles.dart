@@ -223,6 +223,23 @@ extension _ChatPageBubblesExt on _ChatPageState {
             stripSearchIrrelevantMarkdown(s.text),
             lowerQuery,
           );
+        case ErrorSegment s:
+          widgets.add(Container(
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (isDark ? Colors.red[900] : Colors.red[50])!
+                  .withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SelectableText(
+              s.message,
+              style: TextStyle(
+                color: isDark ? Colors.red[200] : Colors.red[800],
+                fontSize: 13,
+              ),
+            ),
+          ));
         case ToolCallSegment s:
           widgets.add(ToolCallCard(data: s.data));
         case ReasoningSegment s:

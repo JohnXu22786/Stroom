@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../database/col_dao.dart';
 import '../database/card_dao.dart';
 import '../database/note_dao.dart';
@@ -42,8 +43,7 @@ class AnkiActions {
 
   Future<void> removeDeck(int did) async {
     final col = await _col;
-    col.removeDeck(did);
-    await col.save();
+    await col.removeDeck(did);
     _refresh();
   }
 
@@ -56,19 +56,39 @@ class AnkiActions {
 
   // ── Notes / Cards ──────────────────────────────────────
 
-  Future<int> addCard(int did, String front, String back,
-      {int? modelId, String tags = ''}) async {
+  Future<int> addCard(
+    int did,
+    String front,
+    String back, {
+    int? modelId,
+    String tags = '',
+  }) async {
     final col = await _col;
     final models = col.modelList;
-    final mid = modelId ?? (models.isNotEmpty ? models.first.id : 1);
+    final int mid;
 
     // Ensure model exists; if not, seed both Basic and Cloze
     if (models.isEmpty) {
-      col.addModel(Notetype.createBasic());
+      final basic = Notetype.createBasic();
+      col.addModel(basic);
+      mid = basic.id;
+    } else {
+      // A dialog opened before the model-list provider finished loading may
+      // still pass its placeholder ID. Resolve it against the current models.
+      mid = modelId != null && models.any((model) => model.id == modelId)
+          ? modelId
+          : models.first.id;
     }
     // Ensure Cloze model exists
     if (!col.modelList.any((m) => m.name == 'Cloze')) {
       col.addModel(Notetype.createCloze());
+    }
+    if (col.getModel(mid) == null) {
+      throw StateError('The note type $mid is unavailable.');
+    }
+    if (models.isEmpty) {
+      // NoteDao derives sort fields from the persisted notetype JSON.
+      await col.save();
     }
 
     final tagList = tags.trim().isEmpty
@@ -103,8 +123,13 @@ class AnkiActions {
   Future<void> answerCard(int cid, int rating, {int duration = 0}) async {
     final col = await _col;
     final cardDao = await _cardDao;
-    await _scheduler.answerCard(col, cardDao, cid, rating,
-        reviewDuration: duration);
+    await _scheduler.answerCard(
+      col,
+      cardDao,
+      cid,
+      rating,
+      reviewDuration: duration,
+    );
     _refresh();
   }
 

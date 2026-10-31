@@ -377,6 +377,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
           toolCalls: msg.toolCalls ?? [],
           toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
         );
+        if (msg.toolCallRoundStarts != null) {
+          rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
+        }
         final blocks = (msg.toolCallRoundStarts != null)
             ? rebuiltBlocks
             : (msg.blocks ?? rebuiltBlocks);
@@ -384,7 +387,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
-        } else if (msg.textSections == null && msg.content.isNotEmpty) {
+        } else if (msg.textSections == null &&
+            msg.content.isNotEmpty &&
+            !blocks.any((block) => block is ErrorBlock)) {
           segments.add(TextSegment(msg.content));
         }
         if (segments.isNotEmpty) {

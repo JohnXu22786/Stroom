@@ -110,6 +110,19 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         // 用显式错误标志而非文本前缀判断：模型正常回复以"错误:"开头
         // 时不应被误标为错误消息。
         final isError = hadStreamError;
+        final blocks = legacyToBlocks(
+          reasoningSections: state.reasoningSections,
+          textChunks: state.textChunks,
+          toolCalls: state.accumulatedToolCalls,
+          toolCallRoundStarts: state.toolCallRoundStarts,
+        );
+        if (hadStreamError &&
+            (state.textChunks.any((chunk) => chunk.isNotEmpty) ||
+                state.reasoningSections.any((section) => section.isNotEmpty))) {
+          blocks.add(ErrorBlock(
+            message: formatChatErrorMessage(streamError),
+          ));
+        }
         // reasoningContent 用全量累计（sections 拼接）：ReasoningSectionEndEvent
         // 会重置 reasoningBuffer，后者只含最后一轮——OpenAI 协议历史重建
         // 回放 reasoning_content 时，中间轮推理会丢失（深度推理模型
@@ -135,12 +148,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
               : null,
-          blocks: legacyToBlocks(
-            reasoningSections: state.reasoningSections,
-            textChunks: state.textChunks,
-            toolCalls: state.accumulatedToolCalls,
-            toolCallRoundStarts: state.toolCallRoundStarts,
-          ),
+          blocks: blocks,
         );
         state.history.add(msg);
         assistantMessage = msg;

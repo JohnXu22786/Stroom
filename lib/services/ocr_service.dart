@@ -187,6 +187,7 @@ class OcrService {
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
         errorType: _lastErrorType ?? error?.runtimeType.toString(),
+        headers: lastResponseHeaders,
         data: lastResponseData,
         excludedValues: {
           config.apiKey,
