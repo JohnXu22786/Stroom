@@ -12752,6 +12752,10 @@ void main() {
                     {
                       'role': 'user',
                       'content': [
+                        {
+                          'type': 'text',
+                          'text': 'Read the receipt total carefully',
+                        },
                         {'type': 'text', 'text': instruction},
                       ],
                     },
@@ -12760,6 +12764,7 @@ void main() {
               },
             });
 
+        const safePrompt = 'Read the receipt total carefully';
         const safeInstruction = 'The label reports authenticity';
         final safeTask = taskFor(
           'legacy-ocr-reported-authenticity-natural-word',
@@ -12767,18 +12772,21 @@ void main() {
         );
         expect(
           OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
-          safeInstruction,
+          '$safePrompt\n$safeInstruction',
         );
 
         final credentialTask = taskFor(
           'legacy-ocr-reported-authorization-credential-echo',
           'The label reports authorization',
         );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
         expect(
           OcrRetrySnapshot.fromMap(credentialTask.retryData!)
               .instructionContent,
-          'The label reports [redacted]',
+          safePrompt,
         );
+        expect(credentialPersisted, contains(safePrompt));
+        expect(credentialPersisted, isNot(contains('authorization')));
       },
     );
 
