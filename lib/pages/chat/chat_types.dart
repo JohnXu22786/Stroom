@@ -12,6 +12,11 @@ class TextSegment extends MessageSegment {
   TextSegment(this.text);
 }
 
+class ErrorSegment extends MessageSegment {
+  final String message;
+  ErrorSegment(this.message);
+}
+
 class ToolCallSegment extends MessageSegment {
   final ToolCallData data;
   ToolCallSegment(this.data);
@@ -268,7 +273,7 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
           compactedAt: compactedAt,
         )));
       case ErrorBlock(:final message):
-        segs.add(TextSegment('[Error: $message]'));
+        segs.add(ErrorSegment(message));
     }
   }
   return segs;
