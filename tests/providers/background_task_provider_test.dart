@@ -12805,7 +12805,7 @@ void main() {
         expect(
           OcrRetrySnapshot.fromMap(authenticityTask.retryData!)
               .instructionContent,
-          'The label reports [redacted]',
+          safePrompt,
         );
         expect(
           jsonEncode(authenticityTask.retryData),
