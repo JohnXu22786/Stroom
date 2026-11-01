@@ -114,6 +114,8 @@ jobs:
   message-platform-android:
     name: Message view Android build and smoke test
     runs-on: ubuntu-24.04
+    env:
+      STROOM_CI_ANDROID_ABI: x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -220,25 +222,31 @@ jobs:
             flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
           ) &
           test_pid=$!
-          for _ in $(seq 1 400); do
+          # Flutter can spend around two minutes waiting for `open` to activate
+          # the app on a hosted runner. Keep watching long enough to recover
+          # when that one-shot launch request fails.
+          for _ in $(seq 1 3600); do
             if grep -q 'Failed to foreground app; open returned 1' "$log" 2>/dev/null; then
-              app="$(find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' -print -quit)"
-              if [ -n "$app" ]; then
-                activation_log="$RUNNER_TEMP/macos-activation.log"
-                : > "$activation_log"
-                activated=0
-                for attempt in $(seq 1 40); do
-                  if open "$app" >>"$activation_log" 2>&1; then
-                    printf 'macOS foreground request succeeded on attempt %s\n' "$attempt" >> "$log"
-                    activated=1
-                    break
-                  fi
-                  sleep 0.25
-                done
-                if [ "$activated" -eq 0 ]; then
-                  printf 'macOS foreground request failed after 10 seconds\n' >> "$log"
-                  cat "$activation_log" >> "$log"
+              app="$GITHUB_WORKSPACE/build/macos/Build/Products/Debug/stroom.app"
+              activation_log="$RUNNER_TEMP/macos-activation.log"
+              : > "$activation_log"
+              if [ ! -d "$app" ]; then
+                printf 'macOS foreground retry could not find app: %s\n' "$app" >> "$log"
+                break
+              fi
+              printf 'Retrying macOS app activation: %s\n' "$app" >> "$log"
+              activated=0
+              for attempt in $(seq 1 40); do
+                if open "$app" >>"$activation_log" 2>&1; then
+                  printf 'macOS foreground request succeeded on attempt %s\n' "$attempt" >> "$log"
+                  activated=1
+                  break
                 fi
+                sleep 0.25
+              done
+              if [ "$activated" -eq 0 ]; then
+                printf 'macOS foreground request failed after 10 seconds\n' >> "$log"
+                cat "$activation_log" >> "$log"
               fi
               break
             fi
@@ -294,7 +302,7 @@ jobs:
         run: |
           set +e
           log="$RUNNER_TEMP/ios-message-smoke.log"
-          flutter test --verbose -d "$IOS_SIMULATOR_ID" integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d "$IOS_SIMULATOR_ID" 2>&1 | tee "$log"
           result=${PIPESTATUS[0]}
           exit "$result"
       - name: Summarize iOS smoke failure

@@ -96,9 +96,12 @@ class _MessageWebHostState extends State<MessageWebHost> {
       for (var attempt = 0; attempt < 8; attempt++) {
         if (!mounted ||
             !identical(controller, _controller) ||
-            _macDocumentNavigationStarted ||
             _macLoadFailed) {
           return;
+        }
+        if (_macDocumentNavigationStarted) {
+          macNavigationPending = true;
+          break;
         }
         try {
           if (kDebugMode) {
@@ -122,7 +125,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
               'url=$currentUrl isLoading=$isLoading',
             );
           }
-          if (currentUrl?.toString() == documentUri.toString() && isLoading) {
+          if (currentUrl?.toString() == documentUri.toString() &&
+              (isLoading || _macDocumentNavigationStarted)) {
             macNavigationPending = true;
             break;
           }
@@ -145,17 +149,26 @@ class _MessageWebHostState extends State<MessageWebHost> {
       if (macNavigationPending &&
           mounted &&
           identical(controller, _controller) &&
-          !_macDocumentNavigationStarted &&
           !_macDocumentReady &&
           !_macLoadFailed) {
         final deadline = DateTime.now().add(const Duration(seconds: 10));
         while (DateTime.now().isBefore(deadline) &&
             mounted &&
             identical(controller, _controller) &&
-            !_macDocumentNavigationStarted &&
             !_macDocumentReady &&
             !_macLoadFailed) {
           await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if (mounted &&
+            identical(controller, _controller) &&
+            !_macDocumentReady &&
+            !_macLoadFailed) {
+          if (kDebugMode) {
+            debugPrint(
+              '[MessageWebHost][load-timeout] macOS document did not become ready',
+            );
+          }
+          setState(() => _macLoadFailed = true);
         }
       }
 
