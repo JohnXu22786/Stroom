@@ -3121,16 +3121,13 @@ void main() {
       );
     });
 
-    test(
-        'restores audio files after partial folder cleanup failure',
-        () async {
+    test('restores audio files after partial folder cleanup failure', () async {
       final firstAudioBytes = Uint8List.fromList([1, 2, 3]);
       final firstSidecarBytes = Uint8List.fromList([97, 98]);
       final secondAudioBytes = Uint8List.fromList([4, 5, 6]);
       final secondSidecarBytes = Uint8List.fromList([99, 100]);
       var extraDeleteCount = 0;
-      final failure =
-          StateError('injected partial audio file cleanup failure');
+      final failure = StateError('injected partial audio file cleanup failure');
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_folder_partial_cleanup_failure',
         storageDirName: 'tts_audio',
