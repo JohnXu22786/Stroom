@@ -6,7 +6,9 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/llm_model_group_provider.dart'
-    show kLlmModelGroupConfigField, kLlmModelGroupMayUseAnthropicConfigField,
+    show
+        kLlmModelGroupConfigField,
+        kLlmModelGroupMayUseAnthropicConfigField,
         kLlmModelCapabilitiesConfigField;
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';

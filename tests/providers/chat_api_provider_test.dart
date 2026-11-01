@@ -80,7 +80,9 @@ void main() {
         {
           'type': 'message',
           'role': 'user',
-          'content': [{'type': 'input_text', 'text': 'hello'}],
+          'content': [
+            {'type': 'input_text', 'text': 'hello'}
+          ],
         },
         {
           'type': 'function_call',
@@ -112,10 +114,13 @@ void main() {
       );
       final calls = <String, Map<String, dynamic>>{};
       expect(
-        provider.parseResponsesEventForTesting(
-          {'type': 'response.output_text.delta', 'delta': 'hello'},
-          calls,
-        ).single.text,
+        provider
+            .parseResponsesEventForTesting(
+              {'type': 'response.output_text.delta', 'delta': 'hello'},
+              calls,
+            )
+            .single
+            .text,
         'hello',
       );
       provider.parseResponsesEventForTesting(
@@ -140,15 +145,18 @@ void main() {
         calls,
       );
       expect(calls['item-1']?['arguments'], '{"q":"x"}');
-      final usage = provider.parseResponsesEventForTesting(
-        {
-          'type': 'response.completed',
-          'response': {
-            'usage': {'input_tokens': 2, 'output_tokens': 3},
-          },
-        },
-        calls,
-      ).single.usage;
+      final usage = provider
+          .parseResponsesEventForTesting(
+            {
+              'type': 'response.completed',
+              'response': {
+                'usage': {'input_tokens': 2, 'output_tokens': 3},
+              },
+            },
+            calls,
+          )
+          .single
+          .usage;
       expect(usage, {'inputTokens': 2, 'outputTokens': 3});
     });
   });

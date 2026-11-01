@@ -279,10 +279,9 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
                 group.id,
             orElse: () => null,
           );
-      final orderedMembers = [
-        ?preferred,
-        ...members.where((member) => member != preferred),
-      ];
+      final orderedMembers = <LlmModelGroupMember>[];
+      if (preferred != null) orderedMembers.add(preferred);
+      orderedMembers.addAll(members.where((member) => member != preferred));
 
       LlmAccount? representativeAccount;
       LlmUpstreamModel? representativeModel;
@@ -338,7 +337,9 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
           : members.any((member) {
               final account = accountById[member.accountId];
               if (account == null ||
-                  catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+                  catalog
+                          .findProvider(account.connectorType)
+                          ?.supportsChatAdapter !=
                       true) {
                 return false;
               }

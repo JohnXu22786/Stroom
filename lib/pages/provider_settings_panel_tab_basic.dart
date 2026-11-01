@@ -61,7 +61,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               ),
               items: supportedApiProtocolsForSupplier(
                 _apiProtocol,
-                connectorType: widget.config.legacyFields['connectorType'] as String?,
+                connectorType:
+                    widget.config.legacyFields['connectorType'] as String?,
               )
                   .map(
                     (protocol) => DropdownMenuItem(

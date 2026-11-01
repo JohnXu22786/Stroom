@@ -476,8 +476,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
 
     // 端点类型覆盖（默认关 = 继承供应商）
-    _overrideEndpointType = m?.apiProtocolOverride != null ||
-        m?.endpointType != null;
+    _overrideEndpointType =
+        m?.apiProtocolOverride != null || m?.endpointType != null;
     _apiProtocol = m?.apiProtocolOverride ??
         widget.provider?.apiProtocol ??
         apiProtocolFromLegacyEndpointType(

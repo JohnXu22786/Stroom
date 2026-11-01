@@ -3539,9 +3539,8 @@ class LlmNativeRequestBuilder {
             '/responses',
             '/messages',
           ];
-          final currentSuffix = endpointSuffixes
-              .where(endpointPath.endsWith)
-              .firstOrNull;
+          final currentSuffix =
+              endpointSuffixes.where(endpointPath.endsWith).firstOrNull;
           if (currentSuffix == desiredPath) {
             path = '';
           } else {

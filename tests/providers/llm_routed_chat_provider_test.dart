@@ -43,7 +43,8 @@ void main() {
     );
   });
 
-  test('uses the selected routed account protocol when no model override exists',
+  test(
+      'uses the selected routed account protocol when no model override exists',
       () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(

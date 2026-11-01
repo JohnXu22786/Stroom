@@ -105,7 +105,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _nameController = TextEditingController(text: c.providerName);
     _hostController = TextEditingController(text: c.host);
     _keyController = TextEditingController(text: c.key);
-    _apiProtocol = c.apiProtocol ?? apiProtocolFromLegacyEndpointType(c.endpointType);
+    _apiProtocol =
+        c.apiProtocol ?? apiProtocolFromLegacyEndpointType(c.endpointType);
 
     _temperature = (c.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
     _topP = (c.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;

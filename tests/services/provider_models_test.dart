@@ -39,7 +39,9 @@ void main() {
     expect(llmChatEndpointTypeForConnector(account.connectorType), isNull);
   });
 
-  test('model-group selector preserves configured protocols independently of connector', () {
+  test(
+      'model-group selector preserves configured protocols independently of connector',
+      () {
     final account = LlmAccount(
       id: 'configured-protocol-account',
       connectorType: 'openai-compatibility',
@@ -227,8 +229,8 @@ void main() {
 
     expect(config.apiProtocol, 'openai.chat_completions');
     expect(
-      config.models.single.legacyFields[
-          kLlmModelGroupMayUseAnthropicConfigField],
+      config
+          .models.single.legacyFields[kLlmModelGroupMayUseAnthropicConfigField],
       isTrue,
     );
   });

@@ -211,9 +211,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           apiProtocolFromLegacyEndpointType(
                             widget.provider?.endpointType,
                           ),
-                      connectorType:
-                          widget.provider?.legacyFields['connectorType']
-                              as String?,
+                      connectorType: widget
+                          .provider?.legacyFields['connectorType'] as String?,
                     )
                         .map(
                           (protocol) => DropdownMenuItem(

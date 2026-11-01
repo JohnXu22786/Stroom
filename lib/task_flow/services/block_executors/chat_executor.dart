@@ -108,8 +108,7 @@ bool flowChatMayUseAnthropic(
           ? null
           : apiProtocolFromLegacyEndpointType(selected.model.endpointType));
   if (modelOverride != null) return modelOverride == 'anthropic.messages';
-  if (selected.model.legacyFields[
-          kLlmModelGroupMayUseAnthropicConfigField] ==
+  if (selected.model.legacyFields[kLlmModelGroupMayUseAnthropicConfigField] ==
       true) {
     return true;
   }

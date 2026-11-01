@@ -16,15 +16,15 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
-    final body = {
+    final body = <String, dynamic>{
       'model': model ?? defaultParams['model'],
       'messages': messages,
-      'max_tokens': ?maxTokens,
-      'temperature': ?temperature,
       'stream': stream,
-      'tools': ?(tools?.isNotEmpty == true ? tools : null),
-      ...?extraParams,
     };
+    if (maxTokens != null) body['max_tokens'] = maxTokens;
+    if (temperature != null) body['temperature'] = temperature;
+    if (tools?.isNotEmpty == true) body['tools'] = tools;
+    if (extraParams != null) body.addAll(extraParams);
     if (_apiProtocol != 'openai.responses') return body;
 
     final normalizedMessages =
@@ -65,10 +65,11 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
               if (part['type'] == 'image_url') {
                 final imageUrl = part['image_url'];
                 final url = imageUrl is Map ? imageUrl['url'] : imageUrl;
-                return <String, dynamic>{
+                final imagePart = <String, dynamic>{
                   'type': role == 'assistant' ? 'output_image' : 'input_image',
-                  'image_url': ?url,
                 };
+                if (url != null) imagePart['image_url'] = url;
+                return imagePart;
               }
               return <String, dynamic>{
                 'type': role == 'assistant' ? 'output_text' : 'input_text',
@@ -116,10 +117,13 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     if (direct is String) return direct;
     final output = data['output'];
     if (output is List) {
-      return output.whereType<Map>().expand((item) {
-        final content = item['content'];
-        return content is List ? content.whereType<Map>() : const <Map>[];
-      }).where((part) => part['type'] == 'output_text')
+      return output
+          .whereType<Map>()
+          .expand((item) {
+            final content = item['content'];
+            return content is List ? content.whereType<Map>() : const <Map>[];
+          })
+          .where((part) => part['type'] == 'output_text')
           .map((part) => part['text'])
           .whereType<String>()
           .join();
@@ -151,12 +155,14 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
       }
     }
     if (type == 'response.function_call_arguments.delta') {
-      final id = data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
+      final id =
+          data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
       final call = calls.putIfAbsent(id, () => {'id': id, 'arguments': ''});
       call['arguments'] = '${call['arguments'] ?? ''}${data['delta'] ?? ''}';
     }
     if (type == 'response.function_call_arguments.done') {
-      final id = data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
+      final id =
+          data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
       final call = calls.putIfAbsent(id, () => {'id': id});
       call['arguments'] = data['arguments'] ?? call['arguments'] ?? '{}';
     }
@@ -167,7 +173,8 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
       if (usage != null) return [AIStreamEvent('', usage: usage)];
     }
     if (type == 'response.failed' || type == 'error') {
-      throw Exception('Responses API stream error: ${data['response'] ?? data['error'] ?? data}');
+      throw Exception(
+          'Responses API stream error: ${data['response'] ?? data['error'] ?? data}');
     }
     return [];
   }
