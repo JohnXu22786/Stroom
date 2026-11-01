@@ -768,7 +768,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        // Keep the 34dp model row the same outer height as the 40dp
+        // instruction row and its settings tap target.
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         child: Row(
           children: [
             Container(
