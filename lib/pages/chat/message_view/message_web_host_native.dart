@@ -94,9 +94,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
       // WKWebView's loadHTMLString/loadData path does not consistently start a
       // navigation. Give WebKit read access to this self-contained file only.
       for (var attempt = 0; attempt < 8; attempt++) {
-        if (!mounted ||
-            !identical(controller, _controller) ||
-            _macLoadFailed) {
+        if (!mounted || !identical(controller, _controller) || _macLoadFailed) {
           return;
         }
         if (_macDocumentNavigationStarted) {

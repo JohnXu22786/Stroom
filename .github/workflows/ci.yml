@@ -222,11 +222,8 @@ jobs:
             flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
           ) &
           test_pid=$!
-          # Flutter can spend around two minutes waiting for `open` to activate
-          # the app on a hosted runner. Keep watching long enough to recover
-          # when that one-shot launch request fails.
-          for _ in $(seq 1 3600); do
-            if grep -q 'Failed to foreground app; open returned 1' "$log" 2>/dev/null; then
+          while kill -0 "$test_pid" 2>/dev/null; do
+            if grep -aFq 'Failed to foreground app' "$log" 2>/dev/null; then
               app="$GITHUB_WORKSPACE/build/macos/Build/Products/Debug/stroom.app"
               activation_log="$RUNNER_TEMP/macos-activation.log"
               : > "$activation_log"
@@ -250,8 +247,7 @@ jobs:
               fi
               break
             fi
-            kill -0 "$test_pid" 2>/dev/null || break
-            sleep 0.05
+            sleep 0.1
           done
           wait "$test_pid"
           result=$?
