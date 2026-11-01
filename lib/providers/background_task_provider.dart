@@ -1382,7 +1382,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
       RegExp(r'^[.!?]+(?:\s|$)').hasMatch(afterAdverb) ||
       RegExp(r'[.!?]+$').hasMatch(match.group(0)!) ||
       RegExp(
-        r'^(?:[,;]\s*)?(?:(?:and|then)\s+(?:(?:please|you\s+should)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b|before\s+(?:reading|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding)\b)',
+        r'^(?:[,;]\s*)?(?:(?:and|then)\s+(?:(?:please|you\s+should)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b|before\s+(?:reading|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding|proceeding)\b)',
         caseSensitive: false,
       ).hasMatch(afterAdverb);
   final naturalActionAdverbContinuation =
@@ -1540,7 +1540,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     final spacedOpenMaskPrefixPattern =
         prefix.split('').map(RegExp.escape).join(r'\s*');
     const spacedCredentialChunk =
-        r'(?:[a-zA-Z0-9_/:;+=~@%-]|\.(?=\s*[a-zA-Z0-9_/:;+=~@%-]))+';
+        r'(?:[a-zA-Z0-9_/:;+=~@%$#!&]|\.(?=\s*[a-zA-Z0-9_/:;+=~@%$#!&]))+';
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
       '(\\s*$spacedCredentialChunk(?:\\s+$spacedCredentialChunk)*)'
@@ -1556,14 +1556,6 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           0,
           chunks.last.length - trailingPunctuation.length,
         );
-      }
-      if (_legacyOcrIsNaturalDocumentationContinuation(
-        sanitized,
-        match,
-        prefix,
-        chunks.join(' '),
-      )) {
-        return match.group(0)!;
       }
       for (var index = 0; index < chunks.length - 1; index++) {
         chunks[index] = chunks[index].replaceFirst(
@@ -1717,6 +1709,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       };
       const naturalActionWords = {
         'answer',
+        'calculate',
+        'compare',
+        'compute',
+        'derive',
         'read',
         'review',
         'examine',
@@ -1734,6 +1730,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'transcribe',
         'translate',
         'classify',
+        'sum',
         'explain',
         'process',
         'show',
@@ -1780,6 +1777,28 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'total',
         'further',
       };
+      final terminalChunk = chunks.last.toLowerCase();
+      final terminalChunkIsNatural = naturalAdverbs.contains(terminalChunk) ||
+          naturalNouns.contains(terminalChunk) ||
+          naturalContinuationWords.contains(terminalChunk) ||
+          naturalActionWords.contains(terminalChunk) ||
+          naturalObjectWords.contains(terminalChunk);
+      final terminalChunkLooksCredentialShaped = !terminalChunkIsNatural &&
+          _legacyOcrHasHighAlphabeticEntropy(
+            terminalChunk,
+            minimumLength: 8,
+            minimumEntropy: 2.5,
+            maximumVowelRatio: 0.45,
+          );
+      if (!terminalChunkLooksCredentialShaped &&
+          _legacyOcrIsNaturalDocumentationContinuation(
+            sanitized,
+            match,
+            prefix,
+            chunks.join(' '),
+          )) {
+        return match.group(0)!;
+      }
       final actionAlternation = naturalActionWords.map(RegExp.escape).join('|');
       final objectAlternation = naturalObjectWords.map(RegExp.escape).join('|');
       final joinedNaturalActionPhrase = RegExp(
@@ -1832,6 +1851,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       }
       var credentialSuffix = '';
       var foundCredential = false;
+      var credentialStartChunkIndex = -1;
       var credentialEndChunkIndex = -1;
       var expectsDocumentIdentifierNumber = false;
       var documentIdentifierDigitCount = 0;
@@ -1846,8 +1866,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                 _legacyOcrHasHighAlphabeticEntropy(
                   alphabeticSuffix,
                   minimumLength: 8,
-                  minimumEntropy: 2.9,
-                  maximumVowelRatio: 0.4,
+                  minimumEntropy: 2.5,
+                  maximumVowelRatio: 0.45,
                 ));
       }
 
@@ -1913,6 +1933,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           continue;
         }
         if (foundCredential) continue;
+        if (credentialSuffix.isEmpty) credentialStartChunkIndex = index;
         credentialSuffix += chunk;
         if (hasCredentialShape(credentialSuffix)) {
           foundCredential = true;
@@ -1946,21 +1967,55 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         ...naturalActionWords,
         ...naturalObjectWords,
       };
-      final trailingNaturalInstruction = trailingPromptChunks.isNotEmpty &&
-          trailingPromptChunks.every(
-            (chunk) => naturalTrailingInstructionWords.contains(
-              chunk.toLowerCase(),
+      final trailingPrompt = trailingPromptChunks.join(' ');
+      final trailingPromptContainsCredentialShape = trailingPromptChunks.any(
+        (chunk) =>
+            !naturalTrailingInstructionWords.contains(chunk.toLowerCase()) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              chunk,
+              minimumLength: 8,
+              minimumEntropy: 2.5,
+              maximumVowelRatio: 0.45,
             ),
-          );
+      );
+      final trailingActionAlternation =
+          naturalActionWords.map(RegExp.escape).join('|');
+      final trailingPromptStartsWithAction = RegExp(
+        '^(?:(?:carefully|thoroughly|closely|fully|completely|verbatim)\\s+)?'
+        '(?:and|then)\\s+(?:(?:please|you\\s+should)\\s+)?'
+        '(?:$trailingActionAlternation)\\b',
+        caseSensitive: false,
+      ).hasMatch(trailingPrompt);
+      final trailingNaturalInstruction = trailingPromptChunks.isNotEmpty &&
+          !trailingPromptContainsCredentialShape &&
+          (trailingPromptChunks.every(
+                (chunk) => naturalTrailingInstructionWords.contains(
+                  chunk.toLowerCase(),
+                ),
+              ) ||
+              trailingPromptStartsWithAction);
       final trailingNaturalContinuation = trailingNaturalInstruction
           ? ' ${trailingPromptChunks.join(' ')}'
           : '';
+      final naturalPrefixChunks = credentialStartChunkIndex > 0
+          ? chunks.take(credentialStartChunkIndex).toList()
+          : const <String>[];
+      final preserveNaturalPrefix = naturalPrefixChunks.isNotEmpty &&
+          _legacyOcrIsNaturalDocumentationContinuation(
+            sanitized,
+            match,
+            prefix,
+            naturalPrefixChunks.join(' '),
+          );
+      final redactedPromptPrefix = preserveNaturalPrefix
+          ? '${match.group(1)}$prefix ${naturalPrefixChunks.join(' ')} [redacted]'
+          : '${match.group(1)}[redacted]';
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
       return explicitAuthenticationUseContext
-          ? '${match.group(1)}[redacted] to authenticate'
+          ? '$redactedPromptPrefix to authenticate'
               '$trailingNaturalContinuation$trailingPunctuation'
-          : '${match.group(1)}[redacted]$trailingNaturalContinuation'
+          : '$redactedPromptPrefix$trailingNaturalContinuation'
               '$trailingPunctuation';
     });
   }

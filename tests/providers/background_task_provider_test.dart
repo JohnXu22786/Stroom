@@ -15011,7 +15011,11 @@ void main() {
           'foo. barxyz',
           'foo: barxyz',
           'foo; barxyz',
+          'foo & barxyz',
           'foo@barxyz',
+          r'foo$barxyz',
+          'foo#barxyz',
+          'foo!barxyz',
           'foo%barxyz',
           'foo bar carefully',
           'key abc123',
@@ -15135,6 +15139,21 @@ void main() {
         );
         expect(trailingActionPersisted, isNot(contains('foobarxyz')));
 
+        final calculateActionTask = taskFor(
+          'legacy-ocr-calculate-action-after-spaced-credential',
+          'Please read the documentation foobarxyz and calculate the total.',
+        );
+        final calculateActionInstruction = OcrRetrySnapshot.fromMap(
+          calculateActionTask.retryData!,
+        ).instructionContent!;
+        final calculateActionPersisted =
+            jsonEncode(calculateActionTask.toMap());
+        expect(
+          calculateActionInstruction,
+          'Please read the [redacted] and calculate the total.',
+        );
+        expect(calculateActionPersisted, isNot(contains('foobarxyz')));
+
         final attachedPrefixCredentialTask = taskFor(
           'legacy-ocr-attached-prefix-spaced-credential',
           'Please read documentationfoobar xyz carefully.',
@@ -15194,6 +15213,12 @@ void main() {
         );
         final clauseThenCredentialPersisted =
             jsonEncode(clauseThenCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            clauseThenCredentialTask.retryData!,
+          ).instructionContent,
+          'Please read the documentation with care and summarize the key points [redacted].',
+        );
         expect(
           clauseThenCredentialPersisted,
           isNot(contains('foobarxyz')),
