@@ -249,11 +249,22 @@ class _MessageWebHostState extends State<MessageWebHost> {
 
     Directory? documentDirectory;
     try {
+      if (kDebugMode) {
+        debugPrint('[MessageWebHost][prepare-start] macOS document');
+      }
       final directory = await getTemporaryDirectory();
+      if (kDebugMode) {
+        debugPrint(
+            '[MessageWebHost][prepare-temp] macOS path=${directory.path}');
+      }
       await directory.create(recursive: true);
       documentDirectory = await directory.createTemp('stroom-message-');
       final document = File('${documentDirectory.path}/index.html');
       await document.writeAsString(widget.html, flush: true);
+      if (kDebugMode) {
+        debugPrint(
+            '[MessageWebHost][prepare-written] macOS url=${document.uri}');
+      }
       if (!mounted) {
         await _deleteMacDocumentDirectory(documentDirectory);
         return;
@@ -319,9 +330,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             initialFile: defaultTargetPlatform == TargetPlatform.macOS
                 ? null
                 : 'assets/vendor/dsh_message_view/index.html',
-            initialUrlRequest: defaultTargetPlatform == TargetPlatform.macOS
-                ? URLRequest(url: WebUri.uri(_macDocumentUri!))
-                : null,
+            initialUrlRequest: null,
             initialData: null,
             // Leave the plugin origin allow-list unset: WKWebView file URLs have
             // no host. The handler below validates this exact main-frame URL.
@@ -408,6 +417,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
                   widget.onEvent(event);
                 },
               );
+              if (defaultTargetPlatform == TargetPlatform.macOS) {
+                unawaited(_loadMacDocument(controller));
+              }
             },
             onLoadStart: (controller, url) {
               if (defaultTargetPlatform == TargetPlatform.macOS &&
