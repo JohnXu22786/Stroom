@@ -15,6 +15,12 @@ class LlmOAuthTokenClient {
   static const _xaiDiscoveryUri =
       'https://auth.x.ai/.well-known/openid-configuration';
   static const _xaiCommonScopes = 'openid profile email offline_access';
+  static const metaMuseClientId = '1031625952748946';
+  static const _metaMuseDeviceAuthorizationUri =
+      'https://auth.meta.com/oidc/device/authorization/';
+  static const _metaMuseTokenUri = 'https://auth.meta.com/oidc/device/token/';
+  static const _metaMuseKeyUri = 'https://api.meta.ai/muse-code/key';
+  static const _metaMuseApiBaseUrl = 'https://api.meta.ai/v1';
 
   final Dio _dio;
 
@@ -293,6 +299,157 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<LlmMetaMuseDeviceCode> startMetaMuseDeviceAuthorization() async {
+    try {
+      final response = await _dio.postUri<Object?>(
+        Uri.parse(_metaMuseDeviceAuthorizationUri),
+        data: {'client_id': metaMuseClientId},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+        ),
+      );
+      final data = _jsonObject(response.data);
+      final deviceCode = _nonEmptyString(data['device_code']);
+      final userCode = _nonEmptyString(data['user_code']);
+      final verification = _metaMuseVerificationUri(
+        data['verification_uri'] ?? data['verification_url'],
+      );
+      final complete = _metaMuseVerificationUri(
+            data['verification_uri_complete'] ??
+                data['verification_url_complete'],
+          ) ??
+          verification;
+      final expiresIn = _seconds(data['expires_in']);
+      final interval = _seconds(data['interval']);
+      if (deviceCode == null ||
+          userCode == null ||
+          verification == null ||
+          complete == null ||
+          expiresIn <= 0) {
+        throw const LlmOAuthFlowException();
+      }
+      return LlmMetaMuseDeviceCode.fromOAuthResponse(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verification,
+        verificationUriComplete: complete,
+        expiresIn: Duration(seconds: expiresIn),
+        interval: Duration(seconds: interval > 0 ? interval : 5),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> pollMetaMuseDeviceAuthorization({
+    required LlmMetaMuseDeviceCode deviceCode,
+    String? expectedEmail,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      if (deviceCode.deviceCode.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final deadline = DateTime.now().add(deviceCode.expiresIn);
+      var interval = deviceCode.interval <= Duration.zero
+          ? const Duration(seconds: 5)
+          : deviceCode.interval;
+      while (DateTime.now().isBefore(deadline)) {
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        final remaining = deadline.difference(DateTime.now());
+        if (remaining <= Duration.zero) break;
+        final expiresBeforeNextPoll = interval >= remaining;
+        await _waitForMetaMusePollingInterval(
+          interval > remaining ? remaining : interval,
+          cancelToken,
+        );
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        if (expiresBeforeNextPoll) break;
+        if (!DateTime.now().isBefore(deadline)) break;
+        final response = await _dio.postUri<Object?>(
+          Uri.parse(_metaMuseTokenUri),
+          data: {
+            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+            'device_code': deviceCode.deviceCode,
+            'client_id': metaMuseClientId,
+          },
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            responseType: ResponseType.json,
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+        final token = _jsonObject(response.data);
+        final error = _nonEmptyString(token['error']);
+        if (error == 'authorization_pending') continue;
+        if (error == 'slow_down') {
+          interval += const Duration(seconds: 5);
+          continue;
+        }
+        if (error != null || (response.statusCode ?? 0) != 200) {
+          throw const LlmOAuthFlowException();
+        }
+        final dcaToken = _nonEmptyString(token['access_token']);
+        if (dcaToken == null || !dcaToken.startsWith('dca:')) {
+          throw const LlmOAuthFlowException();
+        }
+        final mintedResponse = await _dio.postUri<Object?>(
+          Uri.parse(_metaMuseKeyUri),
+          data: {'dca_token': dcaToken},
+          options: Options(
+            contentType: Headers.jsonContentType,
+            responseType: ResponseType.json,
+            headers: {
+              'Authorization': 'Bearer $dcaToken',
+              'User-Agent': 'muse-code/1.0.2',
+              'Accept': 'application/json',
+            },
+          ),
+          cancelToken: cancelToken,
+        );
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        final minted = _jsonObject(mintedResponse.data);
+        final apiKey = _nonEmptyString(minted['api_key']);
+        if (apiKey == null) throw const LlmOAuthFlowException();
+        final email = _nonEmptyString(minted['user_email']);
+        if (email == null ||
+            (expectedEmail != null &&
+                email.toLowerCase() != expectedEmail.toLowerCase())) {
+          throw const LlmOAuthFlowException();
+        }
+        final active = minted['is_subs_active'];
+        if (active != true) throw const LlmOAuthFlowException();
+        final baseUrl = _metaMuseBaseUrl(minted['base_url']);
+        return <String, dynamic>{
+          'access_token': apiKey,
+          'api_key': apiKey,
+          'dca_token': dcaToken,
+          'base_url': baseUrl,
+          'auth_kind': 'oauth',
+          'oauth_contract': 'meta-muse-device-v1',
+          'email': email,
+          if (_nonEmptyString(minted['user_full_name']) case final name?)
+            'name': name,
+          if (_nonEmptyString(minted['subs_tier_name']) case final tier?)
+            'subs_tier_name': tier,
+          if (_nonEmptyString(minted['subs_tier_id']) case final tierId?)
+            'subs_tier_id': tierId,
+          if (active is bool) 'is_subs_active': active,
+          if (minted['has_payment_method'] is bool)
+            'has_payment_method': minted['has_payment_method'],
+        };
+      }
+      throw const LlmOAuthFlowException();
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
   Future<LlmXaiDeviceCode> startXaiDeviceAuthorization({
     required String connectorType,
   }) async {
@@ -316,8 +473,9 @@ class LlmOAuthTokenClient {
           !signingAlgorithms.contains('ES256')) {
         throw const LlmOAuthFlowException();
       }
-      final deviceEndpoint =
-          _xaiEndpoint(discovery['device_authorization_endpoint']);
+      final deviceEndpoint = _xaiEndpoint(
+        discovery['device_authorization_endpoint'],
+      );
       final tokenEndpoint = _xaiEndpoint(discovery['token_endpoint']);
       final jwksUri = _xaiJwksUri(discovery['jwks_uri']);
       final scope = '$_xaiCommonScopes $providerScope';
@@ -587,6 +745,22 @@ class LlmOAuthTokenClient {
     ]);
   }
 
+  static Future<void> _waitForMetaMusePollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(interval);
+      return;
+    }
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
+  }
+
   static Uri? _kimiVerificationUri(Object? value) {
     final uri = Uri.tryParse(value is String ? value.trim() : '');
     if (uri == null ||
@@ -596,6 +770,34 @@ class LlmOAuthTokenClient {
       return null;
     }
     return uri;
+  }
+
+  static Uri? _metaMuseVerificationUri(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        !(uri.host == 'meta.ai' ||
+            uri.host.endsWith('.meta.ai') ||
+            uri.host == 'meta.com' ||
+            uri.host.endsWith('.meta.com'))) {
+      return null;
+    }
+    return uri;
+  }
+
+  static String _metaMuseBaseUrl(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host != 'api.meta.ai' ||
+        uri.userInfo.isNotEmpty ||
+        (uri.path.isNotEmpty && uri.path != '/v1') ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      return _metaMuseApiBaseUrl;
+    }
+    return uri.replace(path: '/v1').toString();
   }
 
   static int _seconds(Object? value) => value is num

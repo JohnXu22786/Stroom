@@ -468,6 +468,10 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account,
   );
 
+  Future<AiGatewayOAuthDeviceAuthorization> beginMetaMuseDeviceAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
     AiGatewayAccount account,
   );

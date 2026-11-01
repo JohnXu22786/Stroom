@@ -345,7 +345,7 @@ void main() {
       ).single;
       final providers = ProviderEntriesState(
         entries: [
-          ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
         ],
       );
       final assistant = Assistant(
@@ -429,20 +429,24 @@ void main() {
   );
 
   test(
-    'xAI and Meta API-key model groups preflight through Responses',
+    'xAI and Meta API keys plus Muse OAuth preflight through Responses',
     () async {
-      for (final connectorType in ['xai', 'meta']) {
+      for (final connectorType in ['xai', 'meta', 'muse-code']) {
         final account = LlmAccount(
           id: '$connectorType-api-key',
           connectorType: connectorType,
-          authType: 'api_key',
+          authType: connectorType == 'muse-code' ? 'oauth' : 'api_key',
           displayName: connectorType,
           status: LlmAccountStatus.ready,
           models: [
             LlmUpstreamModel(
               id: '$connectorType-local',
-              upstreamModelId: '$connectorType-upstream',
-              displayName: '$connectorType upstream',
+              upstreamModelId: connectorType == 'muse-code'
+                  ? 'muse-spark-1.3'
+                  : '$connectorType-upstream',
+              displayName: connectorType == 'muse-code'
+                  ? 'muse-spark-1.3'
+                  : '$connectorType upstream',
               capabilities: const {'chat': true, 'streaming': true},
             ),
           ],
@@ -466,29 +470,55 @@ void main() {
           status: LlmAccountStatus.ready,
           models: account.models,
         );
-        expect(
-          buildLlmModelGroupProviderConfigs(
-            accounts: [subscriptionAccount],
-            groups: [
-              LlmModelGroup(
+        final subscriptionConfigs = buildLlmModelGroupProviderConfigs(
+          accounts: [subscriptionAccount],
+          groups: [
+            LlmModelGroup(
+              id: '$connectorType-subscription-group',
+              displayName: '$connectorType subscription group',
+              members: [
+                LlmModelGroupMember(
+                  accountId: subscriptionAccount.id,
+                  localModelId: '$connectorType-local',
+                  upstreamModelId: connectorType == 'muse-code'
+                      ? 'muse-spark-1.3'
+                      : '$connectorType-upstream',
+                ),
+              ],
+            ),
+          ],
+        );
+        if (connectorType == 'muse-code') {
+          expect(subscriptionConfigs, hasLength(1));
+          expect(subscriptionConfigs.single.apiProtocol, 'openai.responses');
+        } else {
+          expect(
+            subscriptionConfigs,
+            isEmpty,
+            reason:
+                'the subscription credential cannot use the public API path',
+          );
+        }
+        final routingAccount =
+            connectorType == 'muse-code' ? subscriptionAccount : account;
+        final routingGroup = connectorType == 'muse-code'
+            ? LlmModelGroup(
                 id: '$connectorType-subscription-group',
                 displayName: '$connectorType subscription group',
                 members: [
                   LlmModelGroupMember(
                     accountId: subscriptionAccount.id,
                     localModelId: '$connectorType-local',
-                    upstreamModelId: '$connectorType-upstream',
+                    upstreamModelId: connectorType == 'muse-code'
+                        ? 'muse-spark-1.3'
+                        : '$connectorType-upstream',
                   ),
                 ],
-              ),
-            ],
-          ),
-          isEmpty,
-          reason: 'the subscription credential cannot use the public API path',
-        );
+              )
+            : group;
         final config = buildLlmModelGroupProviderConfigs(
-          accounts: [account],
-          groups: [group],
+          accounts: [routingAccount],
+          groups: [routingGroup],
         ).single;
         final providers = ProviderEntriesState(
           entries: [

@@ -9,203 +9,390 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
-  test('xAI device authorization stays separate across its two API modes',
-      () async {
-    final requests = <RequestOptions>[];
-    final generatedKey = JsonWebKey.generate('ES256');
-    final privateKey = JsonWebKey.fromCryptoKeys(
-      publicKey: generatedKey.cryptoKeyPair.publicKey,
-      privateKey: generatedKey.cryptoKeyPair.privateKey,
-      keyId: 'xai-signing-key',
-    );
-    final publicKey = JsonWebKey.fromCryptoKeys(
-      publicKey: generatedKey.cryptoKeyPair.publicKey,
-      keyId: 'xai-signing-key',
-    );
-    final claims = {
-      'iss': LlmOAuthTokenClient.xaiIssuer,
-      'sub': 'account-123',
-      'aud': LlmOAuthTokenClient.xaiClientId,
-      'email': 'xai@example.test',
-      'email_verified': true,
-      'exp': DateTime.now()
-              .toUtc()
-              .add(const Duration(minutes: 5))
-              .millisecondsSinceEpoch ~/
-          1000,
-    };
-    final validIdToken = (JsonWebSignatureBuilder()
-          ..jsonContent = claims
-          ..setProtectedHeader('typ', 'JWT')
-          ..setProtectedHeader('kid', 'xai-signing-key')
-          ..addRecipient(privateKey, algorithm: 'ES256'))
-        .build()
-        .toCompactSerialization();
-    var returnedIdToken = validIdToken;
-    Object? returnedScope =
-        'openid profile email offline_access grok-cli:access';
-    var includeReturnedScope = true;
-    final dio = Dio()
-      ..httpClientAdapter = _OAuthAdapter((request) async {
-        requests.add(request);
-        if (request.uri.path == '/.well-known/openid-configuration') {
+  test(
+    'Meta Muse uses its pinned device grant and key-mint exchange',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          if (request.uri.path == '/oidc/device/authorization/') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'fixture-meta-device-code',
+                'user_code': 'META-1234',
+                'verification_uri': 'https://www.meta.ai/device',
+                'verification_uri_complete':
+                    'https://www.meta.ai/device?code=META-1234',
+                'expires_in': 60,
+                'interval': 1,
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
+          if (request.uri.path == '/oidc/device/token/') {
+            return ResponseBody.fromString(
+              jsonEncode({'access_token': 'dca:fixture-meta-dca'}),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
           return ResponseBody.fromString(
             jsonEncode({
-              'issuer': LlmOAuthTokenClient.xaiIssuer,
-              'jwks_uri': 'https://auth.x.ai/.well-known/jwks.json',
-              'id_token_signing_alg_values_supported': ['ES256'],
-              'device_authorization_endpoint':
-                  'https://auth.x.ai/oauth2/device/code',
-              'token_endpoint': 'https://auth.x.ai/oauth2/token',
+              'api_key': 'fixture-meta-muse-key',
+              'base_url': 'https://api.meta.ai/v1',
+              'user_email': 'muse@example.test',
+              'user_full_name': 'Muse User',
+              'subs_tier_name': 'Muse Plan',
+              'is_subs_active': true,
             }),
             200,
             headers: {
-              Headers.contentTypeHeader: ['application/json']
+              Headers.contentTypeHeader: ['application/json'],
             },
           );
-        }
-        if (request.uri.path == '/.well-known/jwks.json') {
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
+
+      final deviceCode = await client.startMetaMuseDeviceAuthorization();
+      final bundle = await client.pollMetaMuseDeviceAuthorization(
+        deviceCode: deviceCode,
+      );
+
+      expect(deviceCode.userCode, 'META-1234');
+      expect(deviceCode.verificationUri.host, 'www.meta.ai');
+      expect(requests.first.uri.host, 'auth.meta.com');
+      expect(requests.first.method, 'POST');
+      expect(requests[1].uri.path, '/oidc/device/token/');
+      expect(
+        requests[1].data,
+        containsPair('device_code', 'fixture-meta-device-code'),
+      );
+      expect(requests.last.uri.toString(), 'https://api.meta.ai/muse-code/key');
+      expect(
+        requests.last.headers['Authorization'],
+        'Bearer dca:fixture-meta-dca',
+      );
+      expect(bundle['api_key'], 'fixture-meta-muse-key');
+      expect(bundle['dca_token'], 'dca:fixture-meta-dca');
+      expect(bundle['email'], 'muse@example.test');
+      expect(bundle['name'], 'Muse User');
+      expect(bundle['oauth_contract'], 'meta-muse-device-v1');
+      expect(
+        requests.last.toString(),
+        isNot(contains('fixture-meta-muse-key')),
+      );
+    },
+  );
+
+  test(
+    'Meta Muse device authorization expires and polling can be cancelled',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
           return ResponseBody.fromString(
             jsonEncode({
-              'keys': [publicKey.toJson()]
+              'device_code': 'fixture-meta-device-code',
+              'user_code': 'META-1234',
+              'verification_uri': 'https://www.meta.ai/device',
+              'expires_in': 1,
+              'interval': 5,
             }),
             200,
             headers: {
-              Headers.contentTypeHeader: ['application/json']
+              Headers.contentTypeHeader: ['application/json'],
             },
           );
-        }
-        if (request.uri.path == '/oauth2/device/code') {
-          return ResponseBody.fromString(
-            jsonEncode({
-              'device_code': 'fixture-xai-device-code',
-              'user_code': 'XAI-1234',
-              'verification_uri': 'https://x.ai/activate',
-              'verification_uri_complete':
-                  'https://x.ai/activate?code=XAI-1234',
-              'expires_in': 600,
-              'interval': 1,
-            }),
-            200,
-            headers: {
-              Headers.contentTypeHeader: ['application/json']
-            },
-          );
-        }
-        return ResponseBody.fromString(
-          jsonEncode({
-            'access_token': 'fixture-xai-access',
-            'refresh_token': 'fixture-xai-refresh',
-            'id_token': returnedIdToken,
-            'token_type': 'Bearer',
-            if (includeReturnedScope) 'scope': returnedScope,
-            'expires_in': 3600,
-          }),
-          200,
-          headers: {
-            Headers.contentTypeHeader: ['application/json']
-          },
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
+      final expiredCode = await client.startMetaMuseDeviceAuthorization();
+
+      await expectLater(
+        client.pollMetaMuseDeviceAuthorization(deviceCode: expiredCode),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      expect(requests, hasLength(1), reason: 'expired grants are not polled');
+
+      final cancelToken = CancelToken();
+      final cancelCode = LlmMetaMuseDeviceCode.fromOAuthResponse(
+        deviceCode: 'fixture-meta-device-code',
+        userCode: 'META-1234',
+        verificationUri: Uri.parse('https://www.meta.ai/device'),
+        verificationUriComplete: Uri.parse('https://www.meta.ai/device'),
+        expiresIn: const Duration(minutes: 1),
+        interval: const Duration(seconds: 5),
+      );
+      final polling = client.pollMetaMuseDeviceAuthorization(
+        deviceCode: cancelCode,
+        cancelToken: cancelToken,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      cancelToken.cancel('User cancelled');
+      await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+      expect(
+        requests,
+        hasLength(1),
+        reason: 'cancelled polls do not reach Meta',
+      );
+    },
+  );
+
+  test(
+    'Meta Muse requires verified email and active subscription status',
+    () async {
+      for (final minted in [
+        {'api_key': 'muse-key', 'is_subs_active': true},
+        {'api_key': 'muse-key', 'user_email': 'muse@example.test'},
+        {
+          'api_key': 'muse-key',
+          'user_email': 'muse@example.test',
+          'is_subs_active': 'true',
+        },
+      ]) {
+        final dio = Dio()
+          ..httpClientAdapter = _OAuthAdapter((request) async {
+            final response = switch (request.uri.path) {
+              '/oidc/device/authorization/' => {
+                  'device_code': 'fixture-meta-device-code',
+                  'user_code': 'META-1234',
+                  'verification_uri': 'https://www.meta.ai/device',
+                  'expires_in': 60,
+                  'interval': 1,
+                },
+              '/oidc/device/token/' => {'access_token': 'dca:fixture-meta-dca'},
+              _ => minted,
+            };
+            return ResponseBody.fromString(
+              jsonEncode(response),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          });
+        final client = LlmOAuthTokenClient(dio: dio);
+        final deviceCode = await client.startMetaMuseDeviceAuthorization();
+
+        await expectLater(
+          client.pollMetaMuseDeviceAuthorization(deviceCode: deviceCode),
+          throwsA(isA<LlmOAuthFlowException>()),
         );
-      });
-    final client = LlmOAuthTokenClient(dio: dio);
+      }
+    },
+  );
 
-    final code = await client.startXaiDeviceAuthorization(
-      connectorType: 'grok-cli',
-    );
-    final apiCode =
-        await client.startXaiDeviceAuthorization(connectorType: 'xai-oauth');
-    final token = await client.pollXaiDeviceAuthorization(deviceCode: code);
+  test(
+    'xAI device authorization stays separate across its two API modes',
+    () async {
+      final requests = <RequestOptions>[];
+      final generatedKey = JsonWebKey.generate('ES256');
+      final privateKey = JsonWebKey.fromCryptoKeys(
+        publicKey: generatedKey.cryptoKeyPair.publicKey,
+        privateKey: generatedKey.cryptoKeyPair.privateKey,
+        keyId: 'xai-signing-key',
+      );
+      final publicKey = JsonWebKey.fromCryptoKeys(
+        publicKey: generatedKey.cryptoKeyPair.publicKey,
+        keyId: 'xai-signing-key',
+      );
+      final claims = {
+        'iss': LlmOAuthTokenClient.xaiIssuer,
+        'sub': 'account-123',
+        'aud': LlmOAuthTokenClient.xaiClientId,
+        'email': 'xai@example.test',
+        'email_verified': true,
+        'exp': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 5))
+                .millisecondsSinceEpoch ~/
+            1000,
+      };
+      final validIdToken = (JsonWebSignatureBuilder()
+            ..jsonContent = claims
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
+      var returnedIdToken = validIdToken;
+      Object? returnedScope =
+          'openid profile email offline_access grok-cli:access';
+      var includeReturnedScope = true;
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          if (request.uri.path == '/.well-known/openid-configuration') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'issuer': LlmOAuthTokenClient.xaiIssuer,
+                'jwks_uri': 'https://auth.x.ai/.well-known/jwks.json',
+                'id_token_signing_alg_values_supported': ['ES256'],
+                'device_authorization_endpoint':
+                    'https://auth.x.ai/oauth2/device/code',
+                'token_endpoint': 'https://auth.x.ai/oauth2/token',
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
+          if (request.uri.path == '/.well-known/jwks.json') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'keys': [publicKey.toJson()],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
+          if (request.uri.path == '/oauth2/device/code') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'fixture-xai-device-code',
+                'user_code': 'XAI-1234',
+                'verification_uri': 'https://x.ai/activate',
+                'verification_uri_complete':
+                    'https://x.ai/activate?code=XAI-1234',
+                'expires_in': 600,
+                'interval': 1,
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'fixture-xai-access',
+              'refresh_token': 'fixture-xai-refresh',
+              'id_token': returnedIdToken,
+              'token_type': 'Bearer',
+              if (includeReturnedScope) 'scope': returnedScope,
+              'expires_in': 3600,
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
 
-    expect(
-        requests.map((request) => request.uri.host), everyElement('auth.x.ai'));
-    final deviceRequests = requests
-        .where((request) => request.uri.path == '/oauth2/device/code')
-        .toList();
-    expect(deviceRequests, hasLength(2));
-    expect(
-      deviceRequests[0].data['scope'],
-      'openid profile email offline_access grok-cli:access',
-    );
-    expect(
-      deviceRequests[1].data['scope'],
-      'openid profile email offline_access api:access',
-    );
-    expect(
-        deviceRequests[0].data['client_id'], LlmOAuthTokenClient.xaiClientId);
-    final tokenRequest =
-        requests.singleWhere((request) => request.uri.path == '/oauth2/token');
-    expect(tokenRequest.data.toString(), contains('device_code'));
-    expect(token['access_token'], 'fixture-xai-access');
-    expect(token['refresh_token'], 'fixture-xai-refresh');
-    expect(token['identity_sub'], 'account-123');
-    expect(token['identity_email'], 'xai@example.test');
-    expect(token['oauth_contract'], 'xai-device-v1');
-    expect(requests.last.toString(), isNot(contains('fixture-xai-access')));
-    await expectLater(
-      client.pollXaiDeviceAuthorization(
+      final code = await client.startXaiDeviceAuthorization(
+        connectorType: 'grok-cli',
+      );
+      final apiCode = await client.startXaiDeviceAuthorization(
+        connectorType: 'xai-oauth',
+      );
+      final token = await client.pollXaiDeviceAuthorization(deviceCode: code);
+
+      expect(
+        requests.map((request) => request.uri.host),
+        everyElement('auth.x.ai'),
+      );
+      final deviceRequests = requests
+          .where((request) => request.uri.path == '/oauth2/device/code')
+          .toList();
+      expect(deviceRequests, hasLength(2));
+      expect(
+        deviceRequests[0].data['scope'],
+        'openid profile email offline_access grok-cli:access',
+      );
+      expect(
+        deviceRequests[1].data['scope'],
+        'openid profile email offline_access api:access',
+      );
+      expect(
+        deviceRequests[0].data['client_id'],
+        LlmOAuthTokenClient.xaiClientId,
+      );
+      final tokenRequest = requests.singleWhere(
+        (request) => request.uri.path == '/oauth2/token',
+      );
+      expect(tokenRequest.data.toString(), contains('device_code'));
+      expect(token['access_token'], 'fixture-xai-access');
+      expect(token['refresh_token'], 'fixture-xai-refresh');
+      expect(token['identity_sub'], 'account-123');
+      expect(token['identity_email'], 'xai@example.test');
+      expect(token['oauth_contract'], 'xai-device-v1');
+      expect(requests.last.toString(), isNot(contains('fixture-xai-access')));
+      await expectLater(
+        client.pollXaiDeviceAuthorization(
+          deviceCode: code,
+          expectedSubject: 'different-account',
+        ),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedIdToken = '${validIdToken.split('.').take(2).join('.')}.invalid';
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      final nullAzpToken = (JsonWebSignatureBuilder()
+            ..jsonContent = {...claims, 'azp': null}
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
+      returnedIdToken = nullAzpToken;
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedIdToken = validIdToken;
+      final conflictingAzpToken = (JsonWebSignatureBuilder()
+            ..jsonContent = {...claims, 'azp': 'another-client'}
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
+      returnedIdToken = conflictingAzpToken;
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedIdToken = validIdToken;
+      returnedScope = 'openid profile email offline_access api:access';
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedScope = 'openid profile email offline_access grok-cli:access';
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: apiCode),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedScope = '  ';
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      returnedScope = 42;
+      await expectLater(
+        client.pollXaiDeviceAuthorization(deviceCode: code),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      includeReturnedScope = false;
+      returnedScope = null;
+      final tokenWithoutScope = await client.pollXaiDeviceAuthorization(
         deviceCode: code,
-        expectedSubject: 'different-account',
-      ),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedIdToken = '${validIdToken.split('.').take(2).join('.')}.invalid';
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    final nullAzpToken = (JsonWebSignatureBuilder()
-          ..jsonContent = {...claims, 'azp': null}
-          ..setProtectedHeader('typ', 'JWT')
-          ..setProtectedHeader('kid', 'xai-signing-key')
-          ..addRecipient(privateKey, algorithm: 'ES256'))
-        .build()
-        .toCompactSerialization();
-    returnedIdToken = nullAzpToken;
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedIdToken = validIdToken;
-    final conflictingAzpToken = (JsonWebSignatureBuilder()
-          ..jsonContent = {...claims, 'azp': 'another-client'}
-          ..setProtectedHeader('typ', 'JWT')
-          ..setProtectedHeader('kid', 'xai-signing-key')
-          ..addRecipient(privateKey, algorithm: 'ES256'))
-        .build()
-        .toCompactSerialization();
-    returnedIdToken = conflictingAzpToken;
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedIdToken = validIdToken;
-    returnedScope = 'openid profile email offline_access api:access';
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedScope = 'openid profile email offline_access grok-cli:access';
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: apiCode),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedScope = '  ';
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    returnedScope = 42;
-    await expectLater(
-      client.pollXaiDeviceAuthorization(deviceCode: code),
-      throwsA(isA<LlmOAuthFlowException>()),
-    );
-    includeReturnedScope = false;
-    returnedScope = null;
-    final tokenWithoutScope = await client.pollXaiDeviceAuthorization(
-      deviceCode: code,
-    );
-    expect(tokenWithoutScope['scope'], code.scope);
-  });
+      );
+      expect(tokenWithoutScope['scope'], code.scope);
+    },
+  );
 
   test(
     'Kimi Code device authorization exchanges a polled grant safely',

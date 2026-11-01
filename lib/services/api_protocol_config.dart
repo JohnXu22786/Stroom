@@ -62,7 +62,12 @@ String firstNonEmptyProtocol(Iterable<String?> values) {
 String builtinDefaultApiProtocolForConnector(String? connectorType) =>
     switch (connectorType) {
       'codex' => 'openai.responses',
-      'xai' || 'grok-cli' || 'xai-oauth' || 'meta' => 'openai.responses',
+      'xai' ||
+      'grok-cli' ||
+      'xai-oauth' ||
+      'meta' ||
+      'muse-code' =>
+        'openai.responses',
       'claude' => 'anthropic.messages',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
@@ -113,7 +118,12 @@ Set<String> supportedApiProtocolsForSupplier(
     'gemini' || 'aistudio' => 'google.gemini.generate_content',
     'gemini-interactions' => 'google.gemini.interactions',
     'ollama' => 'ollama.chat',
-    'xai' || 'grok-cli' || 'xai-oauth' || 'meta' => 'openai.responses',
+    'xai' ||
+    'grok-cli' ||
+    'xai-oauth' ||
+    'meta' ||
+    'muse-code' =>
+      'openai.responses',
     'bedrock' ||
     'vertex' ||
     'codex' ||

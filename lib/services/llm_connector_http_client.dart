@@ -380,8 +380,9 @@ class LlmConnectorHttpClient {
     return connector?.canRefreshCredentials == true &&
         ((account.authType == 'oauth' &&
                 (account.connectorType != 'vertex' ||
-                    LlmOAuthProviderPolicy.forProvider(account.connectorType)
-                        .supported)) ||
+                    LlmOAuthProviderPolicy.forProvider(
+                      account.connectorType,
+                    ).supported)) ||
             (account.connectorType == 'vertex' &&
                 account.authType == 'service_account'));
   }
@@ -542,7 +543,7 @@ class LlmConnectorHttpClient {
       return false;
     }
     if (bundle == null) return false;
-    if (account.connectorType == 'meta') {
+    if (account.connectorType == 'muse-code') {
       final dcaToken = bundle['dca_token'] ?? bundle['dcaToken'];
       final accessToken = bundle['access_token'] ?? bundle['accessToken'];
       final apiKey = bundle['api_key'] ?? bundle['apiKey'];
@@ -555,7 +556,7 @@ class LlmConnectorHttpClient {
       final token = bundle['access_token'] ?? bundle['accessToken'];
       if (token is! String || token.trim().isEmpty) return true;
     }
-    if (account.authType == 'oauth' && account.connectorType != 'meta') {
+    if (account.authType == 'oauth' && account.connectorType != 'muse-code') {
       final token = bundle['access_token'] ?? bundle['accessToken'];
       if (token is! String || token.trim().isEmpty) return true;
     }

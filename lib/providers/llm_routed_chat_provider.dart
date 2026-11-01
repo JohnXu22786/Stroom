@@ -30,6 +30,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'codex',
           'xai',
           'meta',
+          'muse-code',
           'kimi',
           'kimi-ai',
           'kimi.ai',
@@ -223,8 +224,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       selectedAccountId: selectedAccountId,
       request: (candidate, progress) async {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
-        final protocolId =
-            _protocolFor(candidate.account, candidate.upstreamModelId);
+        final protocolId = _protocolFor(
+          candidate.account,
+          candidate.upstreamModelId,
+        );
         final replayMessages = _messagesWithReasoningReplay(
           messages,
           accountId: candidate.account.id,
@@ -266,12 +269,19 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             executorFamilyId: _executorReplayFamilyId(runtime.executor),
             modelId: candidate.upstreamModelId,
             protocolId: protocolId,
-            returnedResponsesOutputItems:
-                _completionResponsesOutputItems(result.data, protocolId),
-            returnedAssistantTurn:
-                _completionAssistantTurn(result.data, result.text, protocolId),
-            returnedToolSignatures:
-                _completionReasoningSignatures(result.data, protocolId),
+            returnedResponsesOutputItems: _completionResponsesOutputItems(
+              result.data,
+              protocolId,
+            ),
+            returnedAssistantTurn: _completionAssistantTurn(
+              result.data,
+              result.text,
+              protocolId,
+            ),
+            returnedToolSignatures: _completionReasoningSignatures(
+              result.data,
+              protocolId,
+            ),
           );
           _lastMediaAttachments = await _storeStreamMedia(
             result.data,
@@ -383,8 +393,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (requestCancelToken.isCancelled) {
               throw requestCancelToken.cancelError!;
             }
-            final protocolId =
-                _protocolFor(candidate.account, candidate.upstreamModelId);
+            final protocolId = _protocolFor(
+              candidate.account,
+              candidate.upstreamModelId,
+            );
             final replayMessages = _messagesWithReasoningReplay(
               messages,
               accountId: candidate.account.id,
@@ -911,8 +923,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                       AIStreamEvent(
                         part['text'] as String,
                         isReasoning: part['thought'] == true,
-                        thinkingSignature:
-                            _stringValue(part['thoughtSignature']),
+                        thinkingSignature: _stringValue(
+                          part['thoughtSignature'],
+                        ),
                         contentOrder:
                             part['thought'] == true ? null : nextContentOrder++,
                       ),
@@ -1386,11 +1399,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         ],
       };
     }
-    return {
-      'role': 'assistant',
-      'content': text,
-      'tool_calls': const [],
-    };
+    return {'role': 'assistant', 'content': text, 'tool_calls': const []};
   }
 
   static Map<String, String> _completionReasoningSignatures(

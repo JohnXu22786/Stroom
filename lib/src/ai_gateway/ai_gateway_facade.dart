@@ -723,6 +723,44 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginMetaMuseDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (account.connectorType != 'muse-code' ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      String? expectedEmail;
+      final existing = await _accounts.getAccount(account.id);
+      if (existing != null) {
+        if (existing.connectorType != 'muse-code' ||
+            existing.authType != 'oauth') {
+          throw const AiGatewayOAuthException();
+        }
+        final raw = await _accounts.readCredential(account.id);
+        if (raw == null) throw const AiGatewayOAuthException();
+        expectedEmail = _decodeOAuthBundle(raw)['email'] as String?;
+        if (expectedEmail == null || expectedEmail.trim().isEmpty) {
+          throw const AiGatewayOAuthException();
+        }
+      }
+      final deviceCode = await _tokenClient.startMetaMuseDeviceAuthorization();
+      return _LlmMetaMuseDeviceAuthorization(
+        account: account,
+        deviceCode: deviceCode,
+        expectedEmail: expectedEmail,
+        tokenClient: _tokenClient,
+        accounts: _accounts,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
     AiGatewayAccount account,
   ) async {
@@ -790,7 +828,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       return true;
     }
     if (account.connectorType == 'claude' ||
-        account.connectorType == 'kimi-coding') {
+        account.connectorType == 'kimi-coding' ||
+        account.connectorType == 'muse-code') {
       // These OAuth contracts provide token refresh but no revocation endpoint.
       await _accountManagement.deleteAccount(account.id);
       return true;
@@ -1016,6 +1055,110 @@ class _LlmKimiCodeDeviceAuthorization
         ),
         secret: jsonEncode(tokenBundle),
       );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+class _LlmMetaMuseDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmMetaMuseDeviceCode _deviceCode;
+  final String? _expectedEmail;
+  final LlmOAuthTokenClient _tokenClient;
+  final LlmAccountConnectorService _accounts;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmMetaMuseDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmMetaMuseDeviceCode deviceCode,
+    required String? expectedEmail,
+    required LlmOAuthTokenClient tokenClient,
+    required LlmAccountConnectorService accounts,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _expectedEmail = expectedEmail,
+        _tokenClient = tokenClient,
+        _accounts = accounts,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.verificationUri;
+
+  @override
+  Uri get verificationUriComplete => _deviceCode.verificationUriComplete;
+
+  @override
+  String get userCode => _deviceCode.userCode;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final tokenBundle = await _tokenClient.pollMetaMuseDeviceAuthorization(
+        deviceCode: _deviceCode,
+        expectedEmail: _expectedEmail,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+      final saved = await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: _account.authType,
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          // Muse access is account-specific; publish only the authenticated
+          // model list populated below, never the pinned superset.
+          models: const [],
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(tokenBundle),
+      );
+      try {
+        final models = await _accounts.discoverModels(
+          _legacyAccount(saved),
+          refreshRemote: true,
+        );
+        return await _accountManagement.saveAccount(
+          AiGatewayAccount(
+            id: saved.id,
+            connectorType: saved.connectorType,
+            authType: saved.authType,
+            displayName: saved.displayName,
+            status: AiGatewayAccountStatus.ready,
+            hasCredential: true,
+            credentialRef: saved.credentialRef,
+            endpointConfig: saved.endpointConfig,
+            models: [for (final model in models) _gatewayModel(model)],
+            policy: saved.policy,
+            usageByWindow: saved.usageByWindow,
+            remainingQuota: saved.remainingQuota,
+            quotaSignals: saved.quotaSignals,
+          ),
+        );
+      } catch (_) {
+        // Keep the secure account. The editor can retry entitlement discovery.
+        return saved;
+      }
     } catch (_) {
       throw const AiGatewayOAuthException();
     }

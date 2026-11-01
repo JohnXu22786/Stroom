@@ -1437,16 +1437,25 @@ class LlmRoutingService {
         );
         continue;
       }
-      final connectorType =
-          LlmConnectorRegistry.canonicalId(account.connectorType);
-      if (({'xai', 'grok-cli', 'xai-oauth', 'meta'}.contains(connectorType)) &&
+      final connectorType = LlmConnectorRegistry.canonicalId(
+        account.connectorType,
+      );
+      if (({
+            'xai',
+            'grok-cli',
+            'xai-oauth',
+            'meta',
+            'muse-code',
+          }.contains(connectorType)) &&
           !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
             connectorType,
             account.authType,
           )) {
         decisions.add(
           LlmRouteDecision(
-              subjectId: account.id, reason: 'auth_type_unsupported'),
+            subjectId: account.id,
+            reason: 'auth_type_unsupported',
+          ),
         );
         continue;
       }

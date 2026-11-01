@@ -203,8 +203,17 @@ abstract final class LlmConnectorRegistry {
       id: 'meta',
       displayName: 'Meta Muse Code',
       protocol: LlmNativeProtocol.metaResponses,
-      authTypes: {'oauth', 'api_key'},
+      authTypes: {'api_key'},
       modelCatalog: kPinnedMetaModels,
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'muse-code',
+      displayName: 'Meta Muse Code OAuth',
+      protocol: LlmNativeProtocol.metaResponses,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedMuseCodeModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
@@ -330,7 +339,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
-        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' => 'openai',
+        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' || 'muse-code' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -367,6 +376,7 @@ abstract final class LlmConnectorRegistry {
     return switch (canonicalId(connectorType)) {
       'codex' => authType == 'oauth',
       'xai' || 'meta' => authType == 'api_key',
+      'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       _ => true,
     };
@@ -1082,6 +1092,7 @@ class LlmAccountConnectorService {
       'qwen',
       'grok-cli',
       'xai-oauth',
+      'muse-code',
       'bedrock',
       'vertex',
       'ollama',
@@ -1091,6 +1102,15 @@ class LlmAccountConnectorService {
     }
     final accountEntitlementCatalog = account.connectorType == 'grok-cli' ||
         account.connectorType == 'xai-oauth';
+    if (account.connectorType == 'muse-code' &&
+        account.models.isNotEmpty &&
+        !refreshRemote) {
+      return List.unmodifiable(
+        account.models.where(
+          (model) => connector.modelCatalog.contains(model.upstreamModelId),
+        ),
+      );
+    }
     if (account.models.isNotEmpty &&
         (!refreshRemote || !hasRemoteCatalog) &&
         !accountEntitlementCatalog) {
@@ -1111,9 +1131,17 @@ class LlmAccountConnectorService {
         return _mergeModelMappings(
           discovered,
           account.models
-              .where(
-                (model) => entitledIds.contains(model.upstreamModelId),
-              )
+              .where((model) => entitledIds.contains(model.upstreamModelId))
+              .toList(),
+        );
+      }
+      if (account.connectorType == 'muse-code') {
+        final entitledIds =
+            discovered.map((model) => model.upstreamModelId).toSet();
+        return _mergeModelMappings(
+          discovered,
+          account.models
+              .where((model) => entitledIds.contains(model.upstreamModelId))
               .toList(),
         );
       }
@@ -1179,7 +1207,7 @@ class LlmAccountConnectorService {
         account.authType == 'service_account') {
       return _refreshVertexServiceAccount(account, bundle, cancelToken);
     }
-    if (account.connectorType == 'meta' && account.authType == 'oauth') {
+    if (account.connectorType == 'muse-code' && account.authType == 'oauth') {
       return _refreshMetaDca(account, bundle, cancelToken);
     }
     if (account.authType != 'oauth') return false;
@@ -1429,12 +1457,24 @@ class LlmAccountConnectorService {
       );
       final minted = _asJsonMap(response.data);
       final apiKey = _firstString(minted, const ['api_key', 'apiKey']);
-      if (apiKey == null) throw const LlmAccountConnectorException();
+      if (apiKey == null || minted?['is_subs_active'] != true) {
+        throw const LlmAccountConnectorException();
+      }
+      final email = _firstString(minted, const ['user_email', 'email']);
+      final priorEmail = _firstString(bundle, const ['email', 'user_email']);
+      if (email == null ||
+          priorEmail == null ||
+          priorEmail.toLowerCase() != email.toLowerCase()) {
+        throw const LlmAccountConnectorException();
+      }
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(minted ?? const <String, dynamic>{})
         ..['api_key'] = apiKey
         ..['access_token'] = apiKey
         ..['dca_token'] = dcaToken;
+      updated['email'] = email;
+      final name = _firstString(minted, const ['user_full_name', 'name']);
+      if (name != null) updated['name'] = name;
       if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       await saveAccount(account, secret: jsonEncode(updated));
       return true;
@@ -1727,6 +1767,7 @@ class LlmAccountConnectorService {
       'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       'grok-cli' => 'https://cli-chat-proxy.grok.com/v1',
       'xai-oauth' => 'https://api.x.ai/v1',
+      'muse-code' => 'https://api.meta.ai/v1',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       _ => null,
@@ -1755,6 +1796,8 @@ class LlmAccountConnectorService {
     final usesXaiOAuth = account.authType == 'oauth' &&
         (account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth');
+    final usesMuseOAuth =
+        account.authType == 'oauth' && account.connectorType == 'muse-code';
     final usesRefreshableOAuth = usesGeminiOAuth || usesXaiOAuth;
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
@@ -1813,6 +1856,15 @@ class LlmAccountConnectorService {
           account.endpointConfig,
         );
       }
+    } else if (usesMuseOAuth) {
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      headers['Authorization'] =
+          'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
+      headers['User-Agent'] =
+          'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
+      headers['X-Client-Id'] = 'tbh:tui';
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
     } else {
@@ -1911,6 +1963,10 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          if (account.connectorType == 'muse-code' &&
+              !kPinnedMuseCodeModels.contains(modelId)) {
+            continue;
+          }
           final methods = map['supportedGenerationMethods'];
           final actions = map['supportedActions'];
           final vertexActions = account.connectorType != 'vertex'
@@ -1980,6 +2036,10 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if (account.connectorType == 'muse-code') ...{
+                  'chat': true,
+                  'streaming': true,
+                },
                 if (account.connectorType == 'vertex') ...{
                   'chat': vertexSupportsGenerateContent,
                   if (vertexSupportsStreaming) 'streaming': true,
@@ -3211,6 +3271,12 @@ class LlmNativeRequestBuilder {
             !kPinnedKimiCodeModels.contains(modelId))) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'muse-code' &&
+        (account.authType != 'oauth' ||
+            !kPinnedMuseCodeModels.contains(modelId) ||
+            !account.models.any((model) => model.upstreamModelId == modelId))) {
+      throw const LlmAccountConnectorException();
+    }
     if ((account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth') &&
         !account.models.any((model) => model.upstreamModelId == modelId)) {
@@ -3301,7 +3367,7 @@ class LlmNativeRequestBuilder {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;
-      case 'meta':
+      case 'meta' || 'muse-code':
         headers['Authorization'] = 'Bearer $secret';
         headers['User-Agent'] =
             'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
@@ -3438,6 +3504,7 @@ class LlmNativeRequestBuilder {
         'grok-cli' ||
         'xai-oauth' ||
         'meta' ||
+        'muse-code' ||
         'gemini-interactions' ||
         'openai-compatibility' ||
         'openai-api' ||
@@ -3473,7 +3540,8 @@ class LlmNativeRequestBuilder {
             'access_token',
             'accessToken',
           ],
-        'oauth' => account.connectorType == 'meta'
+        'oauth' => account.connectorType == 'meta' ||
+                account.connectorType == 'muse-code'
             ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
             : const ['access_token', 'accessToken'],
         'session_token' => const [
@@ -3488,7 +3556,8 @@ class LlmNativeRequestBuilder {
       for (final key in candidates) {
         final value = decoded[key];
         if (value is String && value.trim().isNotEmpty) {
-          if (account.connectorType == 'meta' &&
+          if ((account.connectorType == 'meta' ||
+                  account.connectorType == 'muse-code') &&
               account.authType == 'oauth' &&
               value.startsWith('dca:') &&
               decoded['api_key'] == null) {
@@ -3505,7 +3574,8 @@ class LlmNativeRequestBuilder {
     if (account.authType == 'service_account') {
       throw const LlmAccountConnectorException();
     }
-    if (account.connectorType == 'meta' &&
+    if ((account.connectorType == 'meta' ||
+            account.connectorType == 'muse-code') &&
         account.authType == 'oauth' &&
         credential.trim().startsWith('dca:')) {
       throw const LlmAccountConnectorException();
@@ -3681,7 +3751,7 @@ class LlmNativeRequestBuilder {
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
         path = '/exa.api_server_pb.ApiServerService/GetChatMessage';
-      case 'meta':
+      case 'meta' || 'muse-code':
         baseUrl = _baseUrl(
           config,
           _metaBaseUrl(credential) ?? 'https://api.meta.ai/v1',
@@ -3964,7 +4034,7 @@ class LlmNativeRequestBuilder {
       'xai' || 'xai-oauth' => host == 'api.x.ai',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
-      'meta' => host == 'api.meta.ai',
+      'meta' || 'muse-code' => host == 'api.meta.ai',
       'gemini' ||
       'gemini-interactions' ||
       'aistudio' =>

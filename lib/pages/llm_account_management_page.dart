@@ -188,6 +188,20 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
           ),
         );
       }
+      if (result.account.connectorType == 'muse-code') {
+        final authorization = await gateway.oauthAuthorization
+            .beginMetaMuseDeviceAuthorization(result.account);
+        if (!mounted) {
+          authorization.cancel();
+          return null;
+        }
+        return showDialog<AiGatewayAccount>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) =>
+              _MetaMuseDeviceAuthorizationDialog(authorization: authorization),
+        );
+      }
       return gateway.oauthAuthorization.authorize(
         result.account,
         configuration: result.oauthConfiguration,
@@ -616,6 +630,79 @@ class _KimiCodeDeviceAuthorizationDialogState
       );
 }
 
+class _MetaMuseDeviceAuthorizationDialog extends StatefulWidget {
+  final AiGatewayOAuthDeviceAuthorization authorization;
+
+  const _MetaMuseDeviceAuthorizationDialog({required this.authorization});
+
+  @override
+  State<_MetaMuseDeviceAuthorizationDialog> createState() =>
+      _MetaMuseDeviceAuthorizationDialogState();
+}
+
+class _MetaMuseDeviceAuthorizationDialogState
+    extends State<_MetaMuseDeviceAuthorizationDialog> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authorization.completed.then(
+      (account) {
+        if (mounted) Navigator.of(context).pop(account);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _error = 'Meta Muse 授权失败，请重新开始登录。');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) widget.authorization.cancel();
+        },
+        child: AlertDialog(
+          title: const Text('登录 Meta Muse Code'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('打开 Meta 验证页面并输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+              const SizedBox(height: 12),
+              SelectableText(widget.authorization.userCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                widget.authorization.verificationUriComplete.toString(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await launchUrl(
+                  widget.authorization.verificationUriComplete,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('打开 Meta'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+}
+
 class _XaiDeviceAuthorizationDialog extends StatefulWidget {
   final AiGatewayOAuthDeviceAuthorization authorization;
   final String connectorType;
@@ -669,7 +756,7 @@ class _XaiDeviceAuthorizationDialogState
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!),
+                Text(_error!)
               ],
             ],
           ),
@@ -1605,7 +1692,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 maxLines: 7,
                 readOnly: _connectorType == 'kimi-coding' ||
                     _connectorType == 'grok-cli' ||
-                    _connectorType == 'xai-oauth',
+                    _connectorType == 'xai-oauth' ||
+                    _connectorType == 'muse-code',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
@@ -1615,11 +1703,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? 'Grok Build 仅开放已验证的订阅模型目录。'
                           : _connectorType == 'xai-oauth'
                               ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                              : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                              : _connectorType == 'muse-code'
+                                  ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                  : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
                 onChanged: _connectorType == 'kimi-coding' ||
                         _connectorType == 'grok-cli' ||
-                        _connectorType == 'xai-oauth'
+                        _connectorType == 'xai-oauth' ||
+                        _connectorType == 'muse-code'
                     ? null
                     : (_) => setState(() => _draftChanged = true),
               ),
