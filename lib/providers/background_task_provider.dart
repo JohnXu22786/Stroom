@@ -499,6 +499,14 @@ String? _sanitizeOcrTaskError(
   );
 }
 
+Iterable<String> _combinedOcrCredentialValues(
+  Iterable<String> diagnosticValues,
+  Iterable<String> sanitizationValues,
+) sync* {
+  yield* diagnosticValues;
+  yield* sanitizationValues;
+}
+
 Map<String, dynamic> _unavailableOcrRetryData(
   String taskId,
   OcrRetrySnapshot snapshot,
@@ -2737,7 +2745,7 @@ bool _isOcrCredentialField(Object? key) {
 }
 
 Iterable<String> _credentialValuesFromOcrRetryData(
-  Map<String, dynamic> retryData,
+  Map<dynamic, dynamic> retryData,
 ) sync* {
   Iterable<String> valuesFrom(dynamic value) sync* {
     if (value is Map) {
@@ -3229,11 +3237,15 @@ class BackgroundTask {
     this.retryData,
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
                 error,
                 rawRequest,
-                additionalCredentialValues: ocrDiagnosticCredentialValues,
+                additionalCredentialValues: _combinedOcrCredentialValues(
+                  ocrDiagnosticCredentialValues,
+                  ocrCredentialValuesForSanitization,
+                ),
               )
             : error,
         steps = type == BackgroundTaskType.ocr
@@ -3245,7 +3257,10 @@ class BackgroundTask {
                     error: _sanitizeOcrTaskError(
                       step.error,
                       rawRequest,
-                      additionalCredentialValues: ocrDiagnosticCredentialValues,
+                      additionalCredentialValues: _combinedOcrCredentialValues(
+                        ocrDiagnosticCredentialValues,
+                        ocrCredentialValuesForSanitization,
+                      ),
                     ),
                   ),
                 )
@@ -3260,14 +3275,20 @@ class BackgroundTask {
         rawRequest = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskRequest(
                 rawRequest,
-                additionalCredentialValues: ocrDiagnosticCredentialValues,
+                additionalCredentialValues: _combinedOcrCredentialValues(
+                  ocrDiagnosticCredentialValues,
+                  ocrCredentialValuesForSanitization,
+                ),
               )
             : rawRequest,
         rawResponse = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskResponse(
                 rawResponse,
                 rawRequest,
-                additionalCredentialValues: ocrDiagnosticCredentialValues,
+                additionalCredentialValues: _combinedOcrCredentialValues(
+                  ocrDiagnosticCredentialValues,
+                  ocrCredentialValuesForSanitization,
+                ),
               )
             : rawResponse,
         ocrPageOutcomes = type == BackgroundTaskType.ocr
@@ -3280,7 +3301,10 @@ class BackgroundTask {
                     error: _sanitizeOcrTaskError(
                       outcome.error,
                       rawRequest,
-                      additionalCredentialValues: ocrDiagnosticCredentialValues,
+                      additionalCredentialValues: _combinedOcrCredentialValues(
+                        ocrDiagnosticCredentialValues,
+                        ocrCredentialValuesForSanitization,
+                      ),
                     ),
                   ),
                 ),
@@ -3371,38 +3395,48 @@ class BackgroundTask {
               ocrPageOutcomes.map((outcome) => outcome.toMap()).toList(),
       };
 
-  factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
-        id: map['id'] as String,
-        type: BackgroundTaskType.values.byName(map['type'] as String),
-        title: map['title'] as String,
-        status: TaskStatus.values.byName(map['status'] as String),
-        result: map['result'] as String?,
-        resultIsComplete: map['resultIsComplete'] as bool? ??
-            !((map['error'] as String? ?? '').contains('finish_reason=length')),
-        resultFolder: map['resultFolder'] as String? ?? '',
-        partialSaveRequested: map['partialSaveRequested'] as bool? ?? false,
-        resultSavedAsPartial: map['resultSavedAsPartial'] as bool? ?? false,
-        error: map['error'] as String?,
-        createdAt: DateTime.parse(map['createdAt'] as String),
-        completedAt: map['completedAt'] != null
-            ? DateTime.parse(map['completedAt'] as String)
-            : null,
-        statusChangedAt: map['statusChangedAt'] != null
-            ? DateTime.parse(map['statusChangedAt'] as String)
-            : null,
-        steps: (map['steps'] as List?)
-                ?.map(
-                  (s) =>
-                      BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
-                )
-                .toList() ??
-            [],
-        downloadedFilePath: map['downloadedFilePath'] as String?,
-        rawRequest: map['rawRequest'] as Map<String, dynamic>?,
-        rawResponse: map['rawResponse'] as Map<String, dynamic>?,
-        retryData: _retryDataFromTaskMap(map),
-        ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
-      );
+  factory BackgroundTask.fromMap(Map<String, dynamic> map) {
+    final type = BackgroundTaskType.values.byName(map['type'] as String);
+    final rawRetryData = map['retryData'];
+    final retryCredentialValues =
+        type == BackgroundTaskType.ocr && rawRetryData is Map
+            ? _credentialValuesFromOcrRetryData(
+                rawRetryData,
+              ).toList(growable: false)
+            : const <String>[];
+    return BackgroundTask(
+      id: map['id'] as String,
+      type: type,
+      title: map['title'] as String,
+      status: TaskStatus.values.byName(map['status'] as String),
+      result: map['result'] as String?,
+      resultIsComplete: map['resultIsComplete'] as bool? ??
+          !((map['error'] as String? ?? '').contains('finish_reason=length')),
+      resultFolder: map['resultFolder'] as String? ?? '',
+      partialSaveRequested: map['partialSaveRequested'] as bool? ?? false,
+      resultSavedAsPartial: map['resultSavedAsPartial'] as bool? ?? false,
+      error: map['error'] as String?,
+      createdAt: DateTime.parse(map['createdAt'] as String),
+      completedAt: map['completedAt'] != null
+          ? DateTime.parse(map['completedAt'] as String)
+          : null,
+      statusChangedAt: map['statusChangedAt'] != null
+          ? DateTime.parse(map['statusChangedAt'] as String)
+          : null,
+      steps: (map['steps'] as List?)
+              ?.map(
+                (s) => BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
+              )
+              .toList() ??
+          [],
+      downloadedFilePath: map['downloadedFilePath'] as String?,
+      rawRequest: map['rawRequest'] as Map<String, dynamic>?,
+      rawResponse: map['rawResponse'] as Map<String, dynamic>?,
+      retryData: _retryDataFromTaskMap(map),
+      ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
+      ocrCredentialValuesForSanitization: retryCredentialValues,
+    );
+  }
 }
 
 // ============================================================================
