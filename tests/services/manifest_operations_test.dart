@@ -3121,6 +3121,77 @@ void main() {
       );
     });
 
+    test('restores audio files after partial folder cleanup failure', () async {
+      final firstAudioBytes = Uint8List.fromList([1, 2, 3]);
+      final firstSidecarBytes = Uint8List.fromList([97, 98]);
+      final secondAudioBytes = Uint8List.fromList([4, 5, 6]);
+      final secondSidecarBytes = Uint8List.fromList([99, 100]);
+      var extraDeleteCount = 0;
+      final failure = StateError('injected partial audio file cleanup failure');
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_folder_partial_cleanup_failure',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        onExtraDelete: (record) async {
+          extraDeleteCount++;
+          if (extraDeleteCount == 2) throw failure;
+          await WebFileStore.delete('tts_audio/${record.textStoragePath}');
+        },
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final first = AudioRecord(
+        id: 'audio_folder_partial_cleanup_first',
+        name: 'first',
+        hash: 'hash_audio_folder_partial_cleanup_first',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: firstAudioBytes.length,
+        folder: 'audio_folder_partial_cleanup',
+      );
+      final second = AudioRecord(
+        id: 'audio_folder_partial_cleanup_second',
+        name: 'second',
+        hash: 'hash_audio_folder_partial_cleanup_second',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: secondAudioBytes.length,
+        folder: 'audio_folder_partial_cleanup',
+      );
+      await operations.writeFile(first.storagePath, firstAudioBytes);
+      await operations.writeFile(first.textStoragePath, firstSidecarBytes);
+      await operations.writeFile(second.storagePath, secondAudioBytes);
+      await operations.writeFile(second.textStoragePath, secondSidecarBytes);
+      await operations.addRecord(first);
+      await operations.addRecord(second);
+
+      await expectLater(
+        operations.removeFolder(first.folder),
+        throwsA(same(failure)),
+      );
+
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals([first.id, second.id]),
+        reason: 'failed cleanup must leave persisted audio rows intact',
+      );
+      expect(
+        (await operations.loadRecords()).map((record) => record.id),
+        unorderedEquals([first.id, second.id]),
+        reason: 'failed cleanup must preserve cached audio rows for retry',
+      );
+      expect(await operations.readFile(first.storagePath), firstAudioBytes);
+      expect(
+        await operations.readFile(first.textStoragePath),
+        firstSidecarBytes,
+      );
+      expect(await operations.readFile(second.storagePath), secondAudioBytes);
+      expect(
+        await operations.readFile(second.textStoragePath),
+        secondSidecarBytes,
+      );
+    });
+
     testWidgets(
         'failed JSON registration preserves folders used by a concurrent registration',
         (WidgetTester t) async {
