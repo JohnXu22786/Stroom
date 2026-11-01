@@ -120,6 +120,412 @@ void main() {
     },
   );
 
+  test('OCR maps images through the routed model protocol', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'responses-ocr-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Responses OCR account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {'baseUrl': 'https://example.test/v1'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'responses-model',
+            upstreamModelId: 'vision-model',
+            displayName: 'Vision model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'openai.responses'},
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'responses-ocr-group',
+        displayName: 'Responses OCR model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'responses-ocr-account',
+            upstreamModelId: 'vision-model',
+            localModelId: 'ocr-local-model',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'id': 'response-1',
+        'status': 'incomplete',
+        'incomplete_details': {'reason': 'content_filter'},
+        'output_text': 'recognized',
+        'usage': {'input_tokens': 3, 'output_tokens': 2},
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+
+    final ocrService = OcrService(
+      config: const OcrConfig(
+        host: '',
+        apiKey: '',
+        model: 'vision-model',
+        routingGroupId: 'responses-ocr-group',
+        routingLocalModelId: 'ocr-local-model',
+      ),
+      routingRuntime: Future.value(runtime),
+    );
+    final result = await ocrService.recognize(
+      imageBytes: Uint8List.fromList([1, 2, 3]),
+      imageFormat: 'png',
+    );
+
+    expect(result.text, 'recognized');
+    expect(result.isComplete, isFalse);
+    expect(result.finishReason, 'incomplete');
+    expect(ocrService.lastResponseData?['output_text'], 'recognized');
+    expect(ocrService.lastResponseData?['usage'], {
+      'input_tokens': 3,
+      'output_tokens': 2,
+    });
+    expect(connector.requestedAccountId, 'responses-ocr-account');
+    expect(connector.requestedModelId, 'vision-model');
+    expect(connector.requestBody, contains('input'));
+    expect(connector.requestBody, isNot(contains('messages')));
+    expect(connector.requestBody?['input'], [
+      {
+        'type': 'message',
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_image',
+            'image_url': 'data:image/png;base64,AQID',
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('OCR excludes accounts incompatible with their model protocol',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'wrong-protocol-gemini',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini account with Responses override',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          'baseUrl': 'https://generativelanguage.googleapis.com'
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'vision-model',
+            upstreamModelId: 'vision-model',
+            displayName: 'Vision model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'openai.responses'},
+          ),
+        ],
+      ),
+      secret: 'gemini-key',
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'compatible-gemini',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini GenerateContent account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          'baseUrl': 'https://generativelanguage.googleapis.com'
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'vision-model',
+            upstreamModelId: 'vision-model',
+            displayName: 'Vision model',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'gemini-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'protocol-filter-group',
+        displayName: 'Protocol filter group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'wrong-protocol-gemini',
+            upstreamModelId: 'vision-model',
+            localModelId: 'ocr-local-model',
+            priorityTier: 0,
+          ),
+          LlmModelGroupMember(
+            accountId: 'compatible-gemini',
+            upstreamModelId: 'vision-model',
+            localModelId: 'ocr-local-model',
+            priorityTier: 1,
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: const {
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {'text': 'recognized'},
+              ],
+            },
+            'finishReason': 'STOP',
+          },
+        ],
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+
+    final result = await OcrService(
+      config: const OcrConfig(
+        host: '',
+        apiKey: '',
+        model: 'vision-model',
+        routingGroupId: 'protocol-filter-group',
+        routingLocalModelId: 'ocr-local-model',
+      ),
+      routingRuntime: Future.value(runtime),
+    ).recognize(imageBytes: Uint8List.fromList([1, 2, 3]), imageFormat: 'png');
+
+    expect(connector.requestedAccountId, 'compatible-gemini');
+    expect(connector.requests.map((request) => request.account.id), [
+      'compatible-gemini',
+    ]);
+    expect(connector.requestBody, contains('contents'));
+    expect(connector.requestBody, isNot(contains('input')));
+    expect(result.text, 'recognized');
+  });
+
+  test('Gemini routed OCR maps top_p into generationConfig', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-ocr-account',
+        connectorType: 'gemini',
+        authType: 'api_key',
+        displayName: 'Gemini OCR account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          'baseUrl': 'https://generativelanguage.googleapis.com'
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-model',
+            upstreamModelId: 'gemini-vision',
+            displayName: 'Gemini vision',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-ocr-group',
+        displayName: 'Gemini OCR model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-ocr-account',
+            upstreamModelId: 'gemini-vision',
+            localModelId: 'ocr-local-model',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: const {
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {'text': 'gemini recognized'},
+              ],
+            },
+            'finishReason': 'SAFETY',
+          },
+        ],
+        'usageMetadata': {
+          'promptTokenCount': 3,
+          'candidatesTokenCount': 2,
+        },
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+
+    final result = await OcrService(
+      config: const OcrConfig(
+        host: '',
+        apiKey: '',
+        model: 'gemini-vision',
+        routingGroupId: 'gemini-ocr-group',
+        routingLocalModelId: 'ocr-local-model',
+        typeConfig: {'enableTopP': true, 'topP': 0.8},
+      ),
+      routingRuntime: Future.value(runtime),
+    ).recognize(imageBytes: Uint8List.fromList([1, 2, 3]), imageFormat: 'png');
+
+    expect(result.text, 'gemini recognized');
+    expect(result.isComplete, isFalse);
+    expect(result.finishReason, 'SAFETY');
+    expect(connector.requestedAccountId, 'gemini-ocr-account');
+    expect(connector.requestedModelId, 'gemini-vision');
+    expect(connector.requestBody, isNot(contains('top_p')));
+    expect(connector.requestBody?['generationConfig'], {'topP': 0.8});
+    expect(connector.requestBody?['contents'][0]['parts'][0], {
+      'inlineData': {'mimeType': 'image/png', 'data': 'AQID'},
+    });
+  });
+
+  test('Gemini Interactions routes OCR images and extracts returned text',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'gemini-interactions-ocr-account',
+        connectorType: 'gemini-interactions',
+        authType: 'api_key',
+        displayName: 'Gemini Interactions OCR account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          'baseUrl': 'https://generativelanguage.googleapis.com',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'gemini-interactions-model',
+            upstreamModelId: 'gemini-interactions-vision',
+            displayName: 'Gemini Interactions vision',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'gemini-interactions-ocr-group',
+        displayName: 'Gemini Interactions OCR model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gemini-interactions-ocr-account',
+            upstreamModelId: 'gemini-interactions-vision',
+            localModelId: 'ocr-local-model',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: const {
+        'status': 'incomplete',
+        'outputs': [
+          {
+            'type': 'model_output',
+            'content': [
+              {'type': 'text', 'text': 'interaction recognized'},
+            ],
+          },
+        ],
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+
+    final result = await OcrService(
+      config: const OcrConfig(
+        host: '',
+        apiKey: '',
+        model: 'gemini-interactions-vision',
+        routingGroupId: 'gemini-interactions-ocr-group',
+        routingLocalModelId: 'ocr-local-model',
+        typeConfig: {'enableTopP': true, 'topP': 0.8},
+      ),
+      routingRuntime: Future.value(runtime),
+    ).recognize(imageBytes: Uint8List.fromList([1, 2, 3]), imageFormat: 'png');
+
+    expect(result.text, 'interaction recognized');
+    expect(result.isComplete, isFalse);
+    expect(result.finishReason, 'incomplete');
+    expect(connector.requestedAccountId, 'gemini-interactions-ocr-account');
+    expect(connector.requestedModelId, 'gemini-interactions-vision');
+    expect(connector.requestBody, isNot(contains('top_p')));
+    expect(connector.requestBody?['generation_config'], {'top_p': 0.8});
+    expect(connector.requestBody, contains('input'));
+    expect(connector.requestBody, isNot(contains('messages')));
+    expect(connector.requestBody?['input'], [
+      {
+        'type': 'text',
+        'text': '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。',
+      },
+      {
+        'type': 'image',
+        'data': 'AQID',
+        'mime_type': 'image/png',
+      },
+    ]);
+  });
+
   test(
     'routed OCR preserves image upload and long response timeouts',
     () async {
@@ -216,6 +622,7 @@ void main() {
               upstreamModelId: 'vision-model',
               displayName: 'Vision model',
               capabilities: {'vision': true},
+              config: {'apiProtocolOverride': 'openai.responses'},
             ),
           ],
         ),
@@ -235,7 +642,7 @@ void main() {
       );
       final connector = _FakeConnectorClient(
         accounts,
-        reportedSendProgress: const [(3, 10), (10, 10)],
+        reportFullSendProgress: true,
       );
       final runtime = LlmChatRoutingRuntime(
         accountService: accounts,
@@ -264,7 +671,10 @@ void main() {
         onStage: stages.add,
       );
 
-      expect(progress, contains((3, 10)));
+      final encodedTotal =
+          utf8.encode(jsonEncode(connector.requestBody)).length;
+      expect(progress.first, (0, encodedTotal));
+      expect(progress, contains((encodedTotal, encodedTotal)));
       expect(stages.first, OcrRequestStage.uploading);
       expect(
         stages.indexOf(OcrRequestStage.waiting),
@@ -760,6 +1170,87 @@ void main() {
   );
 
   test(
+    'legacy full OCR endpoint follows a non-chat model protocol override',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'ocr-custom-endpoint';
+      const localModelId = 'custom-vision';
+      const upstreamModelId = 'vision-model';
+      const endpoint =
+          'https://legacy.example.test/v1/chat/completions?tenant=alpha';
+      final groupId = stableLlmModelGroupId(accountId, localModelId);
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Legacy OCR account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: {
+            'baseUrl': endpoint,
+            'legacyOcrProviderConfigId': 'custom-endpoint',
+            'legacyOcrFullEndpoint': true,
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: upstreamModelId,
+              displayName: 'Vision model',
+              capabilities: {'vision': true},
+              config: {'apiProtocolOverride': 'openai.responses'},
+            ),
+          ],
+        ),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Legacy OCR model',
+          members: const [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: localModelId,
+              upstreamModelId: upstreamModelId,
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(accounts);
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        connectorClient: connector,
+      );
+
+      await OcrService(
+        config: OcrConfig(
+          host: endpoint,
+          apiKey: '',
+          model: upstreamModelId,
+          routingAccountId: accountId,
+          routingGroupId: groupId,
+          routingLocalModelId: localModelId,
+        ),
+        routingRuntime: Future.value(runtime),
+      ).recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+      expect(connector.requestBody, contains('input'));
+      expect(
+        connector.requestedUri.toString(),
+        'https://legacy.example.test/v1/responses?tenant=alpha',
+      );
+    },
+  );
+
+  test(
     'routed legacy OCR preserves its complete custom endpoint URL',
     () async {
       final preferences = _MemoryPreferences();
@@ -1112,7 +1603,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     this.responseBodies,
     this.responseHeaders = const {},
     LlmConnectorObservation? observation,
-    this.reportedSendProgress = const [],
+    this.reportFullSendProgress = false,
   })  : observation = observation ?? LlmConnectorObservation(),
         super(accountService: accountService);
 
@@ -1123,7 +1614,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   final List<Object?>? responseBodies;
   final Map<String, List<String>> responseHeaders;
   final LlmConnectorObservation observation;
-  final List<(int, int)> reportedSendProgress;
+  final bool reportFullSendProgress;
   final requests = <({LlmAccount account, String modelId, Object? body})>[];
   String? requestedModelId;
   String? requestedAccountId;
@@ -1169,8 +1660,9 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
           )
           .uri;
     }
-    for (final (sent, total) in reportedSendProgress) {
-      onSendProgress?.call(sent, total);
+    if (reportFullSendProgress) {
+      final total = utf8.encode(jsonEncode(requestBody)).length;
+      onSendProgress?.call(total, total);
     }
     if (failFirstRequestBeforeSend && requests.length == 1) {
       throw const LlmConnectorHttpException(code: 'connection_error');

@@ -2037,24 +2037,63 @@ void main() {
       },
     );
 
-    test('Gemini Interactions rejects images without a supported mapping', () {
+    test('Gemini Interactions maps inline image data', () {
       final neutral = AiGatewayProtocolBridges.openAiChatCompletions.toStroom({
         'role': 'user',
         'content': [
           {
             'type': 'image_url',
-            'image_url': {'url': 'https://example.test/photo.png'},
+            'image_url': {'url': 'data:image/png;base64,aGVsbG8='},
           },
         ],
       });
 
-      expect(
-        () => AiGatewayProtocolBridges.buildRequest(
-          'google.gemini.interactions',
-          AiGatewayProtocolRequest(modelId: 'gemini', messages: [neutral]),
-        ),
-        throwsUnsupportedError,
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.interactions',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [neutral]),
       );
+
+      expect(request?.body['input'], [
+        {
+          'type': 'image',
+          'data': 'aGVsbG8=',
+          'mime_type': 'image/png',
+        },
+      ]);
+    });
+
+    test('Gemini Interactions re-encodes native inline image source', () {
+      final message = StroomMessage(
+        id: 'native-interactions-image',
+        role: 'user',
+        sequence: 0,
+        createdAt: DateTime.utc(2026),
+        content: [
+          StroomContentPart(
+            type: 'image',
+            data: {
+              'source': {
+                'type': 'image',
+                'data': 'aGVsbG8=',
+                'mime_type': 'image/png',
+              },
+            },
+          ),
+        ],
+      );
+
+      final request = AiGatewayProtocolBridges.buildRequest(
+        'google.gemini.interactions',
+        AiGatewayProtocolRequest(modelId: 'gemini', messages: [message]),
+      );
+
+      expect(request?.body['input'], [
+        {
+          'type': 'image',
+          'data': 'aGVsbG8=',
+          'mime_type': 'image/png',
+        },
+      ]);
     });
 
     test(
