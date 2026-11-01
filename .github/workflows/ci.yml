@@ -217,40 +217,38 @@ jobs:
         run: |
           set +e
           log="$RUNNER_TEMP/macos-message-smoke.log"
-          (
-            set -o pipefail
-            flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
-          ) &
-          test_pid=$!
-          while kill -0 "$test_pid" 2>/dev/null; do
-            if grep -aFq 'Failed to foreground app' "$log" 2>/dev/null; then
-              app="$GITHUB_WORKSPACE/build/macos/Build/Products/Debug/stroom.app"
-              activation_log="$RUNNER_TEMP/macos-activation.log"
-              : > "$activation_log"
-              if [ ! -d "$app" ]; then
-                printf 'macOS foreground retry could not find app: %s\n' "$app" >> "$log"
-                break
-              fi
-              printf 'Retrying macOS app activation: %s\n' "$app" >> "$log"
-              activated=0
-              for attempt in $(seq 1 40); do
-                if open "$app" >>"$activation_log" 2>&1; then
-                  printf 'macOS foreground request succeeded on attempt %s\n' "$attempt" >> "$log"
-                  activated=1
-                  break
-                fi
-                sleep 0.25
+          app="$GITHUB_WORKSPACE/build/macos/Build/Products/Debug/stroom.app"
+          activation_log="$RUNNER_TEMP/macos-activation.log"
+          set -o pipefail
+          flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 \
+            | tee "$log" \
+            | while IFS= read -r line; do
+                printf '%s\n' "$line"
+                case "$line" in
+                  *'Failed to foreground app'*)
+                    : > "$activation_log"
+                    if [ ! -d "$app" ]; then
+                      printf 'macOS foreground retry could not find app: %s\n' "$app"
+                      break
+                    fi
+                    printf 'Retrying macOS app activation: %s\n' "$app"
+                    activated=0
+                    for attempt in $(seq 1 40); do
+                      if open "$app" >>"$activation_log" 2>&1; then
+                        printf 'macOS foreground request succeeded on attempt %s\n' "$attempt"
+                        activated=1
+                        break
+                      fi
+                      sleep 0.25
+                    done
+                    if [ "$activated" -eq 0 ]; then
+                      printf 'macOS foreground request failed after 10 seconds\n'
+                      cat "$activation_log"
+                    fi
+                    ;;
+                esac
               done
-              if [ "$activated" -eq 0 ]; then
-                printf 'macOS foreground request failed after 10 seconds\n' >> "$log"
-                cat "$activation_log" >> "$log"
-              fi
-              break
-            fi
-            sleep 0.1
-          done
-          wait "$test_pid"
-          result=$?
+          result=${PIPESTATUS[0]}
           exit "$result"
       - name: Summarize macOS smoke failure
         if: failure()
