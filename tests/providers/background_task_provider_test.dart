@@ -15009,6 +15009,7 @@ void main() {
           'foo / barxyz',
           'foo + barxyz',
           'foo. barxyz',
+          'foo. barxyz123',
           'foo: barxyz',
           'foo; barxyz',
           'foo & barxyz',
@@ -15071,6 +15072,20 @@ void main() {
         expect(persisted, contains('Please read the [redacted].'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
+
+        final lineBreakTask = taskFor(
+          'legacy-ocr-line-break-masked-credential-echo',
+          'Please read the documentation\nfoo\nbarxyz carefully.',
+        );
+        final lineBreakInstruction = OcrRetrySnapshot.fromMap(
+          lineBreakTask.retryData!,
+        ).instructionContent!;
+        final lineBreakPersisted = jsonEncode(lineBreakTask.toMap());
+        expect(
+          lineBreakInstruction,
+          'Please read the [redacted] carefully.',
+        );
+        expect(lineBreakPersisted, isNot(contains('foobarxyz')));
 
         final spacedPrefixTask = taskFor(
           'legacy-ocr-character-spaced-masked-prefix-echo',
@@ -15310,6 +15325,15 @@ void main() {
       'legacy OCR instruction migration preserves natural documentation after a masked prefix',
       () {
         const safePrompt = 'Please read the documentation carefully.\n'
+            'Please read the documentation carefully. Summarize the process.\n'
+            'Please read the documentation now. Please summarize the process.\n'
+            'Please read the documentation now. Summarize the process clearly.\n'
+            'Please read the documentation now. Proceed with the process.\n'
+            'Please read the documentation now. Proceed.\n'
+            'Please read the documentation now. Prepare a summary.\n'
+            'Please read the documentation now. Summarize the process accurately.\n'
+            'Please read the documentation now. Summarize the overview throughout the workflow.\n'
+            'Please read the documentation now. Summarize the process repeatedly.\n'
             'Use the documentation to authenticate this API request.\n'
             'Please read the documentation independently.\n'
             'Please read the documentation thoroughly.\n'
@@ -15407,6 +15431,133 @@ void main() {
 
         expect(instructionContent, safePrompt);
         expect(persisted, contains(safePrompt));
+
+        final credentialAfterSentence = taskFor(
+          'legacy-ocr-credential-after-natural-sentence',
+          'Please read the documentation now. '
+              'Summarize the process foobarxyz.',
+        );
+        final credentialAfterSentenceInstruction = OcrRetrySnapshot.fromMap(
+          credentialAfterSentence.retryData!,
+        ).instructionContent!;
+        final credentialAfterSentencePersisted =
+            jsonEncode(credentialAfterSentence.toMap());
+        expect(
+          credentialAfterSentenceInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          credentialAfterSentencePersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final shortCredentialAfterSentence = taskFor(
+          'legacy-ocr-short-credential-after-natural-sentence',
+          'Please read the documentation now. '
+              'Summarize the process abc123.',
+        );
+        final shortCredentialAfterSentenceInstruction =
+            OcrRetrySnapshot.fromMap(
+          shortCredentialAfterSentence.retryData!,
+        ).instructionContent!;
+        final shortCredentialAfterSentencePersisted =
+            jsonEncode(shortCredentialAfterSentence.toMap());
+        expect(
+          shortCredentialAfterSentenceInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          shortCredentialAfterSentencePersisted,
+          isNot(contains('abc123')),
+        );
+
+        final spacedCredentialAfterSentence = taskFor(
+          'legacy-ocr-spaced-credential-after-natural-sentence',
+          'Please read the documentation now. '
+              'Summarize the process foo barxyz.',
+        );
+        final spacedCredentialAfterSentenceInstruction =
+            OcrRetrySnapshot.fromMap(
+          spacedCredentialAfterSentence.retryData!,
+        ).instructionContent!;
+        final spacedCredentialAfterSentencePersisted =
+            jsonEncode(spacedCredentialAfterSentence.toMap());
+        expect(
+          spacedCredentialAfterSentenceInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          spacedCredentialAfterSentencePersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final credentialAroundNaturalWord = taskFor(
+          'legacy-ocr-credential-around-natural-word',
+          'Please read the documentation now. '
+              'Summarize the process foo carefully barxyz.',
+        );
+        final credentialAroundNaturalWordInstruction = OcrRetrySnapshot.fromMap(
+          credentialAroundNaturalWord.retryData!,
+        ).instructionContent!;
+        final credentialAroundNaturalWordPersisted =
+            jsonEncode(credentialAroundNaturalWord.toMap());
+        expect(
+          credentialAroundNaturalWordInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          credentialAroundNaturalWordPersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final overlappingCredentialSpans = taskFor(
+          'legacy-ocr-overlapping-credential-spans',
+          'Please read the documentation now. '
+              'Summarize the process fooabcdefgh carefully xyz12345.',
+        );
+        final overlappingCredentialSpansInstruction = OcrRetrySnapshot.fromMap(
+          overlappingCredentialSpans.retryData!,
+        ).instructionContent!;
+        final overlappingCredentialSpansPersisted =
+            jsonEncode(overlappingCredentialSpans.toMap());
+        expect(
+          overlappingCredentialSpansInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          overlappingCredentialSpansPersisted,
+          isNot(contains('fooabcdefgh')),
+        );
+        expect(
+          overlappingCredentialSpansPersisted,
+          isNot(contains('xyz12345')),
+        );
+
+        final credentialAroundNaturalSequence = taskFor(
+          'legacy-ocr-credential-around-natural-sequence',
+          'Please read the documentation now. '
+              'Summarize the process foo carefully then barxyz.',
+        );
+        final credentialAroundNaturalSequenceInstruction =
+            OcrRetrySnapshot.fromMap(
+          credentialAroundNaturalSequence.retryData!,
+        ).instructionContent!;
+        final credentialAroundNaturalSequencePersisted =
+            jsonEncode(credentialAroundNaturalSequence.toMap());
+        expect(
+          credentialAroundNaturalSequenceInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          credentialAroundNaturalSequencePersisted,
+          isNot(contains('foobarxyz')),
+        );
       },
     );
 

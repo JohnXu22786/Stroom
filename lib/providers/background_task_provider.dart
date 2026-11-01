@@ -1487,6 +1487,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'completely',
       'verbatim',
       'independently',
+      'now',
+      'today',
+      'accurately',
+      'appropriately',
+      'correctly',
+      'effectively',
+      'individually',
+      'meaningfully',
+      'specifically',
     };
     const naturalNouns = {
       'documentation',
@@ -1536,14 +1545,231 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'workflow',
       'workflows',
       'encryption',
+      'authentication',
+      'authorization',
+      'compliance',
+      'configuration',
+      'deployment',
+      'design',
+      'installation',
+      'networking',
+      'privacy',
+      'security',
+      'setup',
+      'troubleshooting',
+      'usage',
     };
     final spacedOpenMaskPrefixPattern =
         prefix.split('').map(RegExp.escape).join(r'\s*');
     const spacedCredentialChunk =
-        r'(?:[a-zA-Z0-9_/:;+=~@%$#!&]|\.(?=\s*[a-zA-Z0-9_/:;+=~@%$#!&]))+';
+        r'(?:[a-zA-Z0-9_/:;+=~@%$#!&]|\.(?=[a-zA-Z0-9_/:;+=~@%$#!&]))+';
+    const spacedCredentialChunkSeparator = r'(?:[ \t]+|[\r\n]+[ \t]*)';
+    const naturalSentenceActions = {
+      'analyze',
+      'answer',
+      'check',
+      'classify',
+      'describe',
+      'examine',
+      'explain',
+      'extract',
+      'find',
+      'identify',
+      'inspect',
+      'look',
+      'prepare',
+      'process',
+      'proceed',
+      'read',
+      'review',
+      'scan',
+      'search',
+      'show',
+      'summarize',
+      'transcribe',
+      'translate',
+      'use',
+    };
+    // A dot followed by whitespace is a sentence boundary. Support this
+    // OCR punctuation split only when the joined suffix has a key marker or
+    // appears in explicit credential-use context.
+    final dottedCredentialCandidate = RegExp(
+      '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
+      r'([a-zA-Z0-9_]{1,8})\.[ \t]+([a-zA-Z0-9_]{4,})'
+      r'([^\r\n]*)'
+      r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
+      caseSensitive: false,
+    );
+    sanitized = sanitized.replaceAllMapped(dottedCredentialCandidate, (match) {
+      final firstChunk = match.group(2)!;
+      final secondChunk = match.group(3)!;
+      final sentenceTail = match.group(4)!;
+      final joinedCredential = '$firstChunk$secondChunk';
+      final firstChunkIsNatural =
+          naturalAdverbs.contains(firstChunk.toLowerCase()) ||
+              naturalNouns.contains(firstChunk.toLowerCase());
+      final secondChunkIsNatural =
+          naturalAdverbs.contains(secondChunk.toLowerCase()) ||
+              naturalNouns.contains(secondChunk.toLowerCase());
+      final naturalSentenceContinuation = RegExp(
+        r'^\s+(?:(?:please\s+)?[a-z]+\s+)?(?:the|a|an|this|that|these|those)\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$|^\s+(?:with|for|to|on|about|from|into)\s+(?:(?:the|a|an)\s+)?[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$',
+        caseSensitive: false,
+      ).hasMatch(sentenceTail);
+      final standaloneNaturalAction =
+          naturalSentenceActions.contains(secondChunk.toLowerCase()) &&
+              RegExp(r'^[.!?]*\s*$').hasMatch(sentenceTail);
+      const naturalTailWords = {
+        'a',
+        'an',
+        'and',
+        'about',
+        'after',
+        'before',
+        'by',
+        'for',
+        'from',
+        'in',
+        'into',
+        'of',
+        'on',
+        'or',
+        'the',
+        'then',
+        'to',
+        'with',
+        'process',
+        'points',
+        'question',
+        'receipt',
+        'total',
+        'throughout',
+        'document',
+        'image',
+        'request',
+      };
+      final naturalTailVocabulary = {
+        ...naturalAdverbs,
+        ...naturalNouns,
+        ...naturalSentenceActions,
+        ...naturalTailWords,
+      };
+      final tailWords =
+          RegExp(r'\b[a-zA-Z0-9_]+\b').allMatches(sentenceTail).toList();
+      final trailingCredentialSpans = <List<int>>[];
+      bool hasTailCredentialShape(String candidate) =>
+          (candidate.length >= 6 && RegExp(r'[0-9_]').hasMatch(candidate)) ||
+          _legacyOcrHasHighAlphabeticEntropy(
+            candidate,
+            minimumLength: 8,
+            minimumEntropy: 2.9,
+            maximumVowelRatio: 0.35,
+          );
+      var tailRunStart = -1;
+      var tailRunEnd = -1;
+      final tailRun = StringBuffer();
+      void finishTailRun() {
+        if (tailRunStart < 0) return;
+        final candidate = tailRun.toString();
+        if (hasTailCredentialShape(candidate)) {
+          trailingCredentialSpans.add([tailRunStart, tailRunEnd]);
+        }
+        tailRun.clear();
+        tailRunStart = -1;
+        tailRunEnd = -1;
+      }
+
+      for (final tailWord in tailWords) {
+        if (naturalTailVocabulary.contains(tailWord.group(0)!.toLowerCase())) {
+          finishTailRun();
+          continue;
+        }
+        if (tailRunStart < 0) tailRunStart = tailWord.start;
+        tailRunEnd = tailWord.end;
+        tailRun.write(tailWord.group(0));
+      }
+      finishTailRun();
+      final credentialChunks = <RegExpMatch>[];
+      var naturalWordsBetweenChunks = 0;
+      for (final word in tailWords) {
+        if (naturalTailVocabulary.contains(word.group(0)!.toLowerCase())) {
+          naturalWordsBetweenChunks++;
+          if (naturalWordsBetweenChunks > 3) {
+            credentialChunks.clear();
+            naturalWordsBetweenChunks = 0;
+          }
+          continue;
+        }
+        if (credentialChunks.isEmpty || naturalWordsBetweenChunks <= 3) {
+          credentialChunks.add(word);
+        }
+        if (credentialChunks.length >= 2 &&
+            hasTailCredentialShape(
+              credentialChunks.map((chunk) => chunk.group(0)!).join(),
+            )) {
+          trailingCredentialSpans.add([
+            credentialChunks.first.start,
+            credentialChunks.last.end,
+          ]);
+        }
+        naturalWordsBetweenChunks = 0;
+      }
+      final naturalPromptLeadAfterPeriod = firstChunkIsNatural &&
+          (secondChunkIsNatural ||
+              naturalSentenceContinuation ||
+              standaloneNaturalAction);
+      if (naturalPromptLeadAfterPeriod && trailingCredentialSpans.isNotEmpty) {
+        trailingCredentialSpans
+            .sort((first, second) => first[0].compareTo(second[0]));
+        final mergedCredentialSpans = <List<int>>[];
+        for (final span in trailingCredentialSpans) {
+          if (mergedCredentialSpans.isEmpty ||
+              span[0] > mergedCredentialSpans.last[1]) {
+            mergedCredentialSpans.add(List<int>.from(span));
+          } else if (span[1] > mergedCredentialSpans.last[1]) {
+            mergedCredentialSpans.last[1] = span[1];
+          }
+        }
+        var safeTail = sentenceTail;
+        for (final span in mergedCredentialSpans.reversed) {
+          safeTail = '${safeTail.substring(0, span[0])}[redacted]'
+              '${safeTail.substring(span[1])}';
+        }
+        final firstChunkOffset = match.group(0)!.indexOf(firstChunk);
+        final sourceLead = match.group(0)!.substring(0, firstChunkOffset);
+        return '$sourceLead$firstChunk. $secondChunk$safeTail';
+      }
+      final isNaturalSentence = firstChunkIsNatural &&
+          (secondChunkIsNatural ||
+              naturalSentenceContinuation ||
+              standaloneNaturalAction) &&
+          trailingCredentialSpans.isEmpty;
+      final hasCredentialShape = !isNaturalSentence &&
+          ((joinedCredential.length >= 8 &&
+                  RegExp(r'[0-9_]').hasMatch(joinedCredential)) ||
+              _legacyOcrHasCredentialUseContext(
+                sanitized,
+                match,
+                prefix,
+                joinedCredential,
+              ) ||
+              _legacyOcrHasHighAlphabeticEntropy(
+                joinedCredential,
+                minimumLength: 8,
+                minimumEntropy: 2.5,
+                maximumVowelRatio: 0.45,
+              ));
+      final trailingPunctuation =
+          RegExp(r'[.!?;:)}\]"”’]+$').firstMatch(sentenceTail)?.group(0) ?? '';
+      return hasCredentialShape
+          ? '${match.group(1)}[redacted]$trailingPunctuation'
+          : match.group(0)!;
+    });
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
-      '(\\s*$spacedCredentialChunk(?:\\s+$spacedCredentialChunk)*)'
+      '((?:[ \\t]*$spacedCredentialChunk'
+      '(?:$spacedCredentialChunkSeparator$spacedCredentialChunk)*'
+      '|[\\r\\n]+[ \\t]*$spacedCredentialChunk'
+      '(?:$spacedCredentialChunkSeparator$spacedCredentialChunk)*))'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
     );
