@@ -65,8 +65,11 @@ class _MessageWebHostState extends State<MessageWebHost> {
     final digest = sha256.convert(content).toString();
     final pending = _macDocuments.putIfAbsent(digest, () async {
       final directory = await getTemporaryDirectory();
-      await directory.create(recursive: true);
-      final file = File(p.join(directory.path, 'stroom-dsh-$digest.html'));
+      final documentDirectory = Directory(
+        p.join(directory.path, 'stroom-dsh-$digest'),
+      );
+      await documentDirectory.create(recursive: true);
+      final file = File(p.join(documentDirectory.path, 'index.html'));
       if (!await file.exists() || await file.length() != content.length) {
         await file.writeAsBytes(content, flush: true);
       }
@@ -100,7 +103,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
       }
       await controller.loadUrl(
         urlRequest: URLRequest(url: WebUri.uri(document.uri)),
-        allowingReadAccessTo: WebUri.uri(document.uri),
+        // WKWebView requires the read-access URL to be a containing directory.
+        allowingReadAccessTo: WebUri.uri(document.parent.uri),
       );
     } catch (error) {
       if (kDebugMode) debugPrint('[MessageWebHost][load-error] $error');
@@ -147,17 +151,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
     InAppWebViewController controller,
     Map<String, dynamic> command,
   ) {
-    _pending = _pending
-        .then((_) async {
-          if (!mounted || !identical(controller, _controller)) return;
-          await controller.evaluateJavascript(
-            source:
-                'window.StroomMessageView?.receive(${jsonEncode(command)});',
-          );
-        })
-        .catchError((Object error) {
-          if (mounted) debugPrint('[MessageWebHost] $error');
-        });
+    _pending = _pending.then((_) async {
+      if (!mounted || !identical(controller, _controller)) return;
+      await controller.evaluateJavascript(
+        source: 'window.StroomMessageView?.receive(${jsonEncode(command)});',
+      );
+    }).catchError((Object error) {
+      if (mounted) debugPrint('[MessageWebHost] $error');
+    });
   }
 
   @override
@@ -267,22 +268,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
             controller.addJavaScriptHandler(
               handlerName: 'StroomMessageView',
               callback: (JavaScriptHandlerFunctionData data) {
-                final trustedFrame =
-                    data.isMainFrame &&
+                final trustedFrame = data.isMainFrame &&
                     _trustedDocument(data.requestUrl, macDocument);
                 final staleMacView =
                     defaultTargetPlatform == TargetPlatform.macOS &&
-                    (generation != _macLoadGeneration ||
-                        !identical(controller, _controller));
+                        (generation != _macLoadGeneration ||
+                            !identical(controller, _controller));
                 final rejection = !mounted
                     ? 'unmounted'
                     : staleMacView
-                    ? 'stale-webview'
-                    : !trustedFrame
-                    ? 'untrusted-frame:${data.requestUrl}'
-                    : data.args.length != 1 || data.args.first is! Map
-                    ? 'invalid-arguments'
-                    : null;
+                        ? 'stale-webview'
+                        : !trustedFrame
+                            ? 'untrusted-frame:${data.requestUrl}'
+                            : data.args.length != 1 || data.args.first is! Map
+                                ? 'invalid-arguments'
+                                : null;
                 if (rejection != null) {
                   if (kDebugMode) {
                     debugPrint('[MessageWebHost][handler-rejected] $rejection');
