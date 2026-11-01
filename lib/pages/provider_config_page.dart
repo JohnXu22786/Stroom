@@ -827,10 +827,6 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   }
 
   Future<void> _syncLegacyLlmAccountConfig(AiGatewayAccount account) async {
-    final gateway = await AiGateway.sharedPlatform();
-    final chatProtocolId = gateway.providerCatalog
-        .findProvider(account.connectorType)
-        ?.chatProtocolId;
     final state = ref.read(providerEntriesProvider);
     final entry = state.entries.where((item) => item.type == 'llm').firstOrNull;
     if (entry == null ||
@@ -843,8 +839,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         ..['providerName'] = account.displayName
         ..['connectorType'] = account.connectorType
         ..['authType'] = account.authType
-        ..['endpointType'] =
-            chatProtocolId == 'anthropic' ? 'anthropic' : 'openai'
+        ..['apiProtocol'] = config.apiProtocol ??
+            apiProtocolFromLegacyEndpointType(config.endpointType)
+        ..['endpointType'] = legacyEndpointTypeForApiProtocol(
+          config.apiProtocol ??
+              apiProtocolFromLegacyEndpointType(config.endpointType),
+        )
         ..['models'] = account.models.map((model) {
           final modelConfig = Map<String, dynamic>.from(model.config)
             ..['id'] = model.id

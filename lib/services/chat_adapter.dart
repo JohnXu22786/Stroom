@@ -15,7 +15,6 @@ import '../utils/provider_models.dart'
     show flattenProviderModels, resolveProviderModel;
 import '../ai_gateway/ai_gateway.dart';
 import 'llm_model_group_provider.dart';
-import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
 import 'mcp_client.dart';
@@ -245,7 +244,12 @@ class ChatAdapter {
       return (
         config,
         model,
-        effectiveEndpointType(model.endpointType, config.endpointType),
+        configuredApiProtocol(
+          modelOverride: model.apiProtocolOverride,
+          modelLegacyEndpointType: model.endpointType,
+          supplierProtocol: config.apiProtocol,
+          supplierLegacyEndpointType: config.endpointType,
+        ),
       );
     }
 
@@ -271,8 +275,14 @@ class ChatAdapter {
     if (group == null) return const [];
     final accounts = await gateway.accountManagement.listAccounts();
     final accountsById = {for (final account in accounts) account.id: account};
+    final modelOverride = model.apiProtocolOverride ??
+        (model.endpointType == null
+            ? null
+            : apiProtocolFromLegacyEndpointType(model.endpointType));
     final supportedConnectors =
-        llmRoutedChatSupportedConnectorTypes(endpointType);
+        llmRoutedChatSupportedConnectorTypesForModelOverride(
+      modelOverride,
+    );
     return [
       for (final member in group.members)
         if ((member.localModelId ?? group.id) == model.id &&
@@ -380,8 +390,9 @@ class ChatAdapter {
     String? selectedAccountId,
   }) {
     if (selectedAccountId != null) {
-      _activeServices[convId]
-          ?.selectRoutedAccountForNextRequest(selectedAccountId);
+      _activeServices[convId]?.selectRoutedAccountForNextRequest(
+        selectedAccountId,
+      );
     }
     if (modelReference != null) {
       final selected = entriesState == null
@@ -390,15 +401,22 @@ class ChatAdapter {
       if (selected == null) return null;
       final config = selected.config;
       final model = selected.model;
-      final endpointType = effectiveEndpointType(
-        model.endpointType,
-        config.endpointType,
+      final endpointType = configuredApiProtocol(
+        modelOverride: model.apiProtocolOverride,
+        modelLegacyEndpointType: model.endpointType,
+        supplierProtocol: config.apiProtocol,
+        supplierLegacyEndpointType: config.endpointType,
       );
       return _activeServices.putIfAbsent(
         convId,
         () => _buildService(
-          _providerForModel(config, model, endpointType,
-              conversationId: convId, selectedAccountId: selectedAccountId),
+          _providerForModel(
+            config,
+            model,
+            endpointType,
+            conversationId: convId,
+            selectedAccountId: selectedAccountId,
+          ),
           model,
           config,
           endpointType,
@@ -432,9 +450,11 @@ class ChatAdapter {
       );
       if (resolved != null) {
         final (config, modelConfig) = resolved;
-        final endpointType = effectiveEndpointType(
-          modelConfig.endpointType,
-          config.endpointType,
+        final endpointType = configuredApiProtocol(
+          modelOverride: modelConfig.apiProtocolOverride,
+          modelLegacyEndpointType: modelConfig.endpointType,
+          supplierProtocol: config.apiProtocol,
+          supplierLegacyEndpointType: config.endpointType,
         );
         final provider = _providerForModel(
           config,
@@ -498,7 +518,7 @@ class ChatAdapter {
       provider: provider,
       modelConfig: modelConfig,
       providerConfig: providerConfig,
-      endpointType: endpointType,
+      endpointType: legacyEndpointTypeForApiProtocol(endpointType),
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // the global cached assistant template).
@@ -694,9 +714,11 @@ class ChatAdapter {
     ChatService? svc;
     if (resolved != null) {
       final (config, modelConfig) = resolved;
-      final endpointType = effectiveEndpointType(
-        modelConfig.endpointType,
-        config.endpointType,
+      final endpointType = configuredApiProtocol(
+        modelOverride: modelConfig.apiProtocolOverride,
+        modelLegacyEndpointType: modelConfig.endpointType,
+        supplierProtocol: config.apiProtocol,
+        supplierLegacyEndpointType: config.endpointType,
       );
       final provider = _providerForModel(
         config,
@@ -820,9 +842,11 @@ class ChatAdapter {
     }
     final config = llmEntry.configs[firstModel.configIndex];
     final modelConfig = config.models[firstModel.modelIndex];
-    final endpointType = effectiveEndpointType(
-      modelConfig.endpointType,
-      config.endpointType,
+    final endpointType = configuredApiProtocol(
+      modelOverride: modelConfig.apiProtocolOverride,
+      modelLegacyEndpointType: modelConfig.endpointType,
+      supplierProtocol: config.apiProtocol,
+      supplierLegacyEndpointType: config.endpointType,
     );
     debugPrint(
       'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
@@ -884,9 +908,11 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    final endpointType = effectiveEndpointType(
-      modelConfig.endpointType,
-      config.endpointType,
+    final endpointType = configuredApiProtocol(
+      modelOverride: modelConfig.apiProtocolOverride,
+      modelLegacyEndpointType: modelConfig.endpointType,
+      supplierProtocol: config.apiProtocol,
+      supplierLegacyEndpointType: config.endpointType,
     );
     debugPrint(
       'ChatAdapter.selectModel: using config[$configIndex] '
@@ -923,6 +949,11 @@ class ChatAdapter {
             stableLlmModelGroupId(config.id, model.id),
         localModelId: model.id,
         endpointType: endpointType,
+        apiProtocol: endpointType,
+        apiProtocolOverride: model.apiProtocolOverride ??
+            (model.endpointType == null
+                ? null
+                : apiProtocolFromLegacyEndpointType(model.endpointType)),
         conversationId: conversationId,
         selectedAccountId: selectedAccountId,
       );

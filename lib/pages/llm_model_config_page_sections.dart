@@ -188,8 +188,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('自定义端点类型'),
-                subtitle: const Text('关闭时使用供应商设置的端点类型'),
+                title: const Text('覆盖 API 协议'),
+                subtitle: const Text('关闭时继承供应商默认协议'),
                 value: _overrideEndpointType,
                 onChanged: (v) => setState(() => _overrideEndpointType = v),
               ),
@@ -197,27 +197,34 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: DropdownButtonFormField<String>(
-                    initialValue: _endpointType,
+                    initialValue: _apiProtocol,
                     decoration: const InputDecoration(
-                      labelText: '端点类型',
+                      labelText: 'API 协议',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(
                         Icons.hub_outlined,
                         color: Colors.blue,
                       ),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'openai',
-                        child: Text('OpenAI 兼容 (Chat Completions)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'anthropic',
-                        child: Text('Anthropic 格式 (Messages API)'),
-                      ),
-                    ],
+                    items: supportedApiProtocolsForSupplier(
+                      widget.provider?.apiProtocol ??
+                          apiProtocolFromLegacyEndpointType(
+                            widget.provider?.endpointType,
+                          ),
+                      connectorType: widget
+                          .provider?.legacyFields['connectorType'] as String?,
+                    )
+                        .map(
+                          (protocol) => DropdownMenuItem(
+                            value: protocol,
+                            child: Text(
+                              apiProtocolLabels[protocol] ?? protocol,
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (v) {
-                      if (v != null) setState(() => _endpointType = v);
+                      if (v != null) setState(() => _apiProtocol = v);
                     },
                   ),
                 ),
@@ -227,8 +234,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       ),
       const SizedBox(height: 8),
       Text(
-        '端点类型需与供应商的 API 地址匹配；'
-        '切换端点类型后，本模型的新对话请求将使用新格式。',
+        '模型协议覆盖供应商默认协议；账户连接器只负责提供凭证和请求认证。',
         style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),

@@ -17,7 +17,6 @@ import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/http_tool_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
-import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 
 class _FakeGatewayFacade implements AiGatewayFacade {
@@ -207,6 +206,46 @@ void main() {
         (service.provider as LlmRoutedChatProvider).selectedAccountId,
         'account-b',
       );
+    });
+
+    test('routed provider keeps a legacy model protocol override', () {
+      final runtimeAdapter = ChatAdapter(
+        routingRuntime: Completer<LlmChatRoutingRuntime>().future,
+      );
+      addTearDown(runtimeAdapter.dispose);
+      runtimeAdapter.configure(ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'group-entry',
+            type: 'llm',
+            name: 'Group',
+            configs: [
+              ProviderConfigItem(
+                id: 'group-config',
+                providerName: 'Group',
+                apiProtocol: 'openai.responses',
+                legacyFields: {kLlmModelGroupConfigField: 'group-id'},
+                models: [
+                  ModelConfig(
+                    name: 'Model',
+                    modelId: 'local-model',
+                    endpointType: 'anthropic',
+                    legacyFields: {
+                      kLlmModelCapabilitiesConfigField: {'streaming': true},
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ));
+
+      final service = runtimeAdapter.getOrCreateService('legacy-override')!;
+      // ignore: invalid_use_of_visible_for_testing_member
+      final provider = service.provider as LlmRoutedChatProvider;
+
+      expect(provider.apiProtocolOverride, 'anthropic.messages');
     });
 
     test('configure sets adapter to first config, first model (0,0)', () {
@@ -2425,6 +2464,15 @@ void main() {
                 authType: 'apiKey',
                 displayName: 'Assistant account',
               ),
+              AiGatewayAccount(
+                id: 'assistant-anthropic-account',
+                connectorType: 'claude',
+                authType: 'apiKey',
+                displayName: 'Assistant Anthropic account',
+                endpointConfig: const {
+                  'apiProtocol': 'anthropic.messages',
+                },
+              ),
             ],
             groups: [
               AiGatewayModelGroup(
@@ -2445,6 +2493,11 @@ void main() {
                   AiGatewayModelGroupMember(
                     accountId: 'assistant-account',
                     upstreamModelId: 'upstream-assistant',
+                    localModelId: assistantModel.id,
+                  ),
+                  AiGatewayModelGroupMember(
+                    accountId: 'assistant-anthropic-account',
+                    upstreamModelId: 'claude-assistant',
                     localModelId: assistantModel.id,
                   ),
                 ],
@@ -2469,13 +2522,19 @@ void main() {
           'conv-assistant-group',
           assistant: assistant,
           entriesState: routedEntries,
-          selectedAccountId: choices.single.id,
+          selectedAccountId: choices.first.id,
         );
 
-        expect(choices.map((account) => account.id), ['assistant-account']);
+        expect(
+          choices.map((account) => account.id),
+          ['assistant-account', 'assistant-anthropic-account'],
+        );
         expect(assistantAdapter.hasSelectedRoutedModel, isFalse);
         expect(identity, isNotNull);
-        expect(identity, (assistantGroupId, assistantModel.id, 'openai'));
+        expect(
+          identity,
+          (assistantGroupId, assistantModel.id, 'openai.chat_completions'),
+        );
         expect(
           routedAccountChoiceMatches(
             accountId: 'assistant-account',

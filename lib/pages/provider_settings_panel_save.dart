@@ -210,6 +210,14 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       }
     }
 
+    validateApiProtocolOverride(
+      _apiProtocol,
+      supportedApiProtocolsForSupplier(
+        _apiProtocol,
+        connectorType: widget.config.legacyFields['connectorType'] as String?,
+      ),
+    );
+
     return ProviderConfigItem(
       id: widget.config.id,
       providerName: _nameController.text.trim(),
@@ -220,7 +228,8 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
-      endpointType: _endpointType,
+      endpointType: legacyEndpointTypeForApiProtocol(_apiProtocol),
+      apiProtocol: _apiProtocol,
     );
   }
 }
