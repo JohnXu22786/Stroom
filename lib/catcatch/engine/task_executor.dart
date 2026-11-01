@@ -665,12 +665,16 @@ class TaskExecutor {
         continue;
       }
       final playlistSegmentUrls = segments.toSet();
-      final enrichedMedia = media.map((resource) {
-        return playlistSegmentUrls.contains(resource.url)
-            ? resource.copyWith(initiator: pl.url, isPlayable: false)
-            : resource;
-      }).toList();
-      final existingUrls = media.map((resource) => resource.url).toSet();
+      final existingUrls = <String>{};
+      final enrichedMedia = <MediaResource>[];
+      for (final resource in media) {
+        if (!existingUrls.add(resource.url)) continue;
+        enrichedMedia.add(
+          playlistSegmentUrls.contains(resource.url)
+              ? resource.copyWith(initiator: pl.url, isPlayable: false)
+              : resource,
+        );
+      }
       final uniqueSegments = segments
           .where((segmentUrl) => existingUrls.add(segmentUrl))
           .toList();
@@ -685,7 +689,7 @@ class TaskExecutor {
           isPlaylist: false,
         );
       }).toList();
-      final totalCount = media.length + segmentMedia.length;
+      final totalCount = enrichedMedia.length + segmentMedia.length;
       markExecutorStep(
         steps,
         2,
