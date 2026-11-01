@@ -12,6 +12,7 @@ import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
+import '../fixtures/vertex_service_account.dart';
 
 void main() {
   test('routes Google Generative Language accounts through Gemini chat', () {
@@ -19,6 +20,131 @@ void main() {
       llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),
       containsAll({'gemini', 'aistudio'}),
     );
+  });
+
+  test('selects Vertex accounts only for supported Gemini chat protocols', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),
+      contains('vertex'),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('google.gemini.interactions'),
+      isNot(contains('vertex')),
+      reason: 'Vertex Interactions is not Google Generative Language API',
+    );
+  });
+
+  test('routes Vertex service-account and API-key groups through Gemini chat',
+      () async {
+    for (final authType in ['service_account', 'api_key']) {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final accountId = 'vertex-$authType';
+      final modelId = 'vertex-model-$authType';
+      final groupId = 'vertex-group-$authType';
+      final credential = authType == 'service_account'
+          ? jsonEncode({
+              'service_account': kVertexTestServiceAccount,
+              'access_token': 'vertex-access-token',
+              'expires_at': DateTime.now()
+                  .toUtc()
+                  .add(const Duration(hours: 1))
+                  .toIso8601String(),
+            })
+          : 'vertex-api-key';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'vertex',
+          authType: authType,
+          displayName: 'Vertex $authType',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'projectId': 'vertex-project',
+            'location': 'us-central1',
+          },
+          models: [
+            LlmUpstreamModel(
+              id: modelId,
+              upstreamModelId: 'gemini-2.5-flash',
+              displayName: 'Gemini 2.5 Flash',
+              capabilities: const {'chat': true, 'streaming': true},
+            ),
+          ],
+        ),
+        secret: credential,
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Vertex $authType group',
+          members: [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: modelId,
+              upstreamModelId: 'gemini-2.5-flash',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'Vertex reply'},
+                ],
+              },
+            },
+          ],
+          'usageMetadata': {
+            'promptTokenCount': 3,
+            'candidatesTokenCount': 2,
+            'totalTokenCount': 5,
+          },
+        },
+      );
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        connectorClient: connector,
+      );
+
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: modelId,
+          requiredCapabilities: const {'chat'},
+        ),
+        hasLength(1),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: modelId,
+        endpointType: 'google.gemini.generate_content',
+        apiProtocol: 'google.gemini.generate_content',
+      );
+
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        'Vertex reply',
+      );
+      expect(connector.requestedAccountIds, [accountId]);
+      expect(connector.requestedModelIds, ['gemini-2.5-flash']);
+      expect(connector.requestBody, contains('contents'));
+    }
   });
 
   test('custom connectors remain eligible for Anthropic Messages bridge', () {

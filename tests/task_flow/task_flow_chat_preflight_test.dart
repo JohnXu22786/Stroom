@@ -155,6 +155,63 @@ void main() {
     );
   });
 
+  test('Vertex credential model groups preflight as native Gemini chat',
+      () async {
+    for (final authType in ['service_account', 'api_key']) {
+      final account = LlmAccount(
+        id: 'vertex-$authType',
+        connectorType: 'vertex',
+        authType: authType,
+        displayName: 'Vertex $authType',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'vertex-model-$authType',
+            upstreamModelId: 'gemini-2.5-flash',
+            displayName: 'Gemini 2.5 Flash',
+            capabilities: const {'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'vertex-flow-group-$authType',
+        displayName: 'Vertex group $authType',
+        members: [
+          LlmModelGroupMember(
+            accountId: account.id,
+            localModelId: 'vertex-model-$authType',
+            upstreamModelId: 'gemini-2.5-flash',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ]);
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Vertex assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(
+        flowChatEndpointType(assistant, providers),
+        'google.gemini.generate_content',
+      );
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    }
+  });
+
   test('Anthropic rejects a later DOCX batch input before submission',
       () async {
     final pdf = await File('${directory.path}/notes.pdf')
