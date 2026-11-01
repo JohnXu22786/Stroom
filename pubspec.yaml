@@ -75,7 +75,7 @@ dependencies:
   photo_view: ^0.15.0
 
   # Shared 2D/3D math feature, published on pub.dev.
-  visual_math: ^0.1.0
+  visual_math: ^0.1.1
 
   # UI and Utilities
   cupertino_icons: ^1.0.9
