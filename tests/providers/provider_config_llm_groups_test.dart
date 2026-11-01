@@ -29,7 +29,7 @@ void main() {
     );
     final claudeApiKey = await gateway.accountManagement.saveAccount(
       AiGatewayAccount(
-        id: 'claude-unsupported-oauth',
+        id: 'claude-oauth-auth-transition',
         connectorType: 'claude',
         authType: 'api_key',
         displayName: 'Claude',

@@ -584,7 +584,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isOpenAi = account.connectorType == 'codex';
       final isGemini = account.connectorType == 'gemini' ||
           account.connectorType == 'aistudio';
-      if (!isOpenAi && !isGemini) {
+      final isClaude = account.connectorType == 'claude';
+      if (!isOpenAi && !isGemini && !isClaude) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -595,12 +596,21 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       }
       if (kIsWeb) throw const AiGatewayOAuthException();
 
-      listener = await LlmOAuthLoopback.bind(isGemini ? '/' : '/auth/callback');
+      listener = await LlmOAuthLoopback.bind(
+        isGemini
+            ? '/'
+            : isClaude
+                ? '/callback'
+                : '/auth/callback',
+        host: isClaude ? 'localhost' : '127.0.0.1',
+        port: isClaude ? 54545 : 0,
+      );
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
-      final previousBundle =
-          isGemini || isOpenAi ? await _existingOAuthBundle(account) : null;
+      final previousBundle = isGemini || isOpenAi || isClaude
+          ? await _existingOAuthBundle(account)
+          : null;
       final previousOpenAiBundle =
           previousBundle?['oauth_contract'] == 'openai-siwc-v1'
               ? previousBundle
@@ -613,13 +623,17 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           existingClientId: previousOpenAiBundle?['client_id'] as String?,
           idTokenHint: previousOpenAiBundle?['id_token'] as String?,
         );
-      } else {
+      } else if (isGemini) {
         final clientId = (configuration['clientId'] ?? '').trim().isNotEmpty
             ? configuration['clientId']!.trim()
             : previousBundle?['client_id'] as String? ?? '';
         attempt = LlmOAuthAuthorizationAttempt.geminiDeveloperApi(
           redirectUri: redirectUri,
           clientId: clientId,
+        );
+      } else {
+        attempt = LlmOAuthAuthorizationAttempt.claudeCode(
+          redirectUri: redirectUri,
         );
       }
       if (!await launchUrl(
@@ -632,20 +646,27 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
             const Duration(minutes: 5),
           );
       final callback = attempt.consumeCallback(callbackUri);
-      final tokenBundle = isOpenAi
-          ? await _tokenClient.exchangeOpenAiChatGpt(
-              attempt: attempt,
-              callback: callback,
-              expectedSubject: previousOpenAiBundle?['identity_sub'] as String?,
-            )
-          : await _tokenClient.exchangeGeminiDeveloperApi(
-              attempt: attempt,
-              callback: callback,
-              clientSecret:
-                  (configuration['clientSecret'] ?? '').trim().isNotEmpty
-                      ? configuration['clientSecret']!.trim()
-                      : previousBundle?['client_secret'] as String? ?? '',
-            );
+      late final Map<String, dynamic> tokenBundle;
+      if (isOpenAi) {
+        tokenBundle = await _tokenClient.exchangeOpenAiChatGpt(
+          attempt: attempt,
+          callback: callback,
+          expectedSubject: previousOpenAiBundle?['identity_sub'] as String?,
+        );
+      } else if (isGemini) {
+        tokenBundle = await _tokenClient.exchangeGeminiDeveloperApi(
+          attempt: attempt,
+          callback: callback,
+          clientSecret: (configuration['clientSecret'] ?? '').trim().isNotEmpty
+              ? configuration['clientSecret']!.trim()
+              : previousBundle?['client_secret'] as String? ?? '',
+        );
+      } else {
+        tokenBundle = await _tokenClient.exchangeClaudeCode(
+          attempt: attempt,
+          callback: callback,
+        );
+      }
       final saved = await _accountManagement.saveAuthorizedOAuthAccount(
         AiGatewayAccount(
           id: account.id,
@@ -698,6 +719,12 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async {
     if (account.authType != 'oauth' ||
         !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      await _accountManagement.deleteAccount(account.id);
+      return true;
+    }
+    if (account.connectorType == 'claude') {
+      // The pinned Claude Code OAuth contract provides token refresh but no
+      // revocation endpoint; removing the local secure credential is complete.
       await _accountManagement.deleteAccount(account.id);
       return true;
     }

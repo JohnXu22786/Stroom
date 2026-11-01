@@ -7,6 +7,10 @@ abstract interface class LlmOAuthLoopback {
   Future<void> respond({required bool accepted});
   Future<void> close();
 
-  static Future<LlmOAuthLoopback> bind(String path) =>
-      platform.bindLlmOAuthLoopback(path);
+  static Future<LlmOAuthLoopback> bind(
+    String path, {
+    String host = '127.0.0.1',
+    int port = 0,
+  }) =>
+      platform.bindLlmOAuthLoopback(path, host: host, port: port);
 }

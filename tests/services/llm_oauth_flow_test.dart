@@ -141,6 +141,24 @@ void main() {
       );
     });
 
+    test('preserves hash characters in non-Claude OAuth codes', () {
+      final redirect = Uri.parse('http://127.0.0.1:1455/auth/callback');
+      final attempt = LlmOAuthAuthorizationAttempt.openAiChatGpt(
+        redirectUri: redirect,
+        hostId: 'urn:uuid:host',
+      );
+
+      final callback = attempt.consumeCallback(redirect.replace(
+        queryParameters: {
+          'code': 'opaque#code-suffix',
+          'state': attempt.state,
+          'client_id': 'oaiapp_registered-client',
+        },
+      ));
+
+      expect(callback.code, 'opaque#code-suffix');
+    });
+
     test(
       'keeps Gemini Developer API OAuth separate from API keys and Code Assist',
       () {
@@ -203,6 +221,128 @@ void main() {
         );
       },
     );
+
+    test('creates and validates the Claude Code OAuth PKCE flow', () {
+      final redirect = Uri.parse('http://localhost:54545/callback');
+      final attempt = LlmOAuthAuthorizationAttempt.claudeCode(
+        redirectUri: redirect,
+      );
+
+      expect(attempt.authorizationUri.host, 'claude.ai');
+      expect(attempt.authorizationUri.path, '/oauth/authorize');
+      expect(
+        attempt.authorizationUri.queryParameters['client_id'],
+        '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
+      );
+      expect(
+        attempt.authorizationUri.queryParameters['redirect_uri'],
+        redirect.toString(),
+      );
+      expect(
+        attempt.authorizationUri.queryParameters['response_type'],
+        'code',
+      );
+      expect(attempt.authorizationUri.queryParameters['code'], 'true');
+      expect(
+        attempt.authorizationUri.queryParameters['scope']!.split(' '),
+        containsAll([
+          'user:profile',
+          'user:inference',
+          'user:sessions:claude_code',
+        ]),
+      );
+      expect(
+        attempt.authorizationUri.queryParameters['code_challenge_method'],
+        'S256',
+      );
+      expect(
+        attempt.authorizationUri.queryParameters['code_challenge'],
+        isNot(attempt.codeVerifier),
+      );
+
+      final callback = attempt.consumeCallback(redirect.replace(
+        queryParameters: {'code': 'claude-code', 'state': attempt.state},
+      ));
+      expect(callback.code, 'claude-code');
+      expect(callback.clientId, '9d1c250a-e61b-44d9-88ed-5944d1962f5e');
+      expect(
+        () => attempt.consumeCallback(redirect.replace(
+          queryParameters: {'code': 'second-use', 'state': attempt.state},
+        )),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+      final fragmentAttempt = LlmOAuthAuthorizationAttempt.claudeCode(
+        redirectUri: redirect,
+      );
+      expect(
+        fragmentAttempt
+            .consumeCallback(redirect.replace(
+              queryParameters: {
+                'code': 'fragment-code#${fragmentAttempt.state}',
+                'state': fragmentAttempt.state,
+              },
+            ))
+            .code,
+        'fragment-code',
+      );
+      expect(LlmOAuthProviderPolicy.forProvider('claude').supported, isTrue);
+      expect(
+        () => LlmOAuthAuthorizationAttempt.claudeCode(
+          redirectUri: Uri.parse('http://127.0.0.1:49661/callback'),
+        ),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+    });
+  });
+
+  test('exchanges Claude Code PKCE credentials and keeps returned identity',
+      () async {
+    RequestOptions? captured;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((options) async {
+        captured = options;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'claude-access',
+            'refresh_token': 'claude-refresh',
+            'expires_in': 3600,
+            'account': {
+              'uuid': 'account-uuid',
+              'email_address': 'a@example.test',
+            },
+            'organization': {'uuid': 'org-uuid', 'name': 'Example Org'},
+          }),
+          200,
+        );
+      });
+    final attempt = LlmOAuthAuthorizationAttempt.claudeCode(
+      redirectUri: Uri.parse('http://localhost:54545/callback'),
+    );
+    final callbackUri = attempt.redirectUri.replace(
+      queryParameters: {'code': 'one-time-code', 'state': attempt.state},
+    );
+    final callback = attempt.consumeCallback(callbackUri);
+
+    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeClaudeCode(
+      attempt: attempt,
+      callback: callback,
+    );
+
+    expect(
+      captured?.uri.toString(),
+      'https://platform.claude.com/v1/oauth/token',
+    );
+    expect(captured?.data, containsPair('grant_type', 'authorization_code'));
+    expect(
+      captured?.data,
+      containsPair('code_verifier', attempt.codeVerifier),
+    );
+    expect(bundle['access_token'], 'claude-access');
+    expect(bundle['refresh_token'], 'claude-refresh');
+    expect(bundle['account_uuid'], 'account-uuid');
+    expect(bundle['email'], 'a@example.test');
+    expect(bundle['organization_uuid'], 'org-uuid');
+    expect(bundle['organization_name'], 'Example Org');
   });
 
   test(

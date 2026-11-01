@@ -14,6 +14,78 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('adds a Claude Setup Token account as a distinct auth mode', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final claudeProvider =
+        _testGateway(service).providerCatalog.findProvider('claude')!;
+    expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    await tester.ensureVisible(connectorDropdown);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final connectorWidget = tester.widget<DropdownButton<String>>(
+      connectorButton,
+    );
+    expect(
+      connectorWidget.items!.any((item) => item.value == claudeProvider.id),
+      isTrue,
+    );
+    final onConnectorSelected = connectorWidget.onChanged;
+    expect(onConnectorSelected, isNotNull);
+    // The Claude option exists in the interactive menu data, but Flutter's
+    // popup overlay does not expose its offscreen item text to the test finder.
+    // Invoke the same callback that selecting the item dispatches.
+    onConnectorSelected!(claudeProvider.id);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Setup Token').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).at(0), 'Claude setup');
+    await tester.enterText(
+      find.byType(TextField).at(2),
+      'sk-ant-oat01-secret',
+    );
+    await tester.enterText(
+      find.byType(TextField).at(3),
+      'claude-sonnet-4-6,streaming',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(account.connectorType, 'claude');
+    expect(account.authType, 'setup_token');
+    expect(await service.readCredential(account.id), 'sk-ant-oat01-secret');
+    expect(
+      preferences.values.values.join(),
+      isNot(contains('sk-ant-oat01-secret')),
+    );
+  });
+
   testWidgets('legacy AI Studio relay account can be explicitly reconfigured', (
     tester,
   ) async {

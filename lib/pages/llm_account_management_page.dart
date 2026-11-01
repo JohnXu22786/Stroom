@@ -915,9 +915,13 @@ String _authLabel(String type, {String? connectorType}) {
   if (type == 'oauth' && connectorType == 'vertex') {
     return '旧版 OAuth（不支持）';
   }
+  if (type == 'oauth' && connectorType == 'claude') {
+    return 'Claude Code OAuth';
+  }
   return switch (type) {
     'api_key' => 'API Key',
     'oauth' => '订阅 OAuth',
+    'setup_token' => 'Setup Token',
     'service_account' => 'Google 服务账号',
     'aws_credentials' => 'AWS Access + Secret Key（Session Token 可选）',
     'aws_credential_chain' => 'AWS 默认凭据链',
@@ -937,6 +941,7 @@ String _authSourceLabel(
     'oauth' => account.connectorType == 'vertex'
         ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
         : '$provider OAuth',
+    'setup_token' => '$provider Setup Token',
     'api_key' => account.connectorType == 'openai-compatibility'
         ? '用户提供的上游 API Key'
         : '$provider API Key',
@@ -1366,7 +1371,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                             : _connectorType == 'vertex' &&
                                     _authType == 'service_account'
                                 ? '服务账号 JSON'
-                                : '凭据',
+                                : _authType == 'setup_token'
+                                    ? 'Claude Setup Token'
+                                    : '凭据',
                     hintText: _authType == 'aws_credential_chain'
                         ? '使用运行环境的 AWS 默认凭据链'
                         : !widget.hasCredential

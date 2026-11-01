@@ -115,6 +115,63 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<Map<String, dynamic>> exchangeClaudeCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+  }) async {
+    try {
+      if (callback.clientId !=
+          LlmOAuthAuthorizationAttempt.claudeCodeClientId) {
+        throw const LlmOAuthFlowException();
+      }
+      final response = await _dio.postUri<Object?>(
+        Uri.parse(LlmOAuthAuthorizationAttempt.claudeCodeTokenEndpoint),
+        data: {
+          'grant_type': 'authorization_code',
+          'code': callback.code,
+          'redirect_uri': attempt.redirectUri.toString(),
+          'client_id': callback.clientId,
+          'code_verifier': attempt.codeVerifier,
+          'state': attempt.state,
+        },
+        options: Options(
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.json,
+          headers: const {
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'axios/1.15.2',
+            'Cache-Control': 'no-cache',
+          },
+        ),
+      );
+      final token = _jsonObject(response.data);
+      final bundle = _credentialBundle(token)
+        ..['oauth_contract'] = 'anthropic-claude-code-v1'
+        ..['scope'] = LlmOAuthAuthorizationAttempt.claudeCodeScope;
+      final account = token['account'];
+      if (account is Map) {
+        final accountId = _nonEmptyString(account['uuid']);
+        final email = _nonEmptyString(account['email_address']);
+        if (accountId != null) bundle['account_uuid'] = accountId;
+        if (email != null) bundle['email'] = email;
+      }
+      final organization = token['organization'];
+      if (organization is Map) {
+        final organizationId = _nonEmptyString(organization['uuid']);
+        final organizationName = _nonEmptyString(organization['name']);
+        if (organizationId != null) {
+          bundle['organization_uuid'] = organizationId;
+        }
+        if (organizationName != null) {
+          bundle['organization_name'] = organizationName;
+        }
+      }
+      return bundle;
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
     required String clientId,
