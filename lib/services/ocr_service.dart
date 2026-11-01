@@ -631,8 +631,7 @@ class OcrService {
                       : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
-      if (name == 'max_tokens' || name == 'temperature' ||
-          name == 'top_p') {
+      if (const {'max_tokens', 'temperature', 'top_p'}.contains(name)) {
         continue;
       }
       if (name == 'model' || name == 'messages') {
