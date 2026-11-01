@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class MessageWebHost extends StatefulWidget {
   final String html;
@@ -22,20 +26,22 @@ class MessageWebHost extends StatefulWidget {
 }
 
 class _MessageWebHostState extends State<MessageWebHost> {
-  static final Uri _macDocumentUri = Uri.parse('about:blank');
+  static final Map<String, Future<File>> _macDocuments = {};
 
   InAppWebViewController? _controller;
+  Future<File>? _macDocumentFuture;
   Future<void> _pending = Future.value();
   Key _macWebViewKey = UniqueKey();
-  final List<Map<String, dynamic>> _pendingMacCommands = [];
   bool _macDocumentReady = false;
   bool _macLoadFailed = false;
   int _macLoadGeneration = 0;
   int _macControllerGeneration = -1;
 
-  bool _trustedDocument(Uri uri) {
+  bool _trustedDocument(Uri uri, File? macDocument) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return uri.toString() == _macDocumentUri.toString();
+      final document = macDocument?.uri.toString();
+      final requested = uri.toString().split('#').first;
+      return document == requested;
     }
     return uri.scheme == 'file' &&
         uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
@@ -54,47 +60,49 @@ class _MessageWebHostState extends State<MessageWebHost> {
     }
   }
 
+  static Future<File> _prepareMacDocument(String html) async {
+    final content = utf8.encode(html);
+    final digest = sha256.convert(content).toString();
+    final pending = _macDocuments.putIfAbsent(digest, () async {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(directory.path, 'stroom-dsh-$digest.html'));
+      if (!await file.exists() || await file.length() != content.length) {
+        await file.writeAsBytes(content, flush: true);
+      }
+      return file;
+    });
+    try {
+      return await pending;
+    } catch (_) {
+      if (identical(_macDocuments[digest], pending)) {
+        _macDocuments.remove(digest);
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _loadMacDocument(
     InAppWebViewController controller,
     int generation,
+    File document,
   ) async {
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted ||
-        !identical(controller, _controller) ||
-        generation != _macLoadGeneration) {
-      return;
-    }
     try {
-      // WebKit's loadData call returns without starting navigation in the
-      // macOS host. Write into its initial about:blank main document instead.
-      // Defer the write so replacing the document doesn't invalidate the
-      // JavaScript evaluation that schedules it.
       if (kDebugMode) {
         debugPrint(
-          '[MessageWebHost][document-write] generation=$generation htmlLength=${widget.html.length}',
+          '[MessageWebHost][file-load] generation=$generation bytes=${await document.length()}',
         );
       }
-      final documentState = await controller.evaluateJavascript(
-        source: '''
-(() => {
-  window.setTimeout(() => {
-    document.open();
-    document.write(${jsonEncode(widget.html)});
-    document.close();
-  }, 0);
-  return true;
-})()
-''',
+      if (!mounted ||
+          !identical(controller, _controller) ||
+          generation != _macLoadGeneration) {
+        return;
+      }
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri.uri(document.uri)),
+        allowingReadAccessTo: WebUri.uri(document.uri),
       );
-      if (kDebugMode) {
-        debugPrint(
-          '[MessageWebHost][document-write-scheduled] generation=$generation accepted=$documentState',
-        );
-      }
     } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[MessageWebHost][load-error] $error');
-      }
+      if (kDebugMode) debugPrint('[MessageWebHost][load-error] $error');
       if (mounted &&
           identical(controller, _controller) &&
           generation == _macLoadGeneration) {
@@ -109,12 +117,26 @@ class _MessageWebHostState extends State<MessageWebHost> {
     widget.commands.addListener(_send);
   }
 
+  @override
+  void didUpdateWidget(covariant MessageWebHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.html != widget.html) {
+      _macDocumentFuture = null;
+      _controller = null;
+      _macDocumentReady = false;
+      _macLoadFailed = false;
+      _macLoadGeneration++;
+    }
+  }
+
   void _send() {
     final command = widget.commands.value;
     final controller = _controller;
     if (command == null || controller == null) return;
     if (defaultTargetPlatform == TargetPlatform.macOS && !_macDocumentReady) {
-      _pendingMacCommands.add(Map<String, dynamic>.from(command));
+      // DshMessageView sends a fresh snapshot when the bridge reports ready.
+      // Drop stale patches while loading or retrying instead of retaining an
+      // unbounded queue while assistant messages continue to stream.
       return;
     }
     _sendCommand(controller, command);
@@ -143,6 +165,44 @@ class _MessageWebHostState extends State<MessageWebHost> {
 
   @override
   Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return FutureBuilder<File>(
+        future: _macDocumentFuture ??= _prepareMacDocument(widget.html),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            if (kDebugMode) {
+              debugPrint(
+                '[MessageWebHost][file-prepare-error] ${snapshot.error}',
+              );
+            }
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('消息内容加载失败'),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () => setState(() {
+                      _macDocumentFuture = null;
+                    }),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重试'),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return _buildWebView(context, snapshot.data);
+        },
+      );
+    }
+    return _buildWebView(context, null);
+  }
+
+  Widget _buildWebView(BuildContext context, File? macDocument) {
     return Stack(
       children: [
         InAppWebView(
@@ -150,8 +210,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
               ? _macWebViewKey
               : null,
           // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file
-          // on native platforms except macOS, which loads it as the main
-          // document from memory.
+          // on native platforms except macOS, which loads a temporary file
+          // because its plugin cannot resolve Flutter asset paths.
           initialFile: defaultTargetPlatform == TargetPlatform.macOS
               ? null
               : 'assets/vendor/dsh_message_view/index.html',
@@ -177,7 +237,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
             }
             if (defaultTargetPlatform == TargetPlatform.macOS &&
                 request.isForMainFrame == true &&
-                request.url.toString() == _macDocumentUri.toString() &&
+                request.url.toString() == macDocument?.uri.toString() &&
                 identical(controller, _controller) &&
                 _macControllerGeneration == _macLoadGeneration &&
                 !_macDocumentReady &&
@@ -204,7 +264,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
               handlerName: 'StroomMessageView',
               callback: (JavaScriptHandlerFunctionData data) {
                 final trustedFrame =
-                    data.isMainFrame && _trustedDocument(data.requestUrl);
+                    data.isMainFrame &&
+                    _trustedDocument(data.requestUrl, macDocument);
                 final staleMacView =
                     defaultTargetPlatform == TargetPlatform.macOS &&
                         (generation != _macLoadGeneration ||
@@ -237,13 +298,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
                 if (defaultTargetPlatform == TargetPlatform.macOS &&
                     event['type'] == 'ready') {
                   _macDocumentReady = true;
-                  final controller = _controller;
-                  if (controller != null) {
-                    for (final command in _pendingMacCommands) {
-                      _sendCommand(controller, command);
-                    }
-                  }
-                  _pendingMacCommands.clear();
                   if (_macLoadFailed) {
                     setState(() => _macLoadFailed = false);
                   }
@@ -252,11 +306,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
               },
             );
             if (generation != null) {
-              unawaited(_loadMacDocument(controller, generation));
-            }
-            if (defaultTargetPlatform == TargetPlatform.macOS &&
-                _pendingMacCommands.isEmpty) {
-              _send();
+              final document = macDocument;
+              if (document != null) {
+                unawaited(_loadMacDocument(controller, generation, document));
+              }
             }
           },
           onLoadStart: (controller, url) {
@@ -301,7 +354,7 @@ JSON.stringify({
           },
           shouldOverrideUrlLoading: (controller, action) async {
             final url = action.request.url;
-            final trusted = url != null && _trustedDocument(url);
+            final trusted = url != null && _trustedDocument(url, macDocument);
             if (kDebugMode) {
               debugPrint(
                 '[MessageWebHost][navigation] $url trusted=$trusted',
