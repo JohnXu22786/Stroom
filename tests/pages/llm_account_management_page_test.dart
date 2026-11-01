@@ -39,15 +39,19 @@ void main() {
     final connectorDropdown =
         find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
-    await tester.tap(connectorDropdown);
-    await tester.pumpAndSettle();
-    final claudeConnector = find.text(claudeProvider.displayName);
-    await tester.scrollUntilVisible(
-      claudeConnector,
-      80,
-      scrollable: find.byType(Scrollable).last,
+    final connectorField =
+        tester.widget<DropdownButtonFormField<String>>(connectorDropdown);
+    expect(
+      connectorField.items!.any((item) => item.value == claudeProvider.id),
+      isTrue,
     );
-    await tester.tap(claudeConnector.last);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    await tester.tap(connectorButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(claudeProvider.displayName).last);
     await tester.pumpAndSettle();
     final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
     await tester.ensureVisible(authDropdown);
