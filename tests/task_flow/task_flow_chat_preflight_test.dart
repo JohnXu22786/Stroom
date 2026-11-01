@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
+import 'package:stroom/services/llm_model_group_provider.dart'
+    show kLlmModelGroupConfigField, kLlmModelGroupMayUseAnthropicConfigField,
+        kLlmModelCapabilitiesConfigField;
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -49,6 +52,50 @@ void main() {
             typeKey: BlockType.chat,
             params: {'assistantId': 'assistant'})
       ]);
+
+  test('mixed-protocol model group preflights media for Anthropic members',
+      () async {
+    final audio = await File('${directory.path}/recording.mp3')
+        .writeAsBytes([0xff, 0xfb, 0x90, 0x64]);
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(name: 'LLM', type: 'llm', configs: [
+        ProviderConfigItem(
+          id: 'mixed-group',
+          providerName: 'Group',
+          apiProtocol: 'openai.chat_completions',
+          legacyFields: {kLlmModelGroupConfigField: 'mixed-group'},
+          models: [
+            ModelConfig(
+              name: 'Mixed model',
+              modelId: 'mixed-model',
+              legacyFields: {
+                kLlmModelCapabilitiesConfigField: {'streaming': true},
+                kLlmModelGroupMayUseAnthropicConfigField: true,
+              },
+            ),
+          ],
+        ),
+      ]),
+    ]);
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Mixed assistant',
+      prompt: 'Help',
+      defaultModelId: 'mixed-model',
+      defaultProviderName: 'Group',
+    );
+
+    await expectLater(
+      validateTaskFlow(
+        chatFlow(IOType.audio),
+        [FlowRunInput(text: audio.path)],
+        providers: providers,
+        assistants: [assistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.message, 'unsupported audio', contains('音频'))),
+    );
+  });
 
   test('Anthropic rejects a later DOCX batch input before submission',
       () async {

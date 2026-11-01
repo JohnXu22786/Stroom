@@ -2551,6 +2551,52 @@ void main() {
       );
     });
 
+    test('uses the Anthropic Messages path on a custom connector', () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'custom-anthropic-endpoint',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Custom Anthropic endpoint',
+          endpointConfig: const {
+            'baseUrl': 'https://api.example.test/v1/chat/completions',
+          },
+        ),
+        credential: 'custom-api-key',
+        modelId: 'claude-model',
+        body: const {'model': 'claude-model', 'messages': []},
+        nativeFormat: 'anthropic',
+      );
+
+      expect(request.uri.toString(), 'https://api.example.test/v1/messages');
+      expect(request.headers['Authorization'], 'Bearer custom-api-key');
+    });
+
+    test('does not duplicate full Responses or Messages endpoint suffixes', () {
+      for (final (path, nativeFormat) in [
+        ('/v1/responses', 'responses'),
+        ('/v1/messages', 'anthropic'),
+      ]) {
+        final request = builder.build(
+          account: LlmAccount(
+            id: 'custom-full-endpoint',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'Custom endpoint',
+            endpointConfig: {
+              'baseUrl': 'https://api.example.test$path',
+            },
+          ),
+          credential: 'custom-api-key',
+          modelId: 'vendor-model',
+          body: const {'model': 'vendor-model'},
+          nativeFormat: nativeFormat,
+        );
+
+        expect(request.uri.path, path);
+      }
+    });
+
     test('rejects custom Bedrock endpoints outside the configured region', () {
       expect(
         () => builder.build(

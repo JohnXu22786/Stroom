@@ -18,6 +18,7 @@ export '../models/tts_models.dart';
 export '../models/mcp_provider_group.dart';
 
 export 'provider_config_types.dart';
+export '../services/api_protocol_config.dart';
 part 'provider_config_persistence.dart';
 
 /// Stable identity and label for the local Google/Bing/Baidu web search group.

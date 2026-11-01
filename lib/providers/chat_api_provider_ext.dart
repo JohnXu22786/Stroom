@@ -16,15 +16,160 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
-    return {
+    final body = {
       'model': model ?? defaultParams['model'],
       'messages': messages,
-      if (maxTokens != null) 'max_tokens': maxTokens,
-      if (temperature != null) 'temperature': temperature,
+      'max_tokens': ?maxTokens,
+      'temperature': ?temperature,
       'stream': stream,
-      if (tools != null && tools.isNotEmpty) 'tools': tools,
-      if (extraParams != null) ...extraParams,
+      'tools': ?(tools?.isNotEmpty == true ? tools : null),
+      ...?extraParams,
     };
+    if (_apiProtocol != 'openai.responses') return body;
+
+    final normalizedMessages =
+        body.remove('messages') as List<Map<String, dynamic>>;
+    final instructions = <String>[];
+    final input = <Map<String, dynamic>>[];
+    for (final message in normalizedMessages) {
+      final role = message['role'];
+      if (role == 'system' || role == 'developer') {
+        final text = message['content'];
+        if (text is String && text.isNotEmpty) instructions.add(text);
+        continue;
+      }
+      final toolCalls = message['tool_calls'];
+      if (toolCalls is List) {
+        for (final rawCall in toolCalls.whereType<Map>()) {
+          final fn = rawCall['function'];
+          if (fn is! Map) continue;
+          input.add({
+            'type': 'function_call',
+            'call_id': rawCall['id'] ?? '',
+            'name': fn['name'] ?? '',
+            'arguments': fn['arguments'] ?? '{}',
+          });
+        }
+      }
+      if (role == 'tool') {
+        input.add({
+          'type': 'function_call_output',
+          'call_id': message['tool_call_id'] ?? '',
+          'output': message['content'] ?? '',
+        });
+        continue;
+      }
+      final content = message['content'];
+      final parts = content is List
+          ? content.whereType<Map>().map((part) {
+              if (part['type'] == 'image_url') {
+                final imageUrl = part['image_url'];
+                final url = imageUrl is Map ? imageUrl['url'] : imageUrl;
+                return <String, dynamic>{
+                  'type': role == 'assistant' ? 'output_image' : 'input_image',
+                  'image_url': ?url,
+                };
+              }
+              return <String, dynamic>{
+                'type': role == 'assistant' ? 'output_text' : 'input_text',
+                'text': part['text'] ?? '',
+              };
+            }).toList()
+          : [
+              {
+                'type': role == 'assistant' ? 'output_text' : 'input_text',
+                'text': content ?? '',
+              },
+            ];
+      if (parts.isNotEmpty && content != null) {
+        input.add({'type': 'message', 'role': role, 'content': parts});
+      }
+    }
+    final normalizedTools = body.remove('tools');
+    final responsesBody = <String, dynamic>{
+      'model': body.remove('model'),
+      'input': input,
+      'stream': stream,
+      if (instructions.isNotEmpty) 'instructions': instructions.join('\n'),
+      if (body.containsKey('max_tokens'))
+        'max_output_tokens': body.remove('max_tokens'),
+      ...body,
+      if (normalizedTools is List)
+        'tools': [
+          for (final tool in normalizedTools.whereType<Map>())
+            if (tool['function'] is Map)
+              {
+                'type': 'function',
+                'name': (tool['function'] as Map)['name'],
+                'description': (tool['function'] as Map)['description'],
+                'parameters': (tool['function'] as Map)['parameters'],
+                if ((tool['function'] as Map).containsKey('strict'))
+                  'strict': (tool['function'] as Map)['strict'],
+              },
+        ],
+    };
+    return responsesBody;
+  }
+
+  String _responsesText(Map data) {
+    final direct = data['output_text'];
+    if (direct is String) return direct;
+    final output = data['output'];
+    if (output is List) {
+      return output.whereType<Map>().expand((item) {
+        final content = item['content'];
+        return content is List ? content.whereType<Map>() : const <Map>[];
+      }).where((part) => part['type'] == 'output_text')
+          .map((part) => part['text'])
+          .whereType<String>()
+          .join();
+    }
+    throw Exception('Responses API returned no output text');
+  }
+
+  List<AIStreamEvent> _responsesStreamEvents(
+    Map<String, dynamic> data,
+    Map<String, Map<String, dynamic>> calls,
+  ) {
+    final type = data['type'];
+    if (type == 'response.output_text.delta') {
+      final delta = data['delta'];
+      return delta is String && delta.isNotEmpty ? [AIStreamEvent(delta)] : [];
+    }
+    if (type == 'response.reasoning_summary_text.delta') {
+      final delta = data['delta'];
+      return delta is String && delta.isNotEmpty
+          ? [AIStreamEvent(delta, isReasoning: true)]
+          : [];
+    }
+    if (type == 'response.output_item.added' ||
+        type == 'response.output_item.done') {
+      final item = data['item'];
+      if (item is Map && item['type'] == 'function_call') {
+        calls[item['id']?.toString() ?? item['call_id']?.toString() ?? ''] =
+            Map<String, dynamic>.from(item);
+      }
+    }
+    if (type == 'response.function_call_arguments.delta') {
+      final id = data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
+      final call = calls.putIfAbsent(id, () => {'id': id, 'arguments': ''});
+      call['arguments'] = '${call['arguments'] ?? ''}${data['delta'] ?? ''}';
+    }
+    if (type == 'response.function_call_arguments.done') {
+      final id = data['item_id']?.toString() ?? data['call_id']?.toString() ?? '';
+      final call = calls.putIfAbsent(id, () => {'id': id});
+      call['arguments'] = data['arguments'] ?? call['arguments'] ?? '{}';
+    }
+    if (type == 'response.completed') {
+      final usage = OpenAICompatibleChatProvider.normalizeUsage(
+        (data['response'] as Map?)?['usage'],
+      );
+      if (usage != null) return [AIStreamEvent('', usage: usage)];
+    }
+    if (type == 'response.failed' || type == 'error') {
+      throw Exception('Responses API stream error: ${data['response'] ?? data['error'] ?? data}');
+    }
+    return [];
   }
 
   /// 非流式请求的 Dio 错误处理：填充诊断槽后抛出标准异常。

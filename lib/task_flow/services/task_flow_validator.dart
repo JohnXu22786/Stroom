@@ -15,6 +15,7 @@ import '../models/task_flow_execution.dart';
 import 'block_executors/chat_executor.dart'
     show
         flowChatEndpointType,
+        flowChatMayUseAnthropic,
         flowChatInputError,
         flowChatImageSizeError,
         flowChatIsTextFileName,
@@ -56,6 +57,7 @@ Future<void> validateTaskFlow(
   }
   var previousOutput = flow.inputType;
   String? initialChatEndpointType;
+  var initialChatMayUseAnthropic = false;
   for (var i = 0; i < flow.blocks.length; i++) {
     final block = flow.blocks[i];
     final def = block.getDefinition();
@@ -113,14 +115,26 @@ Future<void> validateTaskFlow(
         }
         final endpointType = flowChatEndpointType(assistant, providers,
             fallback: fallbackChatEndpointType);
-        final unsupported = flowChatInputError(previousOutput, endpointType);
+        final mayUseAnthropic = flowChatMayUseAnthropic(
+          assistant,
+          providers,
+          fallback: fallbackChatEndpointType,
+        );
+        final unsupported = flowChatInputError(
+          previousOutput,
+          endpointType,
+          mayUseAnthropic: mayUseAnthropic,
+        );
         // For initial media, defer protocol checks until each input's MIME
         // and path are known so the error points to the exact batch item.
         if (unsupported != null &&
             (i != 0 || !FlowPayload.isFileType(previousOutput))) {
           fail(unsupported);
         }
-        if (i == 0) initialChatEndpointType = endpointType;
+        if (i == 0) {
+          initialChatEndpointType = endpointType;
+          initialChatMayUseAnthropic = mayUseAnthropic;
+        }
       } else if (param.required &&
           (block.params[param.key]?.toString().trim().isEmpty ?? true)) {
         fail('「${param.label}」为必填项，请在「${def.label}」设置中配置');
@@ -175,6 +189,7 @@ Future<void> validateTaskFlow(
         error = flowChatInputError(
           actualType,
           initialChatEndpointType,
+          mayUseAnthropic: initialChatMayUseAnthropic,
           mimeType: mimeType,
           headerBytes: header,
         );
@@ -183,7 +198,7 @@ Future<void> validateTaskFlow(
             length > maxAttachmentBytes;
         checkTextEncoding = error == null &&
             actualType == IOType.file &&
-            initialChatEndpointType != 'anthropic' &&
+            !initialChatMayUseAnthropic &&
             flowChatIsTextFileName(inputName);
       }
     }

@@ -3526,16 +3526,41 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         final endpointPath = baseUri.path.replaceFirst(RegExp(r'/+$'), '');
-        if (preserveLegacyOcrEndpoint ||
-            endpointPath.endsWith('/chat/completions')) {
+        final desiredPath = switch (nativeFormat) {
+          'responses' => '/responses',
+          'anthropic' => '/messages',
+          _ => '/chat/completions',
+        };
+        if (preserveLegacyOcrEndpoint) {
           path = '';
         } else {
-          path = '/chat/completions';
+          const endpointSuffixes = [
+            '/chat/completions',
+            '/responses',
+            '/messages',
+          ];
+          final currentSuffix = endpointSuffixes
+              .where(endpointPath.endsWith)
+              .firstOrNull;
+          if (currentSuffix == desiredPath) {
+            path = '';
+          } else {
+            if (currentSuffix != null) {
+              final endpointRoot = endpointPath.substring(
+                0,
+                endpointPath.length - currentSuffix.length,
+              );
+              baseUrl = baseUri.replace(path: endpointRoot).toString();
+            }
+            path = desiredPath;
+          }
         }
       default:
         throw const LlmAccountConnectorException();
     }
-    final base = _baseUrl(config, baseUrl);
+    final base = account.connectorType == 'openai-compatibility'
+        ? baseUrl
+        : _baseUrl(config, baseUrl);
     final parsed = Uri.tryParse(base);
     if (parsed == null ||
         !parsed.hasScheme ||

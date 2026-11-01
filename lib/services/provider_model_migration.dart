@@ -80,7 +80,8 @@ class ProviderModelMigration {
           'typeConfig',
           'customParams',
           'reasoningParams',
-          'endpointType'
+          'endpointType',
+          'apiProtocol'
         ];
         final config = <String, dynamic>{
           for (final field in fields)

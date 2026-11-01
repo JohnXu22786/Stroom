@@ -51,35 +51,32 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
           if (_isLlmType) ...[
             const SizedBox(height: 16),
-            // 端点类型：该供应商下所有对话统一使用的协议格式
+            // Supplier protocol default; authentication belongs to the connector.
             DropdownButtonFormField<String>(
-              initialValue: _endpointType,
+              initialValue: _apiProtocol,
               decoration: const InputDecoration(
-                labelText: '端点类型',
+                labelText: '默认 API 协议',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
-              items: const [
-                DropdownMenuItem(
-                  value: 'openai',
-                  child: Text('OpenAI 兼容 (Chat Completions)'),
-                ),
-                DropdownMenuItem(
-                  value: 'anthropic',
-                  child: Text('Anthropic 格式 (Messages API)'),
-                ),
-              ],
+              items: supportedApiProtocolsForSupplier(
+                _apiProtocol,
+                connectorType: widget.config.legacyFields['connectorType'] as String?,
+              )
+                  .map(
+                    (protocol) => DropdownMenuItem(
+                      value: protocol,
+                      child: Text(apiProtocolLabels[protocol] ?? protocol),
+                    ),
+                  )
+                  .toList(),
               onChanged: (v) {
-                if (v != null) setState(() => _endpointType = v);
+                if (v != null) setState(() => _apiProtocol = v);
               },
             ),
             const SizedBox(height: 8),
             Text(
-              _endpointType == 'anthropic'
-                  ? '使用官方 Anthropic Messages API 格式（x-api-key 请求头），'
-                      'API 地址示例: https://api.anthropic.com/v1/messages'
-                  : '使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头），'
-                      'API 地址示例: https://api.openai.com/v1/chat/completions',
+              '选择此供应商默认使用的上游 API 格式。账户连接器负责凭证和请求认证。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],

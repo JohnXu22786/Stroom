@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
-import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
@@ -38,6 +37,43 @@ void main() {
       isEmpty,
     );
     expect(llmChatEndpointTypeForConnector(account.connectorType), isNull);
+  });
+
+  test('model-group selector preserves configured protocols independently of connector', () {
+    final account = LlmAccount(
+      id: 'configured-protocol-account',
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'Configured supplier',
+      endpointConfig: const {'apiProtocol': 'openai.responses'},
+      models: const [
+        LlmUpstreamModel(
+          id: 'configured-model',
+          upstreamModelId: 'gpt-4.1',
+          displayName: 'Configured model',
+          config: {'apiProtocolOverride': 'anthropic.messages'},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'configured-protocol-group',
+      displayName: 'Configured model',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'configured-protocol-account',
+          upstreamModelId: 'gpt-4.1',
+          localModelId: 'configured-model',
+        ),
+      ],
+    );
+
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+
+    expect(config.apiProtocol, 'openai.responses');
+    expect(config.models.single.apiProtocolOverride, 'anthropic.messages');
   });
 
   test(
@@ -135,6 +171,67 @@ void main() {
       expect(flattenProviderModels(state, 'ocr'), isEmpty);
     },
   );
+
+  test('group projection records reachable Anthropic protocols per model', () {
+    const localModelId = 'shared-local-model';
+    final openAi = LlmAccount(
+      id: 'openai-member',
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'OpenAI member',
+      endpointConfig: const {'apiProtocol': 'openai.chat_completions'},
+      models: const [
+        LlmUpstreamModel(
+          id: 'openai-model',
+          upstreamModelId: 'gpt-compatible',
+          displayName: 'OpenAI model',
+          capabilities: {'streaming': true},
+        ),
+      ],
+    );
+    final claude = LlmAccount(
+      id: 'claude-member',
+      connectorType: 'claude',
+      authType: 'api_key',
+      displayName: 'Claude member',
+      models: const [
+        LlmUpstreamModel(
+          id: 'claude-model',
+          upstreamModelId: 'claude-sonnet',
+          displayName: 'Claude model',
+          capabilities: {'streaming': true},
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [openAi, claude],
+      groups: [
+        LlmModelGroup(
+          id: 'mixed-protocol-group',
+          displayName: 'Mixed protocol group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'openai-member',
+              localModelId: localModelId,
+              upstreamModelId: 'gpt-compatible',
+            ),
+            LlmModelGroupMember(
+              accountId: 'claude-member',
+              localModelId: localModelId,
+              upstreamModelId: 'claude-sonnet',
+            ),
+          ],
+        ),
+      ],
+    ).single;
+
+    expect(config.apiProtocol, 'openai.chat_completions');
+    expect(
+      config.models.single.legacyFields[
+          kLlmModelGroupMayUseAnthropicConfigField],
+      isTrue,
+    );
+  });
 
   test(
     'legacy chat selector remains when its stable group lacks streaming',

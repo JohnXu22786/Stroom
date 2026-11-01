@@ -4467,6 +4467,7 @@ class BackupService {
       'customParams',
       'reasoningParams',
       'endpointType',
+      'apiProtocol',
     ];
 
     for (var entryIndex = 0; entryIndex < decoded.length; entryIndex++) {

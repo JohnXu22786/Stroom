@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../utils/credential_field_sanitizer.dart';
+import '../services/api_protocol_config.dart';
 
 // ============================================================================
 // 参数类型枚举
@@ -550,10 +551,13 @@ class ModelConfig {
   Map<String, dynamic> typeConfig;
   String? selectedTrimPresetId;
 
-  /// 端点类型覆盖（'openai' | 'anthropic'）。
-  /// null 表示继承所在供应商的端点类型（默认）。
+  /// Legacy endpoint selector. New protocol selection lives in
+  /// [apiProtocolOverride]; null means inherit the supplier default.
   /// v3 原位演进：旧数据缺省 null = 继承，无需迁移步骤。
   String? endpointType;
+
+  /// Explicit upstream API protocol override; null inherits the supplier.
+  String? apiProtocolOverride;
   final Map<String, dynamic> legacyFields;
 
   ModelConfig({
@@ -575,6 +579,7 @@ class ModelConfig {
     this.typeConfig = const {},
     this.selectedTrimPresetId,
     this.endpointType,
+    this.apiProtocolOverride,
     Map<String, dynamic>? legacyFields,
   })  : id = id ?? 'model_${const Uuid().v4()}',
         voices = voices ?? [],
@@ -602,6 +607,8 @@ class ModelConfig {
         'typeConfig': typeConfig,
         'selectedTrimPresetId': selectedTrimPresetId,
         if (endpointType != null) 'endpointType': endpointType,
+        if (apiProtocolOverride != null)
+          'apiProtocolOverride': apiProtocolOverride,
       };
 
   factory ModelConfig.fromMap(Map<String, dynamic> map) => ModelConfig(
@@ -641,6 +648,12 @@ class ModelConfig {
         typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
         endpointType: map['endpointType'] as String?,
+        apiProtocolOverride: map['apiProtocolOverride'] as String? ??
+            (map['endpointType'] is String
+                ? apiProtocolFromLegacyEndpointType(
+                    map['endpointType'] as String,
+                  )
+                : null),
         legacyFields: _unknownFields(map, {
           'id',
           'name',
@@ -660,6 +673,7 @@ class ModelConfig {
           'typeConfig',
           'selectedTrimPresetId',
           'endpointType',
+          'apiProtocolOverride',
         }),
       );
 
@@ -682,6 +696,7 @@ class ModelConfig {
         selectedTrimPresetId: selectedTrimPresetId,
         typeConfig: Map<String, dynamic>.from(typeConfig),
         endpointType: endpointType,
+        apiProtocolOverride: apiProtocolOverride,
         legacyFields: Map<String, dynamic>.from(legacyFields),
       );
 }
@@ -704,9 +719,11 @@ class ProviderConfigItem {
   List<ReasoningParam> reasoningParams;
   final Map<String, dynamic> legacyFields;
 
-  /// 端点类型（'openai' | 'anthropic'），该供应商下所有对话统一走此协议。
-  /// 旧配置缺省 'openai'（v3 原位演进，无需迁移步骤）。
+  /// Legacy endpoint selector retained for v0.5/v0.6 configuration reads.
   String endpointType;
+
+  /// Supplier default upstream API protocol. Null uses its declared default.
+  String? apiProtocol;
 
   ProviderConfigItem({
     String? id,
@@ -720,6 +737,7 @@ class ProviderConfigItem {
     List<CustomParam>? customParams,
     List<ReasoningParam>? reasoningParams,
     this.endpointType = 'openai',
+    this.apiProtocol,
     Map<String, dynamic>? legacyFields,
   })  : id = id ?? 'config_${const Uuid().v4()}',
         models = models ?? [],
@@ -745,6 +763,7 @@ class ProviderConfigItem {
       'customParams': customParams.map((p) => p.toMap()).toList(),
       'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
       'endpointType': endpointType,
+      if (apiProtocol != null) 'apiProtocol': apiProtocol,
     };
     final sanitized = redactCredentialFields
         ? Map<String, dynamic>.from(
@@ -785,6 +804,7 @@ class ProviderConfigItem {
         'customParams': customParams.map((p) => p.toMap()).toList(),
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'endpointType': endpointType,
+        if (apiProtocol != null) 'apiProtocol': apiProtocol,
       };
 
   Map<String, dynamic> _legacyFieldsForCredentialMigration({
@@ -831,6 +851,8 @@ class ProviderConfigItem {
                 .toList() ??
             [],
         endpointType: map['endpointType'] as String? ?? 'openai',
+        apiProtocol: map['apiProtocol'] as String? ??
+            apiProtocolFromLegacyEndpointType(map['endpointType'] as String?),
         legacyFields: _unknownFields(map, {
           'id',
           'providerName',
@@ -843,6 +865,7 @@ class ProviderConfigItem {
           'customParams',
           'reasoningParams',
           'endpointType',
+          'apiProtocol',
         }),
       );
 
@@ -858,6 +881,7 @@ class ProviderConfigItem {
         customParams: customParams.map((p) => p.copy()).toList(),
         reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
         endpointType: endpointType,
+        apiProtocol: apiProtocol,
         legacyFields: Map<String, dynamic>.from(legacyFields),
       );
 }

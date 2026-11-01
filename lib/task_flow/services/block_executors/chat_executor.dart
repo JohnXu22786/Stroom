@@ -18,10 +18,11 @@ import '../../../services/chat_protocol.dart'
     show
         maxAttachmentBytes,
         imageCompressThresholdBytes,
-        effectiveEndpointType,
         textAttachmentExtensions;
 import '../../../services/chat_adapter.dart'
     show availableLlmModels, resolveModelRef;
+import '../../../services/llm_model_group_provider.dart'
+    show kLlmModelGroupMayUseAnthropicConfigField;
 import '../../../utils/image_send_compressor.dart';
 import '../../../utils/web_file_store.dart';
 import '../../../utils/provider_models.dart' show resolveProviderModel;
@@ -74,21 +75,70 @@ String flowChatEndpointType(
   String fallback = 'openai',
   Map<String, String>? modelReference,
 }) {
+  final selected = _flowChatModelSelection(
+    assistant,
+    providers,
+    modelReference: modelReference,
+  );
+  if (selected == null) return fallback;
+  return configuredApiProtocol(
+    modelOverride: selected.model.apiProtocolOverride,
+    modelLegacyEndpointType: selected.model.endpointType,
+    supplierProtocol: selected.config.apiProtocol,
+    supplierLegacyEndpointType: selected.config.endpointType,
+  );
+}
+
+bool flowChatMayUseAnthropic(
+  Assistant? assistant,
+  ProviderEntriesState providers, {
+  String fallback = 'openai',
+  Map<String, String>? modelReference,
+}) {
+  final selected = _flowChatModelSelection(
+    assistant,
+    providers,
+    modelReference: modelReference,
+  );
+  if (selected == null) {
+    return fallback == 'anthropic' || fallback == 'anthropic.messages';
+  }
+  final modelOverride = selected.model.apiProtocolOverride ??
+      (selected.model.endpointType == null
+          ? null
+          : apiProtocolFromLegacyEndpointType(selected.model.endpointType));
+  if (modelOverride != null) return modelOverride == 'anthropic.messages';
+  if (selected.model.legacyFields[
+          kLlmModelGroupMayUseAnthropicConfigField] ==
+      true) {
+    return true;
+  }
+  final protocol = configuredApiProtocol(
+    modelOverride: null,
+    modelLegacyEndpointType: null,
+    supplierProtocol: selected.config.apiProtocol,
+    supplierLegacyEndpointType: selected.config.endpointType,
+  );
+  return protocol == 'anthropic.messages';
+}
+
+({ProviderConfigItem config, ModelConfig model})? _flowChatModelSelection(
+  Assistant? assistant,
+  ProviderEntriesState providers, {
+  Map<String, String>? modelReference,
+}) {
   if (modelReference != null) {
     final selected = resolveProviderModel(providers, 'llm', modelReference);
     if (selected == null) {
       throw StateError('运行快照引用的对话模型已删除或不可用，请使用最新配置重试');
     }
-    return effectiveEndpointType(
-      selected.model.endpointType,
-      selected.config.endpointType,
-    );
+    return (config: selected.config, model: selected.model);
   }
-  if (assistant == null) return fallback;
+  if (assistant == null) return null;
   final reference = assistant.modelId ??
       assistant.defaultModelId ??
       assistant.defaultModelName;
-  if (reference == null || reference.isEmpty) return fallback;
+  if (reference == null || reference.isEmpty) return null;
   final selected = resolveModelRef(
     models: availableLlmModels(providers),
     modelId: reference,
@@ -101,18 +151,22 @@ String flowChatEndpointType(
   );
   final entry =
       providers.entries.where((entry) => entry.type == 'llm').firstOrNull;
-  if (selected == null || entry == null) return fallback;
+  if (selected == null || entry == null) return null;
   final config = entry.configs[selected.configIndex];
   final model = config.models[selected.modelIndex];
-  return effectiveEndpointType(model.endpointType, config.endpointType);
+  return (config: config, model: model);
 }
 
 String? flowChatInputError(
   IOType type,
   String endpointType, {
+  bool mayUseAnthropic = false,
   String? mimeType,
   List<int>? headerBytes,
 }) {
+  final isAnthropic = mayUseAnthropic ||
+      endpointType == 'anthropic' ||
+      endpointType == 'anthropic.messages';
   final mime = mimeType?.split(';').first.trim().toLowerCase();
   if (mime == 'image/svg+xml') {
     return '助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG';
@@ -133,7 +187,7 @@ String? flowChatInputError(
   // The OpenAI encoder falls back to `mp3` for unrecognised audio MIME.
   // Keep the formats it explicitly maps and reject bytes it would mislabel.
   if (type == IOType.audio &&
-      endpointType != 'anthropic' &&
+      !isAnthropic &&
       mime != null &&
       !const {
         'audio/mpeg',
@@ -151,7 +205,7 @@ String? flowChatInputError(
       }.contains(mime)) {
     return '助手对话不支持 $mime 音频附件，请转换为 MP3、WAV 或 M4A';
   }
-  if (endpointType != 'anthropic') return null;
+  if (!isAnthropic) return null;
   if (type == IOType.audio || type == IOType.video) {
     return '此助手的 Anthropic 对话格式不支持${type.label}附件，请选择支持此媒体的助手';
   }
@@ -288,7 +342,9 @@ Future<ChatMessage> prepareFlowChatMessage(
     if (imageSizeError != null) throw FormatException(imageSizeError);
   }
   final name = p.basename(payload.fileName ?? reference);
-  if (actualType == IOType.file && endpointType != 'anthropic') {
+  if (actualType == IOType.file &&
+      endpointType != 'anthropic' &&
+      endpointType != 'anthropic.messages') {
     final textError = flowChatTextFileError(name, bytes);
     if (textError != null) throw FormatException(textError);
   }

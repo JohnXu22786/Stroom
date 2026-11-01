@@ -1,3 +1,4 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 // Merged from:
 //   - chat_api_provider_auth_header_test.dart
 //   - chat_api_provider_tool_calls_test.dart
@@ -5,6 +6,152 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 
 void main() {
+  group('OpenAI Responses direct provider', () {
+    test('legacy Chat Completions base URLs use the Responses endpoint', () {
+      for (final (baseUrl, expected) in [
+        (
+          'https://api.example.com/v1/chat/completions',
+          'https://api.example.com/v1/responses',
+        ),
+        (
+          'https://api.example.com/custom/path',
+          'https://api.example.com/custom/path/responses',
+        ),
+        (
+          'https://api.example.com/v1/responses',
+          'https://api.example.com/v1/responses',
+        ),
+      ]) {
+        final provider = createChatProviderFromConfig(
+          providerName: 'Custom supplier',
+          baseUrl: baseUrl,
+          apiKey: 'test-key',
+          endpointType: 'openai.responses',
+        ) as OpenAICompatibleChatProvider;
+
+        expect(provider.requestUrlForTesting, expected);
+      }
+    });
+
+    test('converts ChatService messages and tools to Responses input', () {
+      final provider = OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/v1/responses',
+        apiKey: 'test-key',
+        apiProtocol: 'openai.responses',
+      );
+
+      final body = provider.buildBody(
+        const [
+          {'role': 'system', 'content': 'Be concise'},
+          {'role': 'user', 'content': 'hello'},
+          {
+            'role': 'assistant',
+            'tool_calls': [
+              {
+                'id': 'call-1',
+                'type': 'function',
+                'function': {'name': 'lookup', 'arguments': '{"q":"x"}'},
+              },
+            ],
+          },
+          {'role': 'tool', 'tool_call_id': 'call-1', 'content': 'found'},
+        ],
+        model: 'gpt-test',
+        maxTokens: 23,
+        stream: true,
+        tools: const [
+          {
+            'type': 'function',
+            'function': {
+              'name': 'lookup',
+              'description': 'Find an item',
+              'parameters': {'type': 'object'},
+            },
+          },
+        ],
+      );
+
+      expect(body['model'], 'gpt-test');
+      expect(body['stream'], isTrue);
+      expect(body['instructions'], 'Be concise');
+      expect(body['max_output_tokens'], 23);
+      expect(body['messages'], isNull);
+      expect(body['input'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [{'type': 'input_text', 'text': 'hello'}],
+        },
+        {
+          'type': 'function_call',
+          'call_id': 'call-1',
+          'name': 'lookup',
+          'arguments': '{"q":"x"}',
+        },
+        {
+          'type': 'function_call_output',
+          'call_id': 'call-1',
+          'output': 'found',
+        },
+      ]);
+      expect(body['tools'], [
+        {
+          'type': 'function',
+          'name': 'lookup',
+          'description': 'Find an item',
+          'parameters': {'type': 'object'},
+        },
+      ]);
+    });
+
+    test('decodes Responses stream text, function calls, and usage', () {
+      final provider = OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/v1/responses',
+        apiKey: 'test-key',
+        apiProtocol: 'openai.responses',
+      );
+      final calls = <String, Map<String, dynamic>>{};
+      expect(
+        provider.parseResponsesEventForTesting(
+          {'type': 'response.output_text.delta', 'delta': 'hello'},
+          calls,
+        ).single.text,
+        'hello',
+      );
+      provider.parseResponsesEventForTesting(
+        {
+          'type': 'response.output_item.added',
+          'item': {
+            'id': 'item-1',
+            'call_id': 'call-1',
+            'type': 'function_call',
+            'name': 'lookup',
+            'arguments': '',
+          },
+        },
+        calls,
+      );
+      provider.parseResponsesEventForTesting(
+        {
+          'type': 'response.function_call_arguments.delta',
+          'item_id': 'item-1',
+          'delta': '{"q":"x"}',
+        },
+        calls,
+      );
+      expect(calls['item-1']?['arguments'], '{"q":"x"}');
+      final usage = provider.parseResponsesEventForTesting(
+        {
+          'type': 'response.completed',
+          'response': {
+            'usage': {'input_tokens': 2, 'output_tokens': 3},
+          },
+        },
+        calls,
+      ).single.usage;
+      expect(usage, {'inputTokens': 2, 'outputTokens': 3});
+    });
+  });
   group('OpenAICompatibleChatProvider - Authorization header correctness', () {
     const testApiKey = 'sk-test-full-api-key-12345678';
     const expectedAuth = 'Bearer sk-test-full-api-key-12345678';

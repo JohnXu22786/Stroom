@@ -1,6 +1,7 @@
 import '../models/llm_account.dart';
 import '../models/tts_models.dart';
 import '../ai_gateway/ai_gateway.dart';
+import 'api_protocol_config.dart';
 
 /// Namespaced account identity for an OCR provider config that predates
 /// account/model-group routing.
@@ -11,6 +12,8 @@ String llmOcrModelGroupIdForConfig(String configId, String localModelId) =>
 
 const kLlmModelGroupConfigField = 'stroomLlmModelGroupId';
 const kLlmModelCapabilitiesConfigField = 'stroomLlmModelCapabilities';
+const kLlmModelGroupMayUseAnthropicConfigField =
+    'stroomLlmModelGroupMayUseAnthropic';
 const kLlmChatAdapterUnsupportedSelectorField =
     'stroomLlmChatAdapterUnsupported';
 
@@ -259,6 +262,8 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
     final models = <ModelConfig>[];
     String? providerName;
     String? endpointType;
+    String? supplierApiProtocol;
+    String? representativeConnectorType;
 
     for (final localModelId in aliases) {
       final members = group.members
@@ -275,24 +280,23 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
             orElse: () => null,
           );
       final orderedMembers = [
-        if (preferred != null) preferred,
+        ?preferred,
         ...members.where((member) => member != preferred),
       ];
 
       LlmAccount? representativeAccount;
       LlmUpstreamModel? representativeModel;
-      String? representativeEndpointType;
       for (final member in orderedMembers) {
         final account = accountById[member.accountId];
         if (account == null) continue;
-        final endpoint =
-            catalog.findProvider(account.connectorType)?.chatProtocolId;
-        if (endpoint == null) continue;
+        if (catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+            true) {
+          continue;
+        }
         final model = resolveMemberModel(account, member);
         if (model == null) continue;
         representativeAccount = account;
         representativeModel = model;
-        representativeEndpointType = endpoint;
         break;
       }
       if (representativeAccount == null || representativeModel == null) {
@@ -308,8 +312,8 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       final supportsVision = members.any((member) {
         final account = accountById[member.accountId];
         if (account == null ||
-            catalog.findProvider(account.connectorType)?.chatProtocolId !=
-                'openai') {
+            catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+                true) {
           return false;
         }
         final model = resolveMemberModel(account, member);
@@ -325,6 +329,30 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
         final model = resolveMemberModel(account, member);
         return model?.capabilities['streaming'] == true;
       });
+      final representativeModelConfig =
+          ModelConfig.fromMap(representativeModel.config);
+      final representativeOverride =
+          representativeModelConfig.apiProtocolOverride;
+      final mayUseAnthropic = representativeOverride != null
+          ? representativeOverride == 'anthropic.messages'
+          : members.any((member) {
+              final account = accountById[member.accountId];
+              if (account == null ||
+                  catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+                      true) {
+                return false;
+              }
+              final sourceModel = resolveMemberModel(account, member);
+              if (sourceModel == null) return false;
+              final model = ModelConfig.fromMap(sourceModel.config);
+              return configuredApiProtocol(
+                    modelOverride: model.apiProtocolOverride,
+                    modelLegacyEndpointType: model.endpointType,
+                    supplierProtocol: _accountApiProtocol(account),
+                    supplierLegacyEndpointType: null,
+                  ) ==
+                  'anthropic.messages';
+            });
       final rawModel = Map<String, dynamic>.from(representativeModel.config)
         ..['id'] = localModelId
         // Stable groups can use their saved name without changing their old
@@ -340,15 +368,18 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
         ..[kLlmModelCapabilitiesConfigField] = {
           'vision': supportsVision,
           'streaming': supportsStreaming,
-        };
+        }
+        ..[kLlmModelGroupMayUseAnthropicConfigField] = mayUseAnthropic;
       final model = ModelConfig.fromMap(rawModel);
-      model.endpointType = representativeEndpointType;
       models.add(model);
       providerName ??= group.legacyProviderName ??
           (keepsLegacyIdentity
               ? representativeAccount.displayName
               : group.displayName);
-      endpointType ??= representativeEndpointType;
+      final configuredProtocol = _accountApiProtocol(representativeAccount);
+      supplierApiProtocol ??= configuredProtocol;
+      endpointType ??= legacyEndpointTypeForApiProtocol(configuredProtocol);
+      representativeConnectorType ??= representativeAccount.connectorType;
     }
 
     if (models.isEmpty) continue;
@@ -360,11 +391,26 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
         // obtain both from the exact routed account.
         models: models,
         endpointType: endpointType ?? 'openai',
-        legacyFields: {kLlmModelGroupConfigField: group.id},
+        apiProtocol: supplierApiProtocol ?? 'openai.chat_completions',
+        legacyFields: {
+          kLlmModelGroupConfigField: group.id,
+          'connectorType': representativeConnectorType,
+        },
       ),
     );
   }
   return configs;
+}
+
+String _accountApiProtocol(LlmAccount account) {
+  final configured = account.endpointConfig['apiProtocol'];
+  if (configured is String && configured.isNotEmpty) return configured;
+  final legacy = account.endpointConfig['chatProtocol'] ??
+      account.endpointConfig['endpointType'];
+  if (legacy is String && legacy.isNotEmpty) {
+    return apiProtocolFromLegacyEndpointType(legacy);
+  }
+  return builtinDefaultApiProtocolForConnector(account.connectorType);
 }
 
 String? stableLlmModelGroupLocalModelId(String groupId) {

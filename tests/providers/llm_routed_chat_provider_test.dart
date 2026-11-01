@@ -21,6 +21,115 @@ void main() {
     );
   });
 
+  test('custom connectors remain eligible for Anthropic Messages bridge', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('anthropic.messages'),
+      contains('openai-compatibility'),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('anthropic.messages'),
+      isNot(contains('bedrock')),
+    );
+  });
+
+  test('Responses bridge excludes native chat-only connectors', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.responses'),
+      containsAll({'openai-compatibility', 'openai-api'}),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.responses'),
+      isNot(contains('moonshot')),
+    );
+  });
+
+  test('uses the selected routed account protocol when no model override exists',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    for (final (id, protocol) in [
+      ('chat-account', 'openai.chat_completions'),
+      ('responses-account', 'anthropic.messages'),
+    ]) {
+      await accounts.saveAccount(
+        LlmAccount(
+          id: id,
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: id,
+          status: LlmAccountStatus.ready,
+          endpointConfig: {
+            'apiProtocol': protocol,
+            'baseUrl': 'https://provider.example.test/v1',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'local-model',
+              upstreamModelId: 'gpt-routed',
+              displayName: 'Routed model',
+            ),
+          ],
+        ),
+        secret: 'test-api-key',
+      );
+    }
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'protocol-routing-group',
+        displayName: 'Protocol routing group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'chat-account',
+            localModelId: 'local-model',
+            upstreamModelId: 'gpt-routed',
+          ),
+          LlmModelGroupMember(
+            accountId: 'responses-account',
+            localModelId: 'local-model',
+            upstreamModelId: 'gpt-routed',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'content': [
+          {'type': 'text', 'text': 'ok'},
+        ],
+      },
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        connectorClient: connector,
+      )),
+      groupId: 'protocol-routing-group',
+      localModelId: 'local-model',
+      endpointType: 'openai',
+      apiProtocol: 'openai.chat_completions',
+      selectedAccountId: 'responses-account',
+    );
+
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      'ok',
+    );
+    expect(connector.requestedAccountIds, ['responses-account']);
+    expect(connector.lastNativeFormat, 'anthropic');
+    expect(connector.requestBody, contains('max_tokens'));
+  });
+
   test('non-streaming image output is stored and exposed to callers', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
@@ -1474,7 +1583,8 @@ void main() {
         ),
         groupId: 'count-group',
         localModelId: 'count-model',
-        endpointType: 'anthropic',
+        endpointType: 'openai.chat_completions',
+        selectedAccountId: 'count-account',
       );
 
       expect(
