@@ -1297,6 +1297,16 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   }
   final before = text.substring(0, match.start).trimRight();
   final after = text.substring(match.end).trimLeft();
+  final afterFirstWord = RegExp(r'^([a-zA-Z][a-zA-Z_-]*)\b')
+      .firstMatch(after)
+      ?.group(1)
+      ?.toLowerCase();
+  final afterFollowingWord = after
+      .replaceFirst(
+        RegExp(r'^[a-zA-Z][a-zA-Z_-]*\b'),
+        '',
+      )
+      .trimLeft();
   final naturalActionLead = RegExp(
     r'\b(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?$',
     caseSensitive: false,
@@ -1313,6 +1323,12 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
     r'^(?:how|why|whether|that|which|who)\b',
     caseSensitive: false,
   ).hasMatch(after);
+  final naturalDocumentationTail = '${suffix.trim()} ${after.trim()}'.trim();
+  final naturalPrepositionalContinuation = naturalActionLead &&
+      RegExp(
+        r'^(?:with\s+(?:care|attention|caution|examples?)|about\s+(?:the\s+)?(?:topic|subject|process|methods?|requirements?)|on\s+(?:the\s+)?(?:security|authentication|authorization|deployment|usage|configuration|troubleshooting|networking|privacy|setup|design|installation))\b',
+        caseSensitive: false,
+      ).hasMatch(naturalDocumentationTail);
   final naturalWordForm = RegExp(
     r'(?:s|es|ed|ing|er|est|ly|able|ary|aries|ation|ization|istic|based)$',
     caseSensitive: false,
@@ -1320,67 +1336,443 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final terminalSentenceEnd = after.isEmpty ||
       RegExp(r'^[.!?]+(?:\s|$)').hasMatch(after) ||
       RegExp(r'[.!?]+$').hasMatch(match.group(0)!);
-  final naturalActionAdverbContinuation = const {
-        'carefully',
-        'thoroughly',
-        'closely',
-        'fully',
-        'completely',
-      }.contains(suffix.trim().toLowerCase()) &&
-      naturalActionLead;
+  const naturalDocumentationAdverbs = {
+    'carefully',
+    'thoroughly',
+    'closely',
+    'fully',
+    'completely',
+    'verbatim',
+  };
+  final afterAdverb = suffix.trim().isEmpty ? afterFollowingWord : after;
+  final naturalAdverbContinuationTail = afterAdverb.isEmpty ||
+      RegExp(r'^[.!?]+(?:\s|$)').hasMatch(afterAdverb) ||
+      RegExp(
+        r'^(?:[,;]\s*)?(?:(?:and|then)\s+(?:(?:please|you\s+should)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b|before\s+(?:reading|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding)\b)',
+        caseSensitive: false,
+      ).hasMatch(afterAdverb);
+  final naturalActionAdverbContinuation =
+      (naturalDocumentationAdverbs.contains(suffix.trim().toLowerCase()) ||
+              (suffix.trim().isEmpty &&
+                  naturalDocumentationAdverbs.contains(afterFirstWord))) &&
+          naturalActionLead &&
+          naturalAdverbContinuationTail;
   final terminalNaturalActionContinuation =
       naturalActionAdverbContinuation && terminalSentenceEnd;
-  final documentationSuffix = suffix.trim().toLowerCase();
-  final naturalDocumentationInstructionNoun = const {
-        'instructions',
-        'guide',
-        'guides',
-        'manual',
-        'manuals',
-        'overview',
-        'overviews',
-        'reference',
-        'references',
-        'chapter',
-        'chapters',
-        'section',
-        'sections',
-        'policy',
-        'policies',
-        'procedure',
-        'procedures',
-        'detail',
-        'details',
-        'example',
-        'examples',
-        'method',
-        'methods',
-        'requirement',
-        'requirements',
-        'specification',
-        'specifications',
-        'page',
-        'pages',
-        'topic',
-        'topics',
-        'step',
-        'steps',
-        'workflow',
-        'workflows',
-      }.contains(documentationSuffix) &&
-      naturalActionLead &&
-      (after.isEmpty ||
-          RegExp(
-            r'^(?:carefully|thoroughly|closely|fully|completely)\b',
-            caseSensitive: false,
-          ).hasMatch(after));
+  const naturalDocumentationNouns = {
+    'instructions',
+    'guide',
+    'guides',
+    'manual',
+    'manuals',
+    'overview',
+    'overviews',
+    'reference',
+    'references',
+    'chapter',
+    'chapters',
+    'section',
+    'sections',
+    'policy',
+    'policies',
+    'procedure',
+    'procedures',
+    'detail',
+    'details',
+    'example',
+    'examples',
+    'method',
+    'methods',
+    'requirement',
+    'requirements',
+    'specification',
+    'specifications',
+    'page',
+    'pages',
+    'topic',
+    'topics',
+    'step',
+    'steps',
+    'workflow',
+    'workflows',
+  };
+  final documentationSuffix = suffix.trim().isEmpty
+      ? afterFirstWord ?? ''
+      : suffix.trim().toLowerCase();
+  final naturalDocumentationInstructionNoun =
+      naturalDocumentationNouns.contains(documentationSuffix) &&
+          naturalActionLead &&
+          (after.isEmpty ||
+              (suffix.trim().isEmpty &&
+                  naturalDocumentationAdverbs.contains(
+                    RegExp(r'^[a-zA-Z][a-zA-Z_-]*\b')
+                        .firstMatch(afterFollowingWord)
+                        ?.group(0)
+                        ?.toLowerCase(),
+                  )) ||
+              RegExp(
+                r'^(?:carefully|thoroughly|closely|fully|completely)\b',
+                caseSensitive: false,
+              ).hasMatch(after));
   return terminalNaturalActionContinuation ||
       naturalActionAdverbContinuation ||
       naturalDocumentationInstructionNoun ||
+      naturalPrepositionalContinuation ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
       (naturalWordForm &&
           naturalDescriptionLead &&
           (naturalClause || naturalObject));
+}
+
+String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'documentation') continue;
+    const naturalAdverbs = {
+      'carefully',
+      'thoroughly',
+      'closely',
+      'fully',
+      'completely',
+      'verbatim',
+    };
+    const naturalNouns = {
+      'instructions',
+      'guide',
+      'guides',
+      'manual',
+      'manuals',
+      'overview',
+      'overviews',
+      'reference',
+      'references',
+      'chapter',
+      'chapters',
+      'section',
+      'sections',
+      'policy',
+      'policies',
+      'procedure',
+      'procedures',
+      'detail',
+      'details',
+      'example',
+      'examples',
+      'method',
+      'methods',
+      'requirement',
+      'requirements',
+      'specification',
+      'specifications',
+      'page',
+      'pages',
+      'topic',
+      'topics',
+      'step',
+      'steps',
+      'workflow',
+      'workflows',
+    };
+    final chunkedCandidate = RegExp(
+      '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_-]+)+)'
+      r'(?=$|[^a-zA-Z0-9_-])',
+      caseSensitive: false,
+    );
+    sanitized = sanitized.replaceAllMapped(chunkedCandidate, (match) {
+      final chunks = match.group(2)!.trim().split(RegExp(r'\s+'));
+      final joinedSingleCharacterChunks = chunks.join().toLowerCase();
+      if (RegExp(
+        r'^(?:with\s+(?:care|attention|caution|examples?)|about\s+(?:the\s+)?(?:topic|subject|process|methods?|requirements?)|on\s+(?:the\s+)?(?:security|authentication|authorization|deployment|usage|configuration|troubleshooting|networking|privacy|setup|design|installation))$',
+        caseSensitive: false,
+      ).hasMatch(chunks.join(' '))) {
+        return match.group(0)!;
+      }
+      if (RegExp(
+        r'^(?:with\s+(?:care|attention|caution|examples?)|about\s+(?:the\s+)?(?:topic|subject|process|methods?|requirements?)|on\s+(?:the\s+)?(?:security|authentication|authorization|deployment|usage|configuration|troubleshooting|networking|privacy|setup|design|installation))\s+(?:carefully|thoroughly|closely|fully|completely)$',
+        caseSensitive: false,
+      ).hasMatch(chunks.join(' '))) {
+        return match.group(0)!;
+      }
+      const naturalContinuationWords = {
+        'and',
+        'then',
+        'before',
+        'after',
+        'the',
+        'a',
+        'an',
+        'with',
+        'care',
+        'attention',
+        'caution',
+        'about',
+        'on',
+        'security',
+        'authentication',
+        'authorization',
+        'deployment',
+        'usage',
+        'configuration',
+        'troubleshooting',
+        'networking',
+        'privacy',
+        'setup',
+        'design',
+        'installation',
+        'id',
+        'no',
+        'please',
+        'you',
+        'should',
+        'read',
+        'review',
+        'examine',
+        'inspect',
+        'identify',
+        'recognize',
+        'describe',
+        'summarize',
+        'analyze',
+        'extract',
+        'interpret',
+        'count',
+        'find',
+        'search',
+        'transcribe',
+        'translate',
+        'classify',
+        'explain',
+        'process',
+        'show',
+        'tell',
+        'check',
+        'look',
+        'scan',
+        'ocr',
+        'decode',
+        'reading',
+        'proceeding',
+        'reviewing',
+        'examining',
+        'inspecting',
+        'identifying',
+        'recognizing',
+        'describing',
+        'summarizing',
+        'analyzing',
+        'extracting',
+        'interpreting',
+        'counting',
+        'finding',
+        'searching',
+        'transcribing',
+        'translating',
+        'classifying',
+        'explaining',
+        'processing',
+        'showing',
+        'telling',
+        'looking',
+        'scanning',
+        'decoding',
+        'key',
+        'points',
+        'process',
+        'further',
+        'information',
+        'document',
+        'image',
+        'receipt',
+        'total',
+      };
+      const naturalPhraseConcatenations = {
+        'withcare',
+        'withattention',
+        'withcaution',
+        'withexample',
+        'withexamples',
+        'abouttopic',
+        'aboutthetopic',
+        'aboutsubject',
+        'aboutthesubject',
+        'aboutprocess',
+        'abouttheprocess',
+        'aboutmethod',
+        'aboutmethods',
+        'aboutrequirement',
+        'aboutrequirements',
+        'onsecurity',
+        'onthesecurity',
+        'onauthentication',
+        'onauthorization',
+        'ondeployment',
+        'onusage',
+        'onconfiguration',
+        'ontroubleshooting',
+        'onnetworking',
+        'onprivacy',
+        'onsetup',
+        'ondesign',
+        'oninstallation',
+        'withcareandsummarize',
+        'withcareandsummarizethekeypoints',
+        'withcareandsummarizetheprocess',
+      };
+      const naturalActionWords = {
+        'answer',
+        'read',
+        'review',
+        'examine',
+        'inspect',
+        'identify',
+        'recognize',
+        'describe',
+        'summarize',
+        'analyze',
+        'extract',
+        'interpret',
+        'count',
+        'find',
+        'search',
+        'transcribe',
+        'translate',
+        'classify',
+        'explain',
+        'process',
+        'show',
+        'tell',
+        'check',
+        'look',
+        'scan',
+        'ocr',
+        'decode',
+        'reading',
+        'reviewing',
+        'examining',
+        'inspecting',
+        'identifying',
+        'recognizing',
+        'describing',
+        'summarizing',
+        'analyzing',
+        'extracting',
+        'interpreting',
+        'counting',
+        'finding',
+        'searching',
+        'transcribing',
+        'translating',
+        'classifying',
+        'explaining',
+        'processing',
+        'showing',
+        'telling',
+        'looking',
+        'scanning',
+        'decoding',
+      };
+      const naturalObjectWords = {
+        'keypoints',
+        'question',
+        'process',
+        'information',
+        'document',
+        'image',
+        'receipt',
+        'total',
+        'further',
+      };
+      final actionAlternation = naturalActionWords.map(RegExp.escape).join('|');
+      final objectAlternation = naturalObjectWords.map(RegExp.escape).join('|');
+      final joinedNaturalActionPhrase = RegExp(
+        '^(?:and|then|before)(?:please|youshould)?'
+        '(?:$actionAlternation)'
+        '(?:(?:the|a|an|this|that|these|those)?(?:$objectAlternation))?\$',
+        caseSensitive: false,
+      ).hasMatch(joinedSingleCharacterChunks);
+      final joinedNaturalDocumentIdentifier = RegExp(
+        r'^(?:id|no)\d+(?:carefully|thoroughly|closely|fully|completely|verbatim)?'
+        '(?:(?:and|then|before)(?:please|youshould)?'
+        '(?:$actionAlternation)'
+        '(?:(?:the|a|an|this|that|these|those)?(?:$objectAlternation))?)?\$',
+        caseSensitive: false,
+      ).hasMatch(joinedSingleCharacterChunks);
+      if (chunks.every((chunk) => chunk.length == 1) &&
+          (naturalAdverbs.contains(joinedSingleCharacterChunks) ||
+              naturalNouns.contains(joinedSingleCharacterChunks) ||
+              naturalContinuationWords.contains(joinedSingleCharacterChunks) ||
+              naturalPhraseConcatenations
+                  .contains(joinedSingleCharacterChunks) ||
+              joinedNaturalActionPhrase ||
+              joinedNaturalDocumentIdentifier)) {
+        return match.group(0)!;
+      }
+      var credentialSuffix = '';
+      var foundCredential = false;
+      var expectsDocumentIdentifierNumber = false;
+      for (var index = 0; index < chunks.length; index++) {
+        final chunk = chunks[index];
+        final normalizedChunk = chunk.toLowerCase();
+        if (!foundCredential &&
+            credentialSuffix.isEmpty &&
+            (normalizedChunk == 'id' || normalizedChunk == 'no')) {
+          expectsDocumentIdentifierNumber = true;
+          continue;
+        }
+        if (!foundCredential &&
+            credentialSuffix.isEmpty &&
+            expectsDocumentIdentifierNumber &&
+            RegExp(r'^\d+$').hasMatch(chunk)) {
+          expectsDocumentIdentifierNumber = false;
+          continue;
+        }
+        expectsDocumentIdentifierNumber = false;
+        final isNaturalChunk = naturalAdverbs.contains(chunk.toLowerCase()) ||
+            naturalNouns.contains(chunk.toLowerCase()) ||
+            naturalContinuationWords.contains(chunk.toLowerCase()) ||
+            RegExp(
+              r'^(?:v\d+(?:\.\d+)*|(?:id|no|release|version|chapter|section|page|step|part)\d{1,}|\d{4})$',
+              caseSensitive: false,
+            ).hasMatch(chunk);
+        if (!foundCredential && credentialSuffix.isEmpty && isNaturalChunk) {
+          continue;
+        }
+        if (foundCredential) continue;
+        credentialSuffix += chunk;
+        final alphabeticSuffix =
+            credentialSuffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+        final hasMarkerCredentialShape = RegExp(r'[0-9_]')
+                .hasMatch(credentialSuffix) &&
+            credentialSuffix.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').length >=
+                8 &&
+            alphabeticSuffix.length >= 2;
+        final hasCredentialShape = hasMarkerCredentialShape ||
+            (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
+                _legacyOcrHasHighAlphabeticEntropy(
+                  alphabeticSuffix,
+                  minimumLength: 8,
+                  minimumEntropy: 2.9,
+                  maximumVowelRatio: 0.4,
+                ));
+        if (hasCredentialShape) {
+          foundCredential = true;
+        }
+      }
+      if (!foundCredential) return match.group(0)!;
+      // Natural-looking chunks on either side can belong to the credential.
+      // Drop the whole candidate once it matches the credential shape.
+      return '${match.group(1)}[redacted]';
+    });
+  }
+  return sanitized;
 }
 
 const _legacyOcrNaturalCarefulInstructionActions = {
@@ -2560,32 +2952,14 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         r'\b(?:and|then)\s+(?:(?:please)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|answer|extract|interpret|count|copy|compute|find|give|search|transcribe|translate|classify|explain|process|provide|show|tell|check|look|scan|ocr|decode|write|list|record|output|report|note|state|add|return|respond|subtract|sum)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bbefore\s+(?:reading|checking|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding|locating)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bto\s+(?:verify|confirm)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b',
         caseSensitive: false,
       ).hasMatch(afterEcho);
-      final spacedEchoSuffix = echoSuffix.trim();
-      final spacedEchoLetters =
-          spacedEchoSuffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
-      const naturalTerminalDocumentationAdverbs = {
-        'carefully',
-        'thoroughly',
-        'closely',
-        'fully',
-        'completely',
-      };
-      final credentialShapedSpacedEcho =
+      final deferSpacedDocumentationEcho =
           prefix.toLowerCase() == 'documentation' &&
-              spacedEchoSuffix.isNotEmpty &&
-              !naturalTerminalDocumentationAdverbs
-                  .contains(spacedEchoSuffix.toLowerCase()) &&
-              (RegExp(r'[0-9_]').hasMatch(spacedEchoSuffix) ||
-                  (!_legacyOcrHasNaturalAlphaContinuation(spacedEchoLetters) &&
-                      _legacyOcrHasHighAlphabeticEntropy(
-                        spacedEchoLetters,
-                        minimumLength: 8,
-                        minimumEntropy: 2.9,
-                        maximumVowelRatio: 0.4,
-                      )));
-      final confirmedMaskedCredentialEcho =
-          _legacyOcrTextContainsMaskedCredential(echo, [value]) ||
-              credentialShapedSpacedEcho;
+              echoSuffix.trim().isEmpty &&
+              RegExp(
+                r'^\s+(?:[a-zA-Z0-9_-]{2,}\s+){0,3}[a-zA-Z0-9_-]{2,}',
+              ).hasMatch(afterEcho);
+      final confirmedMaskedCredentialEcho = !deferSpacedDocumentationEcho &&
+          _legacyOcrTextContainsMaskedCredential(echo, [value]);
       if ((!hasSentenceBoundary &&
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
@@ -2641,7 +3015,10 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       });
     }
   }
-  return sanitized;
+  return _legacyOcrRedactSpacedDocumentationCredentialEchoes(
+    sanitized,
+    credentialValues,
+  );
 }
 
 bool _legacyOcrHasOrdinaryNaturalPromptContext(

@@ -14999,7 +14999,18 @@ void main() {
       'legacy OCR instruction migration redacts whitespace-separated masked credential echoes',
       () {
         const echoedCredential = 'foobarxyz';
-        const punctuationCredentialEchoes = ['foo_barxyz', 'foo-barxyz'];
+        const punctuationCredentialEchoes = [
+          'foo_barxyz',
+          'foo_barxyz123',
+          'foo-barxyz',
+          'foo-barxyz123',
+          'foo barxyz',
+          'abc 123xyz',
+          'abc 12345',
+          'ab 123456',
+          't r o u b l e s h o o t i n g c o n f i g u r a t i o n',
+          'foo bar baz qux zot',
+        ];
         BackgroundTask taskFor(String id, String instruction) =>
             BackgroundTask.fromMap({
               'id': id,
@@ -15032,10 +15043,70 @@ void main() {
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
 
-        expect(instructionContent, 'Please read the [redacted] carefully.');
-        expect(persisted, contains('Please read the [redacted] carefully.'));
+        expect(instructionContent, 'Please read the [redacted].');
+        expect(persisted, contains('Please read the [redacted].'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
+
+        final trailingCredentialTask = taskFor(
+          'legacy-ocr-natural-adverb-then-spaced-credential',
+          'Please read the documentation carefully foobarxyz.',
+        );
+        final trailingCredentialInstruction = OcrRetrySnapshot.fromMap(
+          trailingCredentialTask.retryData!,
+        ).instructionContent!;
+        final trailingCredentialPersisted =
+            jsonEncode(trailingCredentialTask.toMap());
+        expect(
+          trailingCredentialInstruction,
+          'Please read the [redacted].',
+        );
+        expect(trailingCredentialPersisted, isNot(contains('foobarxyz')));
+
+        final naturalLeadingCredentialTask = taskFor(
+          'legacy-ocr-natural-leading-word-spaced-credential',
+          'Please read the documentation the foobarxyz.',
+        );
+        final naturalLeadingCredentialInstruction = OcrRetrySnapshot.fromMap(
+          naturalLeadingCredentialTask.retryData!,
+        ).instructionContent!;
+        expect(
+          naturalLeadingCredentialInstruction,
+          'Please read the [redacted].',
+        );
+
+        final newlineCredentialTask = taskFor(
+          'legacy-ocr-newline-split-spaced-credential',
+          'Please read the documentation foo\nbarxyz.',
+        );
+        final newlineCredentialPersisted = jsonEncode(newlineCredentialTask);
+        expect(
+          newlineCredentialPersisted,
+          isNot(contains('foo\\nbarxyz')),
+        );
+        expect(newlineCredentialPersisted, isNot(contains('barxyz')));
+
+        final characterSplitCredentialTask = taskFor(
+          'legacy-ocr-character-split-spaced-credential',
+          'Please read the documentation f o o b a r x y z.',
+        );
+        final characterSplitCredentialPersisted =
+            jsonEncode(characterSplitCredentialTask.toMap());
+        expect(
+          characterSplitCredentialPersisted,
+          isNot(contains('f o o b a r x y z')),
+        );
+
+        final clauseThenCredentialTask = taskFor(
+          'legacy-ocr-natural-clause-then-spaced-credential',
+          'Please read the documentation with care and summarize the key points foobarxyz.',
+        );
+        final clauseThenCredentialPersisted =
+            jsonEncode(clauseThenCredentialTask.toMap());
+        expect(
+          clauseThenCredentialPersisted,
+          isNot(contains('foobarxyz')),
+        );
 
         for (final credentialEcho in punctuationCredentialEchoes) {
           final punctuationTask = taskFor(
@@ -15049,10 +15120,30 @@ void main() {
 
           expect(
             punctuationInstruction,
-            'Please read the [redacted] carefully.',
+            'Please read the [redacted].',
           );
           expect(punctuationPersisted, isNot(contains(credentialEcho)));
         }
+
+        final naturalWordInsideCredentialTask = taskFor(
+          'legacy-ocr-natural-word-inside-spaced-credential',
+          'Please read the documentation foobar carefully xyz.',
+        );
+        final naturalWordInsideCredentialInstruction =
+            OcrRetrySnapshot.fromMap(naturalWordInsideCredentialTask.retryData!)
+                .instructionContent!;
+        final naturalWordInsideCredentialPersisted =
+            jsonEncode(naturalWordInsideCredentialTask.toMap());
+        expect(
+          naturalWordInsideCredentialInstruction,
+          'Please read the [redacted].',
+        );
+        expect(naturalWordInsideCredentialPersisted, isNot(contains('foobar')));
+        expect(
+          naturalWordInsideCredentialPersisted,
+          isNot(contains('carefully')),
+        );
+        expect(naturalWordInsideCredentialPersisted, isNot(contains('xyz')));
 
         final contextEchoTask = taskFor(
           'legacy-ocr-spaced-credential-with-natural-tail',
@@ -15078,7 +15169,7 @@ void main() {
 
         expect(
           capitalizedInstruction,
-          'Please read the [redacted] carefully.',
+          'Please read the [redacted].',
         );
         expect(capitalizedPersisted, isNot(contains(echoedCredential)));
       },
@@ -15091,7 +15182,38 @@ void main() {
             'Please read the documentation thoroughly.\n'
             'Please read the documentation instructions carefully.\n'
             'Please read the documentation carefully and summarize the process.\n'
-            'Please read the documentation chapters carefully.';
+            'Please read the documentation chapters carefully.\n'
+            'Please read the documentation carefully before reading further.\n'
+            'Please read the documentation with care.\n'
+            'Please read the documentation with care and summarize the key points.\n'
+            'Please read the documentation on security.\n'
+            'Please read the documentation on security carefully.\n'
+            'Please read the documentation v2 guide carefully.\n'
+            'Please read documentation chapter12 carefully.\n'
+            'Please read documentation id123456 carefully.\n'
+            'Please read documentation ID 123456 carefully.\n'
+            'Please read documentation I D 1 2 3 4 5 6 carefully.\n'
+            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y.\n'
+            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y '
+            'a n d s u m m a r i z e t h e p r o c e s s.\n'
+            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y '
+            'b e f o r e r e a d i n g f u r t h e r.\n'
+            'Please read the documentation a n d a n s w e r t h e '
+            'q u e s t i o n.\n'
+            'Please read the documentation 2025 release notes.\n'
+            'Please read the documentation verbatim.\n'
+            'Please read the documentation i n s t r u c t i o n s.\n'
+            'Please read the documentation n e t w o r k i n g.\n'
+            'Please read the documentation w i t h c a r e.\n'
+            'Please read the documentation o n s e c u r i t y.\n'
+            'Please read the documentation w i t h c a r e a n d '
+            's u m m a r i z e.\n'
+            'Please read the documentation a n d t r a n s c r i b e '
+            't h e r e c e i p t.\n'
+            'Please read the documentation a n d t r a n s c r i b e '
+            'a r e c e i p t.\n'
+            'Please read the documentation carefully before proceeding '
+            'with configuration.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-spaced-natural-documentation-prompt',
           'type': 'ocr',
