@@ -15005,6 +15005,15 @@ void main() {
           'foo-barxyz',
           'foo-barxyz123',
           'foo barxyz',
+          'foo / barxyz',
+          'foo + barxyz',
+          'foo. barxyz',
+          'key abc123',
+          'p a s s w o r d',
+          '1234 5678 9012',
+          'ID 12345678901234567890',
+          'ID12345678901234567890',
+          'I D 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0',
           'abc 123xyz',
           'abc 12345',
           'ab 123456',
@@ -15079,7 +15088,8 @@ void main() {
           'legacy-ocr-newline-split-spaced-credential',
           'Please read the documentation foo\nbarxyz.',
         );
-        final newlineCredentialPersisted = jsonEncode(newlineCredentialTask);
+        final newlineCredentialPersisted =
+            jsonEncode(newlineCredentialTask.toMap());
         expect(
           newlineCredentialPersisted,
           isNot(contains('foo\\nbarxyz')),
@@ -15181,6 +15191,8 @@ void main() {
         const safePrompt = 'Please read the documentation carefully.\n'
             'Please read the documentation thoroughly.\n'
             'Please read the documentation instructions carefully.\n'
+            'Please read the documentation screenshots carefully.\n'
+            'Please read the documentation changelog carefully.\n'
             'Please read the documentation carefully and summarize the process.\n'
             'Please read the documentation chapters carefully.\n'
             'Please read the documentation carefully before reading further.\n'
@@ -15191,6 +15203,7 @@ void main() {
             'Please read the documentation v2 guide carefully.\n'
             'Please read documentation chapter12 carefully.\n'
             'Please read documentation id123456 carefully.\n'
+            'Please read documentation id123456789 carefully.\n'
             'Please read documentation ID 123456 carefully.\n'
             'Please read documentation I D 1 2 3 4 5 6 carefully.\n'
             'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y.\n'
@@ -15200,6 +15213,8 @@ void main() {
             'b e f o r e r e a d i n g f u r t h e r.\n'
             'Please read the documentation a n d a n s w e r t h e '
             'q u e s t i o n.\n'
+            'Please read the documentation a n d a n a l y z e t h e '
+            's e c u r i t y.\n'
             'Please read the documentation 2025 release notes.\n'
             'Please read the documentation verbatim.\n'
             'Please read the documentation i n s t r u c t i o n s.\n'

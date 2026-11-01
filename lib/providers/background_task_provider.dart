@@ -1347,6 +1347,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final afterAdverb = suffix.trim().isEmpty ? afterFollowingWord : after;
   final naturalAdverbContinuationTail = afterAdverb.isEmpty ||
       RegExp(r'^[.!?]+(?:\s|$)').hasMatch(afterAdverb) ||
+      RegExp(r'[.!?]+$').hasMatch(match.group(0)!) ||
       RegExp(
         r'^(?:[,;]\s*)?(?:(?:and|then)\s+(?:(?:please|you\s+should)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b|before\s+(?:reading|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding)\b)',
         caseSensitive: false,
@@ -1399,6 +1400,11 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final documentationSuffix = suffix.trim().isEmpty
       ? afterFirstWord ?? ''
       : suffix.trim().toLowerCase();
+  final normalizedDocumentationSuffix =
+      documentationSuffix.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  final naturalNumberedDocumentationReference = RegExp(
+    r'^(?:chapter|section|page|step|part|id)[0-9]{1,18}$',
+  ).hasMatch(normalizedDocumentationSuffix);
   final naturalDocumentationInstructionNoun =
       naturalDocumentationNouns.contains(documentationSuffix) &&
           naturalActionLead &&
@@ -1417,6 +1423,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   return terminalNaturalActionContinuation ||
       naturalActionAdverbContinuation ||
       naturalDocumentationInstructionNoun ||
+      (naturalNumberedDocumentationReference && naturalActionLead) ||
       naturalPrepositionalContinuation ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
       (naturalWordForm &&
@@ -1465,12 +1472,16 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'details',
       'example',
       'examples',
+      'changelog',
+      'changelogs',
       'method',
       'methods',
       'requirement',
       'requirements',
       'specification',
       'specifications',
+      'screenshot',
+      'screenshots',
       'page',
       'pages',
       'topic',
@@ -1482,12 +1493,26 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     };
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_-]+)+)'
-      r'(?=$|[^a-zA-Z0-9_-])',
+      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_./+=~-]+)+)'
+      r'(?=$|[^a-zA-Z0-9_./+=~-])',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(chunkedCandidate, (match) {
       final chunks = match.group(2)!.trim().split(RegExp(r'\s+'));
+      final trailingPunctuation =
+          RegExp(r'[.!?;:)}\]"”’]+$').firstMatch(chunks.last)?.group(0) ?? '';
+      if (trailingPunctuation.isNotEmpty) {
+        chunks[chunks.length - 1] = chunks.last.substring(
+          0,
+          chunks.last.length - trailingPunctuation.length,
+        );
+      }
+      final numericSequence = chunks.join();
+      if (chunks.length > 1 &&
+          chunks.every((chunk) => RegExp(r'^\d+$').hasMatch(chunk)) &&
+          numericSequence.length >= 8) {
+        return '${match.group(1)}[redacted]$trailingPunctuation';
+      }
       final joinedSingleCharacterChunks = chunks.join().toLowerCase();
       if (RegExp(
         r'^(?:with\s+(?:care|attention|caution|examples?)|about\s+(?:the\s+)?(?:topic|subject|process|methods?|requirements?)|on\s+(?:the\s+)?(?:security|authentication|authorization|deployment|usage|configuration|troubleshooting|networking|privacy|setup|design|installation))$',
@@ -1686,6 +1711,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'document',
         'image',
         'receipt',
+        'security',
         'total',
         'further',
       };
@@ -1698,7 +1724,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         caseSensitive: false,
       ).hasMatch(joinedSingleCharacterChunks);
       final joinedNaturalDocumentIdentifier = RegExp(
-        r'^(?:id|no)\d+(?:carefully|thoroughly|closely|fully|completely|verbatim)?'
+        r'^(?:id|no)\d{1,18}(?:carefully|thoroughly|closely|fully|completely|verbatim)?'
         '(?:(?:and|then|before)(?:please|youshould)?'
         '(?:$actionAlternation)'
         '(?:(?:the|a|an|this|that|these|those)?(?:$objectAlternation))?)?\$',
@@ -1731,6 +1757,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
             expectsDocumentIdentifierNumber &&
             RegExp(r'^\d+$').hasMatch(chunk)) {
           expectsDocumentIdentifierNumber = false;
+          if (chunk.length > 18) foundCredential = true;
           continue;
         }
         expectsDocumentIdentifierNumber = false;
@@ -1738,10 +1765,17 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
             naturalNouns.contains(chunk.toLowerCase()) ||
             naturalContinuationWords.contains(chunk.toLowerCase()) ||
             RegExp(
-              r'^(?:v\d+(?:\.\d+)*|(?:id|no|release|version|chapter|section|page|step|part)\d{1,}|\d{4})$',
+              r'^(?:v\d+(?:\.\d+)*|(?:id|no|release|version|chapter|section|page|step|part)\d{1,18}|\d{4})$',
               caseSensitive: false,
             ).hasMatch(chunk);
         if (!foundCredential && credentialSuffix.isEmpty && isNaturalChunk) {
+          final adjacentOpaqueKeyTail =
+              const {'key', 'secret', 'token'}.contains(normalizedChunk) &&
+                  index + 1 < chunks.length &&
+                  RegExp(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{4,}$')
+                      .hasMatch(chunks[index + 1]) &&
+                  chunk.length + chunks[index + 1].length >= 8;
+          if (adjacentOpaqueKeyTail) foundCredential = true;
           continue;
         }
         if (foundCredential) continue;
@@ -1754,6 +1788,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                 8 &&
             alphabeticSuffix.length >= 2;
         final hasCredentialShape = hasMarkerCredentialShape ||
+            _legacyOcrHasCredentialWord(alphabeticSuffix) ||
             (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
                 _legacyOcrHasHighAlphabeticEntropy(
                   alphabeticSuffix,
@@ -1768,7 +1803,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       if (!foundCredential) return match.group(0)!;
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
-      return '${match.group(1)}[redacted]';
+      return '${match.group(1)}[redacted]$trailingPunctuation';
     });
   }
   return sanitized;
@@ -2648,7 +2683,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final textPartsHadCredential = <bool>[];
   for (final sourceText in sourceTextParts) {
     final credentialCheckText = sourceText.replaceAll('\u0000', '');
-    final hadCredential = _legacyOcrTextContainsCredential(
+    final hadCredentialBeforeRedaction = _legacyOcrTextContainsCredential(
       credentialCheckText,
       credentialValues,
     );
@@ -2656,12 +2691,12 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       sourceText,
       credentialValues,
     );
-    final redactedText = hadCredential
-        ? _legacyOcrRedactMaskedCredentialEchoes(
-            redactionSourceText,
-            credentialValues,
-          )
-        : sourceText;
+    final redactedText = _legacyOcrRedactMaskedCredentialEchoes(
+      redactionSourceText,
+      credentialValues,
+    );
+    final hadCredential =
+        hadCredentialBeforeRedaction || redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
     final containsUnmaskedExactCredential = credentialValues.any((value) {
       final candidate = value.trim();
@@ -2810,7 +2845,8 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     final extendedPrefix = RegExp(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-      '$lineBreakContinuation$suffixPattern)',
+      '$lineBreakContinuation$suffixPattern'
+      r'(?:[ \t]+(?:carefully|thoroughly|closely|fully|completely|verbatim))?',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
@@ -2953,7 +2989,6 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       ).hasMatch(afterEcho);
       final deferSpacedDocumentationEcho =
           prefix.toLowerCase() == 'documentation' &&
-              echoSuffix.trim().isEmpty &&
               RegExp(
                 r'^\s+(?:[a-zA-Z0-9_-]{2,}\s+){0,3}[a-zA-Z0-9_-]{2,}',
               ).hasMatch(afterEcho);
