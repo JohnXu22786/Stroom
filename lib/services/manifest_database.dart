@@ -700,15 +700,27 @@ class ManifestDatabase {
     return _webData!;
   }
 
-  static Future<void> _saveWebData({bool rethrowOnError = false}) async {
-    if (_webData == null) return;
+  static Future<void> _saveWebData({bool rethrowOnError = true}) async {
+    final dataToSave = _webData;
+    if (dataToSave == null) {
+      throw StateError('Manifest data is unavailable for persistence.');
+    }
     await _withJsonRecordRegistrationLock(() async {
       try {
-        final json = jsonEncode(_webData);
+        if (!identical(_webData, dataToSave)) {
+          throw StateError('Manifest data changed before persistence.');
+        }
+        final json = jsonEncode(dataToSave);
         await beforeWebDataSaveForTesting?.call();
         await WebFileStore.write(_webStoreKey, utf8Encode(json));
       } catch (e, st) {
         debugPrint('ManifestDatabase._saveWebData error: $e');
+        // Mutators update this cache before saving. Discard it on a failed
+        // write so the next read reloads the persisted manifest instead of
+        // presenting an uncommitted mutation as current data.
+        if (rethrowOnError && identical(_webData, dataToSave)) {
+          _webData = null;
+        }
         await AppLogService.error(
             'ManifestDatabase', '_saveWebData failed', e, st);
         if (rethrowOnError) rethrow;
