@@ -15088,7 +15088,10 @@ void main() {
       'legacy OCR instruction migration preserves natural documentation after a masked prefix',
       () {
         const safePrompt = 'Please read the documentation carefully.\n'
-            'Please read the documentation thoroughly.';
+            'Please read the documentation thoroughly.\n'
+            'Please read the documentation instructions carefully.\n'
+            'Please read the documentation carefully and summarize the process.\n'
+            'Please read the documentation chapters carefully.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-spaced-natural-documentation-prompt',
           'type': 'ocr',

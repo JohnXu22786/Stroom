@@ -1320,16 +1320,63 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final terminalSentenceEnd = after.isEmpty ||
       RegExp(r'^[.!?]+(?:\s|$)').hasMatch(after) ||
       RegExp(r'[.!?]+$').hasMatch(match.group(0)!);
-  final terminalNaturalActionContinuation = const {
+  final naturalActionAdverbContinuation = const {
         'carefully',
         'thoroughly',
         'closely',
         'fully',
         'completely',
       }.contains(suffix.trim().toLowerCase()) &&
-      terminalSentenceEnd &&
       naturalActionLead;
+  final terminalNaturalActionContinuation =
+      naturalActionAdverbContinuation && terminalSentenceEnd;
+  final documentationSuffix = suffix.trim().toLowerCase();
+  final naturalDocumentationInstructionNoun = const {
+        'instructions',
+        'guide',
+        'guides',
+        'manual',
+        'manuals',
+        'overview',
+        'overviews',
+        'reference',
+        'references',
+        'chapter',
+        'chapters',
+        'section',
+        'sections',
+        'policy',
+        'policies',
+        'procedure',
+        'procedures',
+        'detail',
+        'details',
+        'example',
+        'examples',
+        'method',
+        'methods',
+        'requirement',
+        'requirements',
+        'specification',
+        'specifications',
+        'page',
+        'pages',
+        'topic',
+        'topics',
+        'step',
+        'steps',
+        'workflow',
+        'workflows',
+      }.contains(documentationSuffix) &&
+      naturalActionLead &&
+      (after.isEmpty ||
+          RegExp(
+            r'^(?:carefully|thoroughly|closely|fully|completely)\b',
+            caseSensitive: false,
+          ).hasMatch(after));
   return terminalNaturalActionContinuation ||
+      naturalActionAdverbContinuation ||
+      naturalDocumentationInstructionNoun ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
       (naturalWordForm &&
           naturalDescriptionLead &&
@@ -2513,8 +2560,32 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         r'\b(?:and|then)\s+(?:(?:please)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|answer|extract|interpret|count|copy|compute|find|give|search|transcribe|translate|classify|explain|process|provide|show|tell|check|look|scan|ocr|decode|write|list|record|output|report|note|state|add|return|respond|subtract|sum)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bbefore\s+(?:reading|checking|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding|locating)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bto\s+(?:verify|confirm)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b',
         caseSensitive: false,
       ).hasMatch(afterEcho);
+      final spacedEchoSuffix = echoSuffix.trim();
+      final spacedEchoLetters =
+          spacedEchoSuffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+      const naturalTerminalDocumentationAdverbs = {
+        'carefully',
+        'thoroughly',
+        'closely',
+        'fully',
+        'completely',
+      };
+      final credentialShapedSpacedEcho =
+          prefix.toLowerCase() == 'documentation' &&
+              spacedEchoSuffix.isNotEmpty &&
+              !naturalTerminalDocumentationAdverbs
+                  .contains(spacedEchoSuffix.toLowerCase()) &&
+              (RegExp(r'[0-9_]').hasMatch(spacedEchoSuffix) ||
+                  (!_legacyOcrHasNaturalAlphaContinuation(spacedEchoLetters) &&
+                      _legacyOcrHasHighAlphabeticEntropy(
+                        spacedEchoLetters,
+                        minimumLength: 8,
+                        minimumEntropy: 2.9,
+                        maximumVowelRatio: 0.4,
+                      )));
       final confirmedMaskedCredentialEcho =
-          _legacyOcrTextContainsMaskedCredential(echo, [value]);
+          _legacyOcrTextContainsMaskedCredential(echo, [value]) ||
+              credentialShapedSpacedEcho;
       if ((!hasSentenceBoundary &&
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
