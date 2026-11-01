@@ -53,6 +53,29 @@ class _MessageWebHostState extends State<MessageWebHost> {
     }
   }
 
+  Future<void> _loadMacDocument(
+    InAppWebViewController controller,
+    int generation,
+  ) async {
+    try {
+      // Register the bridge before navigation; macOS may finish inline HTML
+      // during native-view creation, before onWebViewCreated installs handlers.
+      await controller.loadData(
+        data: widget.html,
+        baseUrl: WebUri(_macDocumentUri.toString()),
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[MessageWebHost][load-error] $error');
+      }
+      if (mounted &&
+          identical(controller, _controller) &&
+          generation == _macLoadGeneration) {
+        setState(() => _macLoadFailed = true);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -106,12 +129,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
               ? null
               : 'assets/vendor/dsh_message_view/index.html',
           initialUrlRequest: null,
-          initialData: defaultTargetPlatform == TargetPlatform.macOS
-              ? InAppWebViewInitialData(
-                  data: widget.html,
-                  baseUrl: WebUri(_macDocumentUri.toString()),
-                )
-              : null,
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             transparentBackground: true,
@@ -204,6 +221,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
                 widget.onEvent(event);
               },
             );
+            if (generation != null) {
+              unawaited(_loadMacDocument(controller, generation));
+            }
             if (defaultTargetPlatform == TargetPlatform.macOS &&
                 _pendingMacCommands.isEmpty) {
               _send();
