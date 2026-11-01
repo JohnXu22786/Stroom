@@ -1334,7 +1334,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
       )
       .trimLeft();
   final naturalActionLead = RegExp(
-    r'\b(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?$',
+    r'\b(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\b(?:\s+the)?$',
     caseSensitive: false,
   ).hasMatch(before);
   final naturalDescriptionLead = RegExp(
@@ -1528,11 +1528,11 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     };
     final spacedOpenMaskPrefixPattern =
         prefix.split('').map(RegExp.escape).join(r'\s*');
+    const spacedCredentialChunk =
+        r'(?:[a-zA-Z0-9_/:;+=~@%-]|\.(?=\s*[a-zA-Z0-9_/:;+=~@%-]))+';
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
-      '((?:\\s+'
-      '(?:[a-zA-Z0-9_/:;+=~@%-]|\\.(?=\\s+'
-      '[a-zA-Z0-9_/:;+=~@%-]|[a-zA-Z0-9_/:;+=~@%-]))+)+)'
+      '(\\s*$spacedCredentialChunk(?:\\s+$spacedCredentialChunk)*)'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
     );

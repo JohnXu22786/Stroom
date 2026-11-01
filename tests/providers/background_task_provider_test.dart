@@ -15121,6 +15121,24 @@ void main() {
         );
         expect(trailingCredentialPersisted, isNot(contains('foobarxyz')));
 
+        final attachedPrefixCredentialTask = taskFor(
+          'legacy-ocr-attached-prefix-spaced-credential',
+          'Please read documentationfoobar xyz carefully.',
+        );
+        final attachedPrefixCredentialInstruction = OcrRetrySnapshot.fromMap(
+          attachedPrefixCredentialTask.retryData!,
+        ).instructionContent!;
+        final attachedPrefixCredentialPersisted =
+            jsonEncode(attachedPrefixCredentialTask.toMap());
+        expect(
+          attachedPrefixCredentialInstruction,
+          'Please read [redacted] carefully.',
+        );
+        expect(
+          attachedPrefixCredentialPersisted,
+          isNot(contains('foobar xyz')),
+        );
+
         final naturalLeadingCredentialTask = taskFor(
           'legacy-ocr-natural-leading-word-spaced-credential',
           'Please read the documentation the foobarxyz.',
