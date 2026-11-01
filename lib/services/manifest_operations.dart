@@ -475,14 +475,18 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> _deleteEntityFiles(T record) async {
+  Future<void> _deleteEntityFiles(
+    T record, {
+    int? storageRefCount,
+    int? hashRefCount,
+  }) async {
     if (_isAudioTable) {
       await _deleteAudioEntityFiles(record);
       return;
     }
 
     final storageName = storageNameOf(record);
-    final refCount =
+    final refCount = storageRefCount ??
         _cache!.where((r) => storageNameOf(r) == storageName).length;
     if (refCount <= 1) {
       final name = storageNameOf(record);
@@ -500,9 +504,9 @@ class ManifestOperations<T extends FileRecord> {
       await onExtraDelete?.call(record);
     }
     // Thumbnail deletion: keyed by hash, not storageName
-    final hashRefCount =
+    final thumbnailRefCount = hashRefCount ??
         _cache!.where((x) => hashOf(x) == hashOf(record)).length;
-    if (hashRefCount <= 1) {
+    if (thumbnailRefCount <= 1) {
       final thumbName = _thumbFileNameOf(record);
       debugPrint(
           'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
@@ -563,9 +567,23 @@ class ManifestOperations<T extends FileRecord> {
       // A caller undoing a just-added record cannot know whether another
       // writer has begun using the same content-addressed file. In that
       // case, remove only its metadata and retain the shared bytes.
-      if (!preserveFiles) await _deleteEntityFiles(record);
-      _cache!.removeAt(index);
+      final storageRefCount = _cache!
+          .where((item) => storageNameOf(item) == storageNameOf(record))
+          .length;
+      final hashRefCount = _cache!
+          .where((item) => hashOf(item) == hashOf(record))
+          .length;
       await _dbDeleteRecord(id);
+      _cache!.removeWhere((item) => item.id == id);
+      _recordMutationRevision++;
+      if (preserveFiles) {
+        return;
+      }
+      await _deleteEntityFiles(
+        record,
+        storageRefCount: storageRefCount,
+        hashRefCount: hashRefCount,
+      );
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecord failed', e, st);
@@ -579,12 +597,9 @@ class ManifestOperations<T extends FileRecord> {
       await loadRecords();
       final idSet = ids.toSet();
       final toDelete = <T>[];
-      final remaining = <T>[];
       for (final r in _cache!) {
         if (idSet.contains(r.id)) {
           toDelete.add(r);
-        } else {
-          remaining.add(r);
         }
       }
       if (toDelete.isEmpty) return;
@@ -635,6 +650,10 @@ class ManifestOperations<T extends FileRecord> {
         return;
       }
 
+      await _dbDeleteRecords(ids);
+      _cache!.removeWhere((record) => idSet.contains(record.id));
+      _recordMutationRevision++;
+
       for (final r in toDelete) {
         final sn = storageNameOf(r);
         storageCount[sn] = (storageCount[sn] ?? 1) - 1;
@@ -667,8 +686,6 @@ class ManifestOperations<T extends FileRecord> {
           await _deleteLegacyThumbIfImage(h);
         }
       }
-      _cache = remaining;
-      await _dbDeleteRecords(ids);
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
