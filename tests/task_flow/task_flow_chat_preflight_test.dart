@@ -30,309 +30,152 @@ void main() {
   });
   tearDown(() async => directory.delete(recursive: true));
 
-  final anthropic = ProviderEntriesState(entries: [
-    ProviderEntry(name: 'LLM', type: 'llm', configs: [
-      ProviderConfigItem(
-          providerName: 'Claude',
-          host: 'https://example.com',
-          key: 'test',
-          models: [
-            ModelConfig(
-                name: 'Claude', modelId: 'claude', endpointType: 'anthropic')
-          ])
-    ])
-  ]);
-  final boundAssistant = Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Help',
-      defaultModelId: 'claude',
-      defaultProviderName: 'Claude');
-  final unboundAssistant =
-      Assistant(id: 'assistant', name: 'Assistant', prompt: 'Help');
-
-  TaskFlowDefinition chatFlow(IOType inputType) =>
-      TaskFlowDefinition(name: 'Chat', inputType: inputType, blocks: [
-        TaskFlowBlock(
-            id: 'chat-block',
-            typeKey: BlockType.chat,
-            params: {'assistantId': 'assistant'})
-      ]);
-
-  test('mixed-protocol model group preflights media for Anthropic members',
-      () async {
-    final audio = await File('${directory.path}/recording.mp3')
-        .writeAsBytes([0xff, 0xfb, 0x90, 0x64]);
-    final providers = ProviderEntriesState(entries: [
-      ProviderEntry(name: 'LLM', type: 'llm', configs: [
-        ProviderConfigItem(
-          id: 'mixed-group',
-          providerName: 'Group',
-          apiProtocol: 'openai.chat_completions',
-          legacyFields: {kLlmModelGroupConfigField: 'mixed-group'},
-          models: [
-            ModelConfig(
-              name: 'Mixed model',
-              modelId: 'mixed-model',
-              legacyFields: {
-                kLlmModelCapabilitiesConfigField: {'streaming': true},
-                kLlmModelGroupMayUseAnthropicConfigField: true,
-              },
-            ),
-          ],
-        ),
-      ]),
-    ]);
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'Mixed assistant',
-      prompt: 'Help',
-      defaultModelId: 'mixed-model',
-      defaultProviderName: 'Group',
-    );
-
-    await expectLater(
-      validateTaskFlow(
-        chatFlow(IOType.audio),
-        [FlowRunInput(text: audio.path)],
-        providers: providers,
-        assistants: [assistant],
+  final anthropic = ProviderEntriesState(
+    entries: [
+      ProviderEntry(
+        name: 'LLM',
+        type: 'llm',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Claude',
+            host: 'https://example.com',
+            key: 'test',
+            models: [
+              ModelConfig(
+                name: 'Claude',
+                modelId: 'claude',
+                endpointType: 'anthropic',
+              ),
+            ],
+          ),
+        ],
       ),
-      throwsA(isA<TaskFlowValidationException>()
-          .having((e) => e.message, 'unsupported audio', contains('音频'))),
-    );
-  });
+    ],
+  );
+  final boundAssistant = Assistant(
+    id: 'assistant',
+    name: 'Assistant',
+    prompt: 'Help',
+    defaultModelId: 'claude',
+    defaultProviderName: 'Claude',
+  );
+  final unboundAssistant = Assistant(
+    id: 'assistant',
+    name: 'Assistant',
+    prompt: 'Help',
+  );
 
-  test('Codex model group resolves as Responses during Task Flow preflight',
-      () async {
-    final account = LlmAccount(
-      id: 'codex-oauth',
-      connectorType: 'codex',
-      authType: 'oauth',
-      displayName: 'Codex',
-      status: LlmAccountStatus.ready,
-      models: const [
-        LlmUpstreamModel(
-          id: 'gpt-5-codex-local',
-          upstreamModelId: 'gpt-5-codex',
-          displayName: 'GPT-5 Codex',
-          capabilities: {'streaming': true},
-        ),
-      ],
-    );
-    final group = LlmModelGroup(
-      id: 'codex-task-flow-group',
-      displayName: 'Codex group',
-      members: const [
-        LlmModelGroupMember(
-          accountId: 'codex-oauth',
-          localModelId: 'gpt-5-codex-local',
-          upstreamModelId: 'gpt-5-codex',
-        ),
-      ],
-    );
-    final config = buildLlmModelGroupProviderConfigs(
-      accounts: [account],
-      groups: [group],
-    ).single;
-    final providers = ProviderEntriesState(entries: [
-      ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
-    ]);
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'Codex assistant',
-      prompt: 'Help',
-      defaultModelId: config.models.single.modelId,
-      defaultProviderName: config.providerName,
-    );
+  TaskFlowDefinition chatFlow(IOType inputType) => TaskFlowDefinition(
+    name: 'Chat',
+    inputType: inputType,
+    blocks: [
+      TaskFlowBlock(
+        id: 'chat-block',
+        typeKey: BlockType.chat,
+        params: {'assistantId': 'assistant'},
+      ),
+    ],
+  );
 
-    expect(flowChatEndpointType(assistant, providers), 'openai.responses');
-    await validateTaskFlow(
-      chatFlow(IOType.text),
-      [FlowRunInput(text: 'hello')],
-      providers: providers,
-      assistants: [assistant],
-    );
-  });
-
-  test('Claude OAuth and Setup Token model groups preflight as Anthropic Chat',
-      () async {
-    for (final authType in ['oauth', 'setup_token']) {
-      final account = LlmAccount(
-        id: 'claude-$authType',
-        connectorType: 'claude',
-        authType: authType,
-        displayName: 'Claude $authType',
-        status: LlmAccountStatus.ready,
-        models: [
-          LlmUpstreamModel(
-            id: 'claude-model-$authType',
-            upstreamModelId: 'claude-sonnet-4-6',
-            displayName: 'Claude Sonnet',
-            capabilities: const {'chat': true, 'streaming': true},
+  test(
+    'mixed-protocol model group preflights media for Anthropic members',
+    () async {
+      final audio = await File(
+        '${directory.path}/recording.mp3',
+      ).writeAsBytes([0xff, 0xfb, 0x90, 0x64]);
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'LLM',
+            type: 'llm',
+            configs: [
+              ProviderConfigItem(
+                id: 'mixed-group',
+                providerName: 'Group',
+                apiProtocol: 'openai.chat_completions',
+                legacyFields: {kLlmModelGroupConfigField: 'mixed-group'},
+                models: [
+                  ModelConfig(
+                    name: 'Mixed model',
+                    modelId: 'mixed-model',
+                    legacyFields: {
+                      kLlmModelCapabilitiesConfigField: {'streaming': true},
+                      kLlmModelGroupMayUseAnthropicConfigField: true,
+                    },
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       );
-      final group = LlmModelGroup(
-        id: 'claude-flow-$authType',
-        displayName: 'Claude $authType group',
-        members: [
-          LlmModelGroupMember(
-            accountId: account.id,
-            localModelId: 'claude-model-$authType',
-            upstreamModelId: 'claude-sonnet-4-6',
-          ),
-        ],
-      );
-      final config = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [group],
-      ).single;
-      final providers = ProviderEntriesState(entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
-      ]);
       final assistant = Assistant(
         id: 'assistant',
-        name: 'Claude assistant',
+        name: 'Mixed assistant',
         prompt: 'Help',
-        defaultModelId: config.models.single.modelId,
-        defaultProviderName: config.providerName,
+        defaultModelId: 'mixed-model',
+        defaultProviderName: 'Group',
       );
 
-      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
-      await validateTaskFlow(
-        chatFlow(IOType.text),
-        [FlowRunInput(text: 'hello')],
-        providers: providers,
-        assistants: [assistant],
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.audio),
+          [FlowRunInput(text: audio.path)],
+          providers: providers,
+          assistants: [assistant],
+        ),
+        throwsA(
+          isA<TaskFlowValidationException>().having(
+            (e) => e.message,
+            'unsupported audio',
+            contains('音频'),
+          ),
+        ),
       );
-    }
-  });
+    },
+  );
 
-  test('Vertex credential model groups preflight as native Gemini chat',
-      () async {
-    for (final authType in ['service_account', 'api_key']) {
+  test(
+    'Codex model group resolves as Responses during Task Flow preflight',
+    () async {
       final account = LlmAccount(
-        id: 'vertex-$authType',
-        connectorType: 'vertex',
-        authType: authType,
-        displayName: 'Vertex $authType',
-        status: LlmAccountStatus.ready,
-        models: [
-          LlmUpstreamModel(
-            id: 'vertex-model-$authType',
-            upstreamModelId: 'gemini-2.5-flash',
-            displayName: 'Gemini 2.5 Flash',
-            capabilities: const {'streaming': true},
-          ),
-        ],
-      );
-      final group = LlmModelGroup(
-        id: 'vertex-flow-group-$authType',
-        displayName: 'Vertex group $authType',
-        members: [
-          LlmModelGroupMember(
-            accountId: account.id,
-            localModelId: 'vertex-model-$authType',
-            upstreamModelId: 'gemini-2.5-flash',
-          ),
-        ],
-      );
-      final config = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [group],
-      ).single;
-      final providers = ProviderEntriesState(entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
-      ]);
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'Vertex assistant',
-        prompt: 'Help',
-        defaultModelId: config.models.single.modelId,
-        defaultProviderName: config.providerName,
-      );
-
-      expect(
-        flowChatEndpointType(assistant, providers),
-        'google.gemini.generate_content',
-      );
-      await validateTaskFlow(
-        chatFlow(IOType.text),
-        [FlowRunInput(text: 'hello')],
-        providers: providers,
-        assistants: [assistant],
-      );
-    }
-  });
-
-  test('xAI and Meta API-key model groups preflight through Responses',
-      () async {
-    for (final connectorType in ['xai', 'meta']) {
-      final account = LlmAccount(
-        id: '$connectorType-api-key',
-        connectorType: connectorType,
-        authType: 'api_key',
-        displayName: connectorType,
-        status: LlmAccountStatus.ready,
-        models: [
-          LlmUpstreamModel(
-            id: '$connectorType-local',
-            upstreamModelId: '$connectorType-upstream',
-            displayName: '$connectorType upstream',
-            capabilities: const {'chat': true, 'streaming': true},
-          ),
-        ],
-      );
-      final group = LlmModelGroup(
-        id: '$connectorType-task-flow-group',
-        displayName: '$connectorType group',
-        members: [
-          LlmModelGroupMember(
-            accountId: account.id,
-            localModelId: '$connectorType-local',
-            upstreamModelId: '$connectorType-upstream',
-          ),
-        ],
-      );
-      final subscriptionAccount = LlmAccount(
-        id: '$connectorType-subscription',
-        connectorType: connectorType,
+        id: 'codex-oauth',
+        connectorType: 'codex',
         authType: 'oauth',
-        displayName: '$connectorType subscription',
+        displayName: 'Codex',
         status: LlmAccountStatus.ready,
-        models: account.models,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gpt-5-codex-local',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT-5 Codex',
+            capabilities: {'streaming': true},
+          ),
+        ],
       );
-      expect(
-        buildLlmModelGroupProviderConfigs(
-          accounts: [subscriptionAccount],
-          groups: [
-            LlmModelGroup(
-              id: '$connectorType-subscription-group',
-              displayName: '$connectorType subscription group',
-              members: [
-                LlmModelGroupMember(
-                  accountId: subscriptionAccount.id,
-                  localModelId: '$connectorType-local',
-                  upstreamModelId: '$connectorType-upstream',
-                ),
-              ],
-            ),
-          ],
-        ),
-        isEmpty,
-        reason: 'the subscription credential cannot use the public API path',
+      final group = LlmModelGroup(
+        id: 'codex-task-flow-group',
+        displayName: 'Codex group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'codex-oauth',
+            localModelId: 'gpt-5-codex-local',
+            upstreamModelId: 'gpt-5-codex',
+          ),
+        ],
       );
       final config = buildLlmModelGroupProviderConfigs(
         accounts: [account],
         groups: [group],
       ).single;
-      final providers = ProviderEntriesState(entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
-      ]);
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
       final assistant = Assistant(
         id: 'assistant',
-        name: '$connectorType assistant',
+        name: 'Codex assistant',
         prompt: 'Help',
         defaultModelId: config.models.single.modelId,
         defaultProviderName: config.providerName,
@@ -345,87 +188,397 @@ void main() {
         providers: providers,
         assistants: [assistant],
       );
-    }
-  });
+    },
+  );
 
-  test('Anthropic rejects a later DOCX batch input before submission',
-      () async {
-    final pdf = await File('${directory.path}/notes.pdf')
-        .writeAsBytes(utf8.encode('%PDF-1.7\nexample'));
-    final docx = await File('${directory.path}/notes.docx').writeAsBytes([1]);
-    await expectLater(
-        validateTaskFlow(chatFlow(IOType.file),
-            [FlowRunInput(text: pdf.path), FlowRunInput(text: docx.path)],
-            providers: anthropic, assistants: [boundAssistant]),
-        throwsA(isA<TaskFlowValidationException>()
-            .having((e) => e.blockIndex, 'first chat block', 0)
-            .having((e) => e.inputIndex, 'second input', 1)
-            .having((e) => e.message, 'unsupported file', contains('PDF'))));
-  });
+  test(
+    'Claude OAuth and Setup Token model groups preflight as Anthropic Chat',
+    () async {
+      for (final authType in ['oauth', 'setup_token']) {
+        final account = LlmAccount(
+          id: 'claude-$authType',
+          connectorType: 'claude',
+          authType: authType,
+          displayName: 'Claude $authType',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: 'claude-model-$authType',
+              upstreamModelId: 'claude-sonnet-4-6',
+              displayName: 'Claude Sonnet',
+              capabilities: const {'chat': true, 'streaming': true},
+            ),
+          ],
+        );
+        final group = LlmModelGroup(
+          id: 'claude-flow-$authType',
+          displayName: 'Claude $authType group',
+          members: [
+            LlmModelGroupMember(
+              accountId: account.id,
+              localModelId: 'claude-model-$authType',
+              upstreamModelId: 'claude-sonnet-4-6',
+            ),
+          ],
+        );
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: [account],
+          groups: [group],
+        ).single;
+        final providers = ProviderEntriesState(
+          entries: [
+            ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+          ],
+        );
+        final assistant = Assistant(
+          id: 'assistant',
+          name: 'Claude assistant',
+          prompt: 'Help',
+          defaultModelId: config.models.single.modelId,
+          defaultProviderName: config.providerName,
+        );
+
+        expect(
+          flowChatEndpointType(assistant, providers),
+          'anthropic.messages',
+        );
+        await validateTaskFlow(
+          chatFlow(IOType.text),
+          [FlowRunInput(text: 'hello')],
+          providers: providers,
+          assistants: [assistant],
+        );
+      }
+    },
+  );
+
+  test(
+    'Kimi Code OAuth Task Flow uses the supplier default and model override',
+    () async {
+      final account = LlmAccount(
+        id: 'kimi-code-oauth',
+        connectorType: 'kimi-coding',
+        authType: 'oauth',
+        displayName: 'Kimi Code CLI',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'apiProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'kimi-code-local',
+            upstreamModelId: 'kimi-for-coding',
+            displayName: 'Kimi for Coding',
+            capabilities: {'chat': true, 'streaming': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'kimi-code-task-flow-group',
+        displayName: 'Kimi Code group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'kimi-code-oauth',
+            localModelId: 'kimi-code-local',
+            upstreamModelId: 'kimi-for-coding',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Kimi Code assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(config.apiProtocol, 'openai.responses');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'write a small function')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
+  test(
+    'Vertex credential model groups preflight as native Gemini chat',
+    () async {
+      for (final authType in ['service_account', 'api_key']) {
+        final account = LlmAccount(
+          id: 'vertex-$authType',
+          connectorType: 'vertex',
+          authType: authType,
+          displayName: 'Vertex $authType',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: 'vertex-model-$authType',
+              upstreamModelId: 'gemini-2.5-flash',
+              displayName: 'Gemini 2.5 Flash',
+              capabilities: const {'streaming': true},
+            ),
+          ],
+        );
+        final group = LlmModelGroup(
+          id: 'vertex-flow-group-$authType',
+          displayName: 'Vertex group $authType',
+          members: [
+            LlmModelGroupMember(
+              accountId: account.id,
+              localModelId: 'vertex-model-$authType',
+              upstreamModelId: 'gemini-2.5-flash',
+            ),
+          ],
+        );
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: [account],
+          groups: [group],
+        ).single;
+        final providers = ProviderEntriesState(
+          entries: [
+            ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+          ],
+        );
+        final assistant = Assistant(
+          id: 'assistant',
+          name: 'Vertex assistant',
+          prompt: 'Help',
+          defaultModelId: config.models.single.modelId,
+          defaultProviderName: config.providerName,
+        );
+
+        expect(
+          flowChatEndpointType(assistant, providers),
+          'google.gemini.generate_content',
+        );
+        await validateTaskFlow(
+          chatFlow(IOType.text),
+          [FlowRunInput(text: 'hello')],
+          providers: providers,
+          assistants: [assistant],
+        );
+      }
+    },
+  );
+
+  test(
+    'xAI and Meta API-key model groups preflight through Responses',
+    () async {
+      for (final connectorType in ['xai', 'meta']) {
+        final account = LlmAccount(
+          id: '$connectorType-api-key',
+          connectorType: connectorType,
+          authType: 'api_key',
+          displayName: connectorType,
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: '$connectorType-local',
+              upstreamModelId: '$connectorType-upstream',
+              displayName: '$connectorType upstream',
+              capabilities: const {'chat': true, 'streaming': true},
+            ),
+          ],
+        );
+        final group = LlmModelGroup(
+          id: '$connectorType-task-flow-group',
+          displayName: '$connectorType group',
+          members: [
+            LlmModelGroupMember(
+              accountId: account.id,
+              localModelId: '$connectorType-local',
+              upstreamModelId: '$connectorType-upstream',
+            ),
+          ],
+        );
+        final subscriptionAccount = LlmAccount(
+          id: '$connectorType-subscription',
+          connectorType: connectorType,
+          authType: 'oauth',
+          displayName: '$connectorType subscription',
+          status: LlmAccountStatus.ready,
+          models: account.models,
+        );
+        expect(
+          buildLlmModelGroupProviderConfigs(
+            accounts: [subscriptionAccount],
+            groups: [
+              LlmModelGroup(
+                id: '$connectorType-subscription-group',
+                displayName: '$connectorType subscription group',
+                members: [
+                  LlmModelGroupMember(
+                    accountId: subscriptionAccount.id,
+                    localModelId: '$connectorType-local',
+                    upstreamModelId: '$connectorType-upstream',
+                  ),
+                ],
+              ),
+            ],
+          ),
+          isEmpty,
+          reason: 'the subscription credential cannot use the public API path',
+        );
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: [account],
+          groups: [group],
+        ).single;
+        final providers = ProviderEntriesState(
+          entries: [
+            ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+          ],
+        );
+        final assistant = Assistant(
+          id: 'assistant',
+          name: '$connectorType assistant',
+          prompt: 'Help',
+          defaultModelId: config.models.single.modelId,
+          defaultProviderName: config.providerName,
+        );
+
+        expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+        await validateTaskFlow(
+          chatFlow(IOType.text),
+          [FlowRunInput(text: 'hello')],
+          providers: providers,
+          assistants: [assistant],
+        );
+      }
+    },
+  );
+
+  test(
+    'Anthropic rejects a later DOCX batch input before submission',
+    () async {
+      final pdf = await File(
+        '${directory.path}/notes.pdf',
+      ).writeAsBytes(utf8.encode('%PDF-1.7\nexample'));
+      final docx = await File('${directory.path}/notes.docx').writeAsBytes([1]);
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.file),
+          [FlowRunInput(text: pdf.path), FlowRunInput(text: docx.path)],
+          providers: anthropic,
+          assistants: [boundAssistant],
+        ),
+        throwsA(
+          isA<TaskFlowValidationException>()
+              .having((e) => e.blockIndex, 'first chat block', 0)
+              .having((e) => e.inputIndex, 'second input', 1)
+              .having((e) => e.message, 'unsupported file', contains('PDF')),
+        ),
+      );
+    },
+  );
 
   test('initial file preflight accepts PDF content with other names', () async {
     for (final name in ['report', 'report.docx']) {
-      final pdf = await File('${directory.path}/$name')
-          .writeAsBytes(utf8.encode('%PDF-1.7\nexample'));
+      final pdf = await File(
+        '${directory.path}/$name',
+      ).writeAsBytes(utf8.encode('%PDF-1.7\nexample'));
       await validateTaskFlow(
-          chatFlow(IOType.file), [FlowRunInput(text: pdf.path)],
-          providers: anthropic, assistants: [boundAssistant]);
+        chatFlow(IOType.file),
+        [FlowRunInput(text: pdf.path)],
+        providers: anthropic,
+        assistants: [boundAssistant],
+      );
     }
   });
 
   test('initial file preflight rejects non-PDF content named PDF', () async {
-    final spoofed = await File('${directory.path}/fake.pdf')
-        .writeAsBytes([0x50, 0x4b, 0x03, 0x04, 1, 2]);
+    final spoofed = await File(
+      '${directory.path}/fake.pdf',
+    ).writeAsBytes([0x50, 0x4b, 0x03, 0x04, 1, 2]);
     await expectLater(
-        validateTaskFlow(
-            chatFlow(IOType.file), [FlowRunInput(text: spoofed.path)],
-            providers: anthropic, assistants: [boundAssistant]),
-        throwsA(isA<TaskFlowValidationException>()
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: spoofed.path)],
+        providers: anthropic,
+        assistants: [boundAssistant],
+      ),
+      throwsA(
+        isA<TaskFlowValidationException>()
             .having((e) => e.blockIndex, 'chat block', 0)
             .having((e) => e.inputIndex, 'spoofed input', 0)
-            .having((e) => e.message, 'unsupported file', contains('PDF'))));
+            .having((e) => e.message, 'unsupported file', contains('PDF')),
+      ),
+    );
   });
 
   test('Anthropic checks detected audio in a generic file input', () async {
-    final disguisedAudio = await File('${directory.path}/recording.bin')
-        .writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+    final disguisedAudio = await File(
+      '${directory.path}/recording.bin',
+    ).writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
     expect(
-        flowFileType(disguisedAudio.path,
-            headerBytes: await disguisedAudio.readAsBytes()),
-        IOType.audio);
+      flowFileType(
+        disguisedAudio.path,
+        headerBytes: await disguisedAudio.readAsBytes(),
+      ),
+      IOType.audio,
+    );
     await expectLater(
-        validateTaskFlow(
-            chatFlow(IOType.file), [FlowRunInput(text: disguisedAudio.path)],
-            providers: anthropic, assistants: [boundAssistant]),
-        throwsA(isA<TaskFlowValidationException>()
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: disguisedAudio.path)],
+        providers: anthropic,
+        assistants: [boundAssistant],
+      ),
+      throwsA(
+        isA<TaskFlowValidationException>()
             .having((e) => e.blockIndex, 'first chat block', 0)
             .having((e) => e.inputIndex, 'first input', 0)
-            .having((e) => e.message, 'unsupported audio', contains('音频'))));
+            .having((e) => e.message, 'unsupported audio', contains('音频')),
+      ),
+    );
   });
 
   test('Anthropic reports the input index for declared audio too', () async {
-    final audio = await File('${directory.path}/recording.mp3')
-        .writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+    final audio = await File(
+      '${directory.path}/recording.mp3',
+    ).writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
     await expectLater(
-        validateTaskFlow(
-            chatFlow(IOType.audio), [FlowRunInput(text: audio.path)],
-            providers: anthropic, assistants: [boundAssistant]),
-        throwsA(isA<TaskFlowValidationException>()
+      validateTaskFlow(
+        chatFlow(IOType.audio),
+        [FlowRunInput(text: audio.path)],
+        providers: anthropic,
+        assistants: [boundAssistant],
+      ),
+      throwsA(
+        isA<TaskFlowValidationException>()
             .having((e) => e.blockIndex, 'first chat block', 0)
             .having((e) => e.inputIndex, 'first input', 0)
-            .having((e) => e.isInputError, 'input error', true)));
+            .having((e) => e.isInputError, 'input error', true),
+      ),
+    );
   });
 
   test('unbound assistant follows the current Anthropic endpoint', () async {
     final docx = await File('${directory.path}/notes.docx').writeAsBytes([1]);
     await expectLater(
-        validateTaskFlow(chatFlow(IOType.file), [FlowRunInput(text: docx.path)],
-            providers: const ProviderEntriesState(),
-            assistants: [unboundAssistant],
-            fallbackChatEndpointType: 'anthropic'),
-        throwsA(isA<TaskFlowValidationException>()
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: docx.path)],
+        providers: const ProviderEntriesState(),
+        assistants: [unboundAssistant],
+        fallbackChatEndpointType: 'anthropic',
+      ),
+      throwsA(
+        isA<TaskFlowValidationException>()
             .having((e) => e.inputIndex, 'first input', 0)
-            .having((e) => e.message, 'unsupported file', contains('PDF'))));
+            .having((e) => e.message, 'unsupported file', contains('PDF')),
+      ),
+    );
   });
 
   test('first chat block rejects a non-image attachment over 10 MB', () async {
@@ -435,59 +588,74 @@ void main() {
     await handle.truncate(maxAttachmentBytes + 1);
     await handle.close();
     await expectLater(
-        validateTaskFlow(
-            chatFlow(IOType.audio), [FlowRunInput(text: audio.path)],
-            providers: const ProviderEntriesState(),
-            assistants: [unboundAssistant]),
-        throwsA(isA<TaskFlowValidationException>()
+      validateTaskFlow(
+        chatFlow(IOType.audio),
+        [FlowRunInput(text: audio.path)],
+        providers: const ProviderEntriesState(),
+        assistants: [unboundAssistant],
+      ),
+      throwsA(
+        isA<TaskFlowValidationException>()
             .having((e) => e.blockIndex, 'first chat block', 0)
             .having((e) => e.inputIndex, 'first input', 0)
-            .having((e) => e.message, 'attachment size', contains('10 MB'))));
+            .having((e) => e.message, 'attachment size', contains('10 MB')),
+      ),
+    );
   });
 
-  test(
-    'uncompressible images over 10 MB fail preflight',
-    () async {
-      final image = File('${directory.path}/photo.png');
-      final handle = await image.open(mode: FileMode.write);
-      await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      await handle.truncate(maxAttachmentBytes + 1);
-      await handle.close();
-      await expectLater(
-        validateTaskFlow(
-          chatFlow(IOType.image),
-          [FlowRunInput(text: image.path)],
-          providers: const ProviderEntriesState(),
-          assistants: [unboundAssistant],
-        ),
-        throwsA(isA<TaskFlowValidationException>().having(
-            (e) => e.message, 'uncompressible image', contains('10 MB'))),
-      );
-    },
-  );
-
-  test('generic file input also rejects a large uncompressible image',
-      () async {
-    final image = File('${directory.path}/generic-image.png');
+  test('uncompressible images over 10 MB fail preflight', () async {
+    final image = File('${directory.path}/photo.png');
     final handle = await image.open(mode: FileMode.write);
     await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     await handle.truncate(maxAttachmentBytes + 1);
     await handle.close();
     await expectLater(
       validateTaskFlow(
-        chatFlow(IOType.file),
+        chatFlow(IOType.image),
         [FlowRunInput(text: image.path)],
         providers: const ProviderEntriesState(),
         assistants: [unboundAssistant],
       ),
-      throwsA(isA<TaskFlowValidationException>()
-          .having((e) => e.message, 'uncompressible image', contains('10 MB'))),
+      throwsA(
+        isA<TaskFlowValidationException>().having(
+          (e) => e.message,
+          'uncompressible image',
+          contains('10 MB'),
+        ),
+      ),
     );
   });
 
+  test(
+    'generic file input also rejects a large uncompressible image',
+    () async {
+      final image = File('${directory.path}/generic-image.png');
+      final handle = await image.open(mode: FileMode.write);
+      await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      await handle.truncate(maxAttachmentBytes + 1);
+      await handle.close();
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.file),
+          [FlowRunInput(text: image.path)],
+          providers: const ProviderEntriesState(),
+          assistants: [unboundAssistant],
+        ),
+        throwsA(
+          isA<TaskFlowValidationException>().having(
+            (e) => e.message,
+            'uncompressible image',
+            contains('10 MB'),
+          ),
+        ),
+      );
+    },
+  );
+
   test('SVG fails initial chat preflight for both endpoint types', () async {
-    final image = await File('${directory.path}/vector.svg')
-        .writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    final image = await File(
+      '${directory.path}/vector.svg',
+    ).writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
     for (final (providers, assistant) in [
       (const ProviderEntriesState(), unboundAssistant),
       (anthropic, boundAssistant),
@@ -499,25 +667,24 @@ void main() {
           providers: providers,
           assistants: [assistant],
         ),
-        throwsA(isA<TaskFlowValidationException>()
-            .having((e) => e.message, 'unsupported SVG', contains('SVG'))),
+        throwsA(
+          isA<TaskFlowValidationException>().having(
+            (e) => e.message,
+            'unsupported SVG',
+            contains('SVG'),
+          ),
+        ),
       );
     }
   });
 
   test('unsupported BMP and WMA fail before initial chat submission', () async {
-    final bmp = await File('${directory.path}/photo.bmp')
-        .writeAsBytes([0x42, 0x4d, 0, 0, 0, 0]);
-    final wma = await File('${directory.path}/recording.wma').writeAsBytes([
-      0x30,
-      0x26,
-      0xb2,
-      0x75,
-      0x8e,
-      0x66,
-      0xcf,
-      0x11,
-    ]);
+    final bmp = await File(
+      '${directory.path}/photo.bmp',
+    ).writeAsBytes([0x42, 0x4d, 0, 0, 0, 0]);
+    final wma = await File(
+      '${directory.path}/recording.wma',
+    ).writeAsBytes([0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11]);
     for (final (source, providers, assistant) in [
       (bmp, const ProviderEntriesState(), unboundAssistant),
       (bmp, anthropic, boundAssistant),
@@ -530,18 +697,21 @@ void main() {
           providers: providers,
           assistants: [assistant],
         ),
-        throwsA(isA<TaskFlowValidationException>().having(
-          (e) => e.message,
-          'unsupported media subtype',
-          contains('不支持'),
-        )),
+        throwsA(
+          isA<TaskFlowValidationException>().having(
+            (e) => e.message,
+            'unsupported media subtype',
+            contains('不支持'),
+          ),
+        ),
       );
     }
   });
 
   test('picked text must be UTF-8 before initial chat submission', () async {
-    final file =
-        await File('${directory.path}/copy.bin').writeAsBytes([0xc3, 0x28]);
+    final file = await File(
+      '${directory.path}/copy.bin',
+    ).writeAsBytes([0xc3, 0x28]);
     await expectLater(
       validateTaskFlow(
         chatFlow(IOType.file),
@@ -549,9 +719,11 @@ void main() {
         providers: const ProviderEntriesState(),
         assistants: [unboundAssistant],
       ),
-      throwsA(isA<TaskFlowValidationException>()
-          .having((e) => e.inputIndex, 'input index', 0)
-          .having((e) => e.message, 'text encoding', contains('UTF-8'))),
+      throwsA(
+        isA<TaskFlowValidationException>()
+            .having((e) => e.inputIndex, 'input index', 0)
+            .having((e) => e.message, 'text encoding', contains('UTF-8')),
+      ),
     );
     await file.writeAsString('Valid UTF-8 text');
     await validateTaskFlow(

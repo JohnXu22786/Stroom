@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,198 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('Kimi Code account uses the upstream device authorization flow', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
+    expect(provider.displayName, 'Kimi Code CLI');
+    expect(provider.supportedAuthTypes, {'oauth'});
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('订阅 OAuth').last, findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Kimi Code account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.deviceAuthorizationAccounts, hasLength(1));
+    expect(
+      oauthAuthorization.deviceAuthorizationAccounts.single.connectorType,
+      'kimi-coding',
+    );
+    expect(find.text('ABCD-EFGH'), findsOneWidget);
+    expect(find.text('https://www.kimi.com/code/verify'), findsOneWidget);
+    expect(
+      await service.listAccounts(),
+      isEmpty,
+      reason: 'Do not persist the account before authorization completes.',
+    );
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('Kimi Code system back cancels device authorization', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Kimi Code account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  test(
+    'Kimi Code tokens stay in secure storage and expose coding models',
+    () async {
+      final tokenResponse = Completer<ResponseBody>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path.endsWith('/device_authorization')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'fixture-device-code',
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://www.kimi.com/code/verify',
+                'expires_in': 600,
+                'interval': 5,
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return tokenResponse.future;
+        });
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+      final gateway = _testGateway(service, oauthDio: dio);
+      final flow = await gateway.oauthAuthorization
+          .beginKimiCodeDeviceAuthorization(
+            AiGatewayAccount(
+              id: 'kimi-code-secure',
+              connectorType: 'kimi-coding',
+              authType: 'oauth',
+              displayName: 'Kimi Code',
+            ),
+          );
+
+      expect(await service.listAccounts(), isEmpty);
+      tokenResponse.complete(
+        ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'fixture-access-token',
+            'refresh_token': 'fixture-refresh-token',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        ),
+      );
+      final saved = await flow.completed;
+      final rawCredential = await service.readCredential(saved.id);
+      final storedCredential = jsonDecode(rawCredential!);
+      final account = (await service.listAccounts()).single;
+
+      expect(account.connectorType, 'kimi-coding');
+      expect(account.models.map((model) => model.upstreamModelId), [
+        'kimi-for-coding',
+        'kimi-for-coding-highspeed',
+      ]);
+      expect(
+        (await gateway.modelDiscovery.discoverModels(
+          saved,
+        )).map((model) => model.upstreamModelId),
+        ['kimi-for-coding', 'kimi-for-coding-highspeed'],
+      );
+      expect(storedCredential['access_token'], 'fixture-access-token');
+      expect(storedCredential['refresh_token'], 'fixture-refresh-token');
+      expect(storedCredential['device_id'], isNotEmpty);
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('fixture-access-token')),
+      );
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('fixture-refresh-token')),
+      );
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(saved),
+        isTrue,
+      );
+      expect(await service.listAccounts(), isEmpty);
+      expect(await service.readCredential(saved.id), isNull);
+    },
+  );
+
   testWidgets('adds a Claude Setup Token account as a distinct auth mode', (
     tester,
   ) async {
@@ -33,11 +227,13 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
 
-    final claudeProvider =
-        _testGateway(service).providerCatalog.findProvider('claude')!;
+    final claudeProvider = _testGateway(
+      service,
+    ).providerCatalog.findProvider('claude')!;
     expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     final connectorButton = find.descendant(
       of: connectorDropdown,
@@ -65,10 +261,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).at(0), 'Claude setup');
-    await tester.enterText(
-      find.byType(TextField).at(2),
-      'sk-ant-oat01-secret',
-    );
+    await tester.enterText(find.byType(TextField).at(2), 'sk-ant-oat01-secret');
     await tester.enterText(
       find.byType(TextField).at(3),
       'claude-sonnet-4-6,streaming',
@@ -117,8 +310,10 @@ void main() {
     await tester.tap(find.text('编辑账号'));
     await tester.pumpAndSettle();
 
-    expect(find.text('旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。'),
-        findsOneWidget);
+    expect(
+      find.text('旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。'),
+      findsOneWidget,
+    );
     await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
     await tester.pumpAndSettle();
     expect(find.text('API Key').last, findsOneWidget);
@@ -193,9 +388,7 @@ void main() {
         InterceptorsWrapper(
           onRequest: (options, handler) {
             revocationCalls++;
-            handler.resolve(
-              Response(requestOptions: options, statusCode: 200),
-            );
+            handler.resolve(Response(requestOptions: options, statusCode: 200));
           },
         ),
       );
@@ -218,8 +411,10 @@ void main() {
 
     expect(revocationCalls, 0);
     expect((await service.listAccounts()).single.id, account.id);
-    expect(await service.readCredential(account.id),
-        contains('still-valid-refresh-token'));
+    expect(
+      await service.readCredential(account.id),
+      contains('still-valid-refresh-token'),
+    );
     expect(find.text('账号删除失败。'), findsOneWidget);
     expect(find.textContaining('OAuth 撤销失败'), findsNothing);
   });
@@ -508,9 +703,12 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -600,8 +798,9 @@ void main() {
 
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -679,8 +878,9 @@ void main() {
         find.byType(TextField).at(0),
         'Production Bedrock',
       );
-      final connectorDropdown =
-          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -723,8 +923,9 @@ void main() {
       await tester.tap(find.byTooltip('添加账号'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
-      final connectorDropdown =
-          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -761,8 +962,9 @@ void main() {
     },
   );
 
-  testWidgets('Vertex generic OAuth is excluded without a public flow',
-      (tester) async {
+  testWidgets('Vertex generic OAuth is excluded without a public flow', (
+    tester,
+  ) async {
     final service = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentialStore(),
@@ -777,8 +979,9 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth policy');
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -790,10 +993,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Google OAuth Access Token'), findsNothing);
     expect(
-      _testGateway(service)
-          .providerCatalog
-          .findProvider('vertex')!
-          .authTypeLimitations['oauth'],
+      _testGateway(
+        service,
+      ).providerCatalog.findProvider('vertex')!.authTypeLimitations['oauth'],
       contains('No public third-party OAuth inference flow'),
     );
   });
@@ -816,9 +1018,12 @@ void main() {
       ),
       secret: 'legacy-vertex-oauth-token',
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map<String, dynamic>;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -850,10 +1055,7 @@ void main() {
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('请选择受支持的认证方式后再保存此账号。'),
-      findsWidgets,
-    );
+    expect(find.textContaining('请选择受支持的认证方式后再保存此账号。'), findsWidgets);
     expect((await service.listAccounts()).single.authType, 'oauth');
     expect(
       await service.readCredential('legacy-vertex-oauth'),
@@ -897,16 +1099,16 @@ void main() {
         connectorType: 'vertex',
         authType: 'api_key',
         displayName: 'Vertex malformed project',
-        endpointConfig: const {
-          'projectId': 123,
-          'location': 'us-central1',
-        },
+        endpointConfig: const {'projectId': 123, 'location': 'us-central1'},
       ),
       secret: 'vertex-api-key',
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map<String, dynamic>;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -1523,8 +1725,12 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata = selectorConfig
-        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
+    final capabilityMetadata =
+        selectorConfig
+                .models
+                .single
+                .legacyFields[kLlmModelCapabilitiesConfigField]
+            as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 
@@ -2143,16 +2349,17 @@ LlmChatRoutingRuntime _testGateway(
   LlmAccountConnectorService service, {
   Dio? oauthDio,
   AiGatewayOAuthAuthorization? oauthAuthorization,
-}) =>
-    LlmChatRoutingRuntime(
-      accountService: service,
-      routingService: LlmRoutingService(accountService: service),
-      oauthDio: oauthDio,
-      oauthAuthorization: oauthAuthorization,
-    );
+}) => LlmChatRoutingRuntime(
+  accountService: service,
+  routingService: LlmRoutingService(accountService: service),
+  oauthDio: oauthDio,
+  oauthAuthorization: oauthAuthorization,
+);
 
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];
+  final deviceAuthorizationAccounts = <AiGatewayAccount>[];
+  _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
   Future<AiGatewayAccount> authorize(
@@ -2167,7 +2374,57 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   Future<void> revoke(AiGatewayAccount account) async {}
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKimiCodeDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    deviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization();
+  }
+
+  @override
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
+}
+
+class _PendingOAuthDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final _completion = Completer<AiGatewayAccount>();
+  var cancelled = false;
+
+  @override
+  Uri get verificationUri => Uri.parse('https://www.kimi.com/code/verify');
+
+  @override
+  Uri get verificationUriComplete => verificationUri;
+
+  @override
+  String get userCode => 'ABCD-EFGH';
+
+  @override
+  Future<AiGatewayAccount> get completed => _completion.future;
+
+  @override
+  void cancel() {
+    cancelled = true;
+    if (!_completion.isCompleted) {
+      _completion.completeError(const AiGatewayOAuthException());
+    }
+  }
+}
+
+class _FunctionalAdapter implements HttpClientAdapter {
+  final Future<ResponseBody> Function(RequestOptions options) onFetch;
+
+  _FunctionalAdapter(this.onFetch);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) => onFetch(options);
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _MemoryPreferences implements LlmAccountPreferences {

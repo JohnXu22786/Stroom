@@ -14,13 +14,14 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 30),
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 30),
+            ),
+          );
 
   Future<Map<String, dynamic>> exchangeOpenAiChatGpt({
     required LlmOAuthAuthorizationAttempt attempt,
@@ -172,6 +173,140 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<LlmKimiDeviceCode> startKimiDeviceAuthorization({
+    required String deviceId,
+  }) async {
+    try {
+      final id = deviceId.trim();
+      if (id.isEmpty) throw const LlmOAuthFlowException();
+      final response = await _dio.postUri<Object?>(
+        Uri.parse('https://auth.kimi.com/api/oauth/device_authorization'),
+        data: {'client_id': LlmOAuthAuthorizationAttempt.kimiCodeClientId},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+          headers: _kimiDeviceHeaders(id),
+        ),
+      );
+      final data = _jsonObject(response.data);
+      final deviceCode = _nonEmptyString(data['device_code']);
+      final userCode = _nonEmptyString(data['user_code']);
+      final verification = _kimiVerificationUri(
+        data['verification_uri'] ?? data['verification_url'],
+      );
+      final complete =
+          _kimiVerificationUri(
+            data['verification_uri_complete'] ??
+                data['verification_url_complete'],
+          ) ??
+          verification;
+      if (deviceCode == null ||
+          userCode == null ||
+          verification == null ||
+          complete == null) {
+        throw const LlmOAuthFlowException();
+      }
+      final expiresIn = _seconds(data['expires_in']);
+      final interval = _seconds(data['interval']);
+      if (expiresIn <= 0) throw const LlmOAuthFlowException();
+      return LlmKimiDeviceCode.fromOAuthResponse(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verification,
+        verificationUriComplete: complete,
+        expiresIn: Duration(seconds: expiresIn),
+        interval: Duration(seconds: interval > 0 ? interval : 5),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> pollKimiDeviceAuthorization({
+    required LlmKimiDeviceCode deviceCode,
+    required String deviceId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final id = deviceId.trim();
+      if (id.isEmpty || deviceCode.deviceCode.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final deadline = DateTime.now().add(deviceCode.expiresIn);
+      var interval = deviceCode.interval < const Duration(seconds: 5)
+          ? const Duration(seconds: 5)
+          : deviceCode.interval;
+      while (DateTime.now().isBefore(deadline)) {
+        if (cancelToken?.isCancelled ?? false) {
+          throw cancelToken!.cancelError!;
+        }
+        final response = await _dio.postUri<Object?>(
+          Uri.parse('https://auth.kimi.com/api/oauth/token'),
+          data: {
+            'client_id': LlmOAuthAuthorizationAttempt.kimiCodeClientId,
+            'device_code': deviceCode.deviceCode,
+            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+          },
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            responseType: ResponseType.json,
+            headers: _kimiDeviceHeaders(id),
+          ),
+          cancelToken: cancelToken,
+        );
+        final token = _jsonObject(response.data);
+        final error = _nonEmptyString(token['error']);
+        if (error == 'authorization_pending' || error == 'slow_down') {
+          if (error == 'slow_down') interval += const Duration(seconds: 5);
+          final remaining = deadline.difference(DateTime.now());
+          if (remaining <= Duration.zero) break;
+          await Future<void>.delayed(
+            interval > remaining ? remaining : interval,
+          );
+          continue;
+        }
+        if (error != null) throw const LlmOAuthFlowException();
+        final accessToken = _nonEmptyString(token['access_token']);
+        final refreshToken = _nonEmptyString(token['refresh_token']);
+        if (accessToken == null || refreshToken == null) {
+          throw const LlmOAuthFlowException();
+        }
+        return _credentialBundle(token)
+          ..['device_id'] = id
+          ..['client_id'] = LlmOAuthAuthorizationAttempt.kimiCodeClientId
+          ..['oauth_contract'] = 'kimi-code-device-v1';
+      }
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
+    'X-Msh-Platform': 'CLIProxyAPI',
+    'X-Msh-Version': 'stroom',
+    'X-Msh-Device-Name': 'Stroom',
+    'X-Msh-Device-Model': 'Stroom',
+    'X-Msh-Device-Id': deviceId,
+  };
+
+  static Uri? _kimiVerificationUri(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        !(uri.host == 'kimi.com' || uri.host.endsWith('.kimi.com'))) {
+      return null;
+    }
+    return uri;
+  }
+
+  static int _seconds(Object? value) => value is num
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value) ?? 0
+      : 0;
+
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
     required String clientId,
@@ -242,8 +377,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-            ? int.tryParse(expiresIn)
-            : null;
+        ? int.tryParse(expiresIn)
+        : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,

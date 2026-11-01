@@ -20,13 +20,12 @@ String resolveApiProtocol({
   String? modelOverride,
   String? supplierProtocol,
   String? builtinDefault,
-}) =>
-    firstNonEmptyProtocol([
-      modelOverride,
-      supplierProtocol,
-      builtinDefault,
-      'openai.chat_completions',
-    ]);
+}) => firstNonEmptyProtocol([
+  modelOverride,
+  supplierProtocol,
+  builtinDefault,
+  'openai.chat_completions',
+]);
 
 /// Resolves persisted settings, including direct in-memory configs created by
 /// older call sites that still populate only endpointType.
@@ -35,22 +34,22 @@ String configuredApiProtocol({
   required String? modelLegacyEndpointType,
   required String? supplierProtocol,
   required String? supplierLegacyEndpointType,
-}) =>
-    resolveApiProtocol(
-      modelOverride: modelOverride ??
-          (modelLegacyEndpointType == null
-              ? null
-              : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
-      supplierProtocol: supplierProtocol ??
-          apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
-    );
+}) => resolveApiProtocol(
+  modelOverride:
+      modelOverride ??
+      (modelLegacyEndpointType == null
+          ? null
+          : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
+  supplierProtocol:
+      supplierProtocol ??
+      apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
+);
 
 /// Authentication connector identity is deliberately ignored here.
 String resolveConnectorProtocol(
   String configuredProtocol,
   String connectorType,
-) =>
-    configuredProtocol;
+) => configuredProtocol;
 
 String firstNonEmptyProtocol(Iterable<String?> values) {
   for (final value in values) {
@@ -67,6 +66,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
       'ollama' => 'ollama.chat',
+      'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
 
@@ -95,10 +95,15 @@ Set<String> supportedApiProtocolsForSupplier(
 }) {
   final builtinProtocols = switch (connectorType) {
     'openai-api' => const {'openai.chat_completions', 'openai.responses'},
-    'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
-        'openai.chat_completions'
-      },
-    'kimi' || 'kimi-ai' || 'kimi.ai' => kCustomHttpApiProtocols,
+    'moonshot' ||
+    'glm' ||
+    'deepseek' ||
+    'minimax' ||
+    'qwen' => const {'openai.chat_completions'},
+    'kimi' ||
+    'kimi-ai' ||
+    'kimi.ai' ||
+    'kimi-coding' => kCustomHttpApiProtocols,
     _ => null,
   };
   if (builtinProtocols != null) return builtinProtocols;
@@ -113,8 +118,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'vertex' ||
     'codex' ||
     'antigravity' ||
-    'devin' =>
-      supplierProtocol,
+    'devin' => supplierProtocol,
     _ => null,
   };
   if (nativeProtocol != null) return {nativeProtocol};
