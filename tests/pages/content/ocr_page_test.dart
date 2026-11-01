@@ -3829,6 +3829,8 @@ void main() {
       expect(find.byKey(const Key('ocr_request_budget_mib')), findsNothing);
       await tester.tap(find.text('原图 / 高细节'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
       await pickFromSystemGallery();
       expect(calls.last, (maxWidth: null, maxHeight: null, quality: null));
 
