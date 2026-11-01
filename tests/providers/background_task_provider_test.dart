@@ -15121,6 +15121,20 @@ void main() {
         );
         expect(trailingCredentialPersisted, isNot(contains('foobarxyz')));
 
+        final trailingActionTask = taskFor(
+          'legacy-ocr-natural-action-after-spaced-credential',
+          'Please read the documentation foobarxyz carefully and summarize the receipt.',
+        );
+        final trailingActionInstruction = OcrRetrySnapshot.fromMap(
+          trailingActionTask.retryData!,
+        ).instructionContent!;
+        final trailingActionPersisted = jsonEncode(trailingActionTask.toMap());
+        expect(
+          trailingActionInstruction,
+          'Please read the [redacted] carefully and summarize the receipt.',
+        );
+        expect(trailingActionPersisted, isNot(contains('foobarxyz')));
+
         final attachedPrefixCredentialTask = taskFor(
           'legacy-ocr-attached-prefix-spaced-credential',
           'Please read documentationfoobar xyz carefully.',
@@ -15271,6 +15285,7 @@ void main() {
       'legacy OCR instruction migration preserves natural documentation after a masked prefix',
       () {
         const safePrompt = 'Please read the documentation carefully.\n'
+            'Use the documentation to authenticate this API request.\n'
             'Please read the documentation independently.\n'
             'Please read the documentation thoroughly.\n'
             'Please read the documentation instructions carefully.\n'

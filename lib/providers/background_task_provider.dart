@@ -1317,12 +1317,19 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   String prefix,
   String suffix,
 ) {
-  if (prefix.toLowerCase() != 'documentation' ||
-      _legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
-    return false;
-  }
+  if (prefix.toLowerCase() != 'documentation') return false;
   final before = text.substring(0, match.start).trimRight();
   final after = text.substring(match.end).trimLeft();
+  final naturalAuthenticationDocumentationPrompt =
+      RegExp(r'\buse(?:\s+the)?$', caseSensitive: false).hasMatch(before) &&
+          RegExp(
+            r'^(?:to\s+)?authenticate\s+(?:(?:this|the)\s+)?(?:api\s+)?(?:request|application)\b',
+            caseSensitive: false,
+          ).hasMatch('${suffix.trim()} ${after.trim()}'.trim());
+  if (naturalAuthenticationDocumentationPrompt) return true;
+  if (_legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
+    return false;
+  }
   final afterFirstWord = RegExp(r'^([a-zA-Z][a-zA-Z_-]*)\b')
       .firstMatch(after)
       ?.group(1)
@@ -1408,6 +1415,10 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
     'details',
     'example',
     'examples',
+    'changelog',
+    'changelogs',
+    'screenshot',
+    'screenshots',
     'method',
     'methods',
     'requirement',
@@ -1795,19 +1806,29 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           joinedNaturalDocumentIdentifier) {
         return match.group(0)!;
       }
-      if (chunks.length >= 8 &&
-          chunks.every((chunk) => chunk.length == 1) &&
+      final trailingSpacedNaturalAdverb = chunks.length > 1 &&
+              naturalAdverbs.contains(chunks.last.toLowerCase())
+          ? chunks.last
+          : '';
+      final credentialChunks = trailingSpacedNaturalAdverb.isEmpty
+          ? chunks
+          : chunks.sublist(0, chunks.length - 1);
+      final joinedCredentialChunks = credentialChunks.join().toLowerCase();
+      if (credentialChunks.length >= 8 &&
+          credentialChunks.every((chunk) => chunk.length == 1) &&
           !_legacyOcrHasNaturalWordContinuation(
             prefix,
-            joinedSingleCharacterChunks,
+            joinedCredentialChunks,
           ) &&
           _legacyOcrHasHighAlphabeticEntropy(
-            joinedSingleCharacterChunks,
+            joinedCredentialChunks,
             minimumLength: 8,
             minimumEntropy: 2.5,
             maximumVowelRatio: 0.45,
           )) {
-        return '${match.group(1)}[redacted]$trailingPunctuation';
+        return '${match.group(1)}[redacted]'
+            '${trailingSpacedNaturalAdverb.isEmpty ? '' : ' $trailingSpacedNaturalAdverb'}'
+            '$trailingPunctuation';
       }
       var credentialSuffix = '';
       var foundCredential = false;
@@ -1914,18 +1935,33 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           )) {
         return match.group(0)!;
       }
-      final trailingNaturalAdverb = foundCredential &&
-              credentialEndChunkIndex >= 0 &&
-              credentialEndChunkIndex < chunks.length - 1 &&
-              chunks.length - credentialEndChunkIndex == 2 &&
-              naturalAdverbs.contains(chunks.last.toLowerCase())
-          ? ' ${chunks.last}'
+      final trailingPromptChunks = credentialEndChunkIndex >= 0 &&
+              credentialEndChunkIndex < chunks.length - 1
+          ? chunks.skip(credentialEndChunkIndex + 1).toList()
+          : const <String>[];
+      final naturalTrailingInstructionWords = {
+        ...naturalAdverbs,
+        ...naturalContinuationWords,
+        ...naturalNouns,
+        ...naturalActionWords,
+        ...naturalObjectWords,
+      };
+      final trailingNaturalInstruction = trailingPromptChunks.isNotEmpty &&
+          trailingPromptChunks.every(
+            (chunk) => naturalTrailingInstructionWords.contains(
+              chunk.toLowerCase(),
+            ),
+          );
+      final trailingNaturalContinuation = trailingNaturalInstruction
+          ? ' ${trailingPromptChunks.join(' ')}'
           : '';
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
       return explicitAuthenticationUseContext
-          ? '${match.group(1)}[redacted] to authenticate$trailingPunctuation'
-          : '${match.group(1)}[redacted]$trailingNaturalAdverb$trailingPunctuation';
+          ? '${match.group(1)}[redacted] to authenticate'
+              '$trailingNaturalContinuation$trailingPunctuation'
+          : '${match.group(1)}[redacted]$trailingNaturalContinuation'
+              '$trailingPunctuation';
     });
   }
   return sanitized;
