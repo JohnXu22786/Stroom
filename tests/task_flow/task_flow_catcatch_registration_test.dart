@@ -37,6 +37,7 @@ void main() {
             any(),
             any(),
             taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection'),
             videoFolder: any(named: 'videoFolder'),
             audioFolder: any(named: 'audioFolder'),
             deferSingleResourceSelection:

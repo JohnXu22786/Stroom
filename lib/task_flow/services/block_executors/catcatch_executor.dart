@@ -43,9 +43,33 @@ Future<String> executeCatCatchBlock({
   @visibleForTesting void Function()? onFallbackRegistration,
   IOType? nextInputType,
   void Function(String taskId)? onManualWait,
+  void Function(String taskId, List<MediaResource> candidates)?
+      onManualWaitWithCandidates,
   void Function(IOType type)? onOutputType,
   void Function(FlowPayload payload)? onOutputPayload,
 }) async {
+  final outputTypes = block.outputTypesForNext(nextInputType);
+  if (outputTypes.isEmpty ||
+      (nextInputType != null &&
+          !outputTypes.any((type) => type.isCompatibleWith(nextInputType)))) {
+    throw BlockExecutionException(
+      block.followsDownstreamOutput
+          ? '下游需要${nextInputType?.label ?? '兼容的媒体类型'}，下载资源没有可匹配的音频或视频类型'
+          : '下载输出类型与下一步输入不兼容，请修改输出策略',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+  final resolvedOutputType =
+      outputTypes.length == 1 ? outputTypes.single : null;
+  final desiredType = resolvedOutputType;
+  final selectionPolicy = block.catCatchResourceSelectionPolicy;
+  final automatic = selectionPolicy != 'manual';
+  final automaticWithPrompt = selectionPolicy == 'automaticWithPrompt';
+  final filteredManualFollow =
+      !automatic && block.followsDownstreamOutput && desiredType != null;
+  final flowManagedSelection = automaticWithPrompt || filteredManualFollow;
+  final deferSingleResourceSelection = automatic || filteredManualFollow;
   final taskId = const Uuid().v4();
   if (temporaryOutput) {
     if (!await execNotifier.updateSubTaskIdPersisted(
@@ -59,11 +83,7 @@ Future<String> executeCatCatchBlock({
         blockTitle: def.label,
       );
     }
-    if (!execNotifier.startSubTaskIfActive(
-      execId,
-      flowSubTask.id,
-      taskId,
-    )) {
+    if (!execNotifier.startSubTaskIfActive(execId, flowSubTask.id, taskId)) {
       throw BlockExecutionException(
         '任务流已暂停或结束，未启动临时下载任务',
         blockType: def.typeKey.name,
@@ -73,12 +93,14 @@ Future<String> executeCatCatchBlock({
   } else {
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
-        execId, flowSubTask.id, TaskStatus.running);
+      execId,
+      flowSubTask.id,
+      TaskStatus.running,
+    );
   }
   final durationSec = durationSecOverride > 0
       ? durationSecOverride
       : asIntParam(block.params, 'durationSec', 0);
-  final automatic = block.params['automaticResourceSelection'] == true;
   if (temporaryOutput) {
     catcatchNotifier.addTemporaryTask(
       input,
@@ -86,7 +108,8 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       executionId: execId,
       blockId: block.id,
-      deferSingleResourceSelection: automatic,
+      flowManagedSelection: flowManagedSelection,
+      deferSingleResourceSelection: deferSingleResourceSelection,
     );
   } else {
     catcatchNotifier.addTask(
@@ -95,7 +118,8 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       videoFolder: videoFolder,
       audioFolder: audioFolder,
-      deferSingleResourceSelection: automatic,
+      flowManagedSelection: flowManagedSelection,
+      deferSingleResourceSelection: deferSingleResourceSelection,
     );
   }
 
@@ -109,6 +133,8 @@ Future<String> executeCatCatchBlock({
   var lastProgressAt = DateTime.now();
   bool autoSelected = false;
   bool autoConfirmed = false;
+  bool promptOpen = false;
+  bool manualPickerOpen = false;
 
   bool isCurrent() {
     if (!execNotifier.mounted || !isFlowExecutionActive(execNotifier, execId)) {
@@ -116,9 +142,11 @@ Future<String> executeCatCatchBlock({
     }
     try {
       // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
-      return catcatchNotifier.state.any((current) =>
-          current.id == taskId &&
-          current.status == catcatch.TaskStatus.completed);
+      return catcatchNotifier.state.any(
+        (current) =>
+            current.id == taskId &&
+            current.status == catcatch.TaskStatus.completed,
+      );
     } catch (_) {
       return false;
     }
@@ -168,9 +196,74 @@ Future<String> executeCatCatchBlock({
         task.metadata['pendingConfirm'] == 'special_format';
     // Waiting for an intentional human decision or a user pause is not a stall.
     // Reset the window so resumed engine work receives a full stall allowance.
+    if (!awaitingSelection || task.selectedMedia != null) promptOpen = false;
+    if (!awaitingSelection || task.selectedMedia != null) {
+      manualPickerOpen = false;
+    }
+    if (automaticWithPrompt &&
+        awaitingSelection &&
+        task.detectedMedia.isNotEmpty) {
+      final candidates = catCatchSafeResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
+      final promptCandidates = catCatchPromptResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
+      if ((candidates.length != 1 || promptCandidates.length > 1) &&
+          task.status == catcatch.TaskStatus.running) {
+        if (!promptOpen) {
+          if (promptCandidates.isEmpty) {
+            catcatchNotifier.removeTask(taskId);
+            execNotifier.updateSubTaskStatus(
+              execId,
+              flowSubTask.id,
+              TaskStatus.failed,
+            );
+            throw BlockExecutionException(
+              '没有与下游输入类型兼容的媒体资源可供选择',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          onManualWaitWithCandidates?.call(taskId, promptCandidates);
+          onManualWait?.call(taskId);
+        }
+        promptOpen = true;
+      }
+    }
+    if (filteredManualFollow &&
+        awaitingSelection &&
+        task.status == catcatch.TaskStatus.running) {
+      final promptCandidates = catCatchPromptResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
+      if (promptCandidates.isEmpty) {
+        catcatchNotifier.removeTask(taskId);
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
+        throw BlockExecutionException(
+          '没有与下游输入类型兼容的媒体资源可供选择',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      if (!manualPickerOpen) {
+        onManualWaitWithCandidates?.call(taskId, promptCandidates);
+        onManualWait?.call(taskId);
+        manualPickerOpen = true;
+      }
+    }
     final intentionallyWaiting = task.status == catcatch.TaskStatus.paused ||
+        promptOpen ||
         (!automatic && (awaitingSelection || awaitingConfirmation));
     if (!automatic &&
+        !filteredManualFollow &&
         task.status == catcatch.TaskStatus.running &&
         ((awaitingSelection && task.detectedMedia.length > 1) ||
             awaitingConfirmation)) {
@@ -202,7 +295,10 @@ Future<String> executeCatCatchBlock({
       final path = task.downloadedFilePath;
       if (path == null || path.isEmpty) {
         execNotifier.updateSubTaskStatus(
-            execId, flowSubTask.id, TaskStatus.failed);
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
         throw BlockExecutionException(
           '下载完成但无文件路径',
           blockType: def.typeKey.name,
@@ -212,20 +308,26 @@ Future<String> executeCatCatchBlock({
       final actualType = await catCatchOutputType(task);
       if (actualType == IOType.file) {
         execNotifier.updateSubTaskStatus(
-            execId, flowSubTask.id, TaskStatus.failed);
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
         throw BlockExecutionException(
           '无法验证下载文件的音视频类型，请检查媒体文件',
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );
       }
-      if (actualType != def.outputType ||
+      if ((resolvedOutputType != null && actualType != resolvedOutputType) ||
           (nextInputType != null &&
               !actualType.isCompatibleWith(nextInputType))) {
         execNotifier.updateSubTaskStatus(
-            execId, flowSubTask.id, TaskStatus.failed);
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
         throw BlockExecutionException(
-          '下载结果为${actualType.label}，此步骤声明输出${def.outputType.label}${nextInputType == null ? '' : '，下一步需要${nextInputType.label}'}；请修改输出类型或重新选择匹配的资源',
+          '下载结果为${actualType.label}，此步骤要求输出${resolvedOutputType?.label ?? '音频或视频'}${nextInputType == null ? '' : '，下一步需要${nextInputType.label}'}；请修改输出类型或重新选择匹配的资源',
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );
@@ -240,20 +342,29 @@ Future<String> executeCatCatchBlock({
               path) {
         try {
           onFallbackRegistration?.call();
-          registration = await registerFlowCatCatchOutput(path, task,
-              isCurrent: isCurrent);
+          registration = await registerFlowCatCatchOutput(
+            path,
+            task,
+            isCurrent: isCurrent,
+          );
         } catch (e) {
           if (!isCurrent()) {
-            throw BlockExecutionException('任务已取消',
-                blockType: def.typeKey.name, blockTitle: def.label);
+            throw BlockExecutionException(
+              '任务已取消',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
           }
           debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
         }
       }
       if (!isCurrent()) {
         await registration?.rollback();
-        throw BlockExecutionException('任务已取消',
-            blockType: def.typeKey.name, blockTitle: def.label);
+        throw BlockExecutionException(
+          '任务已取消',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
       }
       // The service commits the step only after saving its output checkpoint.
       return path;
@@ -280,7 +391,10 @@ Future<String> executeCatCatchBlock({
     }
 
     execNotifier.updateSubTaskStatus(
-        execId, flowSubTask.id, TaskStatus.running);
+      execId,
+      flowSubTask.id,
+      TaskStatus.running,
+    );
 
     if (automatic && !autoSelected && awaitingSelection) {
       final us = task.steps.where(
@@ -289,10 +403,26 @@ Future<String> executeCatCatchBlock({
       if (us.isNotEmpty && !us.first.completed && !us.first.skipped) {
         if (task.detectedMedia.isNotEmpty) {
           try {
-            final selected = selectAutomaticCatCatchResource(task.detectedMedia,
-                desiredType: def.outputType);
+            final candidates = catCatchSafeResourceCandidates(
+              task.detectedMedia,
+              desiredType: desiredType,
+            );
+            if (automaticWithPrompt && (promptOpen || candidates.length != 1)) {
+              // Keep the existing resource picker active until the user picks.
+              continue;
+            }
+            final selected = automaticWithPrompt
+                ? candidates.firstOrNull
+                : selectAutomaticCatCatchResource(
+                    task.detectedMedia,
+                    desiredType: desiredType,
+                  );
             if (selected == null) {
-              throw const FormatException('没有可安全自动选择的完整资源，请关闭自动选择后手动选择');
+              throw FormatException(
+                automaticWithPrompt
+                    ? '没有符合输出类型的安全资源，请手动检查下载资源'
+                    : '没有可安全自动选择的完整资源，请关闭自动选择后手动选择',
+              );
             }
             catcatchNotifier.selectMedia(taskId, selected);
             autoSelected = true;
@@ -354,8 +484,10 @@ Future<String> executeCatCatchBlock({
 String _progressSignatureOf(catcatch.CatCatchTask? task) {
   if (task == null) return '';
   final steps = task.steps
-      .map((s) =>
-          '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}')
+      .map(
+        (s) =>
+            '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}',
+      )
       .join('|');
   return '${task.status.name}|${task.downloadedBytes}|'
       '${task.selectedMedia?.url}|${task.metadata['pendingConfirm']}|$steps';
@@ -370,6 +502,18 @@ MediaResource? selectAutomaticCatCatchResource(
   List<MediaResource> resources, {
   IOType? desiredType,
 }) {
+  return catCatchSafeResourceCandidates(
+    resources,
+    desiredType: desiredType,
+  ).firstOrNull;
+}
+
+/// All non-split resources that satisfy the output policy. Ambiguity prompting
+/// uses the full set; legacy Automatic continues to pick its deterministic top.
+List<MediaResource> catCatchSafeResourceCandidates(
+  List<MediaResource> resources, {
+  IOType? desiredType,
+}) {
   int rank(MediaResource media) {
     final kind = catCatchResourceKindHint(media);
     if (kind == CatCatchMediaKind.audio) return 2;
@@ -379,9 +523,9 @@ MediaResource? selectAutomaticCatCatchResource(
     return 4;
   }
 
-  final available = resources.where((media) {
-    return !media.isLikelySplitTrack && rank(media) != 4;
-  }).toList();
+  final available = resources
+      .where((media) => !media.isLikelySplitTrack && rank(media) != 4)
+      .toList();
   bool matchesDeclaredType(MediaResource media) {
     final priority = rank(media);
     if (desiredType == IOType.audio) return priority == 2 || priority == 3;
@@ -390,15 +534,69 @@ MediaResource? selectAutomaticCatCatchResource(
   }
 
   final preferred = available.where(matchesDeclaredType).toList();
-  // Discovery MIME and dimensions can be wrong for shared containers. Use an
-  // opposite hint only when no preferred candidate exists, then verify the
-  // downloaded tracks before the flow accepts the output.
+  // Discovery MIME can mislabel shared containers. Keep the existing fallback
+  // only when no resource advertises the requested type; download verification
+  // still decides whether that shared container is actually acceptable.
   final candidates = preferred.isNotEmpty || desiredType == null
       ? preferred
       : available
           .where((media) => catCatchIsSharedContainerExtension(media.ext))
           .toList();
-  candidates.sort((a, b) {
+  candidates.sort(_compareCatCatchCandidates);
+  return candidates;
+}
+
+/// Resources shown by automatic-with-prompt after applying the downstream
+/// type. Split tracks remain available when their own track matches the type.
+@visibleForTesting
+List<MediaResource> catCatchPromptResourceCandidates(
+  List<MediaResource> resources, {
+  IOType? desiredType,
+}) {
+  final safeCandidates = catCatchSafeResourceCandidates(
+    resources,
+    desiredType: desiredType,
+  );
+  final safeCandidateUrls = safeCandidates.map((media) => media.url).toSet();
+  bool matchesResolvedType(MediaResource media) {
+    if (desiredType == null) return true;
+    final hint = catCatchResourceKindHint(media);
+    if (hint == null) {
+      return catCatchIsSharedContainerExtension(media.ext) ||
+          (desiredType == IOType.video && media.isPlaylist);
+    }
+    final matchesHint = desiredType == IOType.audio
+        ? hint == CatCatchMediaKind.audio
+        : hint == CatCatchMediaKind.video;
+    return matchesHint ||
+        (safeCandidateUrls.contains(media.url) &&
+            catCatchIsSharedContainerExtension(media.ext));
+  }
+
+  final candidates = safeCandidates.where(matchesResolvedType).toList();
+  final included = candidates.map((media) => media.url).toSet();
+  for (final media in resources) {
+    if (included.contains(media.url)) continue;
+    final matches = matchesResolvedType(media);
+    if (matches) {
+      candidates.add(media);
+      included.add(media.url);
+    }
+  }
+  return candidates;
+}
+
+int _compareCatCatchCandidates(MediaResource a, MediaResource b) {
+  int rank(MediaResource media) {
+    final kind = catCatchResourceKindHint(media);
+    if (kind == CatCatchMediaKind.audio) return 2;
+    if (media.isPlaylist) return 1;
+    if (kind == CatCatchMediaKind.video) return 0;
+    if (catCatchIsSharedContainerExtension(media.ext)) return 3;
+    return 4;
+  }
+
+  {
     final priority = rank(a).compareTo(rank(b));
     if (priority != 0) return priority;
     final url = a.url.compareTo(b.url);
@@ -406,14 +604,15 @@ MediaResource? selectAutomaticCatCatchResource(
     return '${a.name}|${a.ext}|${a.mimeType}|${a.groupId}'.compareTo(
       '${b.name}|${b.ext}|${b.mimeType}|${b.groupId}',
     );
-  });
-  return candidates.firstOrNull;
+  }
 }
 
 /// Keep the flow's declared output in sync with the engine's gallery routing.
 Future<IOType> catCatchOutputType(catcatch.CatCatchTask task) async {
-  final kind =
-      await catCatchMediaKindFromFile(task, task.downloadedFilePath ?? '');
+  final kind = await catCatchMediaKindFromFile(
+    task,
+    task.downloadedFilePath ?? '',
+  );
   return switch (kind) {
     CatCatchMediaKind.audio => IOType.audio,
     CatCatchMediaKind.video => IOType.video,

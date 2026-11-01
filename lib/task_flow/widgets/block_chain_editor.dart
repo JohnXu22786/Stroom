@@ -113,8 +113,10 @@ class BlockChainEditor extends StatelessWidget {
                               _showAddBlockSheet(context, insertIndex: index),
                       onInsertAfter: onInsertBlock == null
                           ? null
-                          : () => _showAddBlockSheet(context,
-                              insertIndex: index + 1),
+                          : () => _showAddBlockSheet(
+                                context,
+                                insertIndex: index + 1,
+                              ),
                     ),
                   ],
                 );
@@ -338,16 +340,19 @@ class BlockChainEditor extends StatelessWidget {
   }
 
   List<BlockTypeDefinition> _insertionCandidates(int index) {
-    final previous =
-        index == 0 ? inputType : blocks[index - 1].getDefinition()?.outputType;
+    final previousBlock = index == 0 ? null : blocks[index - 1];
+    final previousTypes = previousBlock?.possibleOutputTypes ??
+        (index == 0 ? [inputType] : const <IOType>[]);
     final next = index == blocks.length
         ? null
         : blocks[index].getDefinition()?.inputType;
-    if (previous == null || (index < blocks.length && next == null)) {
+    if (previousTypes.isEmpty || (index < blocks.length && next == null)) {
       return const [];
     }
-    return BlockTypeDefinition.getReplacementCandidates(
-        prevOutput: previous, nextInput: next);
+    return BlockTypeDefinition.getReplacementCandidatesForOutputs(
+      prevOutputs: previousTypes,
+      nextInput: next,
+    );
   }
 
   void _showAddBlockSheet(BuildContext context, {int? insertIndex}) {
@@ -355,9 +360,11 @@ class BlockChainEditor extends StatelessWidget {
 
     final insertionIndex = insertIndex ?? blocks.length;
     final availableTypes = _insertionCandidates(insertionIndex);
-    final previous = insertionIndex == 0
-        ? inputType
-        : blocks[insertionIndex - 1].getDefinition()?.outputType;
+    final previousBlock =
+        insertionIndex == 0 ? null : blocks[insertionIndex - 1];
+    final previousLabel = insertionIndex == 0
+        ? inputType.label
+        : previousBlock?.outputTypeLabel ?? '未知';
     final next = insertionIndex == blocks.length
         ? null
         : blocks[insertionIndex].getDefinition()?.inputType;
@@ -392,13 +399,14 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 insertIndex == null ? '选择功能块' : '插入功能块',
-                style: Theme.of(
-                  scrollCtx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
-                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: ${previous?.label ?? '未知'}'
+                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: $previousLabel'
                 '${next == null ? '' : '，下一步需要: ${next.label}'}',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
@@ -423,8 +431,13 @@ class BlockChainEditor extends StatelessWidget {
                         .map(
                           (type) => Padding(
                             padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildBlockTypeOption(type, cs, ctx, null,
-                                insertIndex: insertIndex),
+                            child: _buildBlockTypeOption(
+                              type,
+                              cs,
+                              ctx,
+                              null,
+                              insertIndex: insertIndex,
+                            ),
                           ),
                         )
                         .toList(),
@@ -444,14 +457,14 @@ class BlockChainEditor extends StatelessWidget {
   void _showReplaceBlockSheet(BuildContext context, int index) {
     final cs = Theme.of(context).colorScheme;
     final block = blocks[index];
-    final prevOutput = index == 0
-        ? inputType
-        : (blocks[index - 1].getDefinition()?.outputType ?? IOType.any);
+    final previousBlock = index == 0 ? null : blocks[index - 1];
+    final previousTypes = previousBlock?.possibleOutputTypes ??
+        (index == 0 ? [inputType] : const [IOType.any]);
     final nextInput = index == blocks.length - 1
         ? null
         : (blocks[index + 1].getDefinition()?.inputType ?? IOType.any);
-    final candidates = BlockTypeDefinition.getReplacementCandidates(
-      prevOutput: prevOutput,
+    final candidates = BlockTypeDefinition.getReplacementCandidatesForOutputs(
+      prevOutputs: previousTypes,
       nextInput: nextInput,
       exclude: block.typeKey,
     );
@@ -486,9 +499,10 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 '替换功能块',
-                style: Theme.of(
-                  scrollCtx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
@@ -582,7 +596,7 @@ class BlockChainEditor extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${type.inputType.label} → ${type.outputType.label}',
+                      '${type.inputType.label} → ${type.possibleOutputTypes.map((output) => output.label).join('或')}',
                       style: TextStyle(
                         fontSize: 11,
                         color: cs.onSurfaceVariant,
