@@ -17,6 +17,68 @@ TaskFlowBlock _block(BlockType type, String id) => TaskFlowBlock(
     );
 
 void main() {
+  test('follow-downstream CatCatch validates media-specific successors', () {
+    final audio = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(
+          id: 'download',
+          typeKey: BlockType.catcatch,
+          params: {'outputPolicy': 'followDownstream'}),
+      TaskFlowBlock(id: 'asr', typeKey: BlockType.asr),
+    ]);
+    final video = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(
+          id: 'download',
+          typeKey: BlockType.catcatch,
+          params: {'outputPolicy': 'followDownstream'}),
+      TaskFlowBlock(id: 'separation', typeKey: BlockType.audioSeparation),
+    ]);
+    final incompatible = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(
+          id: 'download',
+          typeKey: BlockType.catcatch,
+          params: {'outputPolicy': 'followDownstream'}),
+      TaskFlowBlock(id: 'ocr', typeKey: BlockType.ocr),
+    ]);
+    final textOnly = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(
+          id: 'download',
+          typeKey: BlockType.catcatch,
+          params: {'outputPolicy': 'followDownstream'}),
+      TaskFlowBlock(id: 'tts', typeKey: BlockType.tts),
+    ]);
+
+    expect(audio.issues, isEmpty);
+    expect(video.issues, isEmpty);
+    expect(incompatible.issues, hasLength(1));
+    expect(textOnly.issues, hasLength(1));
+    expect(
+      TaskFlowChainEditor(
+        blocks: [TaskFlowBlock(id: 'asr', typeKey: BlockType.asr)],
+      ).insertionCandidates(0).map((item) => item.typeKey),
+      contains(BlockType.catcatch),
+    );
+  });
+
+  test('inserted or replacement CatCatch follows an audio successor', () {
+    final inserted = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(id: 'chat', typeKey: BlockType.chat),
+      TaskFlowBlock(id: 'asr', typeKey: BlockType.asr),
+    ]);
+    expect(inserted.insertionCandidates(1).map((item) => item.typeKey),
+        contains(BlockType.catcatch));
+    inserted.insert(1, BlockType.catcatch);
+    expect(inserted.blocks[1].followsDownstreamOutput, isTrue);
+    expect(inserted.issues, isEmpty);
+
+    final replaced = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(id: 'chat', typeKey: BlockType.chat),
+      TaskFlowBlock(id: 'asr', typeKey: BlockType.asr),
+    ]);
+    replaced.replace(0, BlockType.catcatch);
+    expect(replaced.blocks.first.followsDownstreamOutput, isTrue);
+    expect(replaced.issues, isEmpty);
+  });
+
   test('assistant link validation rejects unspecified any input', () {
     final editor = TaskFlowChainEditor(
       blocks: [_block(BlockType.chat, 'chat')],

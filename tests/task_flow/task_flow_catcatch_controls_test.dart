@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,12 +14,15 @@ class _FlowActions extends Fake implements TaskFlowExecutionService {
   _FlowActions(this.downloads);
   final _Downloads Function() downloads;
   final calls = <(String, bool)>[];
+  final selectedUrls = <String?>[];
   Future<bool> Function(String, bool, void Function(CatCatchNotifier))? run;
 
   @override
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<bool> performManualCatCatchAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
+      {String? selectedMediaUrl}) async {
     calls.add((taskId, selecting));
+    selectedUrls.add(selectedMediaUrl);
     if (run != null) return run!(taskId, selecting, action);
     action(downloads());
     return true;
@@ -52,10 +56,12 @@ class _Downloads extends CatCatchNotifier {
   void skipConversion(String id) => rawSaves++;
 }
 
-Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task) async {
+Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
+    {bool flowManaged = true}) async {
   late _Downloads downloads;
   final actions = _FlowActions(() => downloads);
   await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
       overrides: [
         taskFlowExecutionServiceProvider.overrideWithValue(actions),
         catcatchTasksProvider.overrideWith((ref) {
@@ -70,7 +76,7 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task) async {
         child: Consumer(
             builder: (context, ref, _) => CatCatchTaskCard(
                   task: ref.watch(catcatchTasksProvider).single,
-                  isFlowManaged: true,
+                  isFlowManaged: flowManaged,
                 )),
       )))));
   await tester.pump();
@@ -106,6 +112,64 @@ void main() {
     expect(downloads.selected, [two]);
     expect(downloads.flowActions.calls, [('download', true)]);
     expect(downloads.batches, isEmpty);
+  });
+
+  testWidgets(
+      'downstream-filtered prompt hides incompatible resource and submits allowed item',
+      (tester) async {
+    const audioA =
+        MediaResource(url: 'https://x/a.mp3', name: 'audio-a', ext: 'mp3');
+    const audioB =
+        MediaResource(url: 'https://x/b.wav', name: 'audio-b', ext: 'wav');
+    const video =
+        MediaResource(url: 'https://x/v.mp4', name: 'video', ext: 'mp4');
+    final task = _task([audioA, audioB, video]).copyWith(metadata: {
+      CatCatchTask.flowManagedSelectionKey: 'true',
+      CatCatchTask.flowSelectionCandidatesKey:
+          jsonEncode([audioA.url, audioB.url]),
+    });
+    final downloads = await _pump(tester, task);
+
+    expect(find.text('video.mp4'), findsNothing);
+    expect(find.text('audio-a.mp3'), findsOneWidget);
+    expect(find.text('audio-b.wav'), findsOneWidget);
+    await tester.tap(find.text('audio-b.wav'));
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.selected, [audioB]);
+    expect(downloads.flowActions.selectedUrls, [audioB.url]);
+    expect(downloads.state.single.detectedMedia, [audioA, audioB, video]);
+  });
+
+  testWidgets('only flow prompts expose a matching split track by itself',
+      (tester) async {
+    const audio = MediaResource(
+      url: 'https://x/audio.m4a',
+      name: 'audio',
+      ext: 'm4a',
+      groupId: 'split',
+      isLikelySplitTrack: true,
+    );
+    final promptTask = _task([audio]).copyWith(metadata: {
+      CatCatchTask.flowManagedSelectionKey: 'true',
+      CatCatchTask.flowSelectionCandidatesKey: jsonEncode([audio.url]),
+    });
+    final downloads = await _pump(tester, promptTask);
+    expect(find.text('audio.m4a'), findsOneWidget);
+    await tester.tap(find.text('audio.m4a'));
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+    expect(downloads.selected, [audio]);
+
+    await _pump(tester, _task([audio]), flowManaged: false);
+    expect(find.text('audio.m4a'), findsNothing);
   });
 
   testWidgets(

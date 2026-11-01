@@ -101,6 +101,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       for (final task in next) {
         if (task.status.name == 'running' &&
+            task.metadata[catcatch_task.CatCatchTask.flowManagedSelectionKey] !=
+                'true' &&
             task.steps.any(
               (s) => s.type.name == 'userSelecting' && s.running,
             ) &&

@@ -122,11 +122,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     return _addTask(url, expectedDurationSec,
         videoFolder: videoFolder,
         audioFolder: audioFolder,
         taskId: taskId,
+        flowManagedSelection: flowManagedSelection,
         deferSingleResourceSelection: deferSingleResourceSelection);
   }
 
@@ -136,11 +138,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String? taskId,
       required String executionId,
       required String blockId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     return _addTask(url, expectedDurationSec,
         taskId: taskId,
         temporaryExecutionId: executionId,
         temporaryBlockId: blockId,
+        flowManagedSelection: flowManagedSelection,
         deferSingleResourceSelection: deferSingleResourceSelection);
   }
 
@@ -150,6 +154,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       String? taskId,
       String? temporaryExecutionId,
       String? temporaryBlockId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
@@ -158,6 +163,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       if (temporaryExecutionId != null)
         flowTemporaryExecutionIdKey: temporaryExecutionId,
       if (temporaryBlockId != null) flowTemporaryBlockIdKey: temporaryBlockId,
+      if (flowManagedSelection) CatCatchTask.flowManagedSelectionKey: 'true',
       if (deferSingleResourceSelection) 'deferSingleResourceSelection': 'true',
     };
     final task = CatCatchTask(
@@ -594,6 +600,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String? mergeAudioUrl}) {
     final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
+    final encodedCandidates =
+        state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
+    if (encodedCandidates != null) {
+      final allowedUrls =
+          (jsonDecode(encodedCandidates) as List).cast<String>();
+      if (!allowedUrls.contains(media.url)) return;
+    }
 
     // 标记 userSelecting 步骤为已完成
     final steps = state[index].steps.map((s) {
@@ -605,6 +618,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 如果传入了合并音频 URL，存入任务元数据
     Map<String, String> metadata = Map.from(state[index].metadata);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesKey);
     if (mergeAudioUrl != null && mergeAudioUrl.isNotEmpty) {
       metadata['mergeAudioUrl'] = mergeAudioUrl;
       metadata['mergeMode'] = 'audio_video';
@@ -626,6 +640,25 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 从 downloading 步骤继续
     _executeTaskFrom(task, StepType.downloading);
+  }
+
+  /// Narrows the task-flow ambiguity picker without changing CatCatch's
+  /// detected resource list. The allow-list rejects stale UI selections.
+  void setFlowSelectionCandidates(
+      String taskId, List<MediaResource> candidates) {
+    final index = state.lastIndexWhere((task) => task.id == taskId);
+    if (index < 0) return;
+    final task = state[index];
+    final metadata = Map<String, String>.from(task.metadata)
+      ..[CatCatchTask.flowManagedSelectionKey] = 'true'
+      ..[CatCatchTask.flowSelectionCandidatesKey] =
+          jsonEncode(candidates.map((media) => media.url).toList());
+    final updated = task.copyWith(metadata: metadata);
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    unawaited(_persistTasks());
   }
 
   /// 批量选择多个媒体资源进行下载

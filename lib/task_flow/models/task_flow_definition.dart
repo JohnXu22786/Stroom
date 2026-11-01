@@ -43,20 +43,82 @@ class TaskFlowBlock {
   /// Get the [BlockTypeDefinition] for this block's type.
   BlockTypeDefinition? getDefinition() {
     final definition = BlockTypeDefinition.findBlockType(typeKey);
-    if (definition == null ||
-        typeKey != BlockType.catcatch ||
-        params['audioOutput'] != true) {
+    if (definition == null || typeKey != BlockType.catcatch) {
       return definition;
     }
+    final outputTypes = possibleOutputTypes;
     return BlockTypeDefinition(
       typeKey: definition.typeKey,
       label: definition.label,
       inputType: definition.inputType,
-      outputType: IOType.audio,
+      // Keep the legacy scalar field concrete. Consumers that need to reason
+      // about all possible outputs must use possibleOutputTypes.
+      outputType:
+          outputTypes.length == 1 ? outputTypes.single : definition.outputType,
+      possibleOutputTypes: outputTypes,
       icon: definition.icon,
       color: definition.color,
       params: definition.params,
     );
+  }
+
+  /// The concrete kinds this block can produce before downstream filtering.
+  /// Follow downstream is the set {video, audio}, distinct from generic Any.
+  List<IOType> get possibleOutputTypes {
+    if (typeKey != BlockType.catcatch) {
+      final definition = BlockTypeDefinition.findBlockType(typeKey);
+      return definition == null ? const [] : definition.possibleOutputTypes;
+    }
+    final policy = switch (params['outputPolicy']) {
+      'audio' => CatCatchOutputPolicy.audio,
+      'followDownstream' => CatCatchOutputPolicy.followDownstream,
+      'video' => CatCatchOutputPolicy.video,
+      _ => params['audioOutput'] == true
+          ? CatCatchOutputPolicy.audio
+          : CatCatchOutputPolicy.video,
+    };
+    switch (policy) {
+      case CatCatchOutputPolicy.video:
+        return const [IOType.video];
+      case CatCatchOutputPolicy.audio:
+        return const [IOType.audio];
+      case CatCatchOutputPolicy.followDownstream:
+        return const [IOType.video, IOType.audio];
+    }
+  }
+
+  /// Possible outputs after intersecting a Follow downstream policy with the
+  /// immediate consumer's input constraint. A generic Any input leaves the
+  /// concrete union unresolved.
+  List<IOType> outputTypesForNext(IOType? nextInputType) {
+    final possible = possibleOutputTypes;
+    if (!followsDownstreamOutput ||
+        nextInputType == null ||
+        nextInputType == IOType.any) {
+      return possible;
+    }
+    return possible
+        .where((type) => type.isCompatibleWith(nextInputType))
+        .toList(growable: false);
+  }
+
+  bool get followsDownstreamOutput =>
+      typeKey == BlockType.catcatch &&
+      params['outputPolicy'] == 'followDownstream';
+
+  String get outputTypeLabel => followsDownstreamOutput
+      ? '视频或音频（按下游筛选）'
+      : (getDefinition()?.outputType.label ?? '未知');
+
+  String get catCatchResourceSelectionPolicy {
+    if (typeKey != BlockType.catcatch) return 'manual';
+    return switch (params['resourceSelectionPolicy']) {
+      'manual' => 'manual',
+      'automatic' => 'automatic',
+      'automaticWithPrompt' => 'automaticWithPrompt',
+      _ =>
+        params['automaticResourceSelection'] == true ? 'automatic' : 'manual',
+    };
   }
 
   /// Create a copy with overridden params. Other params from the definition
@@ -64,15 +126,20 @@ class TaskFlowBlock {
   TaskFlowBlock copyWithParams(Map<String, dynamic> newParams) {
     final merged = Map<String, dynamic>.from(params);
     merged.addAll(newParams);
+    if (newParams.containsKey('audioOutput') &&
+        !newParams.containsKey('outputPolicy')) {
+      merged.remove('outputPolicy');
+    }
+    if (newParams.containsKey('automaticResourceSelection') &&
+        !newParams.containsKey('resourceSelectionPolicy')) {
+      merged.remove('resourceSelectionPolicy');
+    }
     return TaskFlowBlock(id: id, typeKey: typeKey, params: merged);
   }
 
   /// Create a copy with a specific param changed.
-  TaskFlowBlock copyWithParam(String key, dynamic value) {
-    final merged = Map<String, dynamic>.from(params);
-    merged[key] = value;
-    return TaskFlowBlock(id: id, typeKey: typeKey, params: merged);
-  }
+  TaskFlowBlock copyWithParam(String key, dynamic value) =>
+      copyWithParams({key: value});
 
   // ========================================================================
   // Serialization

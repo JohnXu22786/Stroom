@@ -150,6 +150,13 @@ enum TaskStatus {
 
 /// 猫抓下载任务
 class CatCatchTask {
+  /// Marks a flow-owned ambiguity picker so the global CatCatch dialog stays
+  /// closed while the task-flow card presents its scoped choices.
+  static const flowManagedSelectionKey = 'flowManagedSelection';
+
+  /// JSON URL allow-list for the current flow-owned resource prompt.
+  static const flowSelectionCandidatesKey = 'flowSelectionCandidates';
+
   /// Written only after native save registered this exact completed file.
   /// Legacy task records require the task-flow registration fallback.
   static const nativeRegisteredPathKey = 'nativeRegisteredPath';

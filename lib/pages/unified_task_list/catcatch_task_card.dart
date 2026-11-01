@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,14 +48,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   Future<void> _performFlowAction(
     String taskId,
     bool selecting,
-    void Function(CatCatchNotifier) action,
-  ) async {
+    void Function(CatCatchNotifier) action, {
+    String? selectedMediaUrl,
+  }) async {
     if (!_pendingFlowActions.add(taskId)) return;
     setState(() {});
     try {
       final started = await ref
           .read(taskFlowExecutionServiceProvider)
-          .performManualCatCatchAction(taskId, selecting, action);
+          .performManualCatCatchAction(taskId, selecting, action,
+              selectedMediaUrl: selectedMediaUrl);
       if (!started && mounted) {
         _showFlowActionError('任务流操作未执行，请检查流程状态后重试');
       }
@@ -483,7 +487,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final mediaList = task.detectedMedia;
+    final encodedCandidates = widget.isFlowManaged
+        ? task.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey]
+        : null;
+    final allowedUrls = encodedCandidates == null
+        ? null
+        : (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
+    final mediaList = allowedUrls == null
+        ? task.detectedMedia
+        : task.detectedMedia
+            .where((media) => allowedUrls.contains(media.url))
+            .toList();
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
     final splitGroups = <String, List<MediaResource>>{};
@@ -495,9 +509,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
 
     final selectedUrls = _getSelectedUrls(task.id);
     final isSegment = (MediaResource media) => media.isPlaylistSegment;
-    final splitUrls = splitGroups.values
-        .expand((group) => group.map((media) => media.url))
-        .toSet();
+    final splitUrls = allowedUrls == null
+        ? splitGroups.values
+            .expand((group) => group.map((media) => media.url))
+            .toSet()
+        : <String>{
+            for (final group in splitGroups.values)
+              if (group.any((media) => media.isAudio) &&
+                  group.any((media) => media.isVideo))
+                ...group.map((media) => media.url),
+          };
     final selectableMedia =
         mediaList.where((media) => !splitUrls.contains(media.url)).toList();
     final segments = selectableMedia.where(isSegment).toList();
@@ -590,6 +611,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             selectedMediaList.first,
                             mergeAudioUrl: mergeAudio,
                           ),
+                          selectedMediaUrl: selectedMediaList.first.url,
                         );
                       } else {
                         notifier.batchSelectMedia(
@@ -903,16 +925,25 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   List<Widget> _buildGroupedMediaList(
     catcatch.CatCatchTask task,
     List<MediaResource> mediaList,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool allowPartialSplitTracks = false,
+  }) {
     if (mediaList.isEmpty) return [];
 
-    final splitIds = <String>{};
+    final splitGroups = <String, List<MediaResource>>{};
     for (final m in mediaList) {
       if (m.groupId != null && m.isLikelySplitTrack) {
-        splitIds.add(m.url);
+        splitGroups.putIfAbsent(m.groupId!, () => []).add(m);
       }
     }
+    final splitIds = allowPartialSplitTracks
+        ? <String>{
+            for (final group in splitGroups.values)
+              if (group.any((media) => media.isAudio) &&
+                  group.any((media) => media.isVideo))
+                ...group.map((media) => media.url),
+          }
+        : splitGroups.values.expand((group) => group.map((m) => m.url)).toSet();
     final remaining =
         mediaList.where((m) => !splitIds.contains(m.url)).toList();
     if (remaining.isEmpty) return [];
