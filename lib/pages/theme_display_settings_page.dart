@@ -16,6 +16,7 @@ class ThemeDisplaySettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _buildSectionHeader(context, '设置为主题'),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -47,18 +48,38 @@ class ThemeDisplaySettingsPage extends ConsumerWidget {
                     groupValue: themeMode,
                     onSelected: themeNotifier.setSystem,
                   ),
-                  const Divider(height: 1),
-                  const ListTile(
-                    leading: Icon(Icons.language, color: Colors.teal),
-                    title: Text('语言'),
-                    trailing: Text('中文'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, '语言'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ListTile(
+                leading: const Icon(Icons.language, color: Colors.teal),
+                title: const Text('中文'),
+                trailing: const Icon(Icons.check, color: Colors.teal),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
