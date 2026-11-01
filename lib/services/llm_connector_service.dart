@@ -20,7 +20,7 @@ import 'llm_oauth_flow.dart';
 const String kLlmConnectorReferenceRevision =
     'd318bcc3afb9ea8782862f5e8cdb541afdc9dfa5';
 
-const _claudeOAuthClientId = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+const _claudeOAuthClientId = LlmOAuthAuthorizationAttempt.claudeCodeClientId;
 const _kimiOAuthClientId = '17e5f671-d194-4dfb-9706-5516cb48c098';
 const _xaiOAuthClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
 
@@ -111,7 +111,7 @@ abstract final class LlmConnectorRegistry {
       id: 'claude',
       displayName: 'Anthropic Claude Code',
       protocol: LlmNativeProtocol.anthropicMessages,
-      authTypes: {'oauth', 'api_key'},
+      authTypes: {'oauth', 'setup_token', 'api_key'},
       modelCatalog: kPinnedClaudeModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
@@ -1160,6 +1160,27 @@ class LlmAccountConnectorService {
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(freshFields)
         ..['access_token'] = accessToken;
+      final claudeAccount = tokenResponse?['account'];
+      if (account.connectorType == 'claude' && claudeAccount is Map) {
+        final accountData = Map<String, dynamic>.from(claudeAccount);
+        final accountId = _firstString(accountData, const ['uuid']);
+        final email = _firstString(accountData, const ['email_address']);
+        if (accountId != null) updated['account_uuid'] = accountId;
+        if (email != null) updated['email'] = email;
+      }
+      final claudeOrganization = tokenResponse?['organization'];
+      if (account.connectorType == 'claude' && claudeOrganization is Map) {
+        final organizationData = Map<String, dynamic>.from(claudeOrganization);
+        final organizationId = _firstString(organizationData, const ['uuid']);
+        final organizationName =
+            _firstString(organizationData, const ['name']);
+        if (organizationId != null) {
+          updated['organization_uuid'] = organizationId;
+        }
+        if (organizationName != null) {
+          updated['organization_name'] = organizationName;
+        }
+      }
       if (_firstString(updated, const ['refresh_token', 'refreshToken']) ==
           null) {
         updated['refresh_token'] = refreshToken;
@@ -1505,8 +1526,7 @@ class LlmAccountConnectorService {
             'client_id': _claudeOAuthClientId,
             'grant_type': 'refresh_token',
             'refresh_token': refreshToken,
-            'scope':
-                'user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload',
+            'scope': LlmOAuthAuthorizationAttempt.claudeCodeScope,
           },
           contentType: Headers.jsonContentType,
           headers: const {
@@ -2811,6 +2831,7 @@ class LlmAccountConnectorService {
   static bool _requiresSecret(String authType) =>
       authType == 'api_key' ||
       authType == 'oauth' ||
+      authType == 'setup_token' ||
       authType == 'service_account' ||
       authType == 'session_token' ||
       authType == 'aws_credentials';
@@ -3269,6 +3290,12 @@ class LlmNativeRequestBuilder {
     if (isJson && decoded is Map) {
       final candidates = switch (account.authType) {
         'api_key' => const ['api_key', 'apiKey', 'key'],
+        'setup_token' => const [
+            'setup_token',
+            'setupToken',
+            'access_token',
+            'accessToken',
+          ],
         'oauth' => account.connectorType == 'meta'
             ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
             : const ['access_token', 'accessToken'],
@@ -3308,7 +3335,8 @@ class LlmNativeRequestBuilder {
     }
     if (account.authType != 'api_key' &&
         account.authType != 'oauth' &&
-        account.authType != 'session_token') {
+        account.authType != 'session_token' &&
+        account.authType != 'setup_token') {
       throw const LlmAccountConnectorException();
     }
     return credential;
@@ -3441,7 +3469,10 @@ class LlmNativeRequestBuilder {
         path = nativeFormat == 'count_tokens'
             ? '/v1/messages/count_tokens'
             : '/v1/messages';
-        if (account.authType == 'oauth') query = 'beta=true';
+        if (account.authType == 'oauth' ||
+            account.authType == 'setup_token') {
+          query = 'beta=true';
+        }
       case 'antigravity':
         baseUrl = _baseUrl(config, 'https://cloudcode-pa.googleapis.com');
         path = stream

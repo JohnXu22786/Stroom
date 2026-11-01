@@ -10,6 +10,7 @@ import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/aws_sigv4.dart';
 import '../fixtures/vertex_service_account.dart';
 
@@ -88,6 +89,21 @@ void main() {
         'api_key',
         'oauth',
       });
+      expect(LlmConnectorRegistry.find('claude')!.authTypes, {
+        'api_key',
+        'oauth',
+        'setup_token',
+      });
+      expect(LlmOAuthProviderPolicy.forProvider('claude').supported, isTrue);
+      for (final authType in ['oauth', 'setup_token']) {
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            'claude',
+            authType,
+          ),
+          isTrue,
+        );
+      }
       expect(LlmConnectorRegistry.find('aistudio')!.authTypes, {
         'api_key',
         'oauth',
@@ -298,6 +314,31 @@ void main() {
         expect(credentials.values, isEmpty);
       },
     );
+
+    test('stores Claude Setup Tokens securely without treating them as OAuth',
+        () async {
+      const token = 'sk-ant-oat01-setup-secret';
+      final account = await service.saveAccount(
+        _account('claude-setup-token', 'claude', authType: 'setup_token'),
+        secret: token,
+      );
+
+      final storedJson =
+          preferences
+              .values[LlmAccountMigrationService.accountsPreferenceKey]!;
+      expect(account.authType, 'setup_token');
+      expect(storedJson, isNot(contains(token)));
+      expect(await service.readCredential(account.id), token);
+      await service.saveAccount(account, secret: 'sk-ant-oat01-rotated');
+      expect(await service.readCredential(account.id), 'sk-ant-oat01-rotated');
+      expect(credentials.values, hasLength(1));
+      expect(await service.refreshCredential(account), isFalse);
+      expect(
+        (await service.discoverModels(account))
+            .map((model) => model.upstreamModelId),
+        contains('claude-sonnet-4-6'),
+      );
+    });
 
     test(
       'rolls secure credential updates back when preference write fails',
@@ -2470,6 +2511,65 @@ void main() {
       },
     );
 
+    test('refreshes Claude Code OAuth and retains refreshed account identity',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'fresh-claude-access',
+              'refresh_token': 'rotated-claude-refresh',
+              'expires_in': 3600,
+              'account': {
+                'uuid': 'refreshed-account-id',
+                'email_address': 'user@example.test',
+              },
+              'organization': {
+                'uuid': 'refreshed-org-id',
+                'name': 'Claude Org',
+              },
+            }),
+            200,
+          );
+        });
+      final refreshService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await refreshService.saveAccount(
+        _account('claude-refresh-oauth', 'claude', authType: 'oauth'),
+        secret: jsonEncode({
+          'access_token': 'expired-claude-access',
+          'refresh_token': 'old-claude-refresh',
+          'account_uuid': 'claude-account-id',
+          'organization_uuid': 'claude-org-id',
+        }),
+      );
+
+      expect(await refreshService.refreshCredential(account), isTrue);
+
+      final refreshed = jsonDecode(
+        (await refreshService.readCredential(account.id))!,
+      ) as Map;
+      expect(
+        captured?.uri.toString(),
+        'https://platform.claude.com/v1/oauth/token',
+      );
+      expect(
+        captured?.data,
+        containsPair('refresh_token', 'old-claude-refresh'),
+      );
+      expect(refreshed['access_token'], 'fresh-claude-access');
+      expect(refreshed['refresh_token'], 'rotated-claude-refresh');
+      expect(refreshed['account_uuid'], 'refreshed-account-id');
+      expect(refreshed['email'], 'user@example.test');
+      expect(refreshed['organization_uuid'], 'refreshed-org-id');
+      expect(refreshed['organization_name'], 'Claude Org');
+    });
+
     test(
       'does not refresh CLI-only OAuth credentials without public contracts',
       () async {
@@ -2492,7 +2592,6 @@ void main() {
         );
 
         for (final connector in [
-          'claude',
           'antigravity',
           'kimi',
           'kimi-ai',
@@ -2797,10 +2896,46 @@ void main() {
       );
 
       expect(request.uri.path, '/v1/messages');
+      expect(request.uri.queryParameters['beta'], 'true');
       expect(request.headers['Authorization'], 'Bearer claude-access-secret');
+      expect(request.headers['anthropic-beta'], contains('oauth-2025-04-20'));
       expect(request.headers['anthropic-version'], '2023-06-01');
       expect(request.headers['X-App'], 'cli');
       expect(request.toString(), isNot(contains('claude-access-secret')));
+    });
+
+    test('uses Anthropic Messages with a Setup Token bearer credential', () {
+      const setupToken = 'sk-ant-oat01-private-setup-token';
+      final request = builder.build(
+        account: _account('claude-setup-request', 'claude',
+            authType: 'setup_token'),
+        credential: setupToken,
+        modelId: 'claude-sonnet-4-6',
+        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+      );
+
+      expect(request.uri.path, '/v1/messages');
+      expect(request.headers['Authorization'], 'Bearer $setupToken');
+      expect(request.headers['anthropic-version'], '2023-06-01');
+      expect(
+        request.headers['anthropic-beta'],
+        contains('claude-code-20250219'),
+      );
+      expect(request.headers.containsKey('x-api-key'), isFalse);
+      expect(request.toString(), isNot(contains(setupToken)));
+    });
+
+    test('keeps Claude Console API keys on x-api-key authentication', () {
+      final request = builder.build(
+        account: _account('claude-console-key', 'claude', authType: 'api_key'),
+        credential: 'console-api-key',
+        modelId: 'claude-sonnet-4-6',
+        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+      );
+
+      expect(request.headers['x-api-key'], 'console-api-key');
+      expect(request.headers.containsKey('Authorization'), isFalse);
+      expect(request.uri.queryParameters.containsKey('beta'), isFalse);
     });
 
     test('uses Responses for Codex, Grok Build, and Meta', () {
@@ -3870,8 +4005,8 @@ void main() {
           credentialStore: _MemoryCredentials(),
         );
         final account = await accountService.saveAccount(
-          _account('claude-cli-oauth', 'claude', authType: 'oauth'),
-          secret: jsonEncode({'access_token': 'cli-session-token'}),
+          _account('kimi-cli-oauth', 'kimi', authType: 'oauth'),
+          secret: jsonEncode({'access_token': 'kimi-session-token'}),
         );
 
         await expectLater(
@@ -3880,7 +4015,7 @@ void main() {
             dio: dio,
           ).request(
             account: account,
-            modelId: 'claude-sonnet-4-5',
+            modelId: 'kimi-k2',
             body: const {'messages': []},
           ),
           throwsA(isA<LlmConnectorAuthenticationRequired>()),
@@ -4681,11 +4816,11 @@ void main() {
       },
     );
 
-    test('does not route Claude Code CLI OAuth to the Messages API', () async {
-      var requestsSent = 0;
+    test('routes Claude Code OAuth through the Messages API', () async {
+      RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requestsSent++;
+          captured = options;
           return ResponseBody.fromString('{}', 200);
         });
       final accounts = LlmAccountConnectorService(
@@ -4697,16 +4832,19 @@ void main() {
         secret: jsonEncode({'access_token': 'claude-stream-token'}),
       );
 
-      await expectLater(
-        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'claude-sonnet-4-6',
-          body: const {'model': 'claude-sonnet-4-6', 'messages': []},
-          stream: true,
-        ),
-        throwsA(isA<LlmConnectorAuthenticationRequired>()),
+      await LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+        account: account,
+        modelId: 'claude-sonnet-4-6',
+        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+        stream: true,
       );
-      expect(requestsSent, 0);
+      expect(captured?.uri.path, '/v1/messages');
+      expect(captured?.uri.queryParameters['beta'], 'true');
+      expect(captured?.headers['Authorization'], 'Bearer claude-stream-token');
+      expect(
+        captured?.headers['anthropic-beta'],
+        contains('claude-code-20250219'),
+      );
     });
 
     test(

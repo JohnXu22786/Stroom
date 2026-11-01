@@ -18,6 +18,94 @@ import 'package:stroom/services/llm_routing_service.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test('invokes Claude OAuth and Setup Token accounts through Anthropic Chat',
+      () async {
+    for (final authType in ['oauth', 'setup_token']) {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final accountId = 'claude-$authType-account';
+      final modelId = 'claude-$authType-model';
+      final groupId = 'claude-$authType-group';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'claude',
+          authType: authType,
+          displayName: 'Claude $authType',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: modelId,
+              upstreamModelId: 'claude-sonnet-4-6',
+              displayName: 'Claude Sonnet',
+              capabilities: const {'chat': true, 'streaming': true},
+            ),
+          ],
+        ),
+        secret: authType == 'oauth'
+            ? jsonEncode({'access_token': 'claude-oauth-access'})
+            : 'sk-ant-oat01-setup-token',
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Claude $authType group',
+          members: [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: modelId,
+              upstreamModelId: 'claude-sonnet-4-6',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: const {
+          'content': [
+            {'type': 'text', 'text': 'Claude reply'},
+          ],
+        },
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: groupId,
+        localModelId: modelId,
+        endpointType: 'anthropic',
+      );
+
+      final result = await provider.chat(const [
+        {'role': 'user', 'content': 'Hello Claude'},
+      ]);
+
+      expect(connector.requestedAccountIds, [accountId]);
+      expect(connector.requestedModelIds, ['claude-sonnet-4-6']);
+      expect(connector.lastNativeFormat, 'anthropic');
+      expect(connector.requestBody?['messages'], [
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'Hello Claude'},
+          ],
+        },
+      ]);
+      expect(result, contains('Claude reply'));
+    }
+  });
+
   test('routes Google Generative Language accounts through Gemini chat', () {
     expect(
       llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),

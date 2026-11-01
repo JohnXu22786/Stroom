@@ -23,9 +23,7 @@ class LlmOAuthProviderPolicy {
         LlmOAuthProviderPolicy._(providerId: 'aistudio', supported: true),
     'claude': LlmOAuthProviderPolicy._(
       providerId: 'claude',
-      supported: false,
-      reason:
-          'Claude Code OAuth is documented for the Anthropic CLI; third-party Messages API access requires a Console API key or configured workload identity federation.',
+      supported: true,
     ),
     'antigravity': LlmOAuthProviderPolicy._(
       providerId: 'antigravity',
@@ -101,6 +99,12 @@ class LlmOAuthAuthorizationAttempt {
   static const openAiDynamicClientId = 'dynamic_agent_client';
   static const openAiTokenEndpoint =
       'https://auth.openai.com/api/accounts/oauth/token';
+  static const claudeCodeClientId = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+  static const claudeCodeTokenEndpoint =
+      'https://platform.claude.com/v1/oauth/token';
+  static const claudeCodeScope =
+      'user:profile user:inference user:sessions:claude_code '
+      'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
   static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
@@ -112,6 +116,7 @@ class LlmOAuthAuthorizationAttempt {
   final String codeVerifier;
   final String? existingClientId;
   final bool isOpenAiRegistration;
+  final bool _isClaudeCode;
   var _consumed = false;
 
   LlmOAuthAuthorizationAttempt._({
@@ -122,7 +127,8 @@ class LlmOAuthAuthorizationAttempt {
     required this.codeVerifier,
     required this.existingClientId,
     required this.isOpenAiRegistration,
-  });
+    bool isClaudeCode = false,
+  }) : _isClaudeCode = isClaudeCode;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,
@@ -209,6 +215,39 @@ class LlmOAuthAuthorizationAttempt {
     );
   }
 
+  factory LlmOAuthAuthorizationAttempt.claudeCode({
+    required Uri redirectUri,
+  }) {
+    _validateLoopbackRedirect(
+      redirectUri,
+      '/callback',
+      host: 'localhost',
+      port: 54545,
+    );
+    final state = _secureValue();
+    final verifier = _secureValue();
+    final query = <String, String>{
+      'code': 'true',
+      'client_id': claudeCodeClientId,
+      'response_type': 'code',
+      'redirect_uri': redirectUri.toString(),
+      'scope': claudeCodeScope,
+      'code_challenge_method': 'S256',
+      'code_challenge': _challenge(verifier),
+      'state': state,
+    };
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https('claude.ai', '/oauth/authorize', query),
+      state: state,
+      nonce: '',
+      codeVerifier: verifier,
+      existingClientId: claudeCodeClientId,
+      isOpenAiRegistration: false,
+      isClaudeCode: true,
+    );
+  }
+
   LlmOAuthCallbackResult consumeCallback(Uri callbackUri) {
     if (_consumed) throw const LlmOAuthFlowException();
     if (!_sameCallbackTarget(callbackUri, redirectUri)) {
@@ -231,6 +270,18 @@ class LlmOAuthAuthorizationAttempt {
     if (codes == null || codes.length != 1 || codes.single.trim().isEmpty) {
       throw const LlmOAuthFlowException();
     }
+    var code = codes.single.trim();
+    if (_isClaudeCode) {
+      final codeStateSeparator = code.indexOf('#');
+      if (codeStateSeparator >= 0) {
+        final codeState = code.substring(codeStateSeparator + 1);
+        if (codeState.isEmpty || !_constantTimeEquals(codeState, state)) {
+          throw const LlmOAuthFlowException();
+        }
+        code = code.substring(0, codeStateSeparator);
+      }
+    }
+    if (code.isEmpty) throw const LlmOAuthFlowException();
     final clientIds = query['client_id'];
     if (clientIds != null && clientIds.length != 1) {
       throw const LlmOAuthFlowException();
@@ -251,7 +302,7 @@ class LlmOAuthAuthorizationAttempt {
       throw const LlmOAuthFlowException();
     }
     return LlmOAuthCallbackResult(
-      code: codes.single,
+      code: code,
       clientId: clientId,
       scope: scopes?.single,
     );
@@ -266,10 +317,15 @@ class LlmOAuthAuthorizationAttempt {
       .encode(sha256.convert(utf8.encode(verifier)).bytes)
       .replaceAll('=', '');
 
-  static void _validateLoopbackRedirect(Uri uri, String path) {
+  static void _validateLoopbackRedirect(
+    Uri uri,
+    String path, {
+    String host = '127.0.0.1',
+    int? port,
+  }) {
     if (uri.scheme != 'http' ||
-        uri.host != '127.0.0.1' ||
-        uri.port < 1 ||
+        uri.host != host ||
+        (port == null ? uri.port < 1 : uri.port != port) ||
         uri.userInfo.isNotEmpty ||
         uri.path != path ||
         uri.hasQuery ||

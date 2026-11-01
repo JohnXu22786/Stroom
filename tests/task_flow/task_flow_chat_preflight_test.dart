@@ -155,6 +155,60 @@ void main() {
     );
   });
 
+  test('Claude OAuth and Setup Token model groups preflight as Anthropic Chat',
+      () async {
+    for (final authType in ['oauth', 'setup_token']) {
+      final account = LlmAccount(
+        id: 'claude-$authType',
+        connectorType: 'claude',
+        authType: authType,
+        displayName: 'Claude $authType',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'claude-model-$authType',
+            upstreamModelId: 'claude-sonnet-4-6',
+            displayName: 'Claude Sonnet',
+            capabilities: const {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'claude-flow-$authType',
+        displayName: 'Claude $authType group',
+        members: [
+          LlmModelGroupMember(
+            accountId: account.id,
+            localModelId: 'claude-model-$authType',
+            upstreamModelId: 'claude-sonnet-4-6',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ]);
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Claude assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(flowChatEndpointType(assistant, providers), 'anthropic');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    }
+  });
+
   test('Vertex credential model groups preflight as native Gemini chat',
       () async {
     for (final authType in ['service_account', 'api_key']) {
