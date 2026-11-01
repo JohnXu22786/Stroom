@@ -93,6 +93,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final themeIcon = tester.widget<Icon>(find.byIcon(Icons.palette_outlined));
+    final notificationIcon = tester.widget<Icon>(
+      find.byIcon(Icons.notifications_active),
+    );
+    final optimizationIcon = tester.widget<Icon>(find.byIcon(Icons.speed));
+    expect(themeIcon.color, Colors.deepPurple);
+    expect(notificationIcon.color, Colors.blue);
+    expect(optimizationIcon.color, Colors.teal);
+    expect({
+      themeIcon.color,
+      notificationIcon.color,
+      optimizationIcon.color,
+    }, hasLength(3));
+
     expect(find.text('深色模式、显示语言'), findsOneWidget);
     await tester.tap(find.text('主题与显示'));
     await tester.pumpAndSettle();

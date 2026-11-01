@@ -15,9 +15,7 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const ThemeDisplaySettingsPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const ThemeDisplaySettingsPage()),
           );
         },
       ),
@@ -47,7 +45,7 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
 
   Widget _buildBackgroundOptimizationSettings() {
     return _buildListTile(
-      leading: const Icon(Icons.speed, color: Colors.deepPurple),
+      leading: const Icon(Icons.speed, color: Colors.teal),
       title: '后台运行优化',
       subtitle: '检测系统环境与后台服务状态，查看优化教程',
       trailing: const Icon(Icons.chevron_right),
