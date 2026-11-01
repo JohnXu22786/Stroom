@@ -213,56 +213,69 @@ class ManifestDatabase {
           await _migrateLegacyFoldersV4(db);
         }
         if (oldVersion < 5) {
-          // V5: 为四类记录表增加修改时间列 modified_at。
-          // 旧记录没有修改时间 → 回填为 created_at（内容从未被修改过）。
-          // 幂等且自愈：列已存在则跳过 ALTER；回填 UPDATE 只处理 0 值，
-          // 重复执行（含上次失败后的重试）都是安全空操作。
-          for (final table in const [
-            ManifestTables.imageRecords,
-            ManifestTables.audioRecords,
-            ManifestTables.videoRecords,
-            ManifestTables.textRecords,
-          ]) {
-            var hasColumn = false;
-            try {
-              final cols = await db.rawQuery('PRAGMA table_info($table)');
-              hasColumn = cols.any((c) => c['name'] == 'modified_at');
-            } catch (e) {
-              await AppLogService.error('ManifestDatabase',
-                  '_initDatabase v5: table_info failed for $table', e);
-              continue;
-            }
-            if (!hasColumn) {
-              try {
-                await db.execute(
-                  'ALTER TABLE $table ADD COLUMN modified_at INTEGER NOT NULL DEFAULT 0',
-                );
-              } catch (e) {
-                // 列添加失败时记录真实原因；不继续回填（后续读写会显式报错）
-                await AppLogService.error(
-                    'ManifestDatabase',
-                    '_initDatabase v5: ADD COLUMN modified_at failed for $table',
-                    e);
-                continue;
-              }
-            }
-            try {
-              await db.execute(
-                'UPDATE $table SET modified_at = created_at WHERE modified_at = 0',
-              );
-            } catch (e) {
-              await AppLogService.error(
-                  'ManifestDatabase',
-                  '_initDatabase v5: backfill modified_at failed for $table',
-                  e);
-            }
-          }
+          await _migrateModifiedAtV5(db);
         }
       },
     );
     await _migrateOldVideoRecords(db);
     return db;
   }
+
+  static Future<void> _migrateModifiedAtV5(Database db) async {
+    // V5: 为四类记录表增加修改时间列 modified_at。
+    // 旧记录没有修改时间 → 回填为 created_at（内容从未被修改过）。
+    // 幂等且自愈：列已存在则跳过 ALTER；回填 UPDATE 只处理 0 值，
+    // 重复执行（含上次失败后的重试）都是安全空操作。
+    for (final table in const [
+      ManifestTables.imageRecords,
+      ManifestTables.audioRecords,
+      ManifestTables.videoRecords,
+      ManifestTables.textRecords,
+    ]) {
+      var hasColumn = false;
+      try {
+        final cols = await db.rawQuery('PRAGMA table_info($table)');
+        hasColumn = cols.any((c) => c['name'] == 'modified_at');
+      } catch (e) {
+        await AppLogService.error(
+          'ManifestDatabase',
+          '_initDatabase v5: table_info failed for $table',
+          e,
+        );
+        rethrow;
+      }
+      if (!hasColumn) {
+        try {
+          await db.execute(
+            'ALTER TABLE $table ADD COLUMN modified_at INTEGER NOT NULL DEFAULT 0',
+          );
+        } catch (e) {
+          await AppLogService.error(
+            'ManifestDatabase',
+            '_initDatabase v5: ADD COLUMN modified_at failed for $table',
+            e,
+          );
+          rethrow;
+        }
+      }
+      try {
+        await db.execute(
+          'UPDATE $table SET modified_at = created_at WHERE modified_at = 0',
+        );
+      } catch (e) {
+        await AppLogService.error(
+          'ManifestDatabase',
+          '_initDatabase v5: backfill modified_at failed for $table',
+          e,
+        );
+        rethrow;
+      }
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> migrateModifiedAtV5ForTesting(Database db) =>
+      _migrateModifiedAtV5(db);
 
   static Future<void> _migrateLegacyFoldersV4(Database db) async {
     // V4: 引入每个类型独立的文件夹表，替代共享的 folders 表
