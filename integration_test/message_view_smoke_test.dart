@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:stroom/pages/chat/message_view/dsh_message_view.dart';
@@ -54,6 +55,51 @@ window.flutter_inappwebview.callHandler("StroomMessageView", {
       debugPrint('DSH native smoke: macOS minimal document probe passed');
       await tester.pumpWidget(const SizedBox());
       probeCommands.dispose();
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final bridgeEvents = <dynamic>[];
+      debugPrint('DSH native smoke: Android minimal WebView bridge probe');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: '<!doctype html><html><body>bridge probe</body></html>',
+              baseUrl: WebUri(
+                'file:///assets/vendor/dsh_message_view/index.html',
+              ),
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              javaScriptHandlersForMainFrameOnly: true,
+            ),
+            onWebViewCreated: (controller) {
+              controller.addJavaScriptHandler(
+                handlerName: 'StroomMessageView',
+                callback: (data) => bridgeEvents.add(data.args.single),
+              );
+            },
+            onLoadStop: (controller, url) async {
+              await controller.evaluateJavascript(
+                source: '''window.flutter_inappwebview.callHandler(
+                  "StroomMessageView", {type: "probeBridge"}
+                )''',
+              );
+            },
+          ),
+        ),
+      ));
+      for (var i = 0; i < 300 && bridgeEvents.isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        bridgeEvents,
+        isNotEmpty,
+        reason:
+            'Android WebView must load a minimal document and call its bridge',
+      );
+      debugPrint('DSH native smoke: Android minimal bridge probe passed');
+      await tester.pumpWidget(const SizedBox());
     }
 
     final key = GlobalKey<DshMessageViewState>();
