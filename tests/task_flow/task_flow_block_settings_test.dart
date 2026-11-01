@@ -140,8 +140,7 @@ void main() {
     await tester.tap(find.text('视频或音频（按下游筛选）').last);
     await tester.pumpAndSettle();
     expect(find.text('输入: 文本  →  输出: 视频或音频（按下游筛选）'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('确认'), 150,
-        scrollable: find.byType(Scrollable).last);
+    await tester.ensureVisible(find.text('确认'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();

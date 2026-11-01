@@ -1003,6 +1003,8 @@ void main() {
     final activeDownloads = downloads!;
     final taskId =
         activeDownloads.idsByUrl['https://example.com/unclassified']!;
+    await _waitFor(
+        () => scheduler.holds(id), 'CatCatch worker acquires its slot');
     await _waitFor(() => !scheduler.holds(id), 'deferred resource picker');
 
     var heldDuringSelection = false;
