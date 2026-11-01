@@ -1229,11 +1229,14 @@ bool _legacyOcrHasCredentialUseContextAcrossLineBreak(
 ) {
   final splitPrefix = RegExp(
     '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-    r'[\r\n]+[ \t\u00a0]*(\S+)',
+    r'[\r\n]+[ \t\u00a0]*((?:\S+[\r\n]+[ \t\u00a0]*)*\S+)',
     caseSensitive: false,
   );
   for (final match in splitPrefix.allMatches(text)) {
-    final suffix = match.group(1)!.replaceFirst(
+    final suffix = match
+        .group(1)!
+        .replaceAll(RegExp(r'[\r\n]+[ \t\u00a0]*'), '')
+        .replaceFirst(
           RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
           '',
         );
@@ -3213,15 +3216,39 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       sourceText,
       credentialValues,
     );
-    final redactedText = hadCredentialBeforeRedaction
-        ? _legacyOcrRedactMaskedCredentialEchoes(
-            redactionSourceText,
-            credentialValues,
-          )
-        : _legacyOcrRedactSpacedDocumentationCredentialEchoes(
-            redactionSourceText,
-            credentialValues,
+    // First redact the targeted OCR-spaced echoes over the whole instruction
+    // so credentials split across lines are joined. Then apply the broad
+    // legacy matcher only to lines that independently contain credential
+    // evidence; a key-shaped line must not make it rewrite later safe prompts.
+    final targetedRedactedText =
+        _legacyOcrRedactSpacedDocumentationCredentialEchoes(
+      redactionSourceText,
+      credentialValues,
+    );
+    final crossLineCredentialValues = credentialValues.where((value) {
+      final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+      if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) {
+        return false;
+      }
+      final prefix =
+          value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+      return prefix.toLowerCase() != 'documentation';
+    }).toList();
+    final textWithOtherMaskedEchoes = crossLineCredentialValues.isEmpty
+        ? targetedRedactedText
+        : _legacyOcrRedactMaskedCredentialEchoes(
+            targetedRedactedText,
+            crossLineCredentialValues,
           );
+    final redactedText = textWithOtherMaskedEchoes
+        .split('\n')
+        .map((line) => _legacyOcrTextContainsCredential(line, credentialValues)
+            ? _legacyOcrRedactMaskedCredentialEchoes(
+                line,
+                credentialValues,
+              )
+            : line)
+        .join('\n');
     final hadCredential =
         hadCredentialBeforeRedaction || redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
@@ -3375,14 +3402,18 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     final leftBoundary =
         canMatchWithinToken ? r'(?:^|[^a-zA-Z0-9])?' : r'(?:^|[^a-zA-Z0-9])';
     final tokenLead = canMatchWithinToken ? r'[a-zA-Z0-9]*' : '';
+    final hasCredentialUseContextAcrossLineBreak =
+        _legacyOcrHasCredentialUseContextAcrossLineBreak(sanitized, prefix);
     final lineBreakContinuation =
         _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
       prefix,
       text: sanitized,
     );
-    final suffixPattern = allowEmbeddedPrefix
-        ? r'(?:\s+[a-zA-Z0-9_-]{2,}|\S+|(?=$|[^a-zA-Z0-9]))'
-        : r'\S+';
+    final suffixPattern = hasCredentialUseContextAcrossLineBreak
+        ? r'\S+(?:[\r\n]+[ \t\u00a0]*\S+)*'
+        : allowEmbeddedPrefix || prefix.toLowerCase() != 'documentation'
+            ? r'(?:\s+[a-zA-Z0-9_-]{2,}|\S+|(?=$|[^a-zA-Z0-9]))'
+            : r'\S+';
     final extendedPrefix = RegExp(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'

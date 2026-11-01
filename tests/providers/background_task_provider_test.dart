@@ -15092,6 +15092,78 @@ void main() {
         );
         expect(lineBreakPersisted, isNot(contains('foobarxyz')));
 
+        final nonDocumentationPrefixLineBreakTask = taskFor(
+          'legacy-ocr-other-masked-prefix-line-break-echo',
+          'Use foo\nbarxyz to authenticate',
+          authorization: 'Bearer foo…',
+        );
+        final nonDocumentationPrefixLineBreakInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationPrefixLineBreakTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationPrefixLineBreakPersisted =
+            jsonEncode(nonDocumentationPrefixLineBreakTask.toMap());
+        expect(
+          nonDocumentationPrefixLineBreakInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationPrefixLineBreakPersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final nonDocumentationMultiLinePrefixTask = taskFor(
+          'legacy-ocr-other-multiline-masked-prefix-echo',
+          'Use foo\nbar\nxyz to authenticate',
+          authorization: 'Bearer foo…',
+        );
+        final nonDocumentationMultiLinePrefixInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationMultiLinePrefixTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationMultiLinePrefixPersisted =
+            jsonEncode(nonDocumentationMultiLinePrefixTask.toMap());
+        expect(
+          nonDocumentationMultiLinePrefixInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationMultiLinePrefixPersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final nonDocumentationNaturalLineTask = taskFor(
+          'legacy-ocr-other-masked-prefix-natural-line',
+          'Use foo\nbar\nPlease read the documentation carefully.',
+          authorization: 'Bearer foo…',
+        );
+        final nonDocumentationNaturalLineInstruction =
+            OcrRetrySnapshot.fromMap(nonDocumentationNaturalLineTask.retryData!)
+                .instructionContent!;
+        expect(
+          nonDocumentationNaturalLineInstruction,
+          'Use foo\nbar\nPlease read the documentation carefully.',
+        );
+
+        final nonDocumentationPrefixSpaceTask = taskFor(
+          'legacy-ocr-other-masked-prefix-space-echo',
+          'Use foo barxyz to authenticate',
+          authorization: 'Bearer foo…',
+        );
+        final nonDocumentationPrefixSpaceInstruction = OcrRetrySnapshot.fromMap(
+          nonDocumentationPrefixSpaceTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationPrefixSpacePersisted =
+            jsonEncode(nonDocumentationPrefixSpaceTask.toMap());
+        expect(
+          nonDocumentationPrefixSpaceInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationPrefixSpacePersisted,
+          isNot(contains('foobarxyz')),
+        );
+
         final nbspLineBreakTask = taskFor(
           'legacy-ocr-nbsp-line-break-masked-prefix-echo',
           'Please read documentation\n\u00a0foobarxyz carefully.',
