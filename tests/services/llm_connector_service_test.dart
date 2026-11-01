@@ -2739,15 +2739,18 @@ void main() {
     test('refreshes each xAI OAuth mode without crossing API-key identity',
         () async {
       final captured = <String, RequestOptions>{};
+      Object? responseScope;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           captured[options.uri.host] = options;
+          final tokenResponse = <String, Object?>{
+            'access_token': 'fresh-${options.data['refresh_token']}',
+            'refresh_token': 'rotated-${options.data['refresh_token']}',
+            'expires_in': 3600,
+          };
+          if (responseScope != null) tokenResponse['scope'] = responseScope;
           return ResponseBody.fromString(
-            jsonEncode({
-              'access_token': 'fresh-${options.data['refresh_token']}',
-              'refresh_token': 'rotated-${options.data['refresh_token']}',
-              'expires_in': 3600,
-            }),
+            jsonEncode(tokenResponse),
             200,
             headers: const {
               'content-type': ['application/json']
@@ -2761,6 +2764,10 @@ void main() {
       );
 
       for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        final expectedModeScope =
+            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+        responseScope =
+            'openid profile email offline_access $expectedModeScope';
         final account = await accountService.saveAccount(
           _account('refresh-$connectorType', connectorType, authType: 'oauth'),
           secret: jsonEncode({
@@ -2769,6 +2776,7 @@ void main() {
             'token_endpoint': 'https://auth.x.ai/oauth/token',
             'identity_sub': 'xai-account',
             'oauth_contract': 'xai-device-v1',
+            'scope': responseScope,
           }),
         );
 
@@ -2783,6 +2791,39 @@ void main() {
         expect(refreshed['refresh_token'], 'rotated-refresh-$connectorType');
         expect(refreshed['identity_sub'], 'xai-account');
         expect(refreshed['token_endpoint'], 'https://auth.x.ai/oauth/token');
+        expect(refreshed['scope'], responseScope);
+      }
+
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        final expectedModeScope =
+            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+        final oppositeModeScope =
+            connectorType == 'grok-cli' ? 'api:access' : 'grok-cli:access';
+        responseScope =
+            'openid profile email offline_access $oppositeModeScope';
+        final account = await accountService.saveAccount(
+          _account('refresh-mismatch-$connectorType', connectorType,
+              authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-access',
+            'refresh_token': 'refresh-mismatch-$connectorType',
+            'token_endpoint': 'https://auth.x.ai/oauth/token',
+            'identity_sub': 'xai-account',
+            'oauth_contract': 'xai-device-v1',
+            'scope': 'openid profile email offline_access $expectedModeScope',
+          }),
+        );
+
+        await expectLater(
+          accountService.refreshCredential(account),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        final unchanged = jsonDecode(
+          (await accountService.readCredential(account.id))!,
+        ) as Map;
+        expect(unchanged['access_token'], 'old-access');
+        expect(unchanged['scope'],
+            'openid profile email offline_access $expectedModeScope');
       }
 
       final apiKeyAccount = await accountService.saveAccount(

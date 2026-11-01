@@ -1210,10 +1210,15 @@ class LlmAccountConnectorService {
         'accessToken',
       ]);
       if (accessToken == null) throw const LlmAccountConnectorException();
+      final xaiRefreshScope = account.connectorType == 'grok-cli' ||
+              account.connectorType == 'xai-oauth'
+          ? _validatedXaiRefreshScope(tokenResponse, account.connectorType)
+          : null;
       final freshFields = tokenResponse ?? const <String, dynamic>{};
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(freshFields)
         ..['access_token'] = accessToken;
+      if (xaiRefreshScope != null) updated['scope'] = xaiRefreshScope;
       final claudeAccount = tokenResponse?['account'];
       if (account.connectorType == 'claude' && claudeAccount is Map) {
         final accountData = Map<String, dynamic>.from(claudeAccount);
@@ -1666,6 +1671,33 @@ class LlmAccountConnectorService {
       default:
         return null;
     }
+  }
+
+  static String _validatedXaiRefreshScope(
+    Map<String, dynamic>? tokenResponse,
+    String connectorType,
+  ) {
+    final requiredModeScope = switch (connectorType) {
+      'grok-cli' => 'grok-cli:access',
+      'xai-oauth' => 'api:access',
+      _ => throw const LlmAccountConnectorException(),
+    };
+    final oppositeModeScope = requiredModeScope == 'grok-cli:access'
+        ? 'api:access'
+        : 'grok-cli:access';
+    if (tokenResponse == null || !tokenResponse.containsKey('scope')) {
+      return 'openid profile email offline_access $requiredModeScope';
+    }
+    final scope = tokenResponse['scope'];
+    if (scope is! String || scope.trim().isEmpty) {
+      throw const LlmAccountConnectorException();
+    }
+    final grantedScopes = scope.trim().split(RegExp(r'\s+')).toSet();
+    if (!grantedScopes.contains(requiredModeScope) ||
+        grantedScopes.contains(oppositeModeScope)) {
+      throw const LlmAccountConnectorException();
+    }
+    return scope.trim();
   }
 
   Future<List<LlmUpstreamModel>> _discoverRemoteModels(
