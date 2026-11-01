@@ -700,7 +700,10 @@ class ManifestDatabase {
     return _webData!;
   }
 
-  static Future<void> _saveWebData({bool rethrowOnError = true}) async {
+  static Future<void> _saveWebData({
+    bool rethrowOnError = true,
+    bool invalidateCacheOnError = true,
+  }) async {
     final dataToSave = _webData;
     if (dataToSave == null) {
       throw StateError('Manifest data is unavailable for persistence.');
@@ -718,7 +721,9 @@ class ManifestDatabase {
         // Mutators update this cache before saving. Discard it on a failed
         // write so the next read reloads the persisted manifest instead of
         // presenting an uncommitted mutation as current data.
-        if (rethrowOnError && identical(_webData, dataToSave)) {
+        if (rethrowOnError &&
+            invalidateCacheOnError &&
+            identical(_webData, dataToSave)) {
           _webData = null;
         }
         await AppLogService.error(
@@ -795,7 +800,10 @@ class ManifestDatabase {
               insertedFolders.add(path);
             }
             writeAttempted = true;
-            await _saveWebData(rethrowOnError: true);
+            await _saveWebData(
+              rethrowOnError: true,
+              invalidateCacheOnError: false,
+            );
             if (isTextRecord) beforeCommit?.call();
           } catch (error, stackTrace) {
             records.remove(record);
@@ -804,7 +812,10 @@ class ManifestDatabase {
             }
             if (writeAttempted) {
               try {
-                await _saveWebData(rethrowOnError: true);
+                await _saveWebData(
+                  rethrowOnError: true,
+                  invalidateCacheOnError: false,
+                );
               } catch (_) {
                 // Keep the cancellation or original write error as the failure.
               }
@@ -1059,7 +1070,10 @@ class ManifestDatabase {
           data[ManifestTables.audioRecords] =
               records.where((r) => (r as Map)['id'] != id).toList();
           try {
-            await _saveWebData(rethrowOnError: true);
+            await _saveWebData(
+              rethrowOnError: true,
+              invalidateCacheOnError: false,
+            );
           } catch (_) {
             if (originalRecords == null) {
               data.remove(ManifestTables.audioRecords);
@@ -1097,7 +1111,10 @@ class ManifestDatabase {
           data[ManifestTables.audioRecords] =
               records.where((r) => !idSet.contains((r as Map)['id'])).toList();
           try {
-            await _saveWebData(rethrowOnError: true);
+            await _saveWebData(
+              rethrowOnError: true,
+              invalidateCacheOnError: false,
+            );
           } catch (_) {
             if (originalRecords == null) {
               data.remove(ManifestTables.audioRecords);
@@ -1457,7 +1474,10 @@ class ManifestDatabase {
             beforeFolderInsertForTesting?.call(path);
             list.add(path);
             try {
-              await _saveWebData(rethrowOnError: true);
+              await _saveWebData(
+                rethrowOnError: true,
+                invalidateCacheOnError: false,
+              );
             } catch (_) {
               list.remove(path);
               rethrow;
