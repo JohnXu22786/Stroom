@@ -794,6 +794,7 @@ class ManifestDatabase {
     required Map<String, dynamic> record,
     required Iterable<String> folderPaths,
     void Function()? beforeCommit,
+    void Function()? afterCommit,
   }) async {
     try {
       final folderTable = ManifestTables.folderTableFor(recordTable);
@@ -848,6 +849,7 @@ class ManifestDatabase {
             }
             Error.throwWithStackTrace(error, stackTrace);
           }
+          afterCommit?.call();
         });
         return;
       }
@@ -870,6 +872,7 @@ class ManifestDatabase {
         }
         if (isTextRecord) beforeCommit?.call();
       });
+      afterCommit?.call();
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertRecordWithFolders failed', e, stackTrace);
