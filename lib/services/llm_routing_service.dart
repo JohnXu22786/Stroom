@@ -1437,6 +1437,19 @@ class LlmRoutingService {
         );
         continue;
       }
+      final connectorType =
+          LlmConnectorRegistry.canonicalId(account.connectorType);
+      if ((connectorType == 'xai' || connectorType == 'meta') &&
+          !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            connectorType,
+            account.authType,
+          )) {
+        decisions.add(
+          LlmRouteDecision(
+              subjectId: account.id, reason: 'auth_type_unsupported'),
+        );
+        continue;
+      }
       if (account.status == LlmAccountStatus.paused ||
           account.status == LlmAccountStatus.needsAttention) {
         decisions.add(
@@ -1461,6 +1474,18 @@ class LlmRoutingService {
       if (model == null) {
         decisions.add(
           LlmRouteDecision(subjectId: account.id, reason: 'model_not_mapped'),
+        );
+        continue;
+      }
+      if (!LlmConnectorRegistry.isConversationalModel(
+        model.upstreamModelId,
+        model.capabilities,
+      )) {
+        decisions.add(
+          LlmRouteDecision(
+            subjectId: account.id,
+            reason: 'capability_mismatch',
+          ),
         );
         continue;
       }
@@ -2603,6 +2628,12 @@ bool _supportsModelCapability(
     return capabilities[capability] == true;
   }
   final methods = capabilities['supportedGenerationMethods'];
+  if (capability == 'chat' &&
+      methods is Iterable &&
+      !methods.contains('generateContent') &&
+      !methods.contains('streamGenerateContent')) {
+    return false;
+  }
   final protocol = LlmConnectorRegistry.find(connectorType)?.protocol;
   if (methods is Iterable &&
       const {
