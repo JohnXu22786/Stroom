@@ -3272,6 +3272,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     Map<String, dynamic>? retryData,
+    bool _retryDataAlreadySanitized = false,
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
@@ -3328,7 +3329,8 @@ class BackgroundTask {
                 ),
               )
             : rawResponse,
-        retryData = type == BackgroundTaskType.ocr
+        retryData = type == BackgroundTaskType.ocr &&
+                !_retryDataAlreadySanitized
             ? _sanitizeOcrRetryDataForConstruction(
                 taskId: id,
                 retryData: retryData,
@@ -3411,6 +3413,7 @@ class BackgroundTask {
       ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
+      _retryDataAlreadySanitized: retryData == null,
     );
     _generationTokens[copy] = _generationTokenFor(this);
     return copy;
@@ -3481,6 +3484,7 @@ class BackgroundTask {
       rawRequest: map['rawRequest'] as Map<String, dynamic>?,
       rawResponse: map['rawResponse'] as Map<String, dynamic>?,
       retryData: _retryDataFromTaskMap(map),
+      _retryDataAlreadySanitized: true,
       ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
       ocrCredentialValuesForSanitization: retryCredentialValues,
     );
