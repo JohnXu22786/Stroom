@@ -59,6 +59,22 @@ class FolderPathUtils {
   static String? validateFolderName(String name) =>
       _validateName(name, '文件夹名', 100);
 
+  /// 校验完整文件夹路径中的每一级名称。
+  ///
+  /// 路径边界上的空白会由调用方按现有行为处理；内部目录名不能以空白结尾，
+  /// 因为 Windows 会静默移除它，导致不同路径在导出时指向同一目录。
+  static String? validateFolderPath(String folderPath) {
+    if (folderPath.isEmpty) return null;
+    for (final segment in folderPath.split('/')) {
+      if (segment != segment.trimRight()) {
+        return '文件夹名不能以空白结尾';
+      }
+      final error = validateFolderName(segment);
+      if (error != null) return error;
+    }
+    return null;
+  }
+
   /// 校验文件名是否合法（比文件夹名更严格：
   /// 额外拒绝 Windows 非法字符，否则导出时会在路径写入时失败）。
   /// 长度上限与 [sanitizeFileName] 的 110 一致，避免导入后无法重命名。

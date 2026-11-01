@@ -75,4 +75,12 @@ void main() {
       expect(FolderPathUtils.validateFolderName('x' * 100), isNull);
     });
   });
+
+  group('FolderPathUtils.validateFolderPath', () {
+    test('rejects trailing whitespace in every path segment', () {
+      expect(FolderPathUtils.validateFolderPath('foo /bar'), isNotNull);
+      expect(FolderPathUtils.validateFolderPath('foo/bar /baz'), isNotNull);
+      expect(FolderPathUtils.validateFolderPath('foo/bar'), isNull);
+    });
+  });
 }
