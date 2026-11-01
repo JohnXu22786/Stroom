@@ -1018,23 +1018,26 @@ class ManifestOperations<T extends FileRecord> {
       }
       final descendants =
           FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
+      final foldersToRemove = <String>{...descendants, folderName};
+      Future<void> deleteFolderEntries() async {
+        for (final folder in foldersToRemove) {
+          await ManifestDatabase.deleteFolder(folder, recordTable: tableName);
+          _folderCache.remove(folder);
+        }
+      }
 
       // Collect all records to delete
       final idsToDelete = <String>[];
       final toRemoveRecords = <T>[];
 
       for (final child in descendants) {
-        _folderCache.remove(child);
         final childRecords =
             _cache!.where((r) => folderOf(r) == child).toList();
         toRemoveRecords.addAll(childRecords);
         for (final record in childRecords) {
           idsToDelete.add(record.id);
         }
-        await ManifestDatabase.deleteFolder(child, recordTable: tableName);
       }
-
-      _folderCache.remove(folderName);
 
       final folderRecords =
           _cache!.where((r) => folderOf(r) == folderName).toList();
@@ -1042,7 +1045,6 @@ class ManifestOperations<T extends FileRecord> {
       for (final record in folderRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
       // Pre-count storage names and hash counts across ALL records before deletion
       final storageNameCount = <String, int>{};
@@ -1128,6 +1130,10 @@ class ManifestOperations<T extends FileRecord> {
           _recordMutationRevision++;
         }
       }
+
+      // Keep folder metadata available unless record deletion commits. Empty
+      // descendants cannot be reconstructed from surviving record rows.
+      await deleteFolderEntries();
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'removeFolder failed', e, st);
