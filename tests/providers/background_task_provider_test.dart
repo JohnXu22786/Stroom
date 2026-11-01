@@ -3152,6 +3152,48 @@ void main() {
           credentialNounBeforeCarefullyRetryData['instructionContent'],
           redactedCredentialBeforeCarefullyPrompt,
         );
+
+        const exactCredential = 'sk-known-credential-value-12345';
+        final knownCredentialTask = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-known-credential-description',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer $exactCredential'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text': 'The image contains $exactCredential.',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final knownCredentialPersisted =
+            jsonEncode(knownCredentialTask.toMap());
+        final knownCredentialRetryData = (jsonDecode(knownCredentialPersisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            knownCredentialTask.retryData!,
+          ).instructionContent,
+          'The image contains [redacted].',
+        );
+        expect(
+          knownCredentialRetryData['instructionContent'],
+          'The image contains [redacted].',
+        );
+        expect(knownCredentialPersisted, isNot(contains(exactCredential)));
       },
     );
 
