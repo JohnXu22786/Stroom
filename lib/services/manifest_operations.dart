@@ -162,6 +162,7 @@ class ManifestOperations<T extends FileRecord> {
             cache.indexWhere((record) => identical(record, updated));
         if (currentIndex != -1) cache[currentIndex] = previous;
       }
+      _recordMutationRevision++;
       rethrow;
     }
   }
@@ -1181,16 +1182,37 @@ class ManifestOperations<T extends FileRecord> {
         await ManifestDatabase.deleteFolder(f, recordTable: tableName);
       }
 
-      // Move records in the removed folder path to root
+      // Move records in the removed folder path to root.
       final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
-      for (var i = 0; i < (_cache?.length ?? 0); i++) {
-        final r = _cache![i];
-        final f = folderOf(r);
-        if (f == folderPath ||
-            (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
-          _cache![i] = copyFolder(r, '');
-          await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+      final processedRecordIds = <String>{};
+      while (true) {
+        T? nextRecord;
+        for (final record in _cache ?? <T>[]) {
+          final folder = folderOf(record);
+          if (!processedRecordIds.contains(record.id) &&
+              (folder == folderPath ||
+                  (folderPrefix.isNotEmpty &&
+                      folder.startsWith(folderPrefix)))) {
+            nextRecord = record;
+            break;
+          }
         }
+        if (nextRecord == null) break;
+
+        final id = nextRecord.id;
+        processedRecordIds.add(id);
+        await _withRecordMutationLock(id, () async {
+          final cache = _cache;
+          if (cache == null) return;
+          final index = cache.indexWhere((record) => record.id == id);
+          if (index == -1) return;
+          final record = cache[index];
+          final folder = folderOf(record);
+          if (folder == folderPath ||
+              (folderPrefix.isNotEmpty && folder.startsWith(folderPrefix))) {
+            await _persistCachedRecordMutation(index, copyFolder(record, ''));
+          }
+        });
       }
     } catch (e, st) {
       await AppLogService.error('ManifestOperations($manifestKey)',
