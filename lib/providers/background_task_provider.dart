@@ -2244,10 +2244,17 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       var documentIdentifierDigitCount = 0;
       bool hasCredentialShape(String suffix) {
         final alphabeticSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+        final detectedLineBrokenMaskedEcho =
+            match.group(2)!.contains(RegExp(r'[\r\n]')) &&
+                _legacyOcrTextContainsMaskedCredential(
+                  match.group(0)!,
+                  [value],
+                );
         final hasMarkerCredentialShape = RegExp(r'[0-9_]').hasMatch(suffix) &&
             suffix.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').length >= 8 &&
             alphabeticSuffix.length >= 2;
-        return hasMarkerCredentialShape ||
+        return detectedLineBrokenMaskedEcho ||
+            hasMarkerCredentialShape ||
             _legacyOcrHasCredentialWord(alphabeticSuffix) ||
             (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
                 _legacyOcrHasHighAlphabeticEntropy(
