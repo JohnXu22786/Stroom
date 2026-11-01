@@ -1015,7 +1015,7 @@ bool _legacyOcrHasCredentialUseContext(
           RegExp(r'^to authenticate\b', caseSensitive: false)
               .hasMatch(after)) &&
       RegExp(
-        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
+        r'^(?:(?:carefully|thoroughly|closely|fully|completely|verbatim|quickly|accurately|clearly|correctly|precisely|concisely|briefly|literally|faithfully|exactly)\s+)?to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final useForReceiptContext = useVerb &&
@@ -1223,28 +1223,104 @@ bool _legacyOcrHasInterleavedAlphaNumericKeyPrefix(String prefix) {
   return classTransitions >= 3;
 }
 
-bool _legacyOcrHasCredentialUseContextAcrossLineBreak(
+int? _legacyOcrCredentialLineChunkCountAcrossLineBreak(
   String text,
   String prefix,
 ) {
-  final splitPrefix = RegExp(
-    '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-    r'[\r\n]+[ \t\u00a0]*((?:\S+[\r\n]+[ \t\u00a0]*)*\S+)',
+  final prefixPattern = _legacyOcrOpenMaskPrefixPattern(prefix);
+  for (final prefixMatch in RegExp(
+    prefixPattern,
     caseSensitive: false,
-  );
-  for (final match in splitPrefix.allMatches(text)) {
-    final suffix = match
-        .group(1)!
-        .replaceAll(RegExp(r'[\r\n]+[ \t\u00a0]*'), '')
-        .replaceFirst(
-          RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
-          '',
-        );
-    if (_legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
-      return true;
+  ).allMatches(text)) {
+    final windowEnd = prefixMatch.start + 10000;
+    int? naturalEndpointChunkCount;
+    for (var lineChunkCount = 1;
+        lineChunkCount <= text.length - prefixMatch.start;
+        lineChunkCount++) {
+      final splitPrefix = RegExp(
+        prefixPattern +
+            '((?:[\\r\\n]+[ \\t\\u00a0]*\\S+){' +
+            lineChunkCount.toString() +
+            '})',
+        caseSensitive: false,
+      ).matchAsPrefix(text, prefixMatch.start);
+      if (splitPrefix == null || splitPrefix.end > windowEnd) break;
+      final suffix = splitPrefix
+          .group(1)!
+          .replaceAll(RegExp(r'[\r\n]+[ \t\u00a0]*'), '')
+          .replaceFirst(RegExp(r'[.,!?;:)\]}]+$'), '');
+      if (suffix.isEmpty) break;
+      final suffixChunks =
+          splitPrefix.group(1)!.split(RegExp(r'[\r\n]+[ \t\u00a0]*'));
+      if (_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+          _legacyOcrHasNaturalAlphaContinuation(suffix)) {
+        naturalEndpointChunkCount = lineChunkCount;
+        final followingLineChunk = RegExp(
+          r'^[\r\n]+[ \t\u00a0]*(\S+)',
+        ).firstMatch(text.substring(splitPrefix.end))?.group(1);
+        final followingChunkHasCredentialShape = followingLineChunk != null &&
+            _legacyOcrLineChunkHasCredentialShape(followingLineChunk);
+        final followingChunkContinuesNaturalWord = followingLineChunk != null &&
+            (_legacyOcrHasNaturalWordContinuation(
+                  prefix,
+                  '$suffix$followingLineChunk',
+                ) ||
+                _legacyOcrHasNaturalAlphaContinuation(
+                  followingLineChunk,
+                ));
+        final followingChunkIsShortFragment = followingLineChunk != null &&
+            RegExp(r'^[a-zA-Z0-9_-]{1,3}$').hasMatch(followingLineChunk);
+        if (!followingChunkHasCredentialShape &&
+            !followingChunkContinuesNaturalWord &&
+            !followingChunkIsShortFragment) {
+          break;
+        }
+        continue;
+      }
+      if (naturalEndpointChunkCount != null &&
+          !_legacyOcrLineChunkHasCredentialShape(
+            suffixChunks.skip(naturalEndpointChunkCount).join(),
+          )) {
+        continue;
+      }
+      if (_legacyOcrHasCredentialUseContext(
+        text,
+        splitPrefix,
+        prefix,
+        suffix,
+      )) {
+        return lineChunkCount;
+      }
     }
   }
-  return false;
+  return null;
+}
+
+bool _legacyOcrLineChunkHasCredentialShape(String value) {
+  final compactValue = value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  if (!value.contains('_') &&
+      RegExp(
+        r'^(?:(?:api|access|private)?(?:versions?|releases?|pages?|chapters?|sections?|ids?|nos?))[0-9]{1,18}$',
+      ).hasMatch(compactValue)) {
+    return false;
+  }
+  final digits = RegExp(r'\d').allMatches(value).length;
+  return digits >= 6 ||
+      value.contains('_') ||
+      _legacyOcrHasCredentialWord(value) ||
+      _legacyOcrHasHighAlphabeticEntropy(
+        value,
+        minimumLength: 8,
+        minimumEntropy: 2.6,
+        maximumVowelRatio: 0.4,
+      );
+}
+
+String _legacyOcrLineBreakCredentialSuffixPattern(int? lineChunkCount) {
+  if (lineChunkCount == null || lineChunkCount <= 1) return r'\S+';
+  return r'\S+(?:[\r\n]+[ \t\u00a0]*\S+){' +
+      (lineChunkCount - 1).toString() +
+      '}';
 }
 
 String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
@@ -1253,7 +1329,9 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
 }) {
   if (_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
       (text != null &&
-          _legacyOcrHasCredentialUseContextAcrossLineBreak(text, prefix))) {
+          prefix.toLowerCase() != 'documentation' &&
+          _legacyOcrCredentialLineChunkCountAcrossLineBreak(text, prefix) !=
+              null)) {
     return r'(?:[\r\n]+[ \t\u00a0]*)?';
   }
   if (text != null) {
@@ -3402,15 +3480,23 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     final leftBoundary =
         canMatchWithinToken ? r'(?:^|[^a-zA-Z0-9])?' : r'(?:^|[^a-zA-Z0-9])';
     final tokenLead = canMatchWithinToken ? r'[a-zA-Z0-9]*' : '';
+    final credentialLineChunkCount = prefix.toLowerCase() == 'documentation'
+        ? null
+        : _legacyOcrCredentialLineChunkCountAcrossLineBreak(
+            sanitized,
+            prefix,
+          );
     final hasCredentialUseContextAcrossLineBreak =
-        _legacyOcrHasCredentialUseContextAcrossLineBreak(sanitized, prefix);
+        credentialLineChunkCount != null;
     final lineBreakContinuation =
         _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
       prefix,
       text: sanitized,
     );
     final suffixPattern = hasCredentialUseContextAcrossLineBreak
-        ? r'\S+(?:[\r\n]+[ \t\u00a0]*\S+)*'
+        ? _legacyOcrLineBreakCredentialSuffixPattern(
+            credentialLineChunkCount,
+          )
         : allowEmbeddedPrefix || prefix.toLowerCase() != 'documentation'
             ? r'(?:\s+[a-zA-Z0-9_-]{2,}|\S+|(?=$|[^a-zA-Z0-9]))'
             : r'\S+';
@@ -3532,7 +3618,14 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           );
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
-          authenticateWithToProcessContext;
+          authenticateWithToProcessContext ||
+          (!hasSentenceBoundary &&
+              _legacyOcrHasCredentialUseContext(
+                sanitized,
+                match,
+                prefix,
+                echoSuffix,
+              ));
       final naturalReadInstructionsPrompt =
           _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
               RegExp(

@@ -15132,6 +15132,202 @@ void main() {
           isNot(contains('foobarxyz')),
         );
 
+        final nonDocumentationLongMultiLinePrefixTask = taskFor(
+          'legacy-ocr-other-long-multiline-masked-prefix-echo',
+          'Use foo\nbar\nbaz\nqux\nquux\ncorge\ngrault to authenticate',
+          authorization: 'Bearer foo…',
+        );
+        final nonDocumentationLongMultiLinePrefixInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationLongMultiLinePrefixTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationLongMultiLinePrefixPersisted =
+            jsonEncode(nonDocumentationLongMultiLinePrefixTask.toMap());
+        expect(
+          nonDocumentationLongMultiLinePrefixInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationLongMultiLinePrefixPersisted,
+          isNot(contains('foobarbazquxquuxcorgegrault')),
+        );
+
+        final nonDocumentationNaturalWordCredentialTask = taskFor(
+          'legacy-ocr-other-natural-word-fragmented-masked-prefix-echo',
+          'Use auth\nentic\nation123456 to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationNaturalWordCredentialInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationNaturalWordCredentialTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationNaturalWordCredentialPersisted =
+            jsonEncode(nonDocumentationNaturalWordCredentialTask.toMap());
+        expect(
+          nonDocumentationNaturalWordCredentialInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationNaturalWordCredentialPersisted,
+          isNot(contains('authentication123456')),
+        );
+
+        final nonDocumentationNaturalWordLaterMarkerTask = taskFor(
+          'legacy-ocr-other-natural-word-later-marker-masked-prefix-echo',
+          'Use auth\nentic\nation\n123456 to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationNaturalWordLaterMarkerInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationNaturalWordLaterMarkerTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationNaturalWordLaterMarkerPersisted =
+            jsonEncode(nonDocumentationNaturalWordLaterMarkerTask.toMap());
+        expect(
+          nonDocumentationNaturalWordLaterMarkerInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationNaturalWordLaterMarkerPersisted,
+          isNot(contains('authentication123456')),
+        );
+
+        final nonDocumentationShortFragmentLaterMarkerTask = taskFor(
+          'legacy-ocr-other-short-fragment-later-marker-masked-prefix-echo',
+          'Use auth\nentic\nation\nab\n123456 to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationShortFragmentLaterMarkerInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationShortFragmentLaterMarkerTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationShortFragmentLaterMarkerPersisted =
+            jsonEncode(nonDocumentationShortFragmentLaterMarkerTask.toMap());
+        expect(
+          nonDocumentationShortFragmentLaterMarkerInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationShortFragmentLaterMarkerPersisted,
+          isNot(contains('authenticationab123456')),
+        );
+
+        final nonDocumentationNaturalAdverbAfterCredentialTask = taskFor(
+          'legacy-ocr-other-natural-adverb-after-masked-prefix-echo',
+          'Use auth\nentic\nation123456\ncarefully to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationNaturalAdverbAfterCredentialInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationNaturalAdverbAfterCredentialTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationNaturalAdverbAfterCredentialPersisted =
+            jsonEncode(
+                nonDocumentationNaturalAdverbAfterCredentialTask.toMap());
+        expect(
+          nonDocumentationNaturalAdverbAfterCredentialInstruction,
+          'Use [redacted]\ncarefully to authenticate',
+        );
+        expect(
+          nonDocumentationNaturalAdverbAfterCredentialPersisted,
+          isNot(contains('authentication123456')),
+        );
+        expect(
+          nonDocumentationNaturalAdverbAfterCredentialPersisted,
+          contains('carefully to authenticate'),
+        );
+
+        final nonDocumentationSplitDigitAdverbTask = taskFor(
+          'legacy-ocr-other-split-digit-adverb-masked-prefix-echo',
+          'Use auth\nentic\nation\n12\n3456\nquickly to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationSplitDigitAdverbInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationSplitDigitAdverbTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationSplitDigitAdverbPersisted =
+            jsonEncode(nonDocumentationSplitDigitAdverbTask.toMap());
+        expect(
+          nonDocumentationSplitDigitAdverbInstruction,
+          'Use [redacted]\nquickly to authenticate',
+        );
+        expect(
+          nonDocumentationSplitDigitAdverbPersisted,
+          isNot(contains('authentication123456')),
+        );
+        expect(
+          nonDocumentationSplitDigitAdverbPersisted,
+          contains('quickly to authenticate'),
+        );
+
+        final nonDocumentationNaturalWordPromptTask = taskFor(
+          'legacy-ocr-other-natural-word-prompt-under-masked-prefix',
+          'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationNaturalWordPrompt = OcrRetrySnapshot.fromMap(
+          nonDocumentationNaturalWordPromptTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationNaturalWordPromptPersisted =
+            jsonEncode(nonDocumentationNaturalWordPromptTask.toMap());
+        expect(
+          nonDocumentationNaturalWordPrompt,
+          'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
+        );
+        expect(
+          nonDocumentationNaturalWordPromptPersisted,
+          contains(
+            jsonEncode(
+              'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
+            ),
+          ),
+        );
+
+        final nonDocumentationVersionReferencePromptTask = taskFor(
+          'legacy-ocr-natural-version-reference-under-masked-prefix',
+          'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationVersionReferencePrompt = OcrRetrySnapshot.fromMap(
+          nonDocumentationVersionReferencePromptTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationVersionReferencePromptPersisted =
+            jsonEncode(nonDocumentationVersionReferencePromptTask.toMap());
+        expect(
+          nonDocumentationVersionReferencePrompt,
+          'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
+        );
+        expect(
+          nonDocumentationVersionReferencePromptPersisted,
+          contains(
+            jsonEncode(
+              'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
+            ),
+          ),
+        );
+
+        final nonDocumentationUnderscoredVersionCredentialTask = taskFor(
+          'legacy-ocr-underscored-version-credential-under-masked-prefix',
+          'Use auth\nentic\nation\napi_version123456 to authenticate',
+          authorization: 'Bearer auth…',
+        );
+        final nonDocumentationUnderscoredVersionCredentialInstruction =
+            OcrRetrySnapshot.fromMap(
+          nonDocumentationUnderscoredVersionCredentialTask.retryData!,
+        ).instructionContent!;
+        final nonDocumentationUnderscoredVersionCredentialPersisted =
+            jsonEncode(
+                nonDocumentationUnderscoredVersionCredentialTask.toMap());
+        expect(
+          nonDocumentationUnderscoredVersionCredentialInstruction,
+          'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationUnderscoredVersionCredentialPersisted,
+          isNot(contains('api_version123456')),
+        );
+
         final nonDocumentationNaturalLineTask = taskFor(
           'legacy-ocr-other-masked-prefix-natural-line',
           'Use foo\nbar\nPlease read the documentation carefully.',
