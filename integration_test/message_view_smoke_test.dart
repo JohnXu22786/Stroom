@@ -57,6 +57,45 @@ const probeTimer = setInterval(() => {
         for (var i = 0; i < 300 && !bridgeReady(); i++) {
           await tester.pump(const Duration(milliseconds: 100));
         }
+        if (!bridgeReady()) {
+          InAppWebViewController? blankController;
+          final blankEvents = <String>[];
+          debugPrint(
+            'DSH native smoke: local document stalled; testing about:blank on a fresh WKWebView',
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: InAppWebView(
+                  initialUrlRequest: URLRequest(
+                    url: WebUri('about:blank'),
+                  ),
+                  initialSettings: InAppWebViewSettings(
+                    javaScriptEnabled: true,
+                    useShouldOverrideUrlLoading: true,
+                  ),
+                  onWebViewCreated: (controller) {
+                    blankController = controller;
+                  },
+                  onLoadStart: (controller, url) {
+                    blankEvents.add('start:$url');
+                  },
+                  onLoadStop: (controller, url) {
+                    blankEvents.add('stop:$url');
+                  },
+                  shouldOverrideUrlLoading: (controller, action) async =>
+                      NavigationActionPolicy.ALLOW,
+                ),
+              ),
+            ),
+          );
+          for (var i = 0; i < 20; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          debugPrint(
+            'DSH native smoke: about:blank url=${await blankController?.getUrl()} progress=${await blankController?.getProgress()} events=$blankEvents',
+          );
+        }
         expect(
           probeEvents.any((e) => e['type'] == 'ready'),
           isTrue,
