@@ -236,20 +236,60 @@ class _MessageWebHostState extends State<MessageWebHost> {
   void initState() {
     super.initState();
     widget.commands.addListener(_send);
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      unawaited(_prepareMacDocument());
+    }
+  }
+
+  Future<void> _prepareMacDocument() async {
+    if (_macLoadInProgress || !mounted) return;
+    _macLoadInProgress = true;
+    _macLoadFailed = false;
+    setState(() {});
+
+    Directory? documentDirectory;
+    try {
+      final directory = await getTemporaryDirectory();
+      await directory.create(recursive: true);
+      documentDirectory = await directory.createTemp('stroom-message-');
+      final document = File('${documentDirectory.path}/index.html');
+      await document.writeAsString(widget.html, flush: true);
+      if (!mounted) {
+        await _deleteMacDocumentDirectory(documentDirectory);
+        return;
+      }
+      _macDocumentDirectory = documentDirectory;
+      _macDocumentUri = document.uri;
+    } catch (error) {
+      if (documentDirectory != null &&
+          !identical(documentDirectory, _macDocumentDirectory)) {
+        await _deleteMacDocumentDirectory(documentDirectory);
+      }
+      if (kDebugMode) {
+        debugPrint('[MessageWebHost][load-error] macOS document setup: $error');
+      }
+      if (mounted) setState(() => _macLoadFailed = true);
+    } finally {
+      _macLoadInProgress = false;
+      if (mounted) setState(() {});
+    }
   }
 
   void _send() {
     final command = widget.commands.value;
     final controller = _controller;
     if (command == null || controller == null) return;
-    _pending = _pending.then((_) async {
-      if (!mounted || !identical(controller, _controller)) return;
-      await controller.evaluateJavascript(
-        source: 'window.StroomMessageView?.receive(${jsonEncode(command)});',
-      );
-    }).catchError((Object error) {
-      if (mounted) debugPrint('[MessageWebHost] $error');
-    });
+    _pending = _pending
+        .then((_) async {
+          if (!mounted || !identical(controller, _controller)) return;
+          await controller.evaluateJavascript(
+            source:
+                'window.StroomMessageView?.receive(${jsonEncode(command)});',
+          );
+        })
+        .catchError((Object error) {
+          if (mounted) debugPrint('[MessageWebHost] $error');
+        });
   }
 
   @override
@@ -264,8 +304,17 @@ class _MessageWebHostState extends State<MessageWebHost> {
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
-        children: [
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.macOS &&
+        _macDocumentUri == null &&
+        !_macLoadFailed) {
+      return const SizedBox.expand();
+    }
+
+    return Stack(
+      children: [
+        if (defaultTargetPlatform != TargetPlatform.macOS ||
+            _macDocumentUri != null)
           InAppWebView(
             // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
             // native platforms except macOS, where the document is copied into an
@@ -273,6 +322,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
             initialFile: defaultTargetPlatform == TargetPlatform.macOS
                 ? null
                 : 'assets/vendor/dsh_message_view/index.html',
+            initialUrlRequest: defaultTargetPlatform == TargetPlatform.macOS
+                ? URLRequest(url: WebUri.uri(_macDocumentUri!))
+                : null,
             initialData: null,
             // Leave the plugin origin allow-list unset: WKWebView file URLs have
             // no host. The handler below validates this exact main-frame URL.
@@ -283,6 +335,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
               supportZoom: false,
               useShouldOverrideUrlLoading: true,
               javaScriptHandlersForMainFrameOnly: true,
+              allowingReadAccessTo:
+                  defaultTargetPlatform == TargetPlatform.macOS
+                  ? WebUri.uri(_macDocumentDirectory!.uri)
+                  : null,
             ),
             onConsoleMessage: (controller, message) {
               if (kDebugMode) {
@@ -313,12 +369,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
               }
               if (defaultTargetPlatform == TargetPlatform.macOS) {
                 _macDocumentNavigationStarted = false;
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  await _loadMacDocument(controller);
-                });
-                // Platform-view creation can happen between frames. Schedule the
-                // post-frame load, then retry only until WKWebView starts navigating.
-                WidgetsBinding.instance.ensureVisualUpdate();
+                final generation = ++_macLoadGeneration;
+                unawaited(_failMacLoadIfUnready(controller, generation));
               }
               controller.addJavaScriptHandler(
                 handlerName: 'StroomMessageView',
@@ -326,25 +378,28 @@ class _MessageWebHostState extends State<MessageWebHost> {
                   final rejection = !mounted
                       ? 'unmounted'
                       : !data.isMainFrame
-                          ? 'subframe'
-                          : !_trustedDocument(data.requestUrl)
-                              ? 'untrusted-url:${data.requestUrl}'
-                              : data.args.length != 1 || data.args.first is! Map
-                                  ? 'invalid-arguments'
-                                  : null;
+                      ? 'subframe'
+                      : !_trustedDocument(data.requestUrl)
+                      ? 'untrusted-url:${data.requestUrl}'
+                      : data.args.length != 1 || data.args.first is! Map
+                      ? 'invalid-arguments'
+                      : null;
                   if (rejection != null) {
                     if (kDebugMode) {
                       debugPrint(
-                          '[MessageWebHost][handler-rejected] $rejection');
+                        '[MessageWebHost][handler-rejected] $rejection',
+                      );
                     }
                     return;
                   }
                   if (kDebugMode) {
                     debugPrint(
-                        '[MessageWebHost][handler] ${data.args.first['type']}');
+                      '[MessageWebHost][handler] ${data.args.first['type']}',
+                    );
                   }
-                  final event =
-                      Map<String, dynamic>.from(data.args.first as Map);
+                  final event = Map<String, dynamic>.from(
+                    data.args.first as Map,
+                  );
                   if (defaultTargetPlatform == TargetPlatform.macOS &&
                       event['type'] == 'ready') {
                     _macDocumentNavigationStarted = true;
@@ -391,10 +446,9 @@ JSON.stringify({
               }
               if (defaultTargetPlatform == TargetPlatform.macOS &&
                   !rendererReady) {
-                unawaited(_failMacLoadIfUnready(
-                  controller,
-                  _macLoadGeneration,
-                ));
+                unawaited(
+                  _failMacLoadIfUnready(controller, _macLoadGeneration),
+                );
               }
               if (mounted && rendererReady) {
                 _macDocumentNavigationStarted = true;
@@ -410,37 +464,43 @@ JSON.stringify({
               final trusted = url != null && _trustedDocument(url);
               if (kDebugMode) {
                 debugPrint(
-                    '[MessageWebHost][navigation] $url trusted=$trusted');
+                  '[MessageWebHost][navigation] $url trusted=$trusted',
+                );
               }
               return trusted
                   ? NavigationActionPolicy.ALLOW
                   : NavigationActionPolicy.CANCEL;
             },
           ),
-          if (defaultTargetPlatform == TargetPlatform.macOS && _macLoadFailed)
-            Positioned.fill(
-              child: ColoredBox(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline),
-                      const SizedBox(height: 8),
-                      const Text('消息内容加载失败'),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: _macLoadInProgress || _controller == null
-                            ? null
-                            : () => _loadMacDocument(_controller!),
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('重试'),
-                      ),
-                    ],
-                  ),
+        if (defaultTargetPlatform == TargetPlatform.macOS && _macLoadFailed)
+          Positioned.fill(
+            child: ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline),
+                    const SizedBox(height: 8),
+                    const Text('消息内容加载失败'),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _macLoadInProgress
+                          ? null
+                          : _macDocumentUri == null
+                          ? () => _prepareMacDocument()
+                          : _controller == null
+                          ? null
+                          : () => _loadMacDocument(_controller!),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重试'),
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
-      );
+          ),
+      ],
+    );
+  }
 }
