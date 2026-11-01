@@ -42,6 +42,8 @@ void main() {
         .build()
         .toCompactSerialization();
     var returnedIdToken = validIdToken;
+    String? returnedScope =
+        'openid profile email offline_access grok-cli:access';
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
         requests.add(request);
@@ -95,7 +97,7 @@ void main() {
             'refresh_token': 'fixture-xai-refresh',
             'id_token': returnedIdToken,
             'token_type': 'Bearer',
-            'scope': 'openid profile email offline_access grok-cli:access',
+            'scope': returnedScope,
             'expires_in': 3600,
           }),
           200,
@@ -109,7 +111,8 @@ void main() {
     final code = await client.startXaiDeviceAuthorization(
       connectorType: 'grok-cli',
     );
-    await client.startXaiDeviceAuthorization(connectorType: 'xai-oauth');
+    final apiCode =
+        await client.startXaiDeviceAuthorization(connectorType: 'xai-oauth');
     final token = await client.pollXaiDeviceAuthorization(deviceCode: code);
 
     expect(
@@ -149,6 +152,22 @@ void main() {
       client.pollXaiDeviceAuthorization(deviceCode: code),
       throwsA(isA<LlmOAuthFlowException>()),
     );
+    returnedIdToken = validIdToken;
+    returnedScope = 'openid profile email offline_access api:access';
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: code),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    returnedScope = 'openid profile email offline_access grok-cli:access';
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: apiCode),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    returnedScope = null;
+    final tokenWithoutScope = await client.pollXaiDeviceAuthorization(
+      deviceCode: code,
+    );
+    expect(tokenWithoutScope['scope'], code.scope);
   });
 
   test(

@@ -417,6 +417,18 @@ class LlmOAuthTokenClient {
         if (accessToken == null || refreshToken == null || idToken == null) {
           throw const LlmOAuthFlowException();
         }
+        final grantedScope = _nonEmptyString(token['scope']);
+        if (grantedScope != null) {
+          final grantedScopes = grantedScope.split(RegExp(r'\s+')).toSet();
+          final requestedModeScope = deviceCode.scope.split(' ').last;
+          final otherModeScope = requestedModeScope == 'grok-cli:access'
+              ? 'api:access'
+              : 'grok-cli:access';
+          if (!grantedScopes.contains(requestedModeScope) ||
+              grantedScopes.contains(otherModeScope)) {
+            throw const LlmOAuthFlowException();
+          }
+        }
         final identity = await _verifyXaiIdentity(
           idToken: idToken,
           jwksUri: deviceCode.jwksUri,
@@ -433,7 +445,10 @@ class LlmOAuthTokenClient {
           ..['token_endpoint'] = tokenEndpoint.toString()
           ..['id_token'] = idToken
           ..['identity_sub'] = subject
-          ..['scope'] = _nonEmptyString(token['scope']) ?? deviceCode.scope
+          // OAuth omits the response scope when it matches the request. The
+          // pinned xAI device response also omits it, so retain the requested
+          // mode scope in that case.
+          ..['scope'] = grantedScope ?? deviceCode.scope
           ..['oauth_contract'] = 'xai-device-v1';
         if (identity['email_verified'] == true) {
           final email = _nonEmptyString(identity['email']);
