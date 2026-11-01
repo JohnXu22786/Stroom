@@ -2713,33 +2713,36 @@ Map<String, dynamic>? _unavailableRetryDataFromLegacyRequest(
   );
 }
 
+bool _isOcrCredentialField(Object? key) {
+  if (key is! String) return false;
+  final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  return normalized == 'key' ||
+      normalized.contains('apikey') ||
+      RegExp(
+        r'(?:api|access|private|secret|subscription|client|service|consumer|encryption|signing|publishable|webhook|public|app|account|license|project|organization|org|deployment|database|db)key$',
+      ).hasMatch(normalized) ||
+      normalized.contains('token') ||
+      normalized.contains('secret') ||
+      normalized.endsWith('auth') ||
+      normalized.contains('authorization') ||
+      normalized.contains('bearer') ||
+      normalized.contains('credential') ||
+      normalized == 'password' ||
+      normalized == 'passwd' ||
+      normalized == 'passphrase' ||
+      normalized.contains('cookie') ||
+      normalized == 'signature' ||
+      normalized == 'sig' ||
+      normalized == 'jwt';
+}
+
 Iterable<String> _credentialValuesFromOcrRetryData(
   Map<String, dynamic> retryData,
 ) sync* {
-  bool isCredentialField(Object? key) {
-    if (key is! String) return false;
-    final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-    return normalized == 'key' ||
-        RegExp(
-          r'(?:api|access|private|secret|subscription|client|service|consumer|encryption|signing|publishable|webhook|public|app|account|license|project|organization|org|deployment|database|db)key$',
-        ).hasMatch(normalized) ||
-        normalized.contains('token') ||
-        normalized.contains('secret') ||
-        normalized.contains('authorization') ||
-        normalized.contains('credential') ||
-        normalized == 'password' ||
-        normalized == 'passwd' ||
-        normalized == 'passphrase' ||
-        normalized.contains('cookie') ||
-        normalized == 'signature' ||
-        normalized == 'sig' ||
-        normalized == 'jwt';
-  }
-
   Iterable<String> valuesFrom(dynamic value) sync* {
     if (value is Map) {
       for (final entry in value.entries) {
-        if (isCredentialField(entry.key) &&
+        if (_isOcrCredentialField(entry.key) &&
             entry.value is String &&
             (entry.value as String).trim().isNotEmpty) {
           yield entry.value as String;
@@ -2754,6 +2757,20 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   }
 
   yield* valuesFrom(retryData);
+}
+
+dynamic _withoutOcrCredentialFields(dynamic value) {
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        if (!_isOcrCredentialField(entry.key))
+          entry.key: _withoutOcrCredentialFields(entry.value),
+    };
+  }
+  if (value is List) {
+    return [for (final item in value) _withoutOcrCredentialFields(item)];
+  }
+  return value;
 }
 
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
@@ -2900,27 +2917,21 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
       malformedSnapshot.version == 2 ||
       malformedSnapshot.version == OcrRetrySnapshot.currentVersion;
   if (!supportedVersion) {
-    // Safe future-version snapshots must keep following the existing restore
-    // migration path. Rebuild only when the snapshot contains fields or values
-    // that cannot be retained in a task record.
-    bool containsCredential(dynamic value) {
-      if (value is String) {
-        return _legacyOcrTextContainsCredential(value, credentialValues);
+    if (malformedRetryData['version'] is int) {
+      final safeFutureData = _withoutCredentialEchoes(
+        _withoutOcrCredentialFields(malformedRetryData),
+        safeCredentialValues,
+      );
+      try {
+        // Keep forward-compatible fields opaque for future app versions. The
+        // integer version still prevents this app from treating them as
+        // executable retry input.
+        jsonEncode(safeFutureData);
+        return Map<String, dynamic>.from(safeFutureData as Map);
+      } on Object {
+        // Fall back to the known-safe subset if the future payload cannot be
+        // represented in persisted task JSON.
       }
-      if (value is Map) {
-        return value.entries.any(
-          (entry) =>
-              containsCredential(entry.key) || containsCredential(entry.value),
-        );
-      }
-      if (value is Iterable) return value.any(containsCredential);
-      return false;
-    }
-
-    if (malformedRetryData['version'] is int &&
-        !malformedSnapshot.hasUnknownFields &&
-        !containsCredential(malformedRetryData)) {
-      return malformedRetryData;
     }
     return _safeUnsupportedOcrRetryData(
       taskId,
