@@ -1546,6 +1546,14 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           chunks.last.length - trailingPunctuation.length,
         );
       }
+      if (_legacyOcrIsNaturalDocumentationContinuation(
+        sanitized,
+        match,
+        prefix,
+        chunks.join(' '),
+      )) {
+        return match.group(0)!;
+      }
       for (var index = 0; index < chunks.length - 1; index++) {
         chunks[index] = chunks[index].replaceFirst(
           RegExp(r'[.!?;:)}\]"”’]+$'),
@@ -1803,6 +1811,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       }
       var credentialSuffix = '';
       var foundCredential = false;
+      var credentialEndChunkIndex = -1;
       var expectsDocumentIdentifierNumber = false;
       var documentIdentifierDigitCount = 0;
       bool hasCredentialShape(String suffix) {
@@ -1869,12 +1878,16 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                   RegExp(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{4,}$')
                       .hasMatch(chunks[index + 1]) &&
                   chunk.length + chunks[index + 1].length >= 8;
-          if (adjacentOpaqueKeyTail) foundCredential = true;
+          if (adjacentOpaqueKeyTail) {
+            foundCredential = true;
+            credentialEndChunkIndex = index;
+          }
           continue;
         }
         if (!foundCredential && credentialSuffix.isNotEmpty && isNaturalChunk) {
           if (hasCredentialShape('$credentialSuffix$chunk')) {
             foundCredential = true;
+            credentialEndChunkIndex = index;
           }
           continue;
         }
@@ -1882,6 +1895,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         credentialSuffix += chunk;
         if (hasCredentialShape(credentialSuffix)) {
           foundCredential = true;
+          credentialEndChunkIndex = index;
         }
       }
       final explicitAuthenticationUseContext =
@@ -1900,11 +1914,18 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           )) {
         return match.group(0)!;
       }
+      final trailingNaturalAdverb = foundCredential &&
+              credentialEndChunkIndex >= 0 &&
+              credentialEndChunkIndex < chunks.length - 1 &&
+              chunks.length - credentialEndChunkIndex == 2 &&
+              naturalAdverbs.contains(chunks.last.toLowerCase())
+          ? ' ${chunks.last}'
+          : '';
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
       return explicitAuthenticationUseContext
           ? '${match.group(1)}[redacted] to authenticate$trailingPunctuation'
-          : '${match.group(1)}[redacted]$trailingPunctuation';
+          : '${match.group(1)}[redacted]$trailingNaturalAdverb$trailingPunctuation';
     });
   }
   return sanitized;
