@@ -15008,6 +15008,8 @@ void main() {
           'foo / barxyz',
           'foo + barxyz',
           'foo. barxyz',
+          'foo: barxyz',
+          'foo; barxyz',
           'key abc123',
           'p a s s w o r d',
           '1234 5678 9012',
@@ -15135,6 +15137,21 @@ void main() {
           expect(punctuationPersisted, isNot(contains(credentialEcho)));
         }
 
+        final explicitCredentialUseTask = taskFor(
+          'legacy-ocr-spaced-credential-explicit-use-context',
+          'Use documentation foobar to authenticate.',
+        );
+        final explicitCredentialUseInstruction = OcrRetrySnapshot.fromMap(
+          explicitCredentialUseTask.retryData!,
+        ).instructionContent!;
+        final explicitCredentialUsePersisted =
+            jsonEncode(explicitCredentialUseTask.toMap());
+        expect(
+          explicitCredentialUseInstruction,
+          'Use [redacted] to authenticate.',
+        );
+        expect(explicitCredentialUsePersisted, isNot(contains('foobar')));
+
         final naturalWordInsideCredentialTask = taskFor(
           'legacy-ocr-natural-word-inside-spaced-credential',
           'Please read the documentation foobar carefully xyz.',
@@ -15200,6 +15217,7 @@ void main() {
             'Please read the documentation with care and summarize the key points.\n'
             'Please read the documentation on security.\n'
             'Please read the documentation on security carefully.\n'
+            'Please read the documentation for networking carefully.\n'
             'Please read the documentation v2 guide carefully.\n'
             'Please read documentation chapter12 carefully.\n'
             'Please read documentation id123456 carefully.\n'
@@ -15216,6 +15234,7 @@ void main() {
             'Please read the documentation a n d a n a l y z e t h e '
             's e c u r i t y.\n'
             'Please read the documentation 2025 release notes.\n'
+            'Please read the documentation version 2025 release notes.\n'
             'Please read the documentation verbatim.\n'
             'Please read the documentation i n s t r u c t i o n s.\n'
             'Please read the documentation n e t w o r k i n g.\n'

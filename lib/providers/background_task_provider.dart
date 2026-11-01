@@ -1482,6 +1482,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'specifications',
       'screenshot',
       'screenshots',
+      'version',
+      'versions',
       'page',
       'pages',
       'topic',
@@ -1493,8 +1495,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     };
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_./+=~-]+)+)'
-      r'(?=$|[^a-zA-Z0-9_./+=~-])',
+      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_./:;+=~-]+)+)'
+      r'(?=$|[^a-zA-Z0-9_./:;+=~-])',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(chunkedCandidate, (match) {
@@ -1535,6 +1537,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'a',
         'an',
         'with',
+        'for',
         'care',
         'attention',
         'caution',
@@ -1800,7 +1803,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           foundCredential = true;
         }
       }
-      if (!foundCredential) return match.group(0)!;
+      if (!foundCredential &&
+          !_legacyOcrHasCredentialUseContext(
+            sanitized,
+            match,
+            prefix,
+            chunks.join(),
+          )) {
+        return match.group(0)!;
+      }
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
       return '${match.group(1)}[redacted]$trailingPunctuation';
@@ -2846,7 +2857,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
       '$lineBreakContinuation$suffixPattern'
-      r'(?:[ \t]+(?:carefully|thoroughly|closely|fully|completely|verbatim))?',
+      r'(?:[ \t]+(?:carefully|thoroughly|closely|fully|completely|verbatim))?)',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
