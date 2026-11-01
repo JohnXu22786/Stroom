@@ -11,10 +11,10 @@ class LlmOAuthTokenClient {
   static const _openAiDiscoveryUri =
       'https://auth.openai.com/.well-known/openid-configuration';
   static const xaiClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
+  static const xaiIssuer = 'https://auth.x.ai';
   static const _xaiDiscoveryUri =
       'https://auth.x.ai/.well-known/openid-configuration';
-  static const _xaiScope =
-      'openid profile email offline_access grok-cli:access api:access';
+  static const _xaiCommonScopes = 'openid profile email offline_access';
 
   final Dio _dio;
 
@@ -293,19 +293,37 @@ class LlmOAuthTokenClient {
     }
   }
 
-  Future<LlmXaiDeviceCode> startXaiDeviceAuthorization() async {
+  Future<LlmXaiDeviceCode> startXaiDeviceAuthorization({
+    required String connectorType,
+  }) async {
     try {
+      final providerScope = switch (connectorType) {
+        'grok-cli' => 'grok-cli:access',
+        'xai-oauth' => 'api:access',
+        _ => throw const LlmOAuthFlowException(),
+      };
       final discoveryResponse = await _dio.getUri<Object?>(
         Uri.parse(_xaiDiscoveryUri),
         options: Options(responseType: ResponseType.json),
       );
       final discovery = _jsonObject(discoveryResponse.data);
+      if (_nonEmptyString(discovery['issuer']) != xaiIssuer) {
+        throw const LlmOAuthFlowException();
+      }
+      final signingAlgorithms =
+          discovery['id_token_signing_alg_values_supported'];
+      if (signingAlgorithms is! Iterable ||
+          !signingAlgorithms.contains('ES256')) {
+        throw const LlmOAuthFlowException();
+      }
       final deviceEndpoint =
           _xaiEndpoint(discovery['device_authorization_endpoint']);
       final tokenEndpoint = _xaiEndpoint(discovery['token_endpoint']);
+      final jwksUri = _xaiJwksUri(discovery['jwks_uri']);
+      final scope = '$_xaiCommonScopes $providerScope';
       final response = await _dio.postUri<Object?>(
         deviceEndpoint,
-        data: {'client_id': xaiClientId, 'scope': _xaiScope},
+        data: {'client_id': xaiClientId, 'scope': scope},
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
           responseType: ResponseType.json,
@@ -329,6 +347,9 @@ class LlmOAuthTokenClient {
       return LlmXaiDeviceCode.fromOAuthResponse(
         deviceCode: deviceCode,
         tokenEndpoint: tokenEndpoint.toString(),
+        issuer: xaiIssuer,
+        jwksUri: jwksUri,
+        scope: scope,
         userCode: userCode,
         verificationUri: verification,
         verificationUriComplete: complete,
@@ -342,6 +363,7 @@ class LlmOAuthTokenClient {
 
   Future<Map<String, dynamic>> pollXaiDeviceAuthorization({
     required LlmXaiDeviceCode deviceCode,
+    String? expectedSubject,
     CancelToken? cancelToken,
   }) async {
     try {
@@ -391,21 +413,30 @@ class LlmOAuthTokenClient {
         }
         final accessToken = _nonEmptyString(token['access_token']);
         final refreshToken = _nonEmptyString(token['refresh_token']);
-        if (accessToken == null || refreshToken == null) {
+        final idToken = _nonEmptyString(token['id_token']);
+        if (accessToken == null || refreshToken == null || idToken == null) {
+          throw const LlmOAuthFlowException();
+        }
+        final identity = await _verifyXaiIdentity(
+          idToken: idToken,
+          jwksUri: deviceCode.jwksUri,
+          issuer: deviceCode.issuer,
+          clientId: xaiClientId,
+        );
+        final subject = _nonEmptyString(identity['sub']);
+        if (subject == null ||
+            (expectedSubject != null && subject != expectedSubject)) {
           throw const LlmOAuthFlowException();
         }
         final bundle = _credentialBundle(token)
           ..['client_id'] = xaiClientId
           ..['token_endpoint'] = tokenEndpoint.toString()
-          ..['scope'] = _nonEmptyString(token['scope']) ?? _xaiScope
+          ..['id_token'] = idToken
+          ..['identity_sub'] = subject
+          ..['scope'] = _nonEmptyString(token['scope']) ?? deviceCode.scope
           ..['oauth_contract'] = 'xai-device-v1';
-        final idToken = _nonEmptyString(token['id_token']);
-        if (idToken != null) {
-          bundle['id_token'] = idToken;
-          final claims = _unverifiedJwtClaims(idToken);
-          final subject = _nonEmptyString(claims['sub']);
-          final email = _nonEmptyString(claims['email']);
-          if (subject != null) bundle['identity_sub'] = subject;
+        if (identity['email_verified'] == true) {
+          final email = _nonEmptyString(identity['email']);
           if (email != null) bundle['identity_email'] = email;
         }
         return bundle;
@@ -467,16 +498,56 @@ class LlmOAuthTokenClient {
     return uri;
   }
 
-  static Map<String, dynamic> _unverifiedJwtClaims(String token) {
-    final parts = token.split('.');
-    if (parts.length != 3) return const {};
-    try {
-      return _jsonObject(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-    } catch (_) {
-      return const {};
+  static Uri _xaiJwksUri(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.host != 'auth.x.ai' ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmOAuthFlowException();
     }
+    return uri;
+  }
+
+  Future<Map<String, dynamic>> _verifyXaiIdentity({
+    required String idToken,
+    required Uri jwksUri,
+    required String issuer,
+    required String clientId,
+  }) async {
+    final segments = idToken.split('.');
+    if (segments.length != 3) throw const LlmOAuthFlowException();
+    final header = _jsonObject(
+      utf8.decode(base64Url.decode(base64Url.normalize(segments.first))),
+    );
+    if (header['alg'] != 'ES256' ||
+        header['kid'] is! String ||
+        (header['kid'] as String).isEmpty) {
+      throw const LlmOAuthFlowException();
+    }
+    final jwksResponse = await _dio.getUri<Object?>(
+      jwksUri,
+      options: Options(responseType: ResponseType.json),
+    );
+    final keySet = JsonWebKeySet.fromJson(_jsonObject(jwksResponse.data));
+    final token = await JsonWebToken.decodeAndVerify(
+      idToken,
+      JsonWebKeyStore()..addKeySet(keySet),
+    );
+    final claims = token.claims;
+    final claimsJson = claims.toJson();
+    final audience = claims.audience ?? const <String>[];
+    final expiry = claims.expiry;
+    if (claims.issuer?.toString() != issuer ||
+        !audience.contains(clientId) ||
+        (audience.length > 1 && claimsJson['azp'] != clientId) ||
+        expiry == null ||
+        !expiry.isAfter(DateTime.now().toUtc())) {
+      throw const LlmOAuthFlowException();
+    }
+    return claimsJson;
   }
 
   static Future<void> _waitForKimiPollingInterval(

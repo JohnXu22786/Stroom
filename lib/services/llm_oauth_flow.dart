@@ -146,6 +146,9 @@ class LlmKimiDeviceCode {
 class LlmXaiDeviceCode {
   final String _deviceCode;
   final String tokenEndpoint;
+  final String issuer;
+  final Uri jwksUri;
+  final String scope;
   final String userCode;
   final Uri verificationUri;
   final Uri verificationUriComplete;
@@ -157,6 +160,9 @@ class LlmXaiDeviceCode {
   const LlmXaiDeviceCode._({
     required String deviceCode,
     required this.tokenEndpoint,
+    required this.issuer,
+    required this.jwksUri,
+    required this.scope,
     required this.userCode,
     required this.verificationUri,
     required this.verificationUriComplete,
@@ -167,6 +173,9 @@ class LlmXaiDeviceCode {
   factory LlmXaiDeviceCode.fromOAuthResponse({
     required String deviceCode,
     required String tokenEndpoint,
+    required String issuer,
+    required Uri jwksUri,
+    required String scope,
     required String userCode,
     required Uri verificationUri,
     required Uri verificationUriComplete,
@@ -176,6 +185,9 @@ class LlmXaiDeviceCode {
       LlmXaiDeviceCode._(
         deviceCode: deviceCode,
         tokenEndpoint: tokenEndpoint,
+        issuer: issuer,
+        jwksUri: jwksUri,
+        scope: scope,
         userCode: userCode,
         verificationUri: verificationUri,
         verificationUriComplete: verificationUriComplete,

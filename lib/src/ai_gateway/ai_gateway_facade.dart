@@ -732,10 +732,27 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       throw const AiGatewayOAuthException();
     }
     try {
-      final deviceCode = await _tokenClient.startXaiDeviceAuthorization();
+      String? expectedSubject;
+      final existing = await _accounts.getAccount(account.id);
+      if (existing != null) {
+        if (existing.connectorType != account.connectorType ||
+            existing.authType != 'oauth') {
+          throw const AiGatewayOAuthException();
+        }
+        final raw = await _accounts.readCredential(account.id);
+        if (raw == null) throw const AiGatewayOAuthException();
+        expectedSubject = _decodeOAuthBundle(raw)['identity_sub'] as String?;
+        if (expectedSubject == null || expectedSubject.trim().isEmpty) {
+          throw const AiGatewayOAuthException();
+        }
+      }
+      final deviceCode = await _tokenClient.startXaiDeviceAuthorization(
+        connectorType: account.connectorType,
+      );
       return _LlmXaiDeviceAuthorization(
         account: account,
         deviceCode: deviceCode,
+        expectedSubject: expectedSubject,
         tokenClient: _tokenClient,
         accounts: _accounts,
         accountManagement: _accountManagement,
@@ -990,6 +1007,7 @@ class _LlmKimiCodeDeviceAuthorization
 class _LlmXaiDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
   final AiGatewayAccount _account;
   final LlmXaiDeviceCode _deviceCode;
+  final String? _expectedSubject;
   final LlmOAuthTokenClient _tokenClient;
   final LlmAccountConnectorService _accounts;
   final _LlmGatewayAccountManagement _accountManagement;
@@ -999,11 +1017,13 @@ class _LlmXaiDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
   _LlmXaiDeviceAuthorization({
     required AiGatewayAccount account,
     required LlmXaiDeviceCode deviceCode,
+    required String? expectedSubject,
     required LlmOAuthTokenClient tokenClient,
     required LlmAccountConnectorService accounts,
     required _LlmGatewayAccountManagement accountManagement,
   })  : _account = account,
         _deviceCode = deviceCode,
+        _expectedSubject = expectedSubject,
         _tokenClient = tokenClient,
         _accounts = accounts,
         _accountManagement = accountManagement {
@@ -1031,6 +1051,7 @@ class _LlmXaiDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
     try {
       final tokenBundle = await _tokenClient.pollXaiDeviceAuthorization(
         deviceCode: _deviceCode,
+        expectedSubject: _expectedSubject,
         cancelToken: _cancelToken,
       );
       if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();

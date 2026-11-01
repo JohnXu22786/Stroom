@@ -12,15 +12,48 @@ void main() {
   test('xAI device authorization stays separate across its two API modes',
       () async {
     final requests = <RequestOptions>[];
+    final generatedKey = JsonWebKey.generate('ES256');
+    final privateKey = JsonWebKey.fromCryptoKeys(
+      publicKey: generatedKey.cryptoKeyPair.publicKey,
+      privateKey: generatedKey.cryptoKeyPair.privateKey,
+      keyId: 'xai-signing-key',
+    );
+    final publicKey = JsonWebKey.fromCryptoKeys(
+      publicKey: generatedKey.cryptoKeyPair.publicKey,
+      keyId: 'xai-signing-key',
+    );
+    final claims = {
+      'iss': LlmOAuthTokenClient.xaiIssuer,
+      'sub': 'account-123',
+      'aud': LlmOAuthTokenClient.xaiClientId,
+      'email': 'xai@example.test',
+      'email_verified': true,
+      'exp': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 5))
+              .millisecondsSinceEpoch ~/
+          1000,
+    };
+    final validIdToken = (JsonWebSignatureBuilder()
+          ..jsonContent = claims
+          ..setProtectedHeader('typ', 'JWT')
+          ..setProtectedHeader('kid', 'xai-signing-key')
+          ..addRecipient(privateKey, algorithm: 'ES256'))
+        .build()
+        .toCompactSerialization();
+    var returnedIdToken = validIdToken;
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
         requests.add(request);
         if (request.uri.path == '/.well-known/openid-configuration') {
           return ResponseBody.fromString(
             jsonEncode({
+              'issuer': LlmOAuthTokenClient.xaiIssuer,
+              'jwks_uri': 'https://auth.x.ai/.well-known/jwks.json',
+              'id_token_signing_alg_values_supported': ['ES256'],
               'device_authorization_endpoint':
-                  'https://auth.x.ai/oauth/device/code',
-              'token_endpoint': 'https://auth.x.ai/oauth/token',
+                  'https://auth.x.ai/oauth2/device/code',
+              'token_endpoint': 'https://auth.x.ai/oauth2/token',
             }),
             200,
             headers: {
@@ -28,7 +61,18 @@ void main() {
             },
           );
         }
-        if (request.uri.path == '/oauth/device/code') {
+        if (request.uri.path == '/.well-known/jwks.json') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'keys': [publicKey.toJson()]
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json']
+            },
+          );
+        }
+        if (request.uri.path == '/oauth2/device/code') {
           return ResponseBody.fromString(
             jsonEncode({
               'device_code': 'fixture-xai-device-code',
@@ -49,13 +93,9 @@ void main() {
           jsonEncode({
             'access_token': 'fixture-xai-access',
             'refresh_token': 'fixture-xai-refresh',
-            'id_token': 'header.${base64Url.encode(utf8.encode(jsonEncode({
-                      'sub': 'account-123',
-                      'email': 'xai@example.test'
-                    }))).replaceAll('=', '')}.signature',
+            'id_token': returnedIdToken,
             'token_type': 'Bearer',
-            'scope':
-                'openid profile email offline_access grok-cli:access api:access',
+            'scope': 'openid profile email offline_access grok-cli:access',
             'expires_in': 3600,
           }),
           200,
@@ -66,26 +106,49 @@ void main() {
       });
     final client = LlmOAuthTokenClient(dio: dio);
 
-    final code = await client.startXaiDeviceAuthorization();
+    final code = await client.startXaiDeviceAuthorization(
+      connectorType: 'grok-cli',
+    );
+    await client.startXaiDeviceAuthorization(connectorType: 'xai-oauth');
     final token = await client.pollXaiDeviceAuthorization(deviceCode: code);
 
     expect(
         requests.map((request) => request.uri.host), everyElement('auth.x.ai'));
-    expect(requests.map((request) => request.uri.path), [
-      '/.well-known/openid-configuration',
-      '/oauth/device/code',
-      '/oauth/token',
-    ]);
-    expect(requests[1].data.toString(),
-        contains('b1a00492-073a-47ea-816f-4c329264a828'));
-    expect(requests[1].data.toString(), contains('grok-cli:access'));
-    expect(requests[2].data.toString(), contains('device_code'));
+    final deviceRequests = requests
+        .where((request) => request.uri.path == '/oauth2/device/code')
+        .toList();
+    expect(deviceRequests, hasLength(2));
+    expect(
+      deviceRequests[0].data['scope'],
+      'openid profile email offline_access grok-cli:access',
+    );
+    expect(
+      deviceRequests[1].data['scope'],
+      'openid profile email offline_access api:access',
+    );
+    expect(
+        deviceRequests[0].data['client_id'], LlmOAuthTokenClient.xaiClientId);
+    final tokenRequest =
+        requests.singleWhere((request) => request.uri.path == '/oauth2/token');
+    expect(tokenRequest.data.toString(), contains('device_code'));
     expect(token['access_token'], 'fixture-xai-access');
     expect(token['refresh_token'], 'fixture-xai-refresh');
     expect(token['identity_sub'], 'account-123');
     expect(token['identity_email'], 'xai@example.test');
     expect(token['oauth_contract'], 'xai-device-v1');
     expect(requests.last.toString(), isNot(contains('fixture-xai-access')));
+    await expectLater(
+      client.pollXaiDeviceAuthorization(
+        deviceCode: code,
+        expectedSubject: 'different-account',
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    returnedIdToken = '${validIdToken.split('.').take(2).join('.')}.invalid';
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: code),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
   });
 
   test(
