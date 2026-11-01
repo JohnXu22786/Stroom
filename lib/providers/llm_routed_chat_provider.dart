@@ -28,6 +28,8 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'openai-compatibility',
           'openai-api',
           'codex',
+          'xai',
+          'meta',
           'kimi',
           'kimi-ai',
           'kimi.ai',
@@ -212,11 +214,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     final execution = await runtime.executeForGroupId<String>(
       groupId: groupId,
       localModelId: localModelId,
-      requiredCapabilities: _requiredCapabilities(
-        messages,
-        null,
-        extraParams: extraParams,
-      ),
+      requiredCapabilities: {
+        ..._requiredCapabilities(messages, null, extraParams: extraParams),
+        'chat',
+      },
       supportedConnectorTypes: _supportedConnectorTypes,
       conversationId: conversationId,
       selectedAccountId: selectedAccountId,
@@ -372,6 +373,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           localModelId: localModelId,
           requiredCapabilities: {
             ..._requiredCapabilities(messages, tools, extraParams: extraParams),
+            'chat',
             'streaming',
           },
           supportedConnectorTypes: _supportedConnectorTypes,

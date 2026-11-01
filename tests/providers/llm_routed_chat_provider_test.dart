@@ -5,12 +5,15 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
+import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 import '../fixtures/vertex_service_account.dart';
 
@@ -161,11 +164,19 @@ void main() {
   test('Responses bridge excludes native chat-only connectors', () {
     expect(
       llmRoutedChatSupportedConnectorTypes('openai.responses'),
-      containsAll({'openai-compatibility', 'openai-api'}),
+      containsAll({'openai-compatibility', 'openai-api', 'xai', 'meta'}),
     );
     expect(
       llmRoutedChatSupportedConnectorTypes('openai.responses'),
       isNot(contains('moonshot')),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      isNot(contains('xai')),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      isNot(contains('meta')),
     );
   });
 
@@ -273,6 +284,362 @@ void main() {
     expect(connector.requestedAccountIds, ['codex-route-account']);
     expect(connector.requestedModelIds, ['gpt-5-codex']);
     expect(connector.lastNativeFormat, 'responses');
+  });
+
+  test('invokes xAI and Meta API-key model-group members through Responses',
+      () async {
+    for (final connectorType in ['xai', 'meta']) {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final accountId = '$connectorType-api-key';
+      final localModelId = '$connectorType-model';
+      final upstreamModelId = '$connectorType-upstream-model';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: connectorType,
+          authType: 'api_key',
+          displayName: connectorType,
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: upstreamModelId,
+              displayName: upstreamModelId,
+              capabilities: const {'chat': true, 'streaming': true},
+            ),
+            LlmUpstreamModel(
+              id: '$connectorType-embedding',
+              upstreamModelId: '$connectorType-nonchat-model',
+              displayName: '$connectorType embeddings',
+              capabilities: const {
+                'supportedGenerationMethods': ['embedContent'],
+              },
+            ),
+            LlmUpstreamModel(
+              id: '$connectorType-unlabeled-embedding',
+              upstreamModelId: 'text-embedding-3-large',
+              displayName: '$connectorType embeddings',
+            ),
+            LlmUpstreamModel(
+              id: '$connectorType-unlabeled-image-generation',
+              upstreamModelId: 'grok-2-image-1212',
+              displayName: '$connectorType image generation',
+            ),
+            LlmUpstreamModel(
+              id: '$connectorType-chat-disabled',
+              upstreamModelId: '$connectorType-chat-disabled-model',
+              displayName: '$connectorType non-chat model',
+              capabilities: const {'chat': false},
+            ),
+          ],
+        ),
+        secret: '$connectorType-api-key-secret',
+      );
+      final groupId = '$connectorType-responses-group';
+      final modelGroup = LlmModelGroup(
+        id: groupId,
+        displayName: '$connectorType group',
+        members: [
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: localModelId,
+            upstreamModelId: upstreamModelId,
+          ),
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: '$connectorType-embedding',
+            upstreamModelId: '$connectorType-nonchat-model',
+          ),
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: '$connectorType-unlabeled-embedding',
+            upstreamModelId: 'text-embedding-3-large',
+          ),
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: '$connectorType-unlabeled-image-generation',
+            upstreamModelId: 'grok-2-image-1212',
+          ),
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: '$connectorType-chat-disabled',
+            upstreamModelId: '$connectorType-chat-disabled-model',
+          ),
+        ],
+      );
+      await accounts.saveModelGroup(modelGroup);
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'output_text': '$connectorType reply',
+          'output': [
+            {
+              'type': 'message',
+              'role': 'assistant',
+              'content': [
+                {'type': 'output_text', 'text': '$connectorType reply'},
+              ],
+            },
+          ],
+          'usage': {'input_tokens': 5, 'output_tokens': 2},
+        },
+      );
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        connectorClient: connector,
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: localModelId,
+          requiredCapabilities: const {'chat'},
+        ),
+        hasLength(1),
+        reason: connectorType,
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: '$connectorType-embedding',
+          requiredCapabilities: const {'chat'},
+        ),
+        isEmpty,
+        reason: 'embedding-only models cannot be selected for chat',
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: '$connectorType-unlabeled-embedding',
+          requiredCapabilities: const {'chat'},
+        ),
+        isEmpty,
+        reason: 'known embedding model IDs are not conversational models',
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: '$connectorType-unlabeled-image-generation',
+          requiredCapabilities: const {'chat'},
+        ),
+        isEmpty,
+        reason: 'image generation model IDs are not conversational models',
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: '$connectorType-chat-disabled',
+          requiredCapabilities: const {'chat'},
+        ),
+        isEmpty,
+        reason: 'explicit chat-disabled metadata must be honored',
+      );
+      expect(
+        await runtime.modelDiscovery.discoverGroupModels(
+          groupId: groupId,
+          localModelId: localModelId,
+          requiredCapabilities: const {'vision'},
+        ),
+        isEmpty,
+        reason: 'unadvertised multimodal capabilities remain unavailable',
+      );
+      final embeddingProvider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: '$connectorType-embedding',
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      await expectLater(
+        embeddingProvider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        throwsA(isA<AiGatewayRoutingException>()),
+      );
+      final unlabeledEmbeddingProvider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: '$connectorType-unlabeled-embedding',
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      await expectLater(
+        unlabeledEmbeddingProvider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        throwsA(isA<AiGatewayRoutingException>()),
+      );
+      final imageGenerationProvider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: '$connectorType-unlabeled-image-generation',
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      await expectLater(
+        imageGenerationProvider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        throwsA(isA<AiGatewayRoutingException>()),
+      );
+      final chatDisabledProvider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: '$connectorType-chat-disabled',
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      await expectLater(
+        chatDisabledProvider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        throwsA(isA<AiGatewayRoutingException>()),
+      );
+      expect(connector.requestedAccountIds, isEmpty);
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: localModelId,
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        '$connectorType reply',
+        reason: connectorType,
+      );
+      expect(connector.requestedAccountIds, [accountId]);
+      expect(connector.requestedModelIds, [upstreamModelId]);
+      expect(connector.lastNativeFormat, 'responses');
+      expect(connector.requestBody?['model'], upstreamModelId);
+
+      final groupConfig = buildLlmModelGroupProviderConfigs(
+        accounts: [(await accounts.getAccount(accountId))!],
+        groups: [modelGroup],
+      ).single;
+      expect(
+        groupConfig.models.map((model) => model.id),
+        isNot(contains('$connectorType-embedding')),
+      );
+      expect(
+        groupConfig.models.map((model) => model.id),
+        isNot(contains('$connectorType-unlabeled-embedding')),
+      );
+      expect(
+        groupConfig.models.map((model) => model.id),
+        isNot(contains('$connectorType-unlabeled-image-generation')),
+      );
+      expect(
+        groupConfig.models.map((model) => model.id),
+        isNot(contains('$connectorType-chat-disabled')),
+      );
+      final modelConfig = groupConfig.models.firstWhere(
+        (model) => model.id == localModelId,
+      );
+      final providerEntries = ProviderEntriesState(entries: [
+        ProviderEntry(
+          id: 'task-flow-group',
+          type: 'llm',
+          name: 'Task Flow group',
+          configs: [groupConfig],
+        ),
+      ]);
+      final taskFlowConnector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'output': [
+            {
+              'type': 'message',
+              'role': 'assistant',
+              'content': [
+                {'type': 'output_text', 'text': 'Task Flow reply'},
+              ],
+            },
+          ],
+        },
+      );
+      final taskFlowAdapter = ChatAdapter(
+        routingRuntime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: taskFlowConnector,
+          ),
+        ),
+      )..configure(providerEntries);
+      addTearDown(taskFlowAdapter.dispose);
+      final taskFlowService = taskFlowAdapter.getOrCreateService(
+        'flow-captured-model',
+        entriesState: providerEntries,
+        modelReference: {
+          'configId': groupConfig.id,
+          'modelId': modelConfig.id,
+        },
+      );
+      expect(taskFlowService?.provider, isA<LlmRoutedChatProvider>());
+      expect(
+        await taskFlowService!.provider!.chat(const [
+          {'role': 'user', 'content': 'Task Flow prompt'},
+        ]),
+        'Task Flow reply',
+      );
+      expect(taskFlowConnector.requestedAccountIds, [accountId]);
+      expect(taskFlowConnector.requestedModelIds, [upstreamModelId]);
+      expect(taskFlowConnector.lastNativeFormat, 'responses');
+
+      final streamConnector = _FakeConnectorClient(
+        accounts,
+        streamBody: Stream<List<int>>.value(
+          utf8.encode(
+            'data: {"type":"response.output_text.delta","delta":"stream "}\n\n'
+            'data: {"type":"response.output_text.delta","delta":"reply"}\n\n'
+            'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}\n\n',
+          ),
+        ),
+      );
+      final streamProvider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: streamConnector,
+          ),
+        ),
+        groupId: groupId,
+        localModelId: localModelId,
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      final streamedEvents = await streamProvider.chatStream(const [
+        {'role': 'user', 'content': 'hello'},
+      ]).toList();
+      expect(
+        streamedEvents.map((event) => event.text).join(),
+        'stream reply',
+        reason: connectorType,
+      );
+      expect(streamConnector.lastNativeFormat, 'responses');
+      expect(streamConnector.requestBody?['stream'], isTrue);
+    }
   });
 
   test(

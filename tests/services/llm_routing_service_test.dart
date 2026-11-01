@@ -1687,6 +1687,36 @@ void main() {
   });
 
   group('LlmRoutingService selection and fallback', () {
+    test('rejects xAI and Meta subscription OAuth group members', () async {
+      for (final connector in ['xai', 'meta']) {
+        final rig = _Rig(
+          now: DateTime.utc(2026, 10, 18, 12),
+          accounts: [
+            _account(
+              '$connector-subscription',
+              connector,
+              authType: 'oauth',
+            ),
+          ],
+        );
+        var requestAttempted = false;
+
+        await expectLater(
+          rig.route((candidate, progress) async {
+            requestAttempted = true;
+            return candidate.account.id;
+          }),
+          throwsA(isA<LlmRoutingUnavailableException>()),
+          reason: connector,
+        );
+        expect(
+          requestAttempted,
+          isFalse,
+          reason: '$connector subscription credentials never reach requests',
+        );
+      }
+    });
+
     test(
       'keeps the best eligible tier and applies each same-tier strategy',
       () async {
@@ -3293,6 +3323,7 @@ void _seedUsageTracking(
 LlmAccount _account(
   String id,
   String connector, {
+  String authType = 'api_key',
   LlmRoutingPolicy? policy,
   Map<LlmUsageWindow, LlmUsageWindowState> usage = const {},
   String? upstreamModel,
@@ -3300,7 +3331,7 @@ LlmAccount _account(
     LlmAccount(
       id: id,
       connectorType: connector,
-      authType: 'api_key',
+      authType: authType,
       displayName: id,
       status: LlmAccountStatus.ready,
       models: [

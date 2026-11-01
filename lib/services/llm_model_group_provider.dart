@@ -270,9 +270,17 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
     // Routing selects by upstream ID and uses the first matching account
     // model. Project the same model's capabilities so selectors don't
     // advertise a capability that the routed request will reject.
-    return account.models
+    final model = account.models
         .where((model) => model.upstreamModelId == member.upstreamModelId)
         .firstOrNull;
+    if (model == null ||
+        !LlmConnectorRegistry.isConversationalModel(
+          model.upstreamModelId,
+          model.capabilities,
+        )) {
+      return null;
+    }
+    return model;
   }
 
   for (final group in groups) {
