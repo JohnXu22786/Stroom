@@ -55,6 +55,7 @@ void main() {
         'muse-spark-1.1',
       });
       expect(LlmOAuthProviderPolicy.forProvider('muse-code').supported, isTrue);
+      expect(LlmOAuthProviderPolicy.forProvider('devin').supported, isTrue);
       expect(LlmOAuthProviderPolicy.forProvider('meta').supported, isFalse);
       expect(
         LlmOAuthProviderPolicy.forProvider('kimi-coding').supported,
@@ -4150,6 +4151,114 @@ void main() {
       expect(devin.body, isA<Uint8List>());
     });
 
+    test('routes only mapped Devin OAuth models through Connect-RPC', () {
+      const sessionToken = r'devin-session-token$fixture-oauth-token';
+      final account = LlmAccount(
+        id: 'devin-oauth',
+        connectorType: 'devin',
+        authType: 'oauth',
+        displayName: 'Devin account',
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-oauth-model',
+            upstreamModelId: 'devin/swe-2',
+            displayName: 'SWE-2',
+          ),
+        ],
+      );
+      final request = builder.build(
+        account: account,
+        credential: jsonEncode({
+          'session_token': sessionToken,
+          'oauth_contract': 'devin-pkce-v1',
+          'auth_kind': 'oauth',
+          'user_id': 'devin-user',
+          'plan': 'Team',
+        }),
+        modelId: 'devin/swe-2',
+        body: const {
+          'model': 'devin/swe-2',
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+      );
+
+      expect(
+        request.uri.toString(),
+        'https://server.codeium.com/exa.api_server_pb.ApiServerService/GetChatMessage',
+      );
+      expect(
+        request.headers['Authorization'],
+        'Basic $sessionToken-$sessionToken',
+      );
+      expect(request.headers['Connect-Protocol-Version'], '1');
+      expect(request.headers['Content-Type'], 'application/connect+proto');
+      expect(request.headers['Accept'], '*/*');
+      expect(request.body, isA<Uint8List>());
+      expect(request.toString(), isNot(contains(sessionToken)));
+    });
+
+    test(
+      'rejects Devin OAuth model IDs without a mapped account entitlement',
+      () {
+        final account = LlmAccount(
+          id: 'devin-oauth',
+          connectorType: 'devin',
+          authType: 'oauth',
+          displayName: 'Devin account',
+          models: const [],
+        );
+        expect(
+          () => builder.build(
+            account: account,
+            credential: jsonEncode({
+              'session_token': r'devin-session-token$fixture',
+            }),
+            modelId: 'devin/unknown-model',
+            body: Uint8List.fromList([0, 1, 2]),
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
+
+    test('rejects expired Devin OAuth entitlements at request time', () {
+      final account = LlmAccount(
+        id: 'devin-oauth-expired',
+        connectorType: 'devin',
+        authType: 'oauth',
+        displayName: 'Devin account',
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-model',
+            upstreamModelId: 'devin/swe-2',
+            displayName: 'SWE-2',
+          ),
+        ],
+      );
+      expect(
+        () => builder.build(
+          account: account,
+          credential: jsonEncode({
+            'session_token': r'devin-session-token$fixture',
+            'oauth_contract': 'devin-pkce-v1',
+            'auth_kind': 'oauth',
+            'user_id': 'devin-user',
+            'plan': 'Team',
+            'plan_end': '2000-01-01T00:00:00Z',
+          }),
+          modelId: 'devin/swe-2',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
     test('routes Kimi Code OAuth by the selected upstream protocol', () {
       final account = _account(
         'kimi-code-oauth',
@@ -4208,7 +4317,7 @@ void main() {
       );
     });
 
-    test('rejects Devin streaming until its Connect stream is decoded', () {
+    test('keeps legacy Devin token accounts out of OAuth streaming', () {
       expect(
         () => builder.build(
           account: _account('devin-stream', 'devin', authType: 'session_token'),
@@ -4350,6 +4459,79 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test(
+      'adapts Devin unary Connect-RPC to the Chat stream contract',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromBytes(
+              [0, 0, 0, 0, 4, 26, 2, 111, 107, 2, 0, 0, 0, 2, 123, 125],
+              200,
+              headers: const {
+                'content-type': ['application/connect+proto'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'devin-http-oauth',
+            connectorType: 'devin',
+            authType: 'oauth',
+            displayName: 'Devin',
+            models: const [
+              LlmUpstreamModel(
+                id: 'devin-model',
+                upstreamModelId: 'devin/swe-2',
+                displayName: 'SWE-2',
+              ),
+            ],
+          ),
+          secret: jsonEncode({
+            'session_token': r'devin-session-token$fixture',
+            'oauth_contract': 'devin-pkce-v1',
+            'auth_kind': 'oauth',
+            'user_id': 'devin-user',
+            'plan': 'Team',
+          }),
+        );
+
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'devin/swe-2',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+          stream: true,
+        );
+        final sse = utf8.decode(
+          (await (response.body as Stream<List<int>>).toList())
+              .expand((part) => part)
+              .toList(),
+        );
+
+        expect(captured?.uri.host, 'server.codeium.com');
+        expect(
+          captured?.uri.path,
+          '/exa.api_server_pb.ApiServerService/GetChatMessage',
+        );
+        expect(captured?.headers['Connect-Protocol-Version'], '1');
+        expect(captured?.headers['Content-Type'], 'application/connect+proto');
+        expect(sse, contains('"content":"ok"'));
+        expect(sse, contains('data: [DONE]'));
+      },
+    );
+
     test(
       'executes both xAI OAuth modes on their own host and auth route',
       () async {

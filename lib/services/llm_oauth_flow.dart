@@ -48,6 +48,7 @@ class LlmOAuthProviderPolicy {
       providerId: 'muse-code',
       supported: true,
     ),
+    'devin': LlmOAuthProviderPolicy._(providerId: 'devin', supported: true),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
       supported: false,
@@ -96,7 +97,7 @@ class LlmOAuthFlowException implements Exception {
 
 class LlmOAuthCallbackResult {
   final String code;
-  final String clientId;
+  final String? clientId;
   final String? scope;
 
   const LlmOAuthCallbackResult({
@@ -266,6 +267,7 @@ class LlmOAuthAuthorizationAttempt {
   final String? existingClientId;
   final bool isOpenAiRegistration;
   final bool _isClaudeCode;
+  final bool _isDevin;
   var _consumed = false;
 
   LlmOAuthAuthorizationAttempt._({
@@ -277,7 +279,9 @@ class LlmOAuthAuthorizationAttempt {
     required this.existingClientId,
     required this.isOpenAiRegistration,
     bool isClaudeCode = false,
-  }) : _isClaudeCode = isClaudeCode;
+    bool isDevin = false,
+  })  : _isClaudeCode = isClaudeCode,
+        _isDevin = isDevin;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,
@@ -395,6 +399,29 @@ class LlmOAuthAuthorizationAttempt {
     );
   }
 
+  /// Devin's CLI OAuth contract is PKCE based and has no public client ID.
+  factory LlmOAuthAuthorizationAttempt.devin({required Uri redirectUri}) {
+    _validateLoopbackRedirect(redirectUri, '/callback');
+    final state = _secureValue();
+    final verifier = _secureValue();
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https('app.devin.ai', '/auth/cli/continue', {
+        'redirect_uri': redirectUri.toString(),
+        'state': state,
+        'prompt': 'select_account',
+        'code_challenge': _challenge(verifier),
+        'code_challenge_method': 'S256',
+      }),
+      state: state,
+      nonce: '',
+      codeVerifier: verifier,
+      existingClientId: null,
+      isOpenAiRegistration: false,
+      isDevin: true,
+    );
+  }
+
   LlmOAuthCallbackResult consumeCallback(Uri callbackUri) {
     if (_consumed) throw const LlmOAuthFlowException();
     if (!_sameCallbackTarget(callbackUri, redirectUri)) {
@@ -435,13 +462,14 @@ class LlmOAuthAuthorizationAttempt {
     }
     final returnedClientId = clientIds?.single;
     final clientId = returnedClientId ?? existingClientId;
-    if (clientId == null ||
-        clientId.trim().isEmpty ||
-        clientId == openAiDynamicClientId ||
-        (existingClientId != null && clientId != existingClientId) ||
-        (isOpenAiRegistration &&
-            returnedClientId == null &&
-            existingClientId == null)) {
+    if (!_isDevin &&
+        (clientId == null ||
+            clientId.trim().isEmpty ||
+            clientId == openAiDynamicClientId ||
+            (existingClientId != null && clientId != existingClientId) ||
+            (isOpenAiRegistration &&
+                returnedClientId == null &&
+                existingClientId == null))) {
       throw const LlmOAuthFlowException();
     }
     final scopes = query['scope'];

@@ -1,7 +1,8 @@
 import 'dart:convert';
-
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:jose/jose.dart';
+import 'package:crypto/crypto.dart';
 
 import 'llm_oauth_flow.dart';
 
@@ -21,6 +22,11 @@ class LlmOAuthTokenClient {
   static const _metaMuseTokenUri = 'https://auth.meta.com/oidc/device/token/';
   static const _metaMuseKeyUri = 'https://api.meta.ai/muse-code/key';
   static const _metaMuseApiBaseUrl = 'https://api.meta.ai/v1';
+  static const _devinApiBaseUrl = 'https://api.devin.ai';
+  static const _devinServerBaseUrl = 'https://server.codeium.com';
+  static const _devinUserStatusPath =
+      '/exa.seat_management_pb.SeatManagementService/GetUserStatus';
+  static const _devinTokenPrefix = r'devin-session-token$';
 
   final Dio _dio;
 
@@ -39,11 +45,15 @@ class LlmOAuthTokenClient {
     String? expectedSubject,
   }) async {
     try {
+      final clientId = callback.clientId;
+      if (clientId == null || clientId.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
       final response = await _dio.postUri<Object?>(
         Uri.parse(LlmOAuthAuthorizationAttempt.openAiTokenEndpoint),
         data: {
           'grant_type': 'authorization_code',
-          'client_id': callback.clientId,
+          'client_id': clientId,
           'code': callback.code,
           'redirect_uri': attempt.redirectUri.toString(),
           'code_verifier': attempt.codeVerifier,
@@ -68,7 +78,7 @@ class LlmOAuthTokenClient {
       }
       final identity = await _verifyOpenAiIdentity(
         idToken: idToken,
-        clientId: callback.clientId,
+        clientId: clientId,
         expectedNonce: attempt.nonce,
       );
       final subject = _nonEmptyString(identity['sub']);
@@ -77,7 +87,7 @@ class LlmOAuthTokenClient {
         throw const LlmOAuthFlowException();
       }
       return _credentialBundle(token)
-        ..['client_id'] = callback.clientId
+        ..['client_id'] = clientId
         ..['id_token'] = idToken
         ..['identity_sub'] = subject
         ..['resource'] = LlmOAuthAuthorizationAttempt.openAiResource
@@ -94,13 +104,17 @@ class LlmOAuthTokenClient {
     required String clientSecret,
   }) async {
     try {
+      final clientId = callback.clientId;
+      if (clientId == null || clientId.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
       final secret = clientSecret.trim();
       if (secret.isEmpty) throw const LlmOAuthFlowException();
       final response = await _dio.postUri<Object?>(
         Uri.parse(LlmOAuthAuthorizationAttempt.geminiTokenEndpoint),
         data: {
           'grant_type': 'authorization_code',
-          'client_id': callback.clientId,
+          'client_id': clientId,
           'client_secret': secret,
           'code': callback.code,
           'redirect_uri': attempt.redirectUri.toString(),
@@ -118,7 +132,7 @@ class LlmOAuthTokenClient {
         throw const LlmOAuthFlowException();
       }
       return _credentialBundle(token)
-        ..['client_id'] = callback.clientId
+        ..['client_id'] = clientId
         ..['client_secret'] = secret
         ..['oauth_contract'] = 'google-gemini-developer-api-v1';
     } catch (_) {
@@ -141,7 +155,7 @@ class LlmOAuthTokenClient {
           'grant_type': 'authorization_code',
           'code': callback.code,
           'redirect_uri': attempt.redirectUri.toString(),
-          'client_id': callback.clientId,
+          'client_id': LlmOAuthAuthorizationAttempt.claudeCodeClientId,
           'code_verifier': attempt.codeVerifier,
           'state': attempt.state,
         },
@@ -181,6 +195,262 @@ class LlmOAuthTokenClient {
     } catch (_) {
       throw const LlmOAuthFlowException();
     }
+  }
+
+  /// Completes Devin's source-pinned PKCE exchange and verifies both the
+  /// account profile and seat plan before the caller persists the credential.
+  Future<Map<String, dynamic>> exchangeDevinCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+    required String accountId,
+    String? expectedUserId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      if (callback.clientId != null ||
+          callback.code.trim().isEmpty ||
+          attempt.codeVerifier.isEmpty ||
+          accountId.trim().isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final tokenResponse = await _dio.postUri<Object?>(
+        Uri.parse('$_devinApiBaseUrl/auth/cli/token'),
+        data: {'code': callback.code, 'code_verifier': attempt.codeVerifier},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.json,
+        ),
+        cancelToken: cancelToken,
+      );
+      final rawToken = _nonEmptyString(
+        _jsonObject(tokenResponse.data)['token'],
+      );
+      if (rawToken == null) throw const LlmOAuthFlowException();
+      final sessionToken = _formatDevinSessionToken(rawToken);
+
+      final profileResponse = await _dio.getUri<Object?>(
+        Uri.parse('$_devinApiBaseUrl/v3/self'),
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $sessionToken',
+            'Accept': 'application/json',
+          },
+          responseType: ResponseType.json,
+        ),
+        cancelToken: cancelToken,
+      );
+      final profile = _jsonObject(profileResponse.data);
+      final userId = _nonEmptyString(profile['user_id']);
+      if (profileResponse.statusCode != 200 ||
+          userId == null ||
+          (expectedUserId != null && userId != expectedUserId)) {
+        throw const LlmOAuthFlowException();
+      }
+
+      final statusResponse = await _dio.postUri<List<int>>(
+        Uri.parse('$_devinServerBaseUrl$_devinUserStatusPath'),
+        data: _buildDevinUserStatusRequest(sessionToken, accountId),
+        options: Options(
+          headers: {
+            'Authorization': 'Basic $sessionToken-$sessionToken',
+            'Connect-Protocol-Version': '1',
+            'Content-Type': 'application/proto',
+            'Accept': '*/*',
+          },
+          contentType: 'application/proto',
+          responseType: ResponseType.bytes,
+        ),
+        cancelToken: cancelToken,
+      );
+      if (statusResponse.statusCode != 200 || statusResponse.data == null) {
+        throw const LlmOAuthFlowException();
+      }
+      final status = _parseDevinUserStatus(
+        Uint8List.fromList(statusResponse.data!),
+      );
+      if (status.userId != userId || status.plan.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final planEnd = status.planEnd;
+      if (planEnd != null && !planEnd.isAfter(DateTime.now().toUtc())) {
+        throw const LlmOAuthFlowException();
+      }
+
+      return {
+        'session_token': sessionToken,
+        'user_id': userId,
+        if (_nonEmptyString(profile['user_name']) case final String name)
+          'user_name': name,
+        if (_nonEmptyString(profile['org_id']) case final String orgId)
+          'org_id': orgId,
+        if (status.email.isNotEmpty) 'email': status.email,
+        'plan': status.plan,
+        if (planEnd != null) 'plan_end': planEnd.toIso8601String(),
+        'base_url': _devinServerBaseUrl,
+        'auth_kind': 'oauth',
+        'oauth_contract': 'devin-pkce-v1',
+      };
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static String _formatDevinSessionToken(String token) {
+    final clean = token.trim();
+    if (clean.startsWith(_devinTokenPrefix) || !clean.startsWith('eyJ')) {
+      return clean;
+    }
+    return '$_devinTokenPrefix$clean';
+  }
+
+  static Uint8List _buildDevinUserStatusRequest(
+    String sessionToken,
+    String seed,
+  ) {
+    final metadata = <int>[];
+    _appendProtoBytes(metadata, 1, utf8.encode('chisel'));
+    _appendProtoBytes(metadata, 2, utf8.encode('3000.10.21'));
+    _appendProtoBytes(metadata, 3, utf8.encode(sessionToken));
+    _appendProtoBytes(metadata, 4, utf8.encode('en'));
+    _appendProtoBytes(
+      metadata,
+      5,
+      utf8.encode(_devinOsName(defaultTargetPlatform)),
+    );
+    _appendProtoBytes(metadata, 7, utf8.encode('3000.10.21'));
+    _appendProtoBytes(metadata, 12, utf8.encode('chisel'));
+    _appendProtoBytes(metadata, 31, utf8.encode(_devenFingerprint(seed)));
+    final request = <int>[];
+    _appendProtoBytes(request, 1, metadata);
+    return Uint8List.fromList(request);
+  }
+
+  static _DevinUserStatus _parseDevinUserStatus(Uint8List data) {
+    final userStatus = _protoBytesFields(data, 1).firstOrNull;
+    if (userStatus == null) throw const LlmOAuthFlowException();
+    final userFields = _protoFields(userStatus);
+    final userId = utf8.decode(_firstBytesField(userFields, 36) ?? const []);
+    final email = utf8.decode(_firstBytesField(userFields, 7) ?? const []);
+    final planStatus = _firstBytesField(userFields, 13);
+    if (planStatus == null) throw const LlmOAuthFlowException();
+    final planFields = _protoFields(planStatus);
+    final planInfo = _firstBytesField(planFields, 1);
+    if (planInfo == null) throw const LlmOAuthFlowException();
+    final infoFields = _protoFields(planInfo);
+    final plan = utf8.decode(_firstBytesField(infoFields, 2) ?? const []);
+    final expiration = _firstBytesField(planFields, 3);
+    final endEpoch = expiration == null
+        ? null
+        : _firstVarintField(_protoFields(expiration), 1);
+    return _DevinUserStatus(
+      userId: userId,
+      email: email,
+      plan: plan,
+      planEnd: endEpoch == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(endEpoch * 1000, isUtc: true),
+    );
+  }
+
+  static List<Uint8List> _protoBytesFields(Uint8List bytes, int field) =>
+      _protoFields(bytes)
+          .where((item) => item.number == field && item.bytes != null)
+          .map((item) => item.bytes!)
+          .toList(growable: false);
+
+  static Uint8List? _firstBytesField(
+    List<_DevinProtoField> fields,
+    int number,
+  ) =>
+      fields.where((field) => field.number == number).firstOrNull?.bytes;
+
+  static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
+      fields.where((field) => field.number == number).firstOrNull?.value;
+
+  static List<_DevinProtoField> _protoFields(Uint8List bytes) {
+    final fields = <_DevinProtoField>[];
+    var offset = 0;
+    while (offset < bytes.length) {
+      final tag = _readProtoVarint(bytes, offset);
+      offset = tag.$2;
+      final number = tag.$1 >> 3;
+      if (number == 0) throw const LlmOAuthFlowException();
+      switch (tag.$1 & 7) {
+        case 0:
+          final value = _readProtoVarint(bytes, offset);
+          offset = value.$2;
+          fields.add(_DevinProtoField(number, value: value.$1));
+          break;
+        case 1:
+          offset += 8;
+          if (offset > bytes.length) throw const LlmOAuthFlowException();
+          fields.add(_DevinProtoField(number));
+          break;
+        case 2:
+          final size = _readProtoVarint(bytes, offset);
+          offset = size.$2;
+          final end = offset + size.$1;
+          if (end > bytes.length) throw const LlmOAuthFlowException();
+          fields.add(
+            _DevinProtoField(number, bytes: bytes.sublist(offset, end)),
+          );
+          offset = end;
+          break;
+        case 5:
+          offset += 4;
+          if (offset > bytes.length) throw const LlmOAuthFlowException();
+          fields.add(_DevinProtoField(number));
+          break;
+        default:
+          throw const LlmOAuthFlowException();
+      }
+    }
+    return fields;
+  }
+
+  static (int, int) _readProtoVarint(Uint8List data, int offset) {
+    var result = 0;
+    var shift = 0;
+    while (offset < data.length && shift < 64) {
+      final byte = data[offset++];
+      result |= (byte & 0x7f) << shift;
+      if (byte < 0x80) return (result, offset);
+      shift += 7;
+    }
+    throw const LlmOAuthFlowException();
+  }
+
+  static void _appendProtoBytes(List<int> output, int field, List<int> value) {
+    _appendProtoVarint(output, (field << 3) | 2);
+    _appendProtoVarint(output, value.length);
+    output.addAll(value);
+  }
+
+  static void _appendProtoVarint(List<int> output, int value) {
+    while (value >= 0x80) {
+      output.add((value & 0x7f) | 0x80);
+      value >>= 7;
+    }
+    output.add(value);
+  }
+
+  static String _devinOsName(TargetPlatform platform) => switch (platform) {
+        TargetPlatform.android => 'android',
+        TargetPlatform.iOS => 'ios',
+        TargetPlatform.linux => 'linux',
+        TargetPlatform.macOS => 'darwin',
+        TargetPlatform.windows => 'windows',
+        TargetPlatform.fuchsia => 'fuchsia',
+      };
+
+  static String _devenFingerprint(String seed) {
+    final value = StringBuffer();
+    var counter = 0;
+    while (value.length < 732) {
+      value.write(sha256.convert(utf8.encode('$seed-$counter')));
+      counter++;
+    }
+    return value.toString().substring(0, 732);
   }
 
   Future<LlmKimiDeviceCode> startKimiDeviceAuthorization({
@@ -894,4 +1164,26 @@ class LlmOAuthTokenClient {
 
   static bool _scopeContains(String granted, String required) =>
       granted.split(RegExp(r'\s+')).contains(required);
+}
+
+class _DevinUserStatus {
+  final String userId;
+  final String email;
+  final String plan;
+  final DateTime? planEnd;
+
+  const _DevinUserStatus({
+    required this.userId,
+    required this.email,
+    required this.plan,
+    required this.planEnd,
+  });
+}
+
+class _DevinProtoField {
+  final int number;
+  final int? value;
+  final Uint8List? bytes;
+
+  const _DevinProtoField(this.number, {this.value, this.bytes});
 }

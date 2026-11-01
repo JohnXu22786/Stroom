@@ -11,6 +11,7 @@ import 'aws_credential_chain.dart';
 import 'aws_sigv4.dart';
 import 'llm_connector_service.dart';
 import 'llm_oauth_flow.dart';
+import 'devin_connect_rpc.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -188,7 +189,10 @@ class LlmConnectorHttpClient {
           awsCredentials: awsCredentials,
           modelId: modelId,
           body: body,
-          stream: stream,
+          // Devin's source contract exposes unary Connect-RPC. The app's
+          // chat stream adapter still expects SSE, which is synthesized from
+          // the completed unary response below.
+          stream: storedAccount.connectorType == 'devin' ? false : stream,
           nativeFormat: nativeFormat,
         );
       } on LlmConnectorHttpException {
@@ -253,6 +257,80 @@ class LlmConnectorHttpClient {
           storedAccount.connectorType,
           response.headers.map,
         );
+        if (storedAccount.connectorType == 'devin' &&
+            storedAccount.authType == 'oauth') {
+          final responseData = response.data;
+          final responseBytes = responseData is ResponseBody
+              ? await _readResponseStream(responseData.stream)
+              : responseData is Stream<List<int>>
+                  ? await _readResponseStream(responseData)
+                  : responseData;
+          if (responseBytes is! Uint8List && responseBytes is! List<int>) {
+            throw const LlmConnectorHttpException();
+          }
+          final decoded = DevinConnectRpc.decodeChatResponse(
+            responseBytes as List<int>,
+          );
+          final bodyObservation = parseLlmConnectorObservation(
+            storedAccount.connectorType,
+            decoded,
+          );
+          final observation = mergeLlmConnectorObservations(
+            headerObservation,
+            bodyObservation,
+          );
+          if (!stream) {
+            return LlmConnectorResponse(
+              statusCode: status,
+              headers: response.headers.map,
+              body: decoded,
+              observation: observation,
+            );
+          }
+          final choice = (decoded['choices'] as List).first as Map;
+          final message = choice['message'] as Map;
+          final messageToolCalls = message['tool_calls'];
+          final toolCalls = messageToolCalls is Iterable
+              ? messageToolCalls.indexed.map((entry) {
+                  final item = entry.$2 as Map;
+                  final fn = item['function'] as Map;
+                  return {
+                    'index': entry.$1,
+                    'id': item['id'],
+                    'type': 'function',
+                    'function': {
+                      'name': fn['name'],
+                      'arguments': fn['arguments'],
+                    },
+                  };
+                }).toList(growable: false)
+              : null;
+          final chunk = {
+            'id': decoded['id'],
+            'object': 'chat.completion.chunk',
+            'created': decoded['created'],
+            'model': decoded['model'],
+            'choices': [
+              {
+                'index': 0,
+                'delta': {
+                  'content': message['content'],
+                  ...?(toolCalls == null ? null : {'tool_calls': toolCalls}),
+                },
+                'finish_reason': choice['finish_reason'],
+              },
+            ],
+          };
+          final encoded = utf8.encode(
+            'data: ${jsonEncode(chunk)}\n\ndata: [DONE]\n\n',
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: Stream<List<int>>.value(encoded),
+            observation: observation,
+          );
+        }
         if (storedAccount.connectorType == 'bedrock') {
           final responseData = response.data;
           final responseStream = responseData is ResponseBody

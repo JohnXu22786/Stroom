@@ -15,6 +15,7 @@ import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
 import 'llm_oauth_flow.dart';
+import 'devin_connect_rpc.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -346,6 +347,7 @@ abstract final class LlmConnectorRegistry {
         'gemini-interactions' => 'google.gemini.interactions',
         'vertex' => 'google.gemini.generate_content',
         'ollama' => 'ollama.chat',
+        'devin' => 'devin.connect_rpc',
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
@@ -1153,6 +1155,20 @@ class LlmAccountConnectorService {
           id: '${account.id}:catalog:$index',
           upstreamModelId: connector.modelCatalog[index],
           displayName: connector.modelCatalog[index],
+          capabilities: connector.id == 'devin'
+              ? {
+                  // Stroom emits a completed SSE event for Devin's unary RPC so
+                  // Chat and Task Flow share the standard stream lifecycle.
+                  'chat': true,
+                  'streaming': true,
+                  if (!const {
+                    'devin/glm-5-2',
+                    'devin/glm-5-3',
+                    'devin/deepseek-v4-flash',
+                  }.contains(connector.modelCatalog[index]))
+                    'vision': true,
+                }
+              : const {},
           config: const {
             'catalogSource': 'CLIProxyAPI@$kLlmConnectorReferenceRevision',
           },
@@ -3255,8 +3271,10 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        (stream &&
+            account.connectorType == 'devin' &&
+            account.authType != 'oauth') ||
         (account.connectorType == 'vertex' && account.authType == 'oauth') ||
-        (stream && account.connectorType == 'devin') ||
         (stream &&
             _isVertexImagen(
               account,
@@ -3264,6 +3282,13 @@ class LlmNativeRequestBuilder {
               config: account.endpointConfig,
               nativeFormat: nativeFormat,
             ))) {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'devin' &&
+        account.authType == 'oauth' &&
+        (!kPinnedDevinModels.contains(modelId) ||
+            !account.models.any((model) => model.upstreamModelId == modelId) ||
+            !_isVerifiedDevinOAuthCredential(credential))) {
       throw const LlmAccountConnectorException();
     }
     if (account.connectorType == 'kimi-coding' &&
@@ -3388,7 +3413,7 @@ class LlmNativeRequestBuilder {
         headers['Authorization'] = 'Basic $secret-$secret';
         headers['Connect-Protocol-Version'] = '1';
         headers['Content-Type'] = 'application/connect+proto';
-        headers['Accept'] = 'application/connect+proto';
+        headers['Accept'] = '*/*';
         break;
       case 'bedrock':
         break;
@@ -3401,38 +3426,45 @@ class LlmNativeRequestBuilder {
     }
     if (stream && account.connectorType == 'bedrock') {
       headers['Accept'] = 'application/vnd.amazon.eventstream';
-    } else if (stream) {
+    } else if (stream && account.connectorType != 'devin') {
       headers['Accept'] = 'text/event-stream';
     }
 
-    final requestBody = account.connectorType == 'grok-cli'
-        ? _grokBuildPayload(
-            _applyBodyStreamOption(
-              account: account,
-              config: config,
-              body: body,
-              stream: stream,
-              nativeFormat: nativeFormat,
-            ),
+    final requestBody = account.connectorType == 'devin' &&
+            account.authType == 'oauth'
+        ? DevinConnectRpc.encodeChatRequest(
+            sessionToken: secret,
+            modelId: modelId,
+            body: body is Map ? body : const {},
           )
-        : account.connectorType == 'bedrock'
-            ? AwsBedrockConverseAdapter.toConverse(body)
-            : account.connectorType == 'antigravity'
-                ? _antigravityPayload(account, credential, modelId, body)
-                : _isVertexImagen(
-                    account,
-                    modelId,
-                    config: config,
-                    nativeFormat: nativeFormat,
-                  )
-                    ? _vertexImagenPayload(body)
-                    : _applyBodyStreamOption(
-                        account: account,
+        : account.connectorType == 'grok-cli'
+            ? _grokBuildPayload(
+                _applyBodyStreamOption(
+                  account: account,
+                  config: config,
+                  body: body,
+                  stream: stream,
+                  nativeFormat: nativeFormat,
+                ),
+              )
+            : account.connectorType == 'bedrock'
+                ? AwsBedrockConverseAdapter.toConverse(body)
+                : account.connectorType == 'antigravity'
+                    ? _antigravityPayload(account, credential, modelId, body)
+                    : _isVertexImagen(
+                        account,
+                        modelId,
                         config: config,
-                        body: body,
-                        stream: stream,
                         nativeFormat: nativeFormat,
-                      );
+                      )
+                        ? _vertexImagenPayload(body)
+                        : _applyBodyStreamOption(
+                            account: account,
+                            config: config,
+                            body: body,
+                            stream: stream,
+                            nativeFormat: nativeFormat,
+                          );
 
     var requestHeaders = headers;
     if (account.connectorType == 'bedrock') {
@@ -3540,10 +3572,12 @@ class LlmNativeRequestBuilder {
             'access_token',
             'accessToken',
           ],
-        'oauth' => account.connectorType == 'meta' ||
-                account.connectorType == 'muse-code'
-            ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
-            : const ['access_token', 'accessToken'],
+        'oauth' => account.connectorType == 'devin'
+            ? const ['session_token']
+            : account.connectorType == 'meta' ||
+                    account.connectorType == 'muse-code'
+                ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
+                : const ['access_token', 'accessToken'],
         'session_token' => const [
             'session_token',
             'sessionToken',
@@ -3587,6 +3621,32 @@ class LlmNativeRequestBuilder {
       throw const LlmAccountConnectorException();
     }
     return credential;
+  }
+
+  static bool _isVerifiedDevinOAuthCredential(String? credential) {
+    if (credential == null) return false;
+    try {
+      final decoded = jsonDecode(credential);
+      if (decoded is! Map) return false;
+      final planEndValue = decoded['plan_end'];
+      final planEnd = planEndValue is String
+          ? DateTime.tryParse(planEndValue)?.toUtc()
+          : null;
+      if (planEndValue != null &&
+          (planEnd == null || !planEnd.isAfter(DateTime.now().toUtc()))) {
+        return false;
+      }
+      return decoded['oauth_contract'] == 'devin-pkce-v1' &&
+          decoded['auth_kind'] == 'oauth' &&
+          decoded['session_token'] is String &&
+          (decoded['session_token'] as String).trim().isNotEmpty &&
+          decoded['user_id'] is String &&
+          (decoded['user_id'] as String).trim().isNotEmpty &&
+          decoded['plan'] is String &&
+          (decoded['plan'] as String).trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   static String? _credentialBundleString(

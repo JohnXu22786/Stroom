@@ -99,6 +99,56 @@ void main() {
     expect(modelsField.controller!.text, contains('grok-3'));
   });
 
+  testWidgets(
+    'Devin account editor starts OAuth separately from token import',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final authorization = _RecordingOAuthAuthorization();
+      final gateway = _testGateway(service, oauthAuthorization: authorization);
+
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final provider = gateway.providerCatalog.findProvider('devin')!;
+      expect(
+        provider.supportedAuthTypes,
+        containsAll({'oauth', 'session_token'}),
+      );
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connectorDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        provider.id,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Devin OAuth account',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(authorization.authorizedAccounts, hasLength(1));
+      expect(authorization.authorizedAccounts.single.connectorType, 'devin');
+      expect(authorization.authorizedAccounts.single.authType, 'oauth');
+      expect(
+        await service.listAccounts(),
+        isEmpty,
+        reason: 'The account must not be persisted before OAuth completes.',
+      );
+    },
+  );
+
   testWidgets('Kimi Code account uses the upstream device authorization flow', (
     tester,
   ) async {
@@ -2232,7 +2282,7 @@ void main() {
     expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
   });
 
-  testWidgets('discloses native connectors absent from Chat selectors', (
+  testWidgets('shows Devin accounts as supported by Chat selectors', (
     tester,
   ) async {
     final service = LlmAccountConnectorService(
@@ -2265,8 +2315,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Devin account'), findsOneWidget);
-    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsOneWidget);
-    expect(find.text('该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+    expect(find.text('该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。'), findsNothing);
   });
 
   testWidgets('keeps Codex API-key accounts out of Chat selectors', (
@@ -2654,6 +2704,7 @@ LlmChatRoutingRuntime _testGateway(
 
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];
+  final authorizedAccounts = <AiGatewayAccount>[];
   final deviceAuthorizationAccounts = <AiGatewayAccount>[];
   final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
@@ -2665,6 +2716,7 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
     Map<String, String> configuration = const {},
   }) async {
     configurations.add(configuration);
+    authorizedAccounts.add(account);
     return account;
   }
 

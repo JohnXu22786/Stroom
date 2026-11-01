@@ -41,6 +41,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'vertex',
         },
       'google.gemini.interactions' => const {'gemini-interactions'},
+      'devin.connect_rpc' => const {'devin'},
       'ollama.chat' => const {'ollama'},
       _ => const {
           'openai-compatibility',
@@ -71,6 +72,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'google.gemini.generate_content',
       'google.gemini.interactions',
       'ollama.chat',
+      'devin.connect_rpc',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
   };
@@ -688,7 +690,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String? system,
     Map<String, dynamic>? extraParams,
   }) async {
-    final bridge = AiGatewayProtocolBridges.forProtocol(protocolId);
+    final requestProtocolId = protocolId == 'devin.connect_rpc'
+        ? 'openai.chat_completions'
+        : protocolId;
+    final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
     if (bridge == null) {
       throw StateError('No internal protocol bridge for $protocolId.');
     }
@@ -722,7 +727,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final resolvedMessages = await resolveConversationMediaReferences(messages);
     final request = AiGatewayProtocolBridges.buildRequest(
-      protocolId,
+      requestProtocolId,
       AiGatewayProtocolRequest(
         modelId: upstreamModelId,
         operation: operation,
@@ -743,7 +748,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (request == null) {
       throw StateError('No internal request builder for $protocolId.');
     }
-    return request.body;
+    final body = request.body;
+    if (protocolId == 'devin.connect_rpc') {
+      return Map<String, dynamic>.from(body as Map)
+        ..['conversation_id'] = conversationId;
+    }
+    return body;
   }
 
   void _captureRequest(
