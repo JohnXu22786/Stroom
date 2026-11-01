@@ -1011,9 +1011,7 @@ bool _legacyOcrHasCredentialUseContext(
       (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
           maskPrefixIsEmbedded ||
           explicitCredentialTarget ||
-          credentialHeaderTarget ||
-          RegExp(r'^to authenticate\b', caseSensitive: false)
-              .hasMatch(after)) &&
+          credentialHeaderTarget) &&
       RegExp(
         r'^(?:(?:carefully|thoroughly|closely|fully|completely|verbatim|quickly|accurately|clearly|correctly|precisely|concisely|briefly|literally|faithfully|exactly)\s+)?to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
@@ -1525,6 +1523,10 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final naturalNumberedDocumentationReference = RegExp(
     r'^(?:chapter|section|page|step|part|id)[0-9]{1,18}$',
   ).hasMatch(normalizedDocumentationSuffix);
+  final naturalDocumentationYear = RegExp(r'^\d{4}$').hasMatch(suffix.trim()) &&
+      naturalActionLead &&
+      (RegExp(r'^[.!?]\s+').hasMatch(after) ||
+          RegExp(r'\d{4}[.!?]+$').hasMatch(match.group(0)!));
   final naturalDocumentationInstructionNoun =
       naturalDocumentationNouns.contains(documentationSuffix) &&
           naturalActionLead &&
@@ -1544,6 +1546,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
       naturalActionAdverbContinuation ||
       naturalDocumentationInstructionNoun ||
       (naturalNumberedDocumentationReference && naturalActionLead) ||
+      naturalDocumentationYear ||
       naturalPrepositionalContinuation ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
       (naturalWordForm &&
@@ -1756,6 +1759,18 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           ) &&
           RegExp(r'^\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$', caseSensitive: false)
               .hasMatch(sentenceTailForClassification);
+      final naturalYearBeforeCredential = RegExp(r'^\d{4}$')
+              .hasMatch(firstChunk) &&
+          secondChunkIsCredentialShaped &&
+          RegExp(r'\b[a-z]+\b', caseSensitive: false)
+              .allMatches(sentenceTailForClassification)
+              .any(
+                (word) => naturalNouns.contains(word.group(0)!.toLowerCase()),
+              ) &&
+          RegExp(
+            r'^\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$',
+            caseSensitive: false,
+          ).hasMatch(sentenceTailForClassification);
       const naturalTailWords = {
         'a',
         'an',
@@ -1893,6 +1908,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                   naturalSentenceContinuation ||
                   standaloneNaturalAction ||
                   naturalActionAdverbContinuation));
+      if (naturalYearBeforeCredential) {
+        final sourceLead = match.group(0)!.substring(0, firstChunkOffset());
+        return '$sourceLead$firstChunk. [redacted]${redactTrailingCredentials()}';
+      }
       if (naturalPromptLeadAfterPeriod && trailingCredentialSpans.isNotEmpty) {
         final safeTail = redactTrailingCredentials();
         final sourceLead = match.group(0)!.substring(0, firstChunkOffset());
@@ -3328,12 +3347,19 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           );
     final redactedText = textWithOtherMaskedEchoes
         .split('\n')
-        .map((line) => _legacyOcrTextContainsCredential(line, credentialValues)
-            ? _legacyOcrRedactMaskedCredentialEchoes(
-                line,
-                credentialValues,
-              )
-            : line)
+        .map(
+          (line) => line.splitMapJoin(
+            RegExp(r'\[redacted\]'),
+            onMatch: (_) => '[redacted]',
+            onNonMatch: (segment) =>
+                _legacyOcrTextContainsCredential(segment, credentialValues)
+                    ? _legacyOcrRedactMaskedCredentialEchoes(
+                        segment,
+                        credentialValues,
+                      )
+                    : segment,
+          ),
+        )
         .join('\n');
     final hadCredential =
         hadCredentialBeforeRedaction || redactedText != redactionSourceText;
@@ -3591,6 +3617,32 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final prefixOffset = echo.toLowerCase().indexOf(prefix.toLowerCase());
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
+      if (_legacyOcrHasNaturalConnectorAfterLineBreak(
+        sanitized,
+        match,
+        prefix,
+        echoSuffix,
+        const {
+          'a',
+          'an',
+          'and',
+          'as',
+          'at',
+          'by',
+          'for',
+          'from',
+          'in',
+          'into',
+          'of',
+          'on',
+          'or',
+          'the',
+          'to',
+          'with',
+        },
+      )) {
+        return match.group(0)!;
+      }
       if (_legacyOcrIsNaturalDocumentationContinuation(
         sanitized,
         match,

@@ -15041,6 +15041,7 @@ void main() {
           String id,
           String instruction, {
           String authorization = 'Bearer documentation…',
+          String? additionalCredential,
         }) =>
             BackgroundTask.fromMap({
               'id': id,
@@ -15050,7 +15051,11 @@ void main() {
               'createdAt': DateTime(2025, 1, 1).toIso8601String(),
               'rawRequest': {
                 'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {'Authorization': authorization},
+                'headers': {
+                  'Authorization': authorization,
+                  if (additionalCredential != null)
+                    'X-Api-Key': additionalCredential,
+                },
                 'body': {
                   'model': 'vision-model',
                   'messages': [
@@ -15077,6 +15082,32 @@ void main() {
         expect(persisted, contains('Please read the [redacted] carefully.'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
+
+        const secondCredential = 'secondaryKnownCredential987654';
+        final twoCredentialTask = taskFor(
+          'legacy-ocr-second-key-after-redacted-echo',
+          'Please read the documentation foobarxyz carefully. '
+              'Use $secondCredential to authenticate.',
+          additionalCredential: secondCredential,
+        );
+        final twoCredentialInstruction = OcrRetrySnapshot.fromMap(
+          twoCredentialTask.retryData!,
+        ).instructionContent!;
+        final twoCredentialPersisted = jsonEncode(twoCredentialTask.toMap());
+        expect(
+          twoCredentialInstruction,
+          'Please read the [redacted] carefully. '
+          'Use [redacted] to authenticate.',
+        );
+        expect(
+          twoCredentialPersisted,
+          isNot(contains(secondCredential)),
+        );
+        expect(twoCredentialPersisted, isNot(contains('foobarxyz')));
+        expect(
+          twoCredentialPersisted,
+          contains(jsonEncode(twoCredentialInstruction)),
+        );
 
         final lineBreakTask = taskFor(
           'legacy-ocr-line-break-masked-credential-echo',
@@ -15519,8 +15550,14 @@ void main() {
         final characterSplitCredentialPersisted =
             jsonEncode(characterSplitCredentialTask.toMap());
         expect(
-          characterSplitCredentialPersisted,
-          isNot(contains('f o o b a r x y z')),
+          OcrRetrySnapshot.fromMap(
+            characterSplitCredentialTask.retryData!,
+          ).instructionContent,
+          'Please read the [redacted].',
+        );
+        expect(
+          characterSplitCredentialPersisted.replaceAll(RegExp(r'\s+'), ''),
+          isNot(contains('foobarxyz')),
         );
 
         final clauseThenCredentialTask = taskFor(
@@ -15778,11 +15815,45 @@ void main() {
         );
         expect(
           credentialBeforeNaturalTitleTailInstruction,
-          'Please read the documentation [redacted] release notes.',
+          'Please read the documentation 2025. [redacted] release notes.',
         );
         expect(
           credentialBeforeNaturalTitleTailPersisted,
           isNot(contains('foobarxyz')),
+        );
+        expect(
+          credentialBeforeNaturalTitleTailPersisted,
+          contains(jsonEncode(credentialBeforeNaturalTitleTailInstruction)),
+        );
+
+        final multipleCredentialsAfterNaturalYear = taskFor(
+          'legacy-ocr-natural-year-with-multiple-credential-echoes',
+          'Please read the documentation 2025. '
+              'foobarxyz release notes foo_barxyz.',
+        );
+        final multipleCredentialsAfterNaturalYearInstruction =
+            OcrRetrySnapshot.fromMap(
+          multipleCredentialsAfterNaturalYear.retryData!,
+        ).instructionContent!;
+        final multipleCredentialsAfterNaturalYearPersisted = jsonEncode(
+          multipleCredentialsAfterNaturalYear.toMap(),
+        );
+        expect(
+          multipleCredentialsAfterNaturalYearInstruction,
+          'Please read the documentation 2025. '
+          '[redacted] release notes [redacted].',
+        );
+        expect(
+          multipleCredentialsAfterNaturalYearPersisted,
+          contains(jsonEncode(multipleCredentialsAfterNaturalYearInstruction)),
+        );
+        expect(
+          multipleCredentialsAfterNaturalYearPersisted,
+          isNot(contains('foobarxyz')),
+        );
+        expect(
+          multipleCredentialsAfterNaturalYearPersisted,
+          isNot(contains('foo_barxyz')),
         );
 
         final credentialLikeTitleChunk = taskFor(
