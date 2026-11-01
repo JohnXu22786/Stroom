@@ -580,7 +580,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   children: [
                     Text(
                       '图片画质',
-                      style: Theme.of(context).textTheme.titleSmall,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
