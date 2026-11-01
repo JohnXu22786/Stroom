@@ -2489,6 +2489,124 @@ void main() {
       );
     });
 
+    testWidgets('removeFolderFromCache restores records after a failed write',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_remove_folder_write_failure',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final original = AudioRecord(
+        id: 'audio_remove_folder_write_failure',
+        name: 'record',
+        hash: 'hash_remove_folder_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'remove_me/child',
+      );
+      await operations.addFolder(original.folder);
+      await operations.addRecord(original);
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      final refreshSnapshotReady = Completer<void>();
+      final releaseRefresh = Completer<void>();
+      final failure = StateError('injected record write failure');
+      operations.beforeRecordMutationPersistForTesting = () async {
+        writeStarted.complete();
+        await releaseWrite.future;
+        throw failure;
+      };
+
+      final removal = operations.removeFolderFromCache('remove_me');
+      await writeStarted.future;
+      operations.beforeFolderLoadForTesting = () async {
+        refreshSnapshotReady.complete();
+        await releaseRefresh.future;
+      };
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+
+      try {
+        await refreshSnapshotReady.future;
+        releaseWrite.complete();
+        await expectLater(removal, throwsA(same(failure)));
+        releaseRefresh.complete();
+
+        expect((await refresh).single.folder, original.folder,
+            reason:
+                'a stale forced refresh must not replace the rolled-back cache');
+        expect((await operations.loadRecords()).single.folder, original.folder,
+            reason:
+                'a failed folder removal must not remain visible through the cache');
+        expect((await ManifestDatabase.getAllAudioRecords()).single['folder'],
+            original.folder,
+            reason:
+                'a failed record write must leave the persisted folder unchanged');
+      } finally {
+        if (!releaseWrite.isCompleted) releaseWrite.complete();
+        if (!releaseRefresh.isCompleted) releaseRefresh.complete();
+        operations.beforeRecordMutationPersistForTesting = null;
+        operations.beforeFolderLoadForTesting = null;
+      }
+    });
+
+    testWidgets(
+        'removeFolderFromCache includes records added during a pending write',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_remove_folder_concurrent_add',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      AudioRecord folderRecord(String id) => AudioRecord(
+            id: id,
+            name: 'record',
+            hash: 'hash_$id',
+            format: 'wav',
+            createdAt: DateTime(2024),
+            size: 4,
+            folder: 'remove_me/child',
+          );
+      await operations.addRecord(folderRecord('audio_before_pending_write'));
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      var pauseFirstWrite = true;
+      operations.beforeRecordMutationPersistForTesting = () async {
+        if (!pauseFirstWrite) return;
+        pauseFirstWrite = false;
+        writeStarted.complete();
+        await releaseWrite.future;
+      };
+
+      final removal = operations.removeFolderFromCache('remove_me');
+      try {
+        await writeStarted.future;
+        await operations.addRecord(folderRecord('audio_added_during_write'));
+        releaseWrite.complete();
+        await removal;
+      } finally {
+        if (!releaseWrite.isCompleted) releaseWrite.complete();
+        operations.beforeRecordMutationPersistForTesting = null;
+      }
+
+      final records = await operations.loadRecords();
+      expect(records.map((record) => record.folder), everyElement(isEmpty),
+          reason:
+              'records added while a folder removal persists another record must also move to root');
+      expect(
+        (await ManifestDatabase.getAllAudioRecords())
+            .map((record) => record['folder']),
+        everyElement(isEmpty),
+      );
+    });
+
     testWidgets('same-record mutations serialize across a failed write',
         (WidgetTester t) async {
       final original = VideoRecord(
