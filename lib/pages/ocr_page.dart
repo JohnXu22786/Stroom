@@ -581,8 +581,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     Text(
                       '图片画质',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
