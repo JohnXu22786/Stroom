@@ -3099,12 +3099,19 @@ dynamic _withoutCredentialEchoes(
   return value;
 }
 
-Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
+Map<String, dynamic>? _retryDataFromTaskMap(
+  Map<String, dynamic> map, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
   final taskId = map['id'] as String;
   final rawRetryData = map['retryData'];
   final rawRequest = map['rawRequest'];
   final request =
       rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(request),
+    ...additionalCredentialValues,
+  };
   Map<String, dynamic>? malformedRetryData;
   if (rawRetryData is Map) {
     try {
@@ -3113,7 +3120,6 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
           _retryDataHasSupportedOcrSchema(retryData)) {
         if (map['type'] == BackgroundTaskType.ocr.name) {
           final instructionContent = retryData['instructionContent'];
-          final credentialValues = _legacyOcrCredentialValues(request);
           if (instructionContent is String &&
               credentialValues.isNotEmpty &&
               _legacyOcrTextContainsCredential(
@@ -3130,7 +3136,6 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
         }
         final modelRef = retryData['modelRef'];
         if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
-          final credentialValues = _legacyOcrCredentialValues(request);
           final safeModelRef = Map<String, dynamic>.from(modelRef);
           for (final field in ['configId', 'modelId']) {
             final reference = safeModelRef[field];
@@ -3141,7 +3146,6 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
           }
           retryData['modelRef'] = safeModelRef;
         }
-        final credentialValues = _legacyOcrCredentialValues(request);
         return Map<String, dynamic>.from(
           _withoutCredentialEchoes(retryData, credentialValues) as Map,
         );
@@ -3162,7 +3166,7 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
       taskId,
       malformedRetryData,
       legacyRetryData: unavailableRetryData,
-      credentialValues: _legacyOcrCredentialValues(request),
+      credentialValues: credentialValues,
     );
   }
   return unavailableRetryData ??
@@ -3172,6 +3176,32 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
               taskId: taskId,
               imageCount: 0,
             ));
+}
+
+Map<String, dynamic>? _sanitizeOcrRetryDataForConstruction({
+  required String taskId,
+  required Map<String, dynamic>? retryData,
+  required Map<String, dynamic>? rawRequest,
+  required Iterable<String> credentialValues,
+}) {
+  if (retryData == null) return null;
+  final normalized = _retryDataFromTaskMap({
+    'id': taskId,
+    'type': BackgroundTaskType.ocr.name,
+    'retryData': retryData,
+    if (rawRequest != null) 'rawRequest': rawRequest,
+  }, additionalCredentialValues: credentialValues);
+  if (normalized == null) return null;
+  return Map<String, dynamic>.from(
+    _withoutCredentialEchoes(
+      normalized,
+      {
+        ...credentialValues,
+        ..._legacyOcrCredentialValues(rawRequest),
+        ..._credentialValuesFromOcrRetryData(retryData),
+      },
+    ) as Map,
+  );
 }
 
 List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
@@ -3228,6 +3258,53 @@ class BackgroundTask {
   final List<OcrPageOutcome> ocrPageOutcomes;
 
   BackgroundTask({
+    required String id,
+    required BackgroundTaskType type,
+    required String title,
+    TaskStatus status = TaskStatus.running,
+    String? result,
+    bool resultIsComplete = true,
+    String resultFolder = '',
+    bool partialSaveRequested = false,
+    bool resultSavedAsPartial = false,
+    String? error,
+    DateTime? createdAt,
+    DateTime? completedAt,
+    DateTime? statusChangedAt,
+    List<BgTaskStep> steps = const [],
+    String? downloadedFilePath,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
+    Map<String, dynamic>? retryData,
+    List<OcrPageOutcome> ocrPageOutcomes = const [],
+    Iterable<String> ocrDiagnosticCredentialValues = const [],
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
+  }) : this._(
+          id: id,
+          type: type,
+          title: title,
+          status: status,
+          result: result,
+          resultIsComplete: resultIsComplete,
+          resultFolder: resultFolder,
+          partialSaveRequested: partialSaveRequested,
+          resultSavedAsPartial: resultSavedAsPartial,
+          error: error,
+          createdAt: createdAt,
+          completedAt: completedAt,
+          statusChangedAt: statusChangedAt,
+          steps: steps,
+          downloadedFilePath: downloadedFilePath,
+          rawRequest: rawRequest,
+          rawResponse: rawResponse,
+          retryData: retryData,
+          ocrPageOutcomes: ocrPageOutcomes,
+          ocrDiagnosticCredentialValues: ocrDiagnosticCredentialValues,
+          ocrCredentialValuesForSanitization:
+              ocrCredentialValuesForSanitization,
+        );
+
+  BackgroundTask._({
     required this.id,
     required this.type,
     required this.title,
@@ -3245,7 +3322,8 @@ class BackgroundTask {
     this.downloadedFilePath,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
-    this.retryData,
+    Map<String, dynamic>? retryData,
+    bool retryDataAlreadySanitized = false,
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
@@ -3302,6 +3380,17 @@ class BackgroundTask {
                 ),
               )
             : rawResponse,
+        retryData = type == BackgroundTaskType.ocr && !retryDataAlreadySanitized
+            ? _sanitizeOcrRetryDataForConstruction(
+                taskId: id,
+                retryData: retryData,
+                rawRequest: rawRequest,
+                credentialValues: _combinedOcrCredentialValues(
+                  ocrDiagnosticCredentialValues,
+                  ocrCredentialValuesForSanitization,
+                ),
+              )
+            : retryData,
         ocrPageOutcomes = type == BackgroundTaskType.ocr
             ? List.unmodifiable(
                 ocrPageOutcomes.map(
@@ -3338,6 +3427,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     Map<String, dynamic>? retryData,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
     List<OcrPageOutcome>? ocrPageOutcomes,
     bool clearError = false,
     bool clearCompletedAt = false,
@@ -3351,7 +3441,7 @@ class BackgroundTask {
         (status != null && status != this.status
             ? DateTime.now()
             : this.statusChangedAt);
-    final copy = BackgroundTask(
+    final copy = BackgroundTask._(
       id: id,
       type: type,
       title: title,
@@ -3373,7 +3463,9 @@ class BackgroundTask {
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
       ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
+      ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
+      retryDataAlreadySanitized: retryData == null,
     );
     _generationTokens[copy] = _generationTokenFor(this);
     return copy;
@@ -3415,7 +3507,7 @@ class BackgroundTask {
                 rawRetryData,
               ).toList(growable: false)
             : const <String>[];
-    return BackgroundTask(
+    return BackgroundTask._(
       id: map['id'] as String,
       type: type,
       title: map['title'] as String,
@@ -3444,6 +3536,7 @@ class BackgroundTask {
       rawRequest: map['rawRequest'] as Map<String, dynamic>?,
       rawResponse: map['rawResponse'] as Map<String, dynamic>?,
       retryData: _retryDataFromTaskMap(map),
+      retryDataAlreadySanitized: true,
       ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
       ocrCredentialValuesForSanitization: retryCredentialValues,
     );
