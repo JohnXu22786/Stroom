@@ -2083,8 +2083,7 @@ void main() {
           throwsA(same(failure)),
         );
         expect(
-          (await ManifestDatabase.getAllImageRecords())
-              .map((row) => row['id']),
+          (await ManifestDatabase.getAllImageRecords()).map((row) => row['id']),
           contains(record.id),
           reason: 'a failed deletion must leave its database row intact',
         );
