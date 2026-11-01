@@ -1269,7 +1269,7 @@ void main() {
         expect(retryData['modelRef'], {'modelId': 'vision-model'});
         expect(
           retryData['instructionContent'],
-          startsWith('Read the receipt total carefully'),
+          'Read the receipt total carefully',
         );
         expect(retryData['images'], hasLength(2));
         expect(
@@ -1620,7 +1620,7 @@ void main() {
         expect(jsonEncode(updated.toMap()), isNot(contains(credential)));
         expect(
           OcrRetrySnapshot.fromMap(original.retryData!).instructionContent,
-          startsWith('Read the receipt total carefully'),
+          'Read the receipt total carefully',
         );
       },
     );
@@ -2975,9 +2975,17 @@ void main() {
         });
 
         final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+        final persistedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        const expectedInstruction = 'Read the receipt total carefully\n'
+            'The value to recognize is [redacted]';
+        expect(migratedInstruction, expectedInstruction);
         expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          startsWith('Read the receipt total carefully'),
+          persistedRetryData['instructionContent'],
+          expectedInstruction,
         );
         expect(persisted, contains('Read the receipt total carefully'));
         expect(persisted, isNot(contains(apiKey)));
@@ -6953,9 +6961,17 @@ void main() {
         });
 
         final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+        final persistedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        const expectedInstruction = 'Read the receipt total carefully\n'
+            'The value to recognize is [redacted]';
+        expect(migratedInstruction, expectedInstruction);
         expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          startsWith('Read the receipt total carefully'),
+          persistedRetryData['instructionContent'],
+          expectedInstruction,
         );
         expect(persisted, isNot(contains(apiKey)));
       },
@@ -17036,6 +17052,13 @@ void main() {
                 },
               },
             });
+        String? persistedInstruction(String serializedTask) {
+          final taskMap = jsonDecode(serializedTask) as Map<String, dynamic>;
+          return OcrRetrySnapshot.fromMap(
+            taskMap['retryData'] as Map<String, dynamic>,
+          ).instructionContent;
+        }
+
         final task = taskFor(
           'legacy-ocr-spaced-natural-documentation-prompt',
           safePrompt,
