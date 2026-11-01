@@ -1248,17 +1248,18 @@ String _legacyOcrDocumentationCredentialWhitespaceContinuation(
     separators.add(r'[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9]))');
   }
   final spacedContinuation = RegExp(
-    r'\bdocumentation[ \t]+([a-zA-Z0-9]{8,})(?=$|[^a-zA-Z0-9])',
+    r'\bdocumentation[ \t]+([a-zA-Z0-9_-]{8,})(?=$|[^a-zA-Z0-9_-])',
     caseSensitive: false,
   );
   final credentialSuffixes = spacedContinuation
       .allMatches(text)
       .where((match) {
         final suffix = match.group(1)!;
+        final alphabeticSuffix = suffix.replaceAll('-', '');
         return RegExp(r'[0-9_]').hasMatch(suffix) ||
-            (!_legacyOcrHasNaturalAlphaContinuation(suffix) &&
+            (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
                 _legacyOcrHasHighAlphabeticEntropy(
-                  suffix,
+                  alphabeticSuffix,
                   minimumLength: 8,
                   minimumEntropy: 2.9,
                   maximumVowelRatio: 0.4,

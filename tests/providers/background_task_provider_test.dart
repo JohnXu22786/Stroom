@@ -14999,6 +14999,7 @@ void main() {
       'legacy OCR instruction migration redacts whitespace-separated masked credential echoes',
       () {
         const echoedCredential = 'foobarxyz';
+        const punctuationCredentialEchoes = ['foo_barxyz', 'foo-barxyz'];
         BackgroundTask taskFor(String id, String instruction) =>
             BackgroundTask.fromMap({
               'id': id,
@@ -15024,17 +15025,34 @@ void main() {
             });
         final task = taskFor(
           'legacy-ocr-spaced-masked-credential-echo',
-          'The note says documentation $echoedCredential.',
+          'Please read the documentation $echoedCredential carefully.',
         );
         final instructionContent = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
 
-        expect(instructionContent, 'The note says [redacted].');
-        expect(persisted, contains('The note says [redacted].'));
+        expect(instructionContent, 'Please read the [redacted] carefully.');
+        expect(persisted, contains('Please read the [redacted] carefully.'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
+
+        for (final credentialEcho in punctuationCredentialEchoes) {
+          final punctuationTask = taskFor(
+            'legacy-ocr-spaced-masked-credential-echo-punctuation',
+            'Please read the documentation $credentialEcho carefully.',
+          );
+          final punctuationInstruction = OcrRetrySnapshot.fromMap(
+            punctuationTask.retryData!,
+          ).instructionContent!;
+          final punctuationPersisted = jsonEncode(punctuationTask.toMap());
+
+          expect(
+            punctuationInstruction,
+            'Please read the [redacted] carefully.',
+          );
+          expect(punctuationPersisted, isNot(contains(credentialEcho)));
+        }
 
         final contextEchoTask = taskFor(
           'legacy-ocr-spaced-credential-with-natural-tail',
@@ -15051,14 +15069,17 @@ void main() {
 
         final capitalizedTask = taskFor(
           'legacy-ocr-capitalized-spaced-credential-prefix',
-          'The note says Documentation $echoedCredential.',
+          'Please read the Documentation $echoedCredential carefully.',
         );
         final capitalizedInstruction = OcrRetrySnapshot.fromMap(
           capitalizedTask.retryData!,
         ).instructionContent!;
         final capitalizedPersisted = jsonEncode(capitalizedTask.toMap());
 
-        expect(capitalizedInstruction, 'The note says [redacted].');
+        expect(
+          capitalizedInstruction,
+          'Please read the [redacted] carefully.',
+        );
         expect(capitalizedPersisted, isNot(contains(echoedCredential)));
       },
     );
@@ -15066,11 +15087,7 @@ void main() {
     test(
       'legacy OCR instruction migration preserves natural documentation after a masked prefix',
       () {
-        const safePrompt = 'The note says documentation matters.\n'
-            'Read the documentation carefully.\n'
-            'Read the documentation supporting this workflow.\n'
-            'The note says documentation explains how the task works.\n'
-            'The note says documentation explains the task.';
+        const safePrompt = 'Please read the documentation carefully.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-spaced-natural-documentation-prompt',
           'type': 'ocr',
