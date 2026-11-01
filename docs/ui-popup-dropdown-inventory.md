@@ -1,6 +1,12 @@
 # Popup, dropdown, and selection overlay inventory
 
-Generated from the tracked Stroom Dart source under `lib/`. To reproduce the API callsite inventory, run `rg -n "PopupMenuButton|showMenu|DropdownButton|DropdownMenu|MenuAnchor|OverlayEntry|CompositedTransformFollower" lib --glob '*.dart'`, then review each `OverlayEntry` owner to distinguish menus from unrelated drag feedback. The externally owned math component/package is excluded from this audit and from all code changes and renders.
+Generated from every tracked Dart source root in the repository, not only the main application directory. To reproduce the tracked source counts, run `git ls-files '*.dart'` and group by the first path segment. To reproduce the menu-family search, run `rg -n "PopupMenuButton|showMenu|DropdownButton|DropdownMenu|MenuAnchor|MenuItemButton|Autocomplete|OverlayEntry|OverlayPortal|CompositedTransformFollower|CompositedTransformTarget" lib tool integration_test --glob '*.dart'`, then review each overlay owner to distinguish menus from unrelated drag feedback. The externally owned math component/package is excluded from this audit and from all code changes and renders.
+
+## Repository-wide Dart-source coverage
+
+The tracked repository contains 959 Dart files across four top-level roots: `lib/` (534 application and built-in-module source files), `tests/` (423 test files), `integration_test/` (1 test file), and `tool/` (1 utility). `lib/` is the only production app source root; the built-in Stroom modules, including Anki and CatCatch, are inside it. There are no tracked Dart source files under separate component, module, or package roots outside `lib/`. The one `tool/` file (`tool/asr_evaluate.dart`) and one integration test (`integration_test/app_smoke_test.dart`) were also searched; neither contains an in-scope menu or selection overlay callsite. Test files are counted above but are not treated as application source callsites.
+
+The repository-wide search found no relevant popup, dropdown, menu, autocomplete, or menu-like overlay callsites outside `lib/`. All 26 `PopupMenuButton`, 1 `showMenu`, 33 legacy dropdown, and 2 `OverlayEntry` instances found in app source are in `lib/`; the two overlays are the LabeledTextField suggestion menu and DragSortArea drag feedback, respectively. No `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete` callsites were found. The external math package is a dependency, not a tracked source root in this repository.
 
 ## Shared visual system
 
