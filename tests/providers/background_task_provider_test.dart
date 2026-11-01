@@ -15005,6 +15005,7 @@ void main() {
           'foo-barxyz',
           'foo-barxyz123',
           'foo barxyz',
+          'foo\u00A0barxyz',
           'foo / barxyz',
           'foo + barxyz',
           'foo. barxyz',

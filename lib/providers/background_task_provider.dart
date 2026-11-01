@@ -604,7 +604,7 @@ bool _legacyOcrTextContainsCredential(
 
   final naturalDocumentationReference = text.replaceAll(
     RegExp(
-      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:chapter|section|page|step|part|id)[_-]?\s*\d{1,18}\b',
+      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:chapter|section|page|step|part|id|c\s*h\s*a\s*p\s*t\s*e\s*r|s\s*e\s*c\s*t\s*i\s*o\s*n|p\s*a\s*g\s*e|s\s*t\s*e\s*p|p\s*a\s*r\s*t|i\s*d)[_-]?\s*\d{1,18}\b',
       caseSensitive: false,
     ),
     '',
@@ -1528,8 +1528,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     };
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-      '((?:[ \\t\\r\\n]+'
-      '(?:[a-zA-Z0-9_/:;+=~@%-]|\\.(?=[ \\t\\r\\n]+'
+      '((?:\\s+'
+      '(?:[a-zA-Z0-9_/:;+=~@%-]|\\.(?=\\s+'
       '[a-zA-Z0-9_/:;+=~@%-]|[a-zA-Z0-9_/:;+=~@%-]))+)+)'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
@@ -1869,7 +1869,14 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           foundCredential = true;
         }
       }
+      final explicitAuthenticationUseContext =
+          RegExp(r'\buse\b', caseSensitive: false).hasMatch(
+                sanitized.substring(0, match.start),
+              ) &&
+              RegExp(r'\bto\s+authenticate\b', caseSensitive: false)
+                  .hasMatch(chunks.join(' '));
       if (!foundCredential &&
+          !explicitAuthenticationUseContext &&
           !_legacyOcrHasCredentialUseContext(
             sanitized,
             match,
@@ -2912,7 +2919,11 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         compactCredential.split('').map(RegExp.escape).join(r'\s*'),
         caseSensitive: false,
       );
-      sanitized = sanitized.replaceAll(spacedExactCredential, '[redacted]');
+      sanitized = sanitized.replaceAllMapped(spacedExactCredential, (match) {
+        return RegExp(r'\s').hasMatch(match.group(0)!)
+            ? '[redacted]'
+            : match.group(0)!;
+      });
     }
     final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
     if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
