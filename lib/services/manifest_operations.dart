@@ -570,9 +570,8 @@ class ManifestOperations<T extends FileRecord> {
       final storageRefCount = _cache!
           .where((item) => storageNameOf(item) == storageNameOf(record))
           .length;
-      final hashRefCount = _cache!
-          .where((item) => hashOf(item) == hashOf(record))
-          .length;
+      final hashRefCount =
+          _cache!.where((item) => hashOf(item) == hashOf(record)).length;
       await _dbDeleteRecord(id);
       _cache!.removeWhere((item) => item.id == id);
       _recordMutationRevision++;
