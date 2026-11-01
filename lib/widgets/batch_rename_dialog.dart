@@ -560,8 +560,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             DropdownButton<_PreviewFilter>(
-              dropdownColor: StroomMenuStyle.surface(context),
-              borderRadius: StroomMenuStyle.borderRadius,
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _filter,
                 onChanged: (v) => setState(() => _filter = v!),
                 items: [
@@ -605,8 +605,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 child: const Text('复制清单')),
           ]),
       DropdownButton<BatchRenameConflictStrategy>(
-        dropdownColor: StroomMenuStyle.surface(context),
-        borderRadius: StroomMenuStyle.borderRadius,
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
           isExpanded: true,
           value: _config.conflictStrategy,
           items: const [

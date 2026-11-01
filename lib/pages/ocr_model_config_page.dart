@@ -629,7 +629,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  dropdownColor: StroomMenuStyle.surface(context),
+                                  dropdownColor:
+                                      StroomMenuStyle.surface(context),
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,

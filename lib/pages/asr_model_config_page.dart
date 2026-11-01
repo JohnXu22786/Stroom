@@ -510,7 +510,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   const EdgeInsets.symmetric(horizontal: 8),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  dropdownColor: StroomMenuStyle.surface(context),
+                                  dropdownColor:
+                                      StroomMenuStyle.surface(context),
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
