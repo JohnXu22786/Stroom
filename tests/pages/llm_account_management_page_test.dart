@@ -85,6 +85,55 @@ void main() {
     expect(await service.listAccounts(), isEmpty);
   });
 
+  testWidgets('Grok Build and xAI OAuth modes are separate addable accounts', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    for (final (connectorId, displayName) in [
+      ('grok-cli', 'xAI Grok Build'),
+      ('xai-oauth', 'xAI API OAuth'),
+    ]) {
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      final connector = gateway.providerCatalog.findProvider(connectorId)!;
+      expect(connector.displayName, displayName);
+      expect(connector.supportedAuthTypes, {'oauth'});
+      final dropdown = find.byType(DropdownButtonFormField<String>).at(0);
+      final button = find.descendant(
+        of: dropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(button).onChanged!(connectorId);
+      await tester.pumpAndSettle();
+      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+      await tester.enterText(
+          find.byType(TextField).at(0), '$connectorId account');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      expect(
+        oauthAuthorization.xaiDeviceAuthorizationAccounts.last.connectorType,
+        connectorId,
+      );
+      expect(find.text('XAI-1234'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(await service.listAccounts(), isEmpty);
+    }
+  });
+
   testWidgets('Kimi Code system back cancels device authorization', (
     tester,
   ) async {
@@ -2352,6 +2401,7 @@ LlmChatRoutingRuntime _testGateway(
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];
   final deviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
@@ -2375,22 +2425,42 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    xaiDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://x.ai/activate'),
+      userCode: 'XAI-1234',
+    );
+  }
+
+  @override
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
 }
 
 class _PendingOAuthDeviceAuthorization
     implements AiGatewayOAuthDeviceAuthorization {
+  final Uri _verificationUri;
+  final String _userCode;
   final _completion = Completer<AiGatewayAccount>();
   var cancelled = false;
 
+  _PendingOAuthDeviceAuthorization({
+    Uri? verificationUri,
+    String? userCode,
+  })  : _verificationUri =
+            verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
+        _userCode = userCode ?? 'ABCD-EFGH';
+
   @override
-  Uri get verificationUri => Uri.parse('https://www.kimi.com/code/verify');
+  Uri get verificationUri => _verificationUri;
 
   @override
   Uri get verificationUriComplete => verificationUri;
 
   @override
-  String get userCode => 'ABCD-EFGH';
+  String get userCode => _userCode;
 
   @override
   Future<AiGatewayAccount> get completed => _completion.future;

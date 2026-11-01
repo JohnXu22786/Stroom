@@ -34,7 +34,15 @@ class LlmOAuthProviderPolicy {
       providerId: 'xai',
       supported: false,
       reason:
-          'Grok Build OAuth is a CLI session; the public xAI model API uses API keys.',
+          'The native xAI API-key connector does not accept OAuth accounts.',
+    ),
+    'grok-cli': LlmOAuthProviderPolicy._(
+      providerId: 'grok-cli',
+      supported: true,
+    ),
+    'xai-oauth': LlmOAuthProviderPolicy._(
+      providerId: 'xai-oauth',
+      supported: true,
     ),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
@@ -132,6 +140,48 @@ class LlmKimiDeviceCode {
     required this.expiresIn,
     required this.interval,
   }) : _deviceCode = deviceCode;
+}
+
+/// Device authorization returned by xAI's public OIDC device grant.
+class LlmXaiDeviceCode {
+  final String _deviceCode;
+  final String tokenEndpoint;
+  final String userCode;
+  final Uri verificationUri;
+  final Uri verificationUriComplete;
+  final Duration expiresIn;
+  final Duration interval;
+
+  String get deviceCode => _deviceCode;
+
+  const LlmXaiDeviceCode._({
+    required String deviceCode,
+    required this.tokenEndpoint,
+    required this.userCode,
+    required this.verificationUri,
+    required this.verificationUriComplete,
+    required this.expiresIn,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+
+  factory LlmXaiDeviceCode.fromOAuthResponse({
+    required String deviceCode,
+    required String tokenEndpoint,
+    required String userCode,
+    required Uri verificationUri,
+    required Uri verificationUriComplete,
+    required Duration expiresIn,
+    required Duration interval,
+  }) =>
+      LlmXaiDeviceCode._(
+        deviceCode: deviceCode,
+        tokenEndpoint: tokenEndpoint,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        expiresIn: expiresIn,
+        interval: interval,
+      );
 }
 
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in

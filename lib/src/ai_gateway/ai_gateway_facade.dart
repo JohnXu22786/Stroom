@@ -723,6 +723,29 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (!{'grok-cli', 'xai-oauth'}.contains(account.connectorType) ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      final deviceCode = await _tokenClient.startXaiDeviceAuthorization();
+      return _LlmXaiDeviceAuthorization(
+        account: account,
+        deviceCode: deviceCode,
+        tokenClient: _tokenClient,
+        accounts: _accounts,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<void> revoke(AiGatewayAccount account) async {
     try {
       if (account.authType != 'oauth') {
@@ -731,6 +754,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       if (!LlmOAuthProviderPolicy.forProvider(
         account.connectorType,
       ).supported) {
+        return;
+      }
+      if ({'grok-cli', 'xai-oauth'}.contains(account.connectorType)) {
+        // The source contract defines refresh, but no public revocation route.
         return;
       }
       final raw = await _accounts.readCredential(account.id);
@@ -750,7 +777,9 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       return true;
     }
     if (account.connectorType == 'claude' ||
-        account.connectorType == 'kimi-coding') {
+        account.connectorType == 'kimi-coding' ||
+        account.connectorType == 'grok-cli' ||
+        account.connectorType == 'xai-oauth') {
       // These OAuth contracts provide token refresh but no revocation endpoint;
       // removing the local secure credential is complete.
       await _accountManagement.deleteAccount(account.id);
@@ -952,6 +981,122 @@ class _LlmKimiCodeDeviceAuthorization
         ),
         secret: jsonEncode(tokenBundle),
       );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+class _LlmXaiDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmXaiDeviceCode _deviceCode;
+  final LlmOAuthTokenClient _tokenClient;
+  final LlmAccountConnectorService _accounts;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmXaiDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmXaiDeviceCode deviceCode,
+    required LlmOAuthTokenClient tokenClient,
+    required LlmAccountConnectorService accounts,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _tokenClient = tokenClient,
+        _accounts = accounts,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.verificationUri;
+
+  @override
+  Uri get verificationUriComplete => _deviceCode.verificationUriComplete;
+
+  @override
+  String get userCode => _deviceCode.userCode;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final tokenBundle = await _tokenClient.pollXaiDeviceAuthorization(
+        deviceCode: _deviceCode,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+      var saved = await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: _account.authType,
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          models: _account.models,
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(tokenBundle),
+      );
+      try {
+        final models = await _accounts.discoverModels(
+          LlmAccount(
+            id: saved.id,
+            connectorType: saved.connectorType,
+            authType: saved.authType,
+            displayName: saved.displayName,
+            status: LlmAccountStatus.ready,
+            credentialRef: saved.credentialRef,
+            endpointConfig: saved.endpointConfig,
+            policy: _legacyPolicy(saved.policy),
+          ),
+          refreshRemote: true,
+        );
+        saved = await _accountManagement.saveAccount(
+          AiGatewayAccount(
+            id: saved.id,
+            connectorType: saved.connectorType,
+            authType: saved.authType,
+            displayName: saved.displayName,
+            status: AiGatewayAccountStatus.ready,
+            hasCredential: true,
+            credentialRef: saved.credentialRef,
+            endpointConfig: saved.endpointConfig,
+            models: [
+              for (final model in models)
+                AiGatewayUpstreamModel(
+                  id: model.id,
+                  upstreamModelId: model.upstreamModelId,
+                  displayName: model.displayName,
+                  capabilities: model.capabilities,
+                  config: model.config,
+                ),
+            ],
+            policy: saved.policy,
+            usageByWindow: saved.usageByWindow,
+            remainingQuota: saved.remainingQuota,
+            quotaSignals: saved.quotaSignals,
+          ),
+        );
+      } catch (_) {
+        // Preserve the secure OAuth account; model discovery can be retried
+        // from the account editor without exposing credentials.
+      }
+      return saved;
     } catch (_) {
       throw const AiGatewayOAuthException();
     }
@@ -1268,6 +1413,8 @@ bool _hasRequiredModelCapabilities(
     LlmNativeProtocol.ollamaChat,
     LlmNativeProtocol.kimiChatCompletions,
     LlmNativeProtocol.xaiResponses,
+    LlmNativeProtocol.grokBuildResponses,
+    LlmNativeProtocol.xaiOAuthResponses,
     LlmNativeProtocol.metaResponses,
   };
   for (final capability in required) {
@@ -1303,6 +1450,8 @@ bool _hasRequiredModelCapabilities(
               LlmNativeProtocol.ollamaChat,
               LlmNativeProtocol.kimiChatCompletions,
               LlmNativeProtocol.xaiResponses,
+              LlmNativeProtocol.grokBuildResponses,
+              LlmNativeProtocol.xaiOAuthResponses,
               LlmNativeProtocol.metaResponses,
               LlmNativeProtocol.bedrockConverse,
             }.contains(protocol) ||

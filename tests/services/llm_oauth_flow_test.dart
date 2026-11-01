@@ -9,6 +9,85 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('xAI device authorization stays separate across its two API modes',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        requests.add(request);
+        if (request.uri.path == '/.well-known/openid-configuration') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'device_authorization_endpoint':
+                  'https://auth.x.ai/oauth/device/code',
+              'token_endpoint': 'https://auth.x.ai/oauth/token',
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json']
+            },
+          );
+        }
+        if (request.uri.path == '/oauth/device/code') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'device_code': 'fixture-xai-device-code',
+              'user_code': 'XAI-1234',
+              'verification_uri': 'https://x.ai/activate',
+              'verification_uri_complete':
+                  'https://x.ai/activate?code=XAI-1234',
+              'expires_in': 600,
+              'interval': 1,
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json']
+            },
+          );
+        }
+        return ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'fixture-xai-access',
+            'refresh_token': 'fixture-xai-refresh',
+            'id_token': 'header.${base64Url.encode(utf8.encode(jsonEncode({
+                      'sub': 'account-123',
+                      'email': 'xai@example.test'
+                    }))).replaceAll('=', '')}.signature',
+            'token_type': 'Bearer',
+            'scope':
+                'openid profile email offline_access grok-cli:access api:access',
+            'expires_in': 3600,
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json']
+          },
+        );
+      });
+    final client = LlmOAuthTokenClient(dio: dio);
+
+    final code = await client.startXaiDeviceAuthorization();
+    final token = await client.pollXaiDeviceAuthorization(deviceCode: code);
+
+    expect(
+        requests.map((request) => request.uri.host), everyElement('auth.x.ai'));
+    expect(requests.map((request) => request.uri.path), [
+      '/.well-known/openid-configuration',
+      '/oauth/device/code',
+      '/oauth/token',
+    ]);
+    expect(requests[1].data.toString(),
+        contains('b1a00492-073a-47ea-816f-4c329264a828'));
+    expect(requests[1].data.toString(), contains('grok-cli:access'));
+    expect(requests[2].data.toString(), contains('device_code'));
+    expect(token['access_token'], 'fixture-xai-access');
+    expect(token['refresh_token'], 'fixture-xai-refresh');
+    expect(token['identity_sub'], 'account-123');
+    expect(token['identity_email'], 'xai@example.test');
+    expect(token['oauth_contract'], 'xai-device-v1');
+    expect(requests.last.toString(), isNot(contains('fixture-xai-access')));
+  });
+
   test(
     'Kimi Code device authorization exchanges a polled grant safely',
     () async {

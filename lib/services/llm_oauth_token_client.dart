@@ -10,6 +10,11 @@ import 'llm_oauth_flow.dart';
 class LlmOAuthTokenClient {
   static const _openAiDiscoveryUri =
       'https://auth.openai.com/.well-known/openid-configuration';
+  static const xaiClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
+  static const _xaiDiscoveryUri =
+      'https://auth.x.ai/.well-known/openid-configuration';
+  static const _xaiScope =
+      'openid profile email offline_access grok-cli:access api:access';
 
   final Dio _dio;
 
@@ -288,6 +293,129 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<LlmXaiDeviceCode> startXaiDeviceAuthorization() async {
+    try {
+      final discoveryResponse = await _dio.getUri<Object?>(
+        Uri.parse(_xaiDiscoveryUri),
+        options: Options(responseType: ResponseType.json),
+      );
+      final discovery = _jsonObject(discoveryResponse.data);
+      final deviceEndpoint =
+          _xaiEndpoint(discovery['device_authorization_endpoint']);
+      final tokenEndpoint = _xaiEndpoint(discovery['token_endpoint']);
+      final response = await _dio.postUri<Object?>(
+        deviceEndpoint,
+        data: {'client_id': xaiClientId, 'scope': _xaiScope},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+        ),
+      );
+      final data = _jsonObject(response.data);
+      final deviceCode = _nonEmptyString(data['device_code']);
+      final userCode = _nonEmptyString(data['user_code']);
+      final verification = _xaiVerificationUri(data['verification_uri']);
+      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
+          verification;
+      final expiresIn = _seconds(data['expires_in']);
+      final interval = _seconds(data['interval']);
+      if (deviceCode == null ||
+          userCode == null ||
+          verification == null ||
+          complete == null ||
+          expiresIn <= 0) {
+        throw const LlmOAuthFlowException();
+      }
+      return LlmXaiDeviceCode.fromOAuthResponse(
+        deviceCode: deviceCode,
+        tokenEndpoint: tokenEndpoint.toString(),
+        userCode: userCode,
+        verificationUri: verification,
+        verificationUriComplete: complete,
+        expiresIn: Duration(seconds: expiresIn),
+        interval: Duration(seconds: interval > 0 ? interval : 5),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> pollXaiDeviceAuthorization({
+    required LlmXaiDeviceCode deviceCode,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      if (deviceCode.deviceCode.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final tokenEndpoint = _xaiEndpoint(deviceCode.tokenEndpoint);
+      final deadline = DateTime.now().add(deviceCode.expiresIn);
+      var interval = deviceCode.interval < const Duration(seconds: 5)
+          ? const Duration(seconds: 5)
+          : deviceCode.interval;
+      var firstPoll = true;
+      while (DateTime.now().isBefore(deadline)) {
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        if (!firstPoll) {
+          final remaining = deadline.difference(DateTime.now());
+          if (remaining <= Duration.zero) break;
+          await _waitForXaiPollingInterval(
+            interval > remaining ? remaining : interval,
+            cancelToken,
+          );
+        }
+        firstPoll = false;
+        final response = await _dio.postUri<Object?>(
+          tokenEndpoint,
+          data: {
+            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+            'device_code': deviceCode.deviceCode,
+            'client_id': xaiClientId,
+          },
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            responseType: ResponseType.json,
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+        final token = _jsonObject(response.data);
+        final error = _nonEmptyString(token['error']);
+        if (error == 'authorization_pending') continue;
+        if (error == 'slow_down') {
+          interval += const Duration(seconds: 5);
+          continue;
+        }
+        if (error != null || (response.statusCode ?? 0) != 200) {
+          throw const LlmOAuthFlowException();
+        }
+        final accessToken = _nonEmptyString(token['access_token']);
+        final refreshToken = _nonEmptyString(token['refresh_token']);
+        if (accessToken == null || refreshToken == null) {
+          throw const LlmOAuthFlowException();
+        }
+        final bundle = _credentialBundle(token)
+          ..['client_id'] = xaiClientId
+          ..['token_endpoint'] = tokenEndpoint.toString()
+          ..['scope'] = _nonEmptyString(token['scope']) ?? _xaiScope
+          ..['oauth_contract'] = 'xai-device-v1';
+        final idToken = _nonEmptyString(token['id_token']);
+        if (idToken != null) {
+          bundle['id_token'] = idToken;
+          final claims = _unverifiedJwtClaims(idToken);
+          final subject = _nonEmptyString(claims['sub']);
+          final email = _nonEmptyString(claims['email']);
+          if (subject != null) bundle['identity_sub'] = subject;
+          if (email != null) bundle['identity_email'] = email;
+        }
+        return bundle;
+      }
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
   static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
         'X-Msh-Platform': 'CLIProxyAPI',
         'X-Msh-Version': 'stroom',
@@ -295,6 +423,61 @@ class LlmOAuthTokenClient {
         'X-Msh-Device-Model': 'Stroom',
         'X-Msh-Device-Id': deviceId,
       };
+
+  static Future<void> _waitForXaiPollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(interval);
+      return;
+    }
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
+  }
+
+  static Uri _xaiEndpoint(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.host != 'auth.x.ai' && !uri.host.endsWith('.auth.x.ai') ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmOAuthFlowException();
+    }
+    return uri;
+  }
+
+  static Uri? _xaiVerificationUri(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.host != 'x.ai' &&
+            !uri.host.endsWith('.x.ai') &&
+            uri.host != 'x.com' &&
+            !uri.host.endsWith('.x.com')) {
+      return null;
+    }
+    return uri;
+  }
+
+  static Map<String, dynamic> _unverifiedJwtClaims(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) return const {};
+    try {
+      return _jsonObject(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+    } catch (_) {
+      return const {};
+    }
+  }
 
   static Future<void> _waitForKimiPollingInterval(
     Duration interval,
