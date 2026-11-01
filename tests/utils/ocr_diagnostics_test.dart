@@ -34,7 +34,9 @@ void main() {
     final echoedPrefix = token.substring(0, 120);
     const safeRequestId = 'req-safe-long-bearer-202';
     for (final request in [
-      {'headers': {'Authorization': 'Bearer $token'}},
+      {
+        'headers': {'Authorization': 'Bearer $token'}
+      },
       {'url': 'https://ocr.test/v1?access_token=Bearer%20$token'},
     ]) {
       final excludedValues =
