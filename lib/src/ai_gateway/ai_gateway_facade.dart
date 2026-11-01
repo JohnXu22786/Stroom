@@ -586,7 +586,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isGemini = account.connectorType == 'gemini' ||
           account.connectorType == 'aistudio';
       final isClaude = account.connectorType == 'claude';
-      if (!isOpenAi && !isGemini && !isClaude) {
+      final isDevin = account.connectorType == 'devin';
+      if (!isOpenAi && !isGemini && !isClaude && !isDevin) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -600,7 +601,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       listener = await LlmOAuthLoopback.bind(
         isGemini
             ? '/'
-            : isClaude
+            : isClaude || isDevin
                 ? '/callback'
                 : '/auth/callback',
         host: isClaude ? 'localhost' : '127.0.0.1',
@@ -609,7 +610,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
-      final previousBundle = isGemini || isOpenAi || isClaude
+      final previousBundle = isGemini || isOpenAi || isClaude || isDevin
           ? await _existingOAuthBundle(account)
           : null;
       final previousOpenAiBundle =
@@ -632,6 +633,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           redirectUri: redirectUri,
           clientId: clientId,
         );
+      } else if (isDevin) {
+        attempt = LlmOAuthAuthorizationAttempt.devin(redirectUri: redirectUri);
       } else {
         attempt = LlmOAuthAuthorizationAttempt.claudeCode(
           redirectUri: redirectUri,
@@ -662,6 +665,13 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
               ? configuration['clientSecret']!.trim()
               : previousBundle?['client_secret'] as String? ?? '',
         );
+      } else if (isDevin) {
+        tokenBundle = await _tokenClient.exchangeDevinCode(
+          attempt: attempt,
+          callback: callback,
+          accountId: account.id,
+          expectedUserId: previousBundle?['user_id'] as String?,
+        );
       } else {
         tokenBundle = await _tokenClient.exchangeClaudeCode(
           attempt: attempt,
@@ -673,7 +683,9 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           id: account.id,
           connectorType: account.connectorType,
           authType: account.authType,
-          displayName: account.displayName,
+          displayName: isDevin
+              ? _devinAccountDisplayName(account.displayName, tokenBundle)
+              : account.displayName,
           status: AiGatewayAccountStatus.ready,
           hasCredential: true,
           credentialRef: account.credentialRef,
@@ -948,6 +960,22 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       throw const AiGatewayOAuthException();
     }
     return created;
+  }
+
+  static String _devinAccountDisplayName(
+    String fallback,
+    Map<String, dynamic> bundle,
+  ) {
+    final name = bundle['user_name'];
+    final email = bundle['email'];
+    final identity = name is String && name.trim().isNotEmpty
+        ? name.trim()
+        : email is String && email.trim().isNotEmpty
+            ? email.trim()
+            : bundle['user_id'] is String
+                ? bundle['user_id'] as String
+                : fallback;
+    return identity.startsWith('Devin') ? identity : 'Devin ($identity)';
   }
 
   Future<Map<String, dynamic>?> _existingOAuthBundle(

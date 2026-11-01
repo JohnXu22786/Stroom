@@ -10,6 +10,159 @@ import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
   test(
+    'Devin OAuth is separate and uses its pinned PKCE callback contract',
+    () {
+      expect(LlmOAuthProviderPolicy.forProvider('devin').supported, isTrue);
+      expect(LlmOAuthProviderPolicy.forProvider('claude').supported, isTrue);
+      expect(
+        LlmOAuthProviderPolicy.forProvider('session_token').supported,
+        isFalse,
+      );
+
+      final attempt = LlmOAuthAuthorizationAttempt.devin(
+        redirectUri: Uri.parse('http://127.0.0.1:43127/callback'),
+      );
+      final authorization = attempt.authorizationUri;
+      expect(authorization.origin, 'https://app.devin.ai');
+      expect(authorization.path, '/auth/cli/continue');
+      expect(
+        authorization.queryParameters['redirect_uri'],
+        attempt.redirectUri.toString(),
+      );
+      expect(authorization.queryParameters['prompt'], 'select_account');
+      expect(authorization.queryParameters['code_challenge_method'], 'S256');
+      expect(authorization.queryParameters['code_challenge'], isNotEmpty);
+      expect(authorization.queryParameters['state'], attempt.state);
+      expect(authorization.queryParameters, isNot(contains('client_id')));
+
+      final callback = attempt.consumeCallback(
+        Uri.parse(
+          '${attempt.redirectUri}?code=fixture-code&state=${attempt.state}',
+        ),
+      );
+      expect(callback.code, 'fixture-code');
+      expect(callback.clientId, isNull);
+      expect(
+        () => attempt.consumeCallback(
+          Uri.parse(
+            '${attempt.redirectUri}?code=another&state=${attempt.state}',
+          ),
+        ),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+    },
+  );
+
+  test('Devin OAuth exchanges, verifies identity and checks plan status',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        requests.add(request);
+        if (request.uri.toString() == 'https://api.devin.ai/auth/cli/token') {
+          return ResponseBody.fromString(
+            '{"token":"eyJfixture-devin-token"}',
+            200,
+          );
+        }
+        if (request.uri.toString() == 'https://api.devin.ai/v3/self') {
+          return ResponseBody.fromString(
+            '{"user_id":"devin-user-1","user_name":"Dev User","org_id":"org-1"}',
+            200,
+          );
+        }
+        if (request.uri.toString() ==
+            'https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus') {
+          return ResponseBody.fromBytes(
+            _devinStatusResponse(userId: 'devin-user-1', plan: 'Team'),
+            200,
+          );
+        }
+        throw StateError('Unexpected Devin OAuth request');
+      });
+    final attempt = LlmOAuthAuthorizationAttempt.devin(
+      redirectUri: Uri.parse('http://127.0.0.1:43127/callback'),
+    );
+    final callback = attempt.consumeCallback(
+      Uri.parse(
+        '${attempt.redirectUri}?code=fixture-code&state=${attempt.state}',
+      ),
+    );
+
+    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeDevinCode(
+      attempt: attempt,
+      callback: callback,
+      accountId: 'devin-account-1',
+    );
+
+    expect(
+      bundle['session_token'],
+      r'devin-session-token$eyJfixture-devin-token',
+    );
+    expect(bundle['user_id'], 'devin-user-1');
+    expect(bundle['user_name'], 'Dev User');
+    expect(bundle['org_id'], 'org-1');
+    expect(bundle['plan'], 'Team');
+    expect(bundle['oauth_contract'], 'devin-pkce-v1');
+    expect(requests[0].method, 'POST');
+    expect(requests[0].contentType, Headers.jsonContentType);
+    expect(requests[0].data, {
+      'code': 'fixture-code',
+      'code_verifier': attempt.codeVerifier,
+    });
+    expect(requests[0].data, isNot(contains('client_id')));
+    expect(
+      requests[1].headers['Authorization'],
+      r'Bearer devin-session-token$eyJfixture-devin-token',
+    );
+    expect(requests[2].uri.host, 'server.codeium.com');
+    expect(
+      requests[2].headers['Authorization'],
+      r'Basic devin-session-token$eyJfixture-devin-token-devin-session-token$eyJfixture-devin-token',
+    );
+    expect(requests[2].headers['Connect-Protocol-Version'], '1');
+    expect(requests[2].headers['Content-Type'], 'application/proto');
+    expect(requests.toString(), isNot(contains('fixture-devin-token')));
+  });
+
+  test(
+    'Devin OAuth rejects identity mismatches and accounts without plan status',
+    () async {
+      final attempt = LlmOAuthAuthorizationAttempt.devin(
+        redirectUri: Uri.parse('http://127.0.0.1:43127/callback'),
+      );
+      final callback = attempt.consumeCallback(
+        Uri.parse(
+          '${attempt.redirectUri}?code=fixture-code&state=${attempt.state}',
+        ),
+      );
+
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          if (request.uri.path == '/auth/cli/token') {
+            return ResponseBody.fromString('{"token":"fixture-token"}', 200);
+          }
+          if (request.uri.path == '/v3/self') {
+            return ResponseBody.fromString('{"user_id":"profile-user"}', 200);
+          }
+          return ResponseBody.fromBytes(
+            _devinStatusResponse(userId: 'different-user', plan: ''),
+            200,
+          );
+        });
+
+      await expectLater(
+        LlmOAuthTokenClient(dio: dio).exchangeDevinCode(
+          attempt: attempt,
+          callback: callback,
+          accountId: 'devin-account-2',
+        ),
+        throwsA(isA<LlmOAuthFlowException>()),
+      );
+    },
+  );
+
+  test(
     'Meta Muse uses its pinned device grant and key-mint exchange',
     () async {
       final requests = <RequestOptions>[];
@@ -1164,4 +1317,29 @@ class _OAuthAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+Uint8List _devinStatusResponse({required String userId, required String plan}) {
+  final status = <int>[]..addAll(_protoBytes(36, utf8.encode(userId)));
+  if (plan.isNotEmpty) {
+    final planInfo = _protoBytes(2, utf8.encode(plan));
+    status.addAll(_protoBytes(13, _protoBytes(1, planInfo)));
+  }
+  return Uint8List.fromList(_protoBytes(1, status));
+}
+
+List<int> _protoBytes(int field, List<int> bytes) => [
+      ..._protoVarint((field << 3) | 2),
+      ..._protoVarint(bytes.length),
+      ...bytes,
+    ];
+
+List<int> _protoVarint(int value) {
+  final bytes = <int>[];
+  while (value >= 0x80) {
+    bytes.add((value & 0x7f) | 0x80);
+    value >>= 7;
+  }
+  bytes.add(value);
+  return bytes;
 }

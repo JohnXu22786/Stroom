@@ -115,6 +115,99 @@ void main() {
     );
   });
 
+  test('routes Devin accounts only through Devin Connect-RPC', () {
+    expect(llmRoutedChatSupportedConnectorTypes('devin.connect_rpc'), {
+      'devin',
+    });
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      isNot(contains('devin')),
+    );
+  });
+
+  test('invokes a verified Devin OAuth model through routed Chat', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'devin-chat-account',
+        connectorType: 'devin',
+        authType: 'oauth',
+        displayName: 'Devin',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-chat-model',
+            upstreamModelId: 'devin/swe-2',
+            displayName: 'Devin SWE-2',
+            capabilities: {'chat': true, 'streaming': true},
+          ),
+        ],
+      ),
+      secret: jsonEncode({
+        'session_token': r'devin-session-token$fixture',
+        'oauth_contract': 'devin-pkce-v1',
+        'auth_kind': 'oauth',
+        'user_id': 'devin-user',
+        'plan': 'Team',
+      }),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'devin-chat-group',
+        displayName: 'Devin group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'devin-chat-account',
+            localModelId: 'devin-chat-model',
+            upstreamModelId: 'devin/swe-2',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'choices': [
+          {
+            'message': {'role': 'assistant', 'content': 'Devin reply'},
+          },
+        ],
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: 'devin-chat-group',
+      localModelId: 'devin-chat-model',
+      endpointType: 'devin.connect_rpc',
+      apiProtocol: 'devin.connect_rpc',
+      conversationId: 'chat-conversation-1',
+    );
+
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      'Devin reply',
+    );
+    expect(connector.requestedAccountIds, ['devin-chat-account']);
+    expect(connector.requestedModelIds, ['devin/swe-2']);
+    expect(connector.requestBody?['conversation_id'], 'chat-conversation-1');
+    expect(connector.requestBody?['messages'], isNotEmpty);
+  });
+
   test('selects Vertex accounts only for supported Gemini chat protocols', () {
     expect(
       llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),

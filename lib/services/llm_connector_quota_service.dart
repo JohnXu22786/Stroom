@@ -132,11 +132,17 @@ class LlmConnectorQuotaService {
   }
 
   Future<LlmConnectorObservation> _observeDevin(LlmAccount account) async {
-    final token = _credentialToken(
-      account,
-      await accountService.readCredential(account.id),
-      const ['session_token', 'sessionToken', 'access_token', 'accessToken'],
-    );
+    final storedCredential = await accountService.readCredential(account.id);
+    if (account.authType == 'oauth' &&
+        !_isVerifiedDevinOAuthCredential(storedCredential)) {
+      return LlmConnectorObservation();
+    }
+    final token = _credentialToken(account, storedCredential, const [
+      'session_token',
+      'sessionToken',
+      'access_token',
+      'accessToken',
+    ]);
     final base = _httpsBase(account, 'https://server.codeium.com');
     final uri = base.replace(
       path: _joinPath(
@@ -181,6 +187,31 @@ class LlmConnectorQuotaService {
           ),
       },
     );
+  }
+
+  bool _isVerifiedDevinOAuthCredential(String? credential) {
+    if (credential == null) return false;
+    try {
+      final decoded = jsonDecode(credential);
+      if (decoded is! Map ||
+          decoded['oauth_contract'] != 'devin-pkce-v1' ||
+          decoded['auth_kind'] != 'oauth' ||
+          decoded['session_token'] is! String ||
+          (decoded['session_token'] as String).trim().isEmpty ||
+          decoded['user_id'] is! String ||
+          (decoded['user_id'] as String).trim().isEmpty ||
+          decoded['plan'] is! String ||
+          (decoded['plan'] as String).trim().isEmpty) {
+        return false;
+      }
+      final planEnd = decoded['plan_end'];
+      if (planEnd == null) return true;
+      if (planEnd is! String) return false;
+      final expiresAt = DateTime.tryParse(planEnd)?.toUtc();
+      return expiresAt != null && expiresAt.isAfter(_clock().toUtc());
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Object?> _post(

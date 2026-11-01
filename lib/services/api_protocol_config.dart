@@ -72,6 +72,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
       'ollama' => 'ollama.chat',
+      'devin' => 'devin.connect_rpc',
       'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
@@ -145,4 +146,5 @@ const apiProtocolLabels = <String, String>{
   'openai.chat_completions': 'OpenAI Chat Completions',
   'openai.responses': 'OpenAI Responses',
   'anthropic.messages': 'Anthropic Messages',
+  'devin.connect_rpc': 'Devin Connect-RPC',
 };

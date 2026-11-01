@@ -192,6 +192,62 @@ void main() {
   );
 
   test(
+    'Devin model group preserves Connect-RPC in Task Flow preflight',
+    () async {
+      final account = LlmAccount(
+        id: 'devin-oauth',
+        connectorType: 'devin',
+        authType: 'oauth',
+        displayName: 'Devin',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-swe-2-local',
+            upstreamModelId: 'devin/swe-2',
+            displayName: 'Devin SWE-2',
+            capabilities: {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'devin-task-flow-group',
+        displayName: 'Devin group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'devin-oauth',
+            localModelId: 'devin-swe-2-local',
+            upstreamModelId: 'devin/swe-2',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Devin assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(flowChatEndpointType(assistant, providers), 'devin.connect_rpc');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
+  test(
     'Claude OAuth and Setup Token model groups preflight as Anthropic Chat',
     () async {
       for (final authType in ['oauth', 'setup_token']) {
