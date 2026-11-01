@@ -17,16 +17,25 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: MessageWebHost(
-            html:
-                '<!doctype html><script>window.StroomMessageView = {};</script>',
+            html: '''<!doctype html>
+<script>
+window.StroomMessageView = {};
+window.flutter_inappwebview.callHandler("StroomMessageView", {
+  type: "probeBridge",
+  marker: "macos-local-document"
+});
+</script>''',
             commands: probeCommands,
             onEvent: probeEvents.add,
           ),
         ),
       ));
-      for (var i = 0;
-          i < 300 && !probeEvents.any((e) => e['type'] == 'ready');
-          i++) {
+      bool bridgeReady() =>
+          probeEvents.any((e) => e['type'] == 'ready') &&
+          probeEvents.any((e) =>
+              e['type'] == 'probeBridge' &&
+              e['marker'] == 'macos-local-document');
+      for (var i = 0; i < 300 && !bridgeReady(); i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(
@@ -34,6 +43,13 @@ void main() {
         isTrue,
         reason:
             'A minimal local document must load before testing the DSH bundle',
+      );
+      expect(
+        probeEvents.any((e) =>
+            e['type'] == 'probeBridge' &&
+            e['marker'] == 'macos-local-document'),
+        isTrue,
+        reason: 'The macOS document must call through the JavaScript bridge',
       );
       debugPrint('DSH native smoke: macOS minimal document probe passed');
       await tester.pumpWidget(const SizedBox());
@@ -87,7 +103,8 @@ void main() {
     debugPrint('DSH native smoke: mounting DSH document');
     await tester.pumpWidget(
         render('**native smoke**\n\n```dart\nfinal value = 1;\n```'));
-    debugPrint('DSH native smoke: DSH document mounted; waiting for ready bridge');
+    debugPrint(
+        'DSH native smoke: DSH document mounted; waiting for ready bridge');
     await waitFor(() => events.any((e) => e['type'] == 'ready'),
         'The bundled document must initialize its real WebView bridge');
     debugPrint('DSH native smoke: document ready');

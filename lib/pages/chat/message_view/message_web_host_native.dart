@@ -131,6 +131,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
             macNavigationPending = true;
             break;
           }
+          if (isLoading) {
+            // WKWebView may report the target URL and loading state before it
+            // delivers its navigation callback. Reissuing loadUrl here can
+            // restart the same file navigation and prevent the page from ever
+            // reaching the ready bridge.
+            macNavigationPending = true;
+            break;
+          }
           if (_macLoadFailed) break;
         } catch (error) {
           if (kDebugMode) {

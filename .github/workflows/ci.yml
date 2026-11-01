@@ -168,7 +168,7 @@ jobs:
             fi
             if [ -f "$RUNNER_TEMP/android-message-logcat.log" ]; then
               echo '```text'
-              logcat_tail="$(rg -i 'chromium|webview|flutter|fatal exception|crash' "$RUNNER_TEMP/android-message-logcat.log" | tail -n 80 || true)"
+              logcat_tail="$(grep -Ei 'chromium|webview|flutter|fatal exception|crash' "$RUNNER_TEMP/android-message-logcat.log" | tail -n 80 || true)"
               printf '%s\n' "$logcat_tail"
               echo '```'
               logcat_details="$(printf '%s\n' "$logcat_tail" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-4000)"
