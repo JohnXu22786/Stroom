@@ -31,6 +31,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
   bool _macDocumentReady = false;
   bool _macLoadFailed = false;
   int _macLoadGeneration = 0;
+  int _macControllerGeneration = -1;
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
@@ -57,13 +58,31 @@ class _MessageWebHostState extends State<MessageWebHost> {
     InAppWebViewController controller,
     int generation,
   ) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        !identical(controller, _controller) ||
+        generation != _macLoadGeneration) {
+      return;
+    }
     try {
       // Register the bridge before navigation; macOS may finish inline HTML
       // during native-view creation, before onWebViewCreated installs handlers.
+      // Wait until Flutter submits the frame so the native view is attached
+      // before asking WebKit to start its first navigation.
+      if (kDebugMode) {
+        debugPrint(
+          '[MessageWebHost][load-request] generation=$generation htmlLength=${widget.html.length}',
+        );
+      }
       await controller.loadData(
         data: widget.html,
         baseUrl: WebUri(_macDocumentUri.toString()),
       );
+      if (kDebugMode) {
+        debugPrint(
+          '[MessageWebHost][load-request-sent] generation=$generation',
+        );
+      }
     } catch (error) {
       if (kDebugMode) {
         debugPrint('[MessageWebHost][load-error] $error');
@@ -151,6 +170,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
             if (defaultTargetPlatform == TargetPlatform.macOS &&
                 request.isForMainFrame == true &&
                 request.url.toString() == _macDocumentUri.toString() &&
+                identical(controller, _controller) &&
+                _macControllerGeneration == _macLoadGeneration &&
                 !_macDocumentReady &&
                 mounted) {
               setState(() => _macLoadFailed = true);
@@ -167,6 +188,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
                 ? ++_macLoadGeneration
                 : null;
             if (generation != null) {
+              _macControllerGeneration = generation;
               _macDocumentReady = false;
               unawaited(_failMacLoadIfUnready(controller, generation));
             }
