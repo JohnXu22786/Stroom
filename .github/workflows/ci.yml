@@ -151,7 +151,7 @@ jobs:
           profile: pixel_2
           script: |
             set +e
-            log="$GITHUB_WORKSPACE/android-message-smoke.log"
+            log="android-message-smoke.log"
             flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$log"
             result=${PIPESTATUS[0]}
             exit "$result"
