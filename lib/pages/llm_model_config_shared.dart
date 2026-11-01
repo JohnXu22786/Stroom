@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 
 // ============================================================================
 // LabeledTextField — label + description + text field.
@@ -197,8 +198,14 @@ class _LabeledTextFieldState extends State<LabeledTextField>
           child: Material(
             key: _popupKey,
             elevation: 4,
-            color: cs.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(8),
+            color: StroomMenuStyle.surface(context),
+            shape: RoundedRectangleBorder(
+              borderRadius: StroomMenuStyle.borderRadius,
+              side: BorderSide(
+                color: cs.outlineVariant.withValues(alpha: 0.35),
+                width: 0.5,
+              ),
+            ),
             clipBehavior: Clip.antiAlias,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
@@ -214,6 +221,9 @@ class _LabeledTextFieldState extends State<LabeledTextField>
                   for (final s in suggestions)
                     ListTile(
                       dense: true,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       title: Text(s),
                       onTap: () => _selectSuggestion(s),
                     ),

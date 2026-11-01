@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
@@ -810,6 +811,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
                     hint: selectedIndex == null
                         ? Text(_modelSelectionMessage(selectedIndex) ?? '请选择模型')
@@ -955,6 +958,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     value: clamped,
                     isDense: true,
                     isExpanded: true,

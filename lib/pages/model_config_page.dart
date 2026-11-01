@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
@@ -1110,6 +1111,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                   const EdgeInsets.symmetric(horizontal: 8),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
+                                  dropdownColor:
+                                      StroomMenuStyle.surface(context),
+                                  borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
                                   items: ParamType.values

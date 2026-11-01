@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
@@ -628,6 +629,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
+                                  dropdownColor:
+                                      StroomMenuStyle.surface(context),
+                                  borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
                                   items: ParamType.values

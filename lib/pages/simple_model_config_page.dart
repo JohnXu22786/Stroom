@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 
 /// 简洁模型配置编辑页面（适用于 OCR、ASR 等不需要 TTS 特有字段的类型）
@@ -243,6 +244,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
+                                dropdownColor: StroomMenuStyle.surface(context),
+                                borderRadius: StroomMenuStyle.borderRadius,
                                 value: param.type,
                                 isDense: true,
                                 items: ParamType.values

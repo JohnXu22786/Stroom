@@ -46,6 +46,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _chunking,
                 isDense: true,
                 items: const [
@@ -128,6 +130,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _compression,
                 isDense: true,
                 items: const [

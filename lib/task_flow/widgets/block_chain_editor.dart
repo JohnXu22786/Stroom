@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
@@ -210,6 +211,8 @@ class BlockChainEditor extends StatelessWidget {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<IOType>(
+                          dropdownColor: StroomMenuStyle.surface(context),
+                          borderRadius: StroomMenuStyle.borderRadius,
                           // Stored url/any display as text; file remains
                           // selectable. The value must exist in items.
                           value: inputType.userFacing,
