@@ -203,10 +203,6 @@ class OpenAIProtocol implements ChatProtocol {
             },
         ],
       };
-      // DeepSeek 兼容：重建时保留推理内容
-      if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty) {
-        assistantMsg['reasoning_content'] = msg.reasoningContent;
-      }
       result.add(assistantMsg);
       for (final tc in toolCalls) {
         result.add({
@@ -231,10 +227,8 @@ class OpenAIProtocol implements ChatProtocol {
     String? roundReasoning,
     String? thinkingSignature,
   }) {
-    // Per DeepSeek Tool Calls guide: messages.append(message)
-    // preserves the COMPLETE assistant message (including
-    // reasoning_content) when sending subsequent requests
-    // in the same tool call chain.
+    // This legacy protocol builder cannot verify provider/account affinity.
+    // Routed requests restore source reasoning only after a scoped cache hit.
     final assistantMsg = <String, dynamic>{
       'role': 'assistant',
       'tool_calls': [
@@ -242,18 +236,11 @@ class OpenAIProtocol implements ChatProtocol {
           {
             'id': tc.id,
             'type': 'function',
-            if (tc.thoughtSignature != null)
-              'thoughtSignature': tc.thoughtSignature,
             'function': {'name': tc.name, 'arguments': tc.argumentsJson},
           },
       ],
       'content': content.isNotEmpty ? content : null,
     };
-    // Preserve reasoning content so the model retains full context
-    // across tool call chain rounds.
-    if (roundReasoning != null && roundReasoning.isNotEmpty) {
-      assistantMsg['reasoning_content'] = roundReasoning;
-    }
     return [assistantMsg];
   }
 
