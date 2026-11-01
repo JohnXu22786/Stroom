@@ -506,6 +506,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       value: 'pin',
                       child: Text(conv.isPinned ? '取消置顶' : '置顶'),
                     ),
+                    const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'delete',
                       child: Text('删除', style: TextStyle(color: cs.error)),

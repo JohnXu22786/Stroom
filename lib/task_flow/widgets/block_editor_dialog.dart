@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -459,6 +460,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<int>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
               value: selectedIndex,
               hint: Text(models.isEmpty ? '请先配置模型' : '模型未选择或已失效，请重新选择'),
               isDense: true,
@@ -617,6 +620,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             )
             .firstOrNull;
         return DropdownButtonFormField<String>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
           value: currentOption != null
               ? '${currentOption.modelIndex}:${currentOption.id}'
               : null,

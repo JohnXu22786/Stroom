@@ -62,6 +62,25 @@ void main() {
   });
 
   group('FolderPathUtils.validateFolderName', () {
+    test('rejects Windows superscript COM and LPT device names', () {
+      const reservedNames = [
+        'COM¹',
+        'COM²',
+        'COM³',
+        'LPT¹',
+        'LPT²',
+        'LPT³',
+      ];
+
+      for (final name in reservedNames) {
+        expect(FolderPathUtils.validateFolderName(name), isNotNull,
+            reason: '$name should be reserved on Windows');
+        expect(
+            FolderPathUtils.validateFolderName(name.toLowerCase()), isNotNull,
+            reason: '${name.toLowerCase()} should be reserved on Windows');
+      }
+    });
+
     test('rejects empty, overlong and slash-containing names', () {
       expect(FolderPathUtils.validateFolderName(''), isNotNull);
       expect(FolderPathUtils.validateFolderName('   '), isNotNull);
@@ -69,10 +88,69 @@ void main() {
       expect(FolderPathUtils.validateFolderName('a/b'), isNotNull);
     });
 
+    test('rejects Windows control characters in every position', () {
+      for (var codeUnit = 0; codeUnit <= 0x1f; codeUnit++) {
+        final control = String.fromCharCode(codeUnit);
+        expect(
+          FolderPathUtils.validateFolderName('folder${control}name'),
+          isNotNull,
+          reason: 'Control U+${codeUnit.toRadixString(16).padLeft(4, '0')}',
+        );
+        expect(
+          FolderPathUtils.validateFolderName('${control}folder'),
+          isNotNull,
+        );
+        expect(
+          FolderPathUtils.validateFolderName('folder$control'),
+          isNotNull,
+        );
+      }
+    });
+
     test('accepts valid names', () {
       expect(FolderPathUtils.validateFolderName('folder'), isNull);
       expect(FolderPathUtils.validateFolderName('文件夹 2024'), isNull);
       expect(FolderPathUtils.validateFolderName('x' * 100), isNull);
+    });
+  });
+
+  group('FolderPathUtils.validateFileName', () {
+    test('rejects Windows superscript COM and LPT device names', () {
+      const reservedNames = [
+        'COM¹',
+        'COM²',
+        'COM³',
+        'LPT¹',
+        'LPT²',
+        'LPT³',
+      ];
+
+      for (final name in reservedNames) {
+        expect(FolderPathUtils.validateFileName(name), isNotNull,
+            reason: '$name should be reserved on Windows');
+        expect(FolderPathUtils.validateFileName('${name.toLowerCase()}.txt'),
+            isNotNull,
+            reason: '${name.toLowerCase()}.txt should be reserved on Windows');
+      }
+    });
+
+    test('rejects Windows control characters in every position', () {
+      for (var codeUnit = 0; codeUnit <= 0x1f; codeUnit++) {
+        final control = String.fromCharCode(codeUnit);
+        expect(
+          FolderPathUtils.validateFileName('file${control}name'),
+          isNotNull,
+          reason: 'Control U+${codeUnit.toRadixString(16).padLeft(4, '0')}',
+        );
+        expect(
+          FolderPathUtils.validateFileName('${control}file'),
+          isNotNull,
+        );
+        expect(
+          FolderPathUtils.validateFileName('file$control'),
+          isNotNull,
+        );
+      }
     });
   });
 

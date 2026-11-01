@@ -192,6 +192,7 @@ class TopicItem extends StatelessWidget {
                           value: 'pin',
                           child: Text(topic.isPinned ? '取消置顶' : '置顶'),
                         ),
+                        const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',
                           child: Text('删除', style: TextStyle(color: cs.error)),

@@ -8,8 +8,12 @@ import 'package:stroom/providers/provider_config.dart';
 
 const kExpectedSuggestions = kContextLengthSuggestions;
 
-Future<void> pumpPage(WidgetTester tester, {ModelConfig? model}) async {
-  tester.view.physicalSize = const Size(800, 1400);
+Future<void> pumpPage(
+  WidgetTester tester, {
+  ModelConfig? model,
+  Size viewSize = const Size(800, 1400),
+}) async {
+  tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -46,6 +50,18 @@ void main() {
     // First items are visible without scrolling the popup.
     expect(find.text('1024'), findsOneWidget);
     expect(find.text('8192'), findsOneWidget);
+  });
+
+  testWidgets('suggestion popup stays within a short viewport', (tester) async {
+    await pumpPage(tester, viewSize: const Size(800, 800));
+
+    await tester.tap(contextField);
+    await tester.pump();
+
+    final popupRect = tester.getRect(popupList);
+    expect(popupRect.top, greaterThanOrEqualTo(0));
+    expect(popupRect.bottom, lessThanOrEqualTo(800));
+    expect(popupValues(tester), kExpectedSuggestions);
   });
 
   testWidgets('selecting a suggestion fills the field and closes the popup',

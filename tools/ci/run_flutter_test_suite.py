@@ -134,6 +134,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/settings/asr_page_test.dart",
         "pages/settings/ocr_model_config_page_test.dart",
         "pages/settings/tts_create_page_test.dart",
+        "pages/voice_batch_add_page_test.dart",
         "pages/asr_page_lifecycle_test.dart",
         "pages/ocr/ocr_shared_test.dart",
         "widgets/app_media_picker_dialog_test.dart",
@@ -183,6 +184,8 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/tap_outside_unfocus_test.dart",
         "widgets/drag_sort_area_test.dart",
         "widgets/preview_chip_test.dart",
+        "widgets/shared_popup_menu_destructive_dividers_test.dart",
+        "widgets/stroom_menu_style_test.dart",
         "widgets/transform_stretch_overscroll_test.dart",
         "widgets/update_dialog_test.dart",
         "pages/application_quit_confirmation_test.dart",
@@ -193,6 +196,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/log_viewer_page_test.dart",
         "pages/navigation_main_pages_test.dart",
         "pages/settings/settings_page_test.dart",
+        "pages/theme_display_settings_page_test.dart",
     ),
 }
 

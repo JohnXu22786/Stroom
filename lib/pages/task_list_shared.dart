@@ -165,6 +165,7 @@ class TaskCard extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
+                  const PopupMenuDivider(),
                   const PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
@@ -246,7 +247,7 @@ class TaskCard extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
-                      if (task.error != null)
+                      if (task.error != null) ...[
                         const PopupMenuItem(
                           value: 'dismiss_error',
                           child: ListTile(
@@ -257,6 +258,8 @@ class TaskCard extends ConsumerWidget {
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
+                        const PopupMenuDivider(),
+                      ],
                       const PopupMenuItem(
                         value: 'remove',
                         child: ListTile(

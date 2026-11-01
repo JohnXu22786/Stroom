@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 import 'voice_batch_add_shared.dart';
 
@@ -348,6 +349,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 const Text('分隔符：'),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
+                  dropdownColor: StroomMenuStyle.surface(context),
+                  borderRadius: StroomMenuStyle.borderRadius,
                   value: _selectedSeparator,
                   isDense: true,
                   items: _separatorOptions

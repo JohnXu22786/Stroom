@@ -495,4 +495,90 @@ void main() {
       expect(find.text('版本信息'), findsNothing);
     });
   });
+
+  testWidgets(
+      'About menu separates update controls from links and orders legal links',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 6000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(_buildSettingsTestApp());
+    await tester.pumpAndSettle();
+
+    final updates = find.text('检查更新');
+    final previewUpdates = find.text('接收预览版');
+    final home = find.text('项目主页');
+    final generalAndLegalLinks = [
+      find.text('问题反馈'),
+      find.text('隐私政策'),
+      find.text('开源协议'),
+      find.text('开源许可'),
+    ];
+    final updatesCard = find
+        .ancestor(
+          of: updates,
+          matching: find.byType(Card),
+        )
+        .first;
+    final previewUpdatesCard = find
+        .ancestor(
+          of: previewUpdates,
+          matching: find.byType(Card),
+        )
+        .first;
+    final linksCard = find
+        .ancestor(
+          of: home,
+          matching: find.byType(Card),
+        )
+        .first;
+    List<String> titlesIn(Finder card) => find
+        .descendant(of: card, matching: find.byType(ListTile))
+        .evaluate()
+        .map((element) => (element.widget as ListTile).title as Text)
+        .map((title) => title.data!)
+        .toList();
+
+    expect(
+        identical(
+            tester.widget(updatesCard), tester.widget(previewUpdatesCard)),
+        isTrue);
+    expect(identical(tester.widget(updatesCard), tester.widget(linksCard)),
+        isFalse);
+    expect(titlesIn(updatesCard), ['检查更新', '接收预览版']);
+    expect(titlesIn(linksCard), [
+      '项目主页',
+      '问题反馈',
+      '隐私政策',
+      '开源协议',
+      '开源许可',
+    ]);
+    for (final row in generalAndLegalLinks) {
+      final legalCard = find
+          .ancestor(
+            of: row,
+            matching: find.byType(Card),
+          )
+          .first;
+      expect(identical(tester.widget(linksCard), tester.widget(legalCard)),
+          isTrue);
+    }
+
+    final legalLabels = find
+        .descendant(of: linksCard, matching: find.byType(Text))
+        .evaluate()
+        .map((element) => (element.widget as Text).data)
+        .whereType<String>()
+        .toList();
+    expect(legalLabels.indexOf('项目主页'), lessThan(legalLabels.indexOf('问题反馈')));
+    expect(legalLabels.indexOf('问题反馈'), lessThan(legalLabels.indexOf('隐私政策')));
+    expect(legalLabels.indexOf('隐私政策'), lessThan(legalLabels.indexOf('开源协议')));
+    expect(legalLabels.indexOf('开源协议'), lessThan(legalLabels.indexOf('开源许可')));
+  });
 }

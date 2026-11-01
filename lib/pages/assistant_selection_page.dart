@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
