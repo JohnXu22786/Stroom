@@ -193,6 +193,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/log_viewer_page_test.dart",
         "pages/navigation_main_pages_test.dart",
         "pages/settings/settings_page_test.dart",
+        "pages/theme_display_settings_page_test.dart",
     ),
 }
 
