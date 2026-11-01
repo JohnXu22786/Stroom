@@ -116,7 +116,7 @@ void main() {
   );
 
   test(
-    'chat v2 restores a later text round missing from partial blocks',
+    'chat v2 restores missing text rounds without duplicating error content',
     () async {
       SharedPreferences.setMockInitialValues({
         'data_format_versions': jsonEncode({
@@ -129,6 +129,7 @@ void main() {
             'messages': [
               {
                 'role': 'assistant',
+                'isError': true,
                 'content': '第一轮第二轮',
                 'textSections': ['第一轮', '第二轮'],
                 'toolCallRoundStarts': [0, 1],

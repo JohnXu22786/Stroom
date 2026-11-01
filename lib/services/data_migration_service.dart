@@ -1140,14 +1140,11 @@ void _preserveStoredErrorText(Map message, List blocks) {
       message['content'] is! String ||
       blocks.any((b) => b is Map && b['type'] == 'error')) return;
   final errorText = (message['content'] as String).split('\n\n---\n').first;
-  if (errorText.isNotEmpty &&
-      !blocks.any(
-        (b) =>
-            b is Map &&
-            b['type'] == 'text' &&
-            b['text'] is String &&
-            (b['text'] as String).startsWith(errorText),
-      )) {
+  final existingText = blocks
+      .where((b) => b is Map && b['type'] == 'text' && b['text'] is String)
+      .map((b) => (b['text'] as String))
+      .join();
+  if (errorText.isNotEmpty && !existingText.startsWith(errorText)) {
     blocks.insert(0, TextBlock(text: errorText).toMap());
   }
 }

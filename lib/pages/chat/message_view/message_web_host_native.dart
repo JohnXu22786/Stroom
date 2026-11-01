@@ -124,8 +124,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
               'url=$currentUrl isLoading=$isLoading',
             );
           }
-          if (currentUrl?.toString() == documentUri.toString() &&
-              (isLoading || _macDocumentNavigationStarted)) {
+          // WKWebView can report the requested URL and isLoading before it
+          // emits a navigation callback. Keep retrying until the callback
+          // confirms that the document navigation actually started.
+          if (_macDocumentNavigationStarted) {
             macNavigationPending = true;
             break;
           }

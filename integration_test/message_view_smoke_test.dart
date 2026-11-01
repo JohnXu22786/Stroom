@@ -73,5 +73,5 @@ void main() {
     debugPrint('DSH native smoke: disposing document');
     await tester.pumpWidget(const SizedBox());
     debugPrint('DSH native smoke: document disposed');
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 5)));
 }

@@ -163,6 +163,7 @@ test("Web startup migration matches canonical ordering and retries malformed dat
     },
     {
       role: "assistant",
+      isError: true,
       content: "第一轮第二轮",
       textSections: ["第一轮", "第二轮"],
       toolCallRoundStarts: [0, 1],
@@ -217,6 +218,13 @@ test("Web startup migration matches canonical ordering and retries malformed dat
   assert.equal(migrated[1].blocks[3].text, "");
   assert.equal(migrated[3].blocks.at(-1).text, "遗漏的正文");
   assert.equal(migrated[2].blocks[0].text, "错误: 中断");
+  assert.deepEqual(
+    migrated
+      .find((message) => message.isError && message.content === "第一轮第二轮")
+      .blocks.filter((b) => b.type === "text")
+      .map((b) => b.text),
+    ["第一轮", "第二轮"],
+  );
   assert.deepEqual(migrated[4], messages[4]);
   assert.deepEqual(migrated[5].blocks, [
     { type: "reasoning", text: "idea", isComplete: true },

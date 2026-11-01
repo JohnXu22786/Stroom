@@ -603,8 +603,11 @@ function preserveStoredErrorText(message, blocks) {
   if (message.isError !== true || typeof message.content !== 'string' ||
       blocks.some(b => isRecord(b) && b.type === 'error')) return;
   const errorText = message.content.split('\n\n---\n')[0];
-  if (errorText && !blocks.some(b => isRecord(b) && b.type === 'text' &&
-      typeof b.text === 'string' && b.text.startsWith(errorText))) {
+  const existingText = blocks
+    .filter(b => isRecord(b) && b.type === 'text' && typeof b.text === 'string')
+    .map(b => b.text)
+    .join('');
+  if (errorText && !existingText.startsWith(errorText)) {
     blocks.unshift({type:'text',text:errorText});
   }
 }
