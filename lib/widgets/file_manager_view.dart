@@ -535,16 +535,15 @@ class _FileManagerViewState<T extends FileRecord>
     required Widget icon,
     required String label,
   }) {
-    return Tooltip(
-      message: label,
-      child: OutlinedButton(
-        key: key,
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          minimumSize: const Size(0, 40),
-        ),
-        child: icon,
+    return IconButton(
+      key: key,
+      onPressed: onPressed,
+      tooltip: label,
+      icon: icon,
+      style: IconButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        minimumSize: const Size(0, 40),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
