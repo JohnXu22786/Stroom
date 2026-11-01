@@ -1236,13 +1236,20 @@ int? _legacyOcrCredentialLineChunkCountAcrossLineBreak(
     caseSensitive: false,
   ).allMatches(text)) {
     final windowEnd = prefixMatch.start + 10000;
-    final lineChunks = lineChunkPattern
-        .allMatches(text.substring(prefixMatch.end))
-        .toList(growable: false);
+    final lineChunks = <Match>[];
+    var nextLineChunkStart = prefixMatch.end;
+    while (true) {
+      final lineChunk =
+          lineChunkPattern.matchAsPrefix(text, nextLineChunkStart);
+      if (lineChunk == null) break;
+      lineChunks.add(lineChunk);
+      nextLineChunkStart = lineChunk.end;
+      if (lineChunk.end > windowEnd) break;
+    }
     int? naturalEndpointChunkCount;
     for (var index = 0; index < lineChunks.length; index++) {
       final lineChunkCount = index + 1;
-      final splitPrefixEnd = prefixMatch.end + lineChunks[index].end;
+      final splitPrefixEnd = lineChunks[index].end;
       if (splitPrefixEnd > windowEnd) break;
       final matchedText = text.substring(prefixMatch.start, splitPrefixEnd);
       final suffixWithLineBreaks =
