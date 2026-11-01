@@ -66,16 +66,16 @@ void main() {
   );
 
   TaskFlowDefinition chatFlow(IOType inputType) => TaskFlowDefinition(
-    name: 'Chat',
-    inputType: inputType,
-    blocks: [
-      TaskFlowBlock(
-        id: 'chat-block',
-        typeKey: BlockType.chat,
-        params: {'assistantId': 'assistant'},
-      ),
-    ],
-  );
+        name: 'Chat',
+        inputType: inputType,
+        blocks: [
+          TaskFlowBlock(
+            id: 'chat-block',
+            typeKey: BlockType.chat,
+            params: {'assistantId': 'assistant'},
+          ),
+        ],
+      );
 
   test(
     'mixed-protocol model group preflights media for Anthropic members',
@@ -499,9 +499,8 @@ void main() {
                 'the subscription credential cannot use the public API path',
           );
         }
-        final routingAccount = connectorType == 'muse-code'
-            ? subscriptionAccount
-            : account;
+        final routingAccount =
+            connectorType == 'muse-code' ? subscriptionAccount : account;
         final routingGroup = connectorType == 'muse-code'
             ? LlmModelGroup(
                 id: '$connectorType-subscription-group',

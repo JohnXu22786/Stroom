@@ -160,12 +160,12 @@ void main() {
           ..httpClientAdapter = _OAuthAdapter((request) async {
             final response = switch (request.uri.path) {
               '/oidc/device/authorization/' => {
-                'device_code': 'fixture-meta-device-code',
-                'user_code': 'META-1234',
-                'verification_uri': 'https://www.meta.ai/device',
-                'expires_in': 60,
-                'interval': 1,
-              },
+                  'device_code': 'fixture-meta-device-code',
+                  'user_code': 'META-1234',
+                  'verification_uri': 'https://www.meta.ai/device',
+                  'expires_in': 60,
+                  'interval': 1,
+                },
               '/oidc/device/token/' => {'access_token': 'dca:fixture-meta-dca'},
               _ => minted,
             };
@@ -208,21 +208,19 @@ void main() {
         'aud': LlmOAuthTokenClient.xaiClientId,
         'email': 'xai@example.test',
         'email_verified': true,
-        'exp':
-            DateTime.now()
+        'exp': DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 5))
                 .millisecondsSinceEpoch ~/
             1000,
       };
-      final validIdToken =
-          (JsonWebSignatureBuilder()
-                ..jsonContent = claims
-                ..setProtectedHeader('typ', 'JWT')
-                ..setProtectedHeader('kid', 'xai-signing-key')
-                ..addRecipient(privateKey, algorithm: 'ES256'))
-              .build()
-              .toCompactSerialization();
+      final validIdToken = (JsonWebSignatureBuilder()
+            ..jsonContent = claims
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
       var returnedIdToken = validIdToken;
       Object? returnedScope =
           'openid profile email offline_access grok-cli:access';
@@ -341,28 +339,26 @@ void main() {
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
-      final nullAzpToken =
-          (JsonWebSignatureBuilder()
-                ..jsonContent = {...claims, 'azp': null}
-                ..setProtectedHeader('typ', 'JWT')
-                ..setProtectedHeader('kid', 'xai-signing-key')
-                ..addRecipient(privateKey, algorithm: 'ES256'))
-              .build()
-              .toCompactSerialization();
+      final nullAzpToken = (JsonWebSignatureBuilder()
+            ..jsonContent = {...claims, 'azp': null}
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
       returnedIdToken = nullAzpToken;
       await expectLater(
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       returnedIdToken = validIdToken;
-      final conflictingAzpToken =
-          (JsonWebSignatureBuilder()
-                ..jsonContent = {...claims, 'azp': 'another-client'}
-                ..setProtectedHeader('typ', 'JWT')
-                ..setProtectedHeader('kid', 'xai-signing-key')
-                ..addRecipient(privateKey, algorithm: 'ES256'))
-              .build()
-              .toCompactSerialization();
+      final conflictingAzpToken = (JsonWebSignatureBuilder()
+            ..jsonContent = {...claims, 'azp': 'another-client'}
+            ..setProtectedHeader('typ', 'JWT')
+            ..setProtectedHeader('kid', 'xai-signing-key')
+            ..addRecipient(privateKey, algorithm: 'ES256'))
+          .build()
+          .toCompactSerialization();
       returnedIdToken = conflictingAzpToken;
       await expectLater(
         client.pollXaiDeviceAuthorization(deviceCode: code),
@@ -642,18 +638,17 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
-        () =>
-            LlmOAuthAuthorizationAttempt.openAiChatGpt(
-              redirectUri: redirect,
-              hostId: 'urn:uuid:host',
-            ).consumeCallback(
-              callback.replace(
-                queryParameters: {
-                  ...callback.queryParameters,
-                  'state': 'wrong-state',
-                },
-              ),
-            ),
+        () => LlmOAuthAuthorizationAttempt.openAiChatGpt(
+          redirectUri: redirect,
+          hostId: 'urn:uuid:host',
+        ).consumeCallback(
+          callback.replace(
+            queryParameters: {
+              ...callback.queryParameters,
+              'state': 'wrong-state',
+            },
+          ),
+        ),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
@@ -954,8 +949,7 @@ void main() {
               jsonEncode({
                 'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
                 'aud': 'registered-openai-client',
-                'exp':
-                    DateTime.now()
+                'exp': DateTime.now()
                         .toUtc()
                         .add(const Duration(minutes: 5))
                         .millisecondsSinceEpoch ~/
@@ -970,15 +964,15 @@ void main() {
           requestedPaths.add(options.uri.path);
           final response = switch (options.uri.path) {
             '/api/accounts/oauth/token' => {
-              'access_token': 'chatgpt-access',
-              'refresh_token': 'chatgpt-refresh',
-              'id_token': '$header.$claims.invalid-signature',
-              'scope': 'openid chatgpt.tokens.use.direct',
-            },
+                'access_token': 'chatgpt-access',
+                'refresh_token': 'chatgpt-refresh',
+                'id_token': '$header.$claims.invalid-signature',
+                'scope': 'openid chatgpt.tokens.use.direct',
+              },
             '/.well-known/openid-configuration' => {
-              'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-              'jwks_uri': 'https://auth.openai.com/jwks',
-            },
+                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+                'jwks_uri': 'https://auth.openai.com/jwks',
+              },
             '/jwks' => {'keys': []},
             _ => throw StateError('Unexpected OAuth endpoint.'),
           };
@@ -1034,8 +1028,7 @@ void main() {
           'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
           'sub': subject,
           'aud': clientId,
-          'exp':
-              DateTime.now()
+          'exp': DateTime.now()
                   .toUtc()
                   .add(const Duration(minutes: 5))
                   .millisecondsSinceEpoch ~/
@@ -1047,14 +1040,13 @@ void main() {
           privateKey: generatedKey.cryptoKeyPair.privateKey,
           keyId: 'signing-key',
         );
-        final idToken =
-            (JsonWebSignatureBuilder()
-                  ..jsonContent = claims
-                  ..setProtectedHeader('typ', 'JWT')
-                  ..setProtectedHeader('kid', 'signing-key')
-                  ..addRecipient(privateKey, algorithm: 'RS256'))
-                .build()
-                .toCompactSerialization();
+        final idToken = (JsonWebSignatureBuilder()
+              ..jsonContent = claims
+              ..setProtectedHeader('typ', 'JWT')
+              ..setProtectedHeader('kid', 'signing-key')
+              ..addRecipient(privateKey, algorithm: 'RS256'))
+            .build()
+            .toCompactSerialization();
         final publicKey = JsonWebKey.fromCryptoKeys(
           publicKey: generatedKey.cryptoKeyPair.publicKey,
           keyId: 'signing-key',
@@ -1063,18 +1055,18 @@ void main() {
           ..httpClientAdapter = _OAuthAdapter((options) async {
             final response = switch (options.uri.path) {
               '/api/accounts/oauth/token' => {
-                'access_token': 'chatgpt-access',
-                'refresh_token': 'chatgpt-refresh',
-                'id_token': idToken,
-                'scope': 'openid chatgpt.tokens.use.direct',
-              },
+                  'access_token': 'chatgpt-access',
+                  'refresh_token': 'chatgpt-refresh',
+                  'id_token': idToken,
+                  'scope': 'openid chatgpt.tokens.use.direct',
+                },
               '/.well-known/openid-configuration' => {
-                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-                'jwks_uri': 'https://auth.openai.com/jwks',
-              },
+                  'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+                  'jwks_uri': 'https://auth.openai.com/jwks',
+                },
               '/jwks' => {
-                'keys': [publicKey.toJson()],
-              },
+                  'keys': [publicKey.toJson()],
+                },
               _ => throw StateError('Unexpected OAuth endpoint.'),
             };
             return ResponseBody.fromString(
@@ -1139,12 +1131,12 @@ void main() {
         ),
       );
 
-      final bundle = await LlmOAuthTokenClient(dio: dio)
-          .exchangeGeminiDeveloperApi(
-            attempt: attempt,
-            callback: callback,
-            clientSecret: 'desktop-client-secret',
-          );
+      final bundle =
+          await LlmOAuthTokenClient(dio: dio).exchangeGeminiDeveloperApi(
+        attempt: attempt,
+        callback: callback,
+        clientSecret: 'desktop-client-secret',
+      );
 
       expect(captured?.uri.toString(), 'https://oauth2.googleapis.com/token');
       expect(captured?.data.toString(), contains('desktop-client-secret'));
@@ -1167,7 +1159,8 @@ class _OAuthAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}

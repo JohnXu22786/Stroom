@@ -126,14 +126,15 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmKimiDeviceCode._(
-    deviceCode: deviceCode,
-    userCode: userCode,
-    verificationUri: verificationUri,
-    verificationUriComplete: verificationUriComplete,
-    expiresIn: expiresIn,
-    interval: interval,
-  );
+  }) =>
+      LlmKimiDeviceCode._(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        expiresIn: expiresIn,
+        interval: interval,
+      );
 
   const LlmKimiDeviceCode._({
     required String deviceCode,
@@ -173,14 +174,15 @@ class LlmMetaMuseDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmMetaMuseDeviceCode._(
-    deviceCode: deviceCode,
-    userCode: userCode,
-    verificationUri: verificationUri,
-    verificationUriComplete: verificationUriComplete,
-    expiresIn: expiresIn,
-    interval: interval,
-  );
+  }) =>
+      LlmMetaMuseDeviceCode._(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        expiresIn: expiresIn,
+        interval: interval,
+      );
 }
 
 /// Device authorization returned by xAI's public OIDC device grant.
@@ -222,18 +224,19 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmXaiDeviceCode._(
-    deviceCode: deviceCode,
-    tokenEndpoint: tokenEndpoint,
-    issuer: issuer,
-    jwksUri: jwksUri,
-    scope: scope,
-    userCode: userCode,
-    verificationUri: verificationUri,
-    verificationUriComplete: verificationUriComplete,
-    expiresIn: expiresIn,
-    interval: interval,
-  );
+  }) =>
+      LlmXaiDeviceCode._(
+        deviceCode: deviceCode,
+        tokenEndpoint: tokenEndpoint,
+        issuer: issuer,
+        jwksUri: jwksUri,
+        scope: scope,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        expiresIn: expiresIn,
+        interval: interval,
+      );
 }
 
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in
@@ -252,8 +255,7 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope =
-      'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;

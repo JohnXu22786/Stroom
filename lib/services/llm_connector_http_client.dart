@@ -43,15 +43,14 @@ class LlmConnectorHttpClient {
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: const Duration(seconds: 10),
-               receiveTimeout: const Duration(seconds: 60),
-             ),
-           ),
-       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+  })  : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 60),
+              ),
+            ),
+        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -75,15 +74,14 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker =
-          Future<void>.sync(() async {
-            await onRequestSent?.call();
-          }).then<void>(
-            (_) {},
-            onError: (Object _, StackTrace _) {
-              requestSentMarkerFailed = true;
-            },
-          );
+      requestSentMarker = Future<void>.sync(() async {
+        await onRequestSent?.call();
+      }).then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          requestSentMarkerFailed = true;
+        },
+      );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -260,8 +258,8 @@ class LlmConnectorHttpClient {
           final responseStream = responseData is ResponseBody
               ? responseData.stream
               : responseData is Stream<List<int>>
-              ? responseData
-              : null;
+                  ? responseData
+                  : null;
           if (stream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
@@ -329,8 +327,8 @@ class LlmConnectorHttpClient {
           responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-              ? await _readResponseStream(responseData)
-              : responseData,
+                  ? await _readResponseStream(responseData)
+                  : responseData,
         );
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
@@ -581,9 +579,8 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes = data is Uint8List
-          ? data
-          : Uint8List.fromList(data as List<int>);
+      final bytes =
+          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {
