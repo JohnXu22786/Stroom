@@ -44,6 +44,7 @@ void main() {
   });
 
   tearDown(() {
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
   });
 
@@ -602,6 +603,79 @@ void main() {
       expect(await ImageManifest.readFile(record.storagePath), isNull);
       expect(
           await WebFileStore.exists('pictures/${record.storagePath}'), isFalse);
+    });
+  });
+
+  group('JSON record insertion duplicate IDs', () {
+    testWidgets('replaces the existing row and keeps folder entries',
+        (WidgetTester t) async {
+      const id = 'duplicate_image_id';
+      final firstInsert = ImageManifest.addRecord(ImageRecord(
+        id: id,
+        name: 'before',
+        hash: 'duplicate-before',
+        format: 'png',
+        createdAt: DateTime(2024),
+        size: 1,
+        folder: 'first',
+      ));
+      final replacementInsert = ImageManifest.addRecord(ImageRecord(
+        id: id,
+        name: 'after',
+        hash: 'duplicate-after',
+        format: 'png',
+        createdAt: DateTime(2024),
+        size: 2,
+        folder: 'second',
+      ));
+      await Future.wait([firstInsert, replacementInsert]);
+
+      expect((await ImageManifest.loadRecords()).map((record) => record.name),
+          ['after']);
+      expect(
+        (await ManifestDatabase.getAllImageRecords()).map((row) => row['id']),
+        [id],
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        containsAll(['first', 'second']),
+      );
+    });
+
+    testWidgets('failed replacement restores the previous row and folders',
+        (WidgetTester t) async {
+      const id = 'duplicate_image_id_rollback';
+      await ManifestDatabase.insertRecordWithFolders(
+        recordTable: ManifestTables.imageRecords,
+        record: {'id': id, 'name': 'before'},
+        folderPaths: const ['images', 'images/original'],
+      );
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (path == 'images/failed') {
+          throw StateError('injected folder failure');
+        }
+      };
+
+      await expectLater(
+        ManifestDatabase.insertRecordWithFolders(
+          recordTable: ManifestTables.imageRecords,
+          record: {'id': id, 'name': 'after'},
+          folderPaths: const ['images', 'images/failed'],
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await ManifestDatabase.getAllImageRecords(), [
+        {'id': id, 'name': 'before'},
+      ]);
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        containsAll(['images', 'images/original']),
+      );
     });
   });
 
@@ -2216,6 +2290,139 @@ void main() {
   // Folder tracking behaviors
   // ====================================================================
 
+  group('record mutation cache rollback', () {
+    void failNextRecordWrite(StateError failure) {
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+    }
+
+    testWidgets('updateRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_update_write_failure',
+        name: 'before',
+        hash: 'hash_update_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.updateRecord(original.copyWithName('after')),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.name, 'before',
+          reason: 'a failed update must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'before',
+          reason: 'the failed update must leave persisted data unchanged');
+    });
+
+    testWidgets('renameRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_rename_write_failure',
+        name: 'before',
+        hash: 'hash_rename_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.renameRecord(original.id, 'after'),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.name, 'before',
+          reason: 'a failed rename must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'before',
+          reason: 'the failed rename must leave persisted data unchanged');
+    });
+
+    testWidgets('moveRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_move_write_failure',
+        name: 'record',
+        hash: 'hash_move_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.moveRecord(original.id, 'target'),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.folder, '',
+          reason: 'a failed move must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['folder'], '',
+          reason: 'the failed move must leave persisted data unchanged');
+      expect(
+        await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords),
+        isEmpty,
+        reason: 'a failed record write must not track its target folder',
+      );
+    });
+
+    testWidgets('same-record mutations serialize across a failed write',
+        (WidgetTester t) async {
+      final original = VideoRecord(
+        id: 'video_overlapping_write_failure',
+        name: 'before',
+        hash: 'hash_overlapping_write_failure',
+        format: 'mp4',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await VideoManifest.addRecord(original);
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      final failure = StateError('injected record write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        writeStarted.complete();
+        await releaseWrite.future;
+        throw failure;
+      };
+
+      final failedUpdate = VideoManifest.updateRecord(
+        original.copyWithName('failed update'),
+      );
+      await writeStarted.future;
+      final followingRename = VideoManifest.renameRecord(
+        original.id,
+        'successful rename',
+      );
+      releaseWrite.complete();
+
+      await expectLater(failedUpdate, throwsA(same(failure)));
+      await followingRename;
+
+      expect(
+          (await VideoManifest.loadRecords()).single.name, 'successful rename');
+      expect((await ManifestDatabase.getAllVideoRecords()).single['name'],
+          'successful rename');
+    });
+  });
+
   group('folder tracking', () {
     Future<void> expectWebFolderSaveFailureCanRetry(
       String path,
@@ -2357,6 +2564,115 @@ void main() {
           await ManifestDatabase.getAllFolders(
               recordTable: ManifestTables.audioRecords),
           containsAll(['refresh', 'refresh/child']));
+    });
+
+    testWidgets(
+        'forced refresh keeps a record mutation made after its snapshot',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_mutation_during_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final original = AudioRecord(
+        id: 'audio_mutated_during_refresh',
+        name: 'before',
+        hash: 'hash_mutated_during_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(original);
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      try {
+        await operations.renameRecord(original.id, 'after');
+      } finally {
+        releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+      }
+
+      expect((await refresh).single.name, 'after',
+          reason:
+              'a forced refresh must not replace an optimistic record mutation with its older snapshot');
+      expect((await operations.loadRecords()).single.name, 'after');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after');
+    });
+
+    testWidgets(
+        'forced refresh during a record write keeps the committed mutation',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_mutation_during_refresh_write',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final original = AudioRecord(
+        id: 'audio_mutated_during_refresh_write',
+        name: 'before',
+        hash: 'hash_mutated_during_refresh_write',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(original);
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      operations.beforeRecordMutationPersistForTesting = () async {
+        writeStarted.complete();
+        await releaseWrite.future;
+      };
+      final mutation = operations.renameRecord(original.id, 'after');
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      try {
+        await writeStarted.future;
+        final refresh =
+            operations.loadRecords(forceRefresh: true, throwOnError: true);
+        await recordSnapshotReady.future;
+
+        releaseFolderRead.complete();
+
+        expect((await refresh).single.name, 'before',
+            reason:
+                'the refresh snapshot is stale while the record write is paused');
+
+        releaseWrite.complete();
+        await mutation;
+
+        expect((await operations.loadRecords()).single.name, 'after',
+            reason:
+                'a successful mutation must remain visible if a stale refresh installed while its write was pending');
+      } finally {
+        if (!releaseWrite.isCompleted) releaseWrite.complete();
+        if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+        operations.beforeRecordMutationPersistForTesting = null;
+      }
+
+      expect((await operations.loadRecords()).single.name, 'after');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after');
     });
 
     testWidgets('forced refresh keeps a single audio deletion absent',
