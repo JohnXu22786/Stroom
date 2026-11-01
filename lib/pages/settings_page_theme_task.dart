@@ -5,46 +5,20 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
   // 主题设置
   // ================================================================
 
-  Widget _buildGeneralSettings(
-    ThemeMode themeMode,
-    ThemeNotifier themeNotifier,
-  ) {
+  Widget _buildGeneralSettings() {
     return _buildSettingsCard([
       _buildListTile(
-        leading: const Icon(Icons.light_mode, color: Colors.amber),
-        title: '浅色模式',
-        trailing: Radio<ThemeMode>(
-          value: ThemeMode.light,
-          // ignore: deprecated_member_use
-          groupValue: themeMode,
-          // ignore: deprecated_member_use
-          onChanged: (_) => themeNotifier.setLight(),
-        ),
-        onTap: () => themeNotifier.setLight(),
-      ),
-      _buildListTile(
-        leading: const Icon(Icons.dark_mode, color: Colors.indigo),
-        title: '深色模式',
-        trailing: Radio<ThemeMode>(
-          value: ThemeMode.dark,
-          // ignore: deprecated_member_use
-          groupValue: themeMode,
-          // ignore: deprecated_member_use
-          onChanged: (_) => themeNotifier.setDark(),
-        ),
-        onTap: () => themeNotifier.setDark(),
-      ),
-      _buildListTile(
-        leading: const Icon(Icons.settings_suggest, color: Colors.grey),
-        title: '跟随系统',
-        trailing: Radio<ThemeMode>(
-          value: ThemeMode.system,
-          // ignore: deprecated_member_use
-          groupValue: themeMode,
-          // ignore: deprecated_member_use
-          onChanged: (_) => themeNotifier.setSystem(),
-        ),
-        onTap: () => themeNotifier.setSystem(),
+        leading: const Icon(Icons.palette_outlined, color: Colors.deepPurple),
+        title: '主题与显示',
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ThemeDisplaySettingsPage(),
+            ),
+          );
+        },
       ),
       _buildNotificationSettings(),
       _buildBackgroundOptimizationSettings(),

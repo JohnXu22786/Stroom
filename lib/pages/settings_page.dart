@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/built_in_assistants.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
-import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/update_provider.dart';
 import '../services/chat_adapter.dart'
@@ -22,6 +21,7 @@ import 'background_optimization_page.dart';
 import 'notification_settings_page.dart';
 import 'browser_cookies_page.dart';
 import 'log_viewer_page.dart';
+import 'theme_display_settings_page.dart';
 
 part 'settings_page_theme_task.dart';
 part 'settings_page_provider_system.dart';
@@ -39,16 +39,13 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeProvider);
-    final themeNotifier = ref.read(themeProvider.notifier);
-
     return Scaffold(
       appBar: AppBar(title: const Text('设置'), centerTitle: true),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _buildSectionHeader('常规设置'),
-          _buildGeneralSettings(themeMode, themeNotifier),
+          _buildGeneralSettings(),
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
