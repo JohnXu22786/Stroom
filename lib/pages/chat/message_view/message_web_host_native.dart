@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:path_provider/path_provider.dart';
 
 class MessageWebHost extends StatefulWidget {
   final String html;
@@ -26,7 +24,6 @@ class MessageWebHost extends StatefulWidget {
 class _MessageWebHostState extends State<MessageWebHost> {
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
-  Directory? _macDocumentDirectory;
   Uri? _macDocumentUri;
   bool _macDocumentNavigationStarted = false;
   bool _macDocumentReady = false;
@@ -37,7 +34,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       return uri.toString() == 'about:blank' ||
-          (uri.scheme == 'file' &&
+          (uri.scheme == 'stroom-message' &&
               uri.toString() == _macDocumentUri?.toString());
     }
     return uri.scheme == 'file' &&
@@ -45,7 +42,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
   }
 
   bool _isMacDocumentUrl(WebUri? url) =>
-      url?.scheme == 'file' && url.toString() == _macDocumentUri?.toString();
+      url?.scheme == 'stroom-message' &&
+      url.toString() == _macDocumentUri?.toString();
 
   Future<void> _loadMacDocument(InAppWebViewController controller) async {
     if (_macLoadInProgress || !mounted || !identical(controller, _controller)) {
@@ -57,43 +55,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
     _macDocumentReady = false;
     setState(() {});
 
-    Directory? createdDirectory;
     try {
-      var documentDirectory = _macDocumentDirectory;
-      var documentUri = _macDocumentUri;
-      if (documentDirectory == null || documentUri == null) {
-        final directory = await getTemporaryDirectory();
-        await directory.create(recursive: true);
-        documentDirectory = await directory.createTemp('stroom-message-');
-        createdDirectory = documentDirectory;
-        if (!mounted || !identical(controller, _controller)) {
-          await _deleteMacDocumentDirectory(documentDirectory);
-          return;
-        }
-        final document = File('${documentDirectory.path}/index.html');
-        await document.writeAsString(widget.html, flush: true);
-        documentUri = document.uri;
-        _macDocumentDirectory = documentDirectory;
-        _macDocumentUri = documentUri;
-      }
-
-      if (!mounted || !identical(controller, _controller)) {
-        if (createdDirectory != null) {
-          await _deleteMacDocumentDirectory(createdDirectory);
-          if (identical(createdDirectory, _macDocumentDirectory)) {
-            _macDocumentDirectory = null;
-            _macDocumentUri = null;
-          }
-        }
-        return;
-      }
+      final documentUri = _macDocumentUri;
+      if (documentUri == null) return;
 
       _macDocumentNavigationStarted = false;
       var macNavigationPending = false;
 
-      // WKWebView's loadHTMLString/loadData path does not consistently start a
-      // navigation. Scope file access to this unique directory containing only
-      // the self-contained document.
+      // Load the self-contained HTML through the registered custom URL scheme.
       for (var attempt = 0; attempt < 8; attempt++) {
         if (!mounted || !identical(controller, _controller) || _macLoadFailed) {
           return;
@@ -105,22 +74,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
         try {
           if (kDebugMode) {
             debugPrint(
-              '[MessageWebHost][load-file-start] macOS attempt=${attempt + 1}',
+              '[MessageWebHost][load-start-request] macOS attempt=${attempt + 1}',
             );
           }
           await controller.loadUrl(
             urlRequest: URLRequest(url: WebUri.uri(documentUri)),
-            allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
           if (_macLoadFailed) break;
           final currentUrl = await controller.getUrl();
           final isLoading = await controller.isLoading();
           if (kDebugMode) {
             debugPrint(
-              '[MessageWebHost][load-file-sent] macOS attempt=${attempt + 1}',
+              '[MessageWebHost][load-request-sent] macOS attempt=${attempt + 1}',
             );
             debugPrint(
-              '[MessageWebHost][load-file-state] macOS attempt=${attempt + 1} '
+              '[MessageWebHost][load-state] macOS attempt=${attempt + 1} '
               'url=$currentUrl isLoading=$isLoading',
             );
           }
@@ -212,10 +180,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
       if (kDebugMode) {
         debugPrint('[MessageWebHost][load-error] macOS document setup: $error');
       }
-      if (createdDirectory != null &&
-          !identical(createdDirectory, _macDocumentDirectory)) {
-        await _deleteMacDocumentDirectory(createdDirectory);
-      }
       if (mounted && identical(controller, _controller)) {
         setState(() => _macLoadFailed = true);
       }
@@ -224,14 +188,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
         _macLoadInProgress = false;
         setState(() {});
       }
-    }
-  }
-
-  Future<void> _deleteMacDocumentDirectory(Directory directory) async {
-    try {
-      await directory.delete(recursive: true);
-    } catch (_) {
-      // The OS may already have removed the temporary files.
     }
   }
 
@@ -253,52 +209,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
     super.initState();
     widget.commands.addListener(_send);
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      unawaited(_prepareMacDocument());
-    }
-  }
-
-  Future<void> _prepareMacDocument() async {
-    if (_macLoadInProgress || !mounted) return;
-    _macLoadInProgress = true;
-    _macLoadFailed = false;
-    setState(() {});
-
-    Directory? documentDirectory;
-    try {
-      if (kDebugMode) {
-        debugPrint('[MessageWebHost][prepare-start] macOS document');
-      }
-      final directory = await getTemporaryDirectory();
-      if (kDebugMode) {
-        debugPrint(
-            '[MessageWebHost][prepare-temp] macOS path=${directory.path}');
-      }
-      await directory.create(recursive: true);
-      documentDirectory = await directory.createTemp('stroom-message-');
-      final document = File('${documentDirectory.path}/index.html');
-      await document.writeAsString(widget.html, flush: true);
-      if (kDebugMode) {
-        debugPrint(
-            '[MessageWebHost][prepare-written] macOS url=${document.uri}');
-      }
-      if (!mounted) {
-        await _deleteMacDocumentDirectory(documentDirectory);
-        return;
-      }
-      _macDocumentDirectory = documentDirectory;
-      _macDocumentUri = document.uri;
-    } catch (error) {
-      if (documentDirectory != null &&
-          !identical(documentDirectory, _macDocumentDirectory)) {
-        await _deleteMacDocumentDirectory(documentDirectory);
-      }
-      if (kDebugMode) {
-        debugPrint('[MessageWebHost][load-error] macOS document setup: $error');
-      }
-      if (mounted) setState(() => _macLoadFailed = true);
-    } finally {
-      _macLoadInProgress = false;
-      if (mounted) setState(() {});
+      _macDocumentUri = Uri.parse('stroom-message://renderer/index.html');
     }
   }
 
@@ -320,18 +231,13 @@ class _MessageWebHostState extends State<MessageWebHost> {
   void dispose() {
     widget.commands.removeListener(_send);
     _controller = null;
-    final documentDirectory = _macDocumentDirectory;
-    if (documentDirectory != null) {
-      unawaited(_deleteMacDocumentDirectory(documentDirectory));
-    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (defaultTargetPlatform == TargetPlatform.macOS &&
-        _macDocumentUri == null &&
-        !_macLoadFailed) {
+        _macDocumentUri == null) {
       return const SizedBox.expand();
     }
 
@@ -340,16 +246,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
         if (defaultTargetPlatform != TargetPlatform.macOS ||
             _macDocumentUri != null)
           InAppWebView(
-            // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file on
-            // native platforms except macOS, where the document is copied into an
-            // isolated temporary directory and opened as a file URL.
+            // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file
+            // on native platforms except macOS, which serves it through the
+            // plugin's custom-scheme handler to avoid WKWebView file navigation.
             initialFile: defaultTargetPlatform == TargetPlatform.macOS
                 ? null
                 : 'assets/vendor/dsh_message_view/index.html',
             initialUrlRequest: null,
             initialData: null,
-            // Leave the plugin origin allow-list unset: WKWebView file URLs have
-            // no host. The handler below validates this exact main-frame URL.
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
               transparentBackground: true,
@@ -357,11 +261,21 @@ class _MessageWebHostState extends State<MessageWebHost> {
               supportZoom: false,
               useShouldOverrideUrlLoading: true,
               javaScriptHandlersForMainFrameOnly: true,
-              allowingReadAccessTo:
+              resourceCustomSchemes:
                   defaultTargetPlatform == TargetPlatform.macOS
-                      ? WebUri.uri(_macDocumentDirectory!.uri)
-                      : null,
+                      ? ['stroom-message']
+                      : const [],
             ),
+            onLoadResourceWithCustomScheme: (controller, request) {
+              if (defaultTargetPlatform != TargetPlatform.macOS ||
+                  request.url.toString() != _macDocumentUri?.toString()) {
+                return null;
+              }
+              return CustomSchemeResponse(
+                data: Uint8List.fromList(utf8.encode(widget.html)),
+                contentType: 'text/html',
+              );
+            },
             onConsoleMessage: (controller, message) {
               if (kDebugMode) {
                 debugPrint('[MessageWebHost][console] ${message.message}');
@@ -409,8 +323,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
                   if (rejection != null) {
                     if (kDebugMode) {
                       debugPrint(
-                        '[MessageWebHost][handler-rejected] $rejection',
-                      );
+                          '[MessageWebHost][handler-rejected] $rejection');
                     }
                     return;
                   }
@@ -419,9 +332,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
                       '[MessageWebHost][handler] ${data.args.first['type']}',
                     );
                   }
-                  final event = Map<String, dynamic>.from(
-                    data.args.first as Map,
-                  );
+                  final event =
+                      Map<String, dynamic>.from(data.args.first as Map);
                   if (defaultTargetPlatform == TargetPlatform.macOS &&
                       event['type'] == 'ready') {
                     _macDocumentNavigationStarted = true;
@@ -472,8 +384,7 @@ JSON.stringify({
               if (defaultTargetPlatform == TargetPlatform.macOS &&
                   !rendererReady) {
                 unawaited(
-                  _failMacLoadIfUnready(controller, _macLoadGeneration),
-                );
+                    _failMacLoadIfUnready(controller, _macLoadGeneration));
               }
               if (mounted && rendererReady) {
                 _macDocumentNavigationStarted = true;
@@ -489,8 +400,7 @@ JSON.stringify({
               final trusted = url != null && _trustedDocument(url);
               if (kDebugMode) {
                 debugPrint(
-                  '[MessageWebHost][navigation] $url trusted=$trusted',
-                );
+                    '[MessageWebHost][navigation] $url trusted=$trusted');
               }
               return trusted
                   ? NavigationActionPolicy.ALLOW
@@ -512,11 +422,9 @@ JSON.stringify({
                     TextButton.icon(
                       onPressed: _macLoadInProgress
                           ? null
-                          : _macDocumentUri == null
-                              ? () => _prepareMacDocument()
-                              : _controller == null
-                                  ? null
-                                  : () => _loadMacDocument(_controller!),
+                          : _controller == null
+                              ? null
+                              : () => _loadMacDocument(_controller!),
                       icon: const Icon(Icons.refresh),
                       label: const Text('重试'),
                     ),
