@@ -43,14 +43,15 @@ class LlmConnectorHttpClient {
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-  })  : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 60),
-              ),
-            ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           ),
+       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -74,14 +75,15 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker = Future<void>.sync(() async {
-        await onRequestSent?.call();
-      }).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {
-          requestSentMarkerFailed = true;
-        },
-      );
+      requestSentMarker =
+          Future<void>.sync(() async {
+            await onRequestSent?.call();
+          }).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {
+              requestSentMarkerFailed = true;
+            },
+          );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -258,8 +260,8 @@ class LlmConnectorHttpClient {
           final responseStream = responseData is ResponseBody
               ? responseData.stream
               : responseData is Stream<List<int>>
-                  ? responseData
-                  : null;
+              ? responseData
+              : null;
           if (stream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
@@ -327,8 +329,8 @@ class LlmConnectorHttpClient {
           responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-                  ? await _readResponseStream(responseData)
-                  : responseData,
+              ? await _readResponseStream(responseData)
+              : responseData,
         );
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
@@ -380,8 +382,9 @@ class LlmConnectorHttpClient {
     return connector?.canRefreshCredentials == true &&
         ((account.authType == 'oauth' &&
                 (account.connectorType != 'vertex' ||
-                    LlmOAuthProviderPolicy.forProvider(account.connectorType)
-                        .supported)) ||
+                    LlmOAuthProviderPolicy.forProvider(
+                      account.connectorType,
+                    ).supported)) ||
             (account.connectorType == 'vertex' &&
                 account.authType == 'service_account'));
   }
@@ -542,7 +545,7 @@ class LlmConnectorHttpClient {
       return false;
     }
     if (bundle == null) return false;
-    if (account.connectorType == 'meta') {
+    if (account.connectorType == 'muse-code') {
       final dcaToken = bundle['dca_token'] ?? bundle['dcaToken'];
       final accessToken = bundle['access_token'] ?? bundle['accessToken'];
       final apiKey = bundle['api_key'] ?? bundle['apiKey'];
@@ -555,7 +558,7 @@ class LlmConnectorHttpClient {
       final token = bundle['access_token'] ?? bundle['accessToken'];
       if (token is! String || token.trim().isEmpty) return true;
     }
-    if (account.authType == 'oauth' && account.connectorType != 'meta') {
+    if (account.authType == 'oauth' && account.connectorType != 'muse-code') {
       final token = bundle['access_token'] ?? bundle['accessToken'];
       if (token is! String || token.trim().isEmpty) return true;
     }
@@ -578,8 +581,9 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes =
-          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {

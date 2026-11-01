@@ -93,13 +93,19 @@ const kPinnedXaiModels = <String>[
 
 // Grok Build exposes its own model endpoint. These are its pinned conversational
 // models; active availability and plan entitlement come from /v1/models.
-const kPinnedGrokBuildModels = <String>[
-  'grok-4.7',
-  'grok-4.6',
-  'grok-4.5',
-];
+const kPinnedGrokBuildModels = <String>['grok-4.7', 'grok-4.6', 'grok-4.5'];
 
 const kPinnedMetaModels = <String>[
+  'muse-spark-1.3',
+  'muse-spark-1.3-contributor',
+  'muse-spark-1.2',
+  'muse-spark-1.2-contributor',
+  'muse-spark-1.1',
+];
+
+// Meta Muse subscription models are registered on their own OAuth account;
+// they are not inherited from Meta's API-key connector.
+const kPinnedMuseCodeModels = <String>[
   'muse-spark-1.3',
   'muse-spark-1.3-contributor',
   'muse-spark-1.2',

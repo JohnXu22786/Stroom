@@ -44,6 +44,10 @@ class LlmOAuthProviderPolicy {
       providerId: 'xai-oauth',
       supported: true,
     ),
+    'muse-code': LlmOAuthProviderPolicy._(
+      providerId: 'muse-code',
+      supported: true,
+    ),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
       supported: false,
@@ -122,15 +126,14 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmKimiDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmKimiDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 
   const LlmKimiDeviceCode._({
     required String deviceCode,
@@ -140,6 +143,44 @@ class LlmKimiDeviceCode {
     required this.expiresIn,
     required this.interval,
   }) : _deviceCode = deviceCode;
+}
+
+/// Verification details returned by Meta Muse's device authorization grant.
+/// The device code is kept out of UI-facing account data.
+class LlmMetaMuseDeviceCode {
+  final String _deviceCode;
+  final String userCode;
+  final Uri verificationUri;
+  final Uri verificationUriComplete;
+  final Duration expiresIn;
+  final Duration interval;
+
+  String get deviceCode => _deviceCode;
+
+  const LlmMetaMuseDeviceCode._({
+    required String deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.verificationUriComplete,
+    required this.expiresIn,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+
+  factory LlmMetaMuseDeviceCode.fromOAuthResponse({
+    required String deviceCode,
+    required String userCode,
+    required Uri verificationUri,
+    required Uri verificationUriComplete,
+    required Duration expiresIn,
+    required Duration interval,
+  }) => LlmMetaMuseDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// Device authorization returned by xAI's public OIDC device grant.
@@ -181,19 +222,18 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmXaiDeviceCode._(
-        deviceCode: deviceCode,
-        tokenEndpoint: tokenEndpoint,
-        issuer: issuer,
-        jwksUri: jwksUri,
-        scope: scope,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmXaiDeviceCode._(
+    deviceCode: deviceCode,
+    tokenEndpoint: tokenEndpoint,
+    issuer: issuer,
+    jwksUri: jwksUri,
+    scope: scope,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in
@@ -212,7 +252,8 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope =
+      'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;

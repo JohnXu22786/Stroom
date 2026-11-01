@@ -90,7 +90,8 @@ abstract final class LlmConnectorRegistry {
       metadata['type'],
     ].whereType<String>().join(' ').toLowerCase();
     final methods = metadata['supportedGenerationMethods'];
-    final methodsExcludeChat = methods is Iterable &&
+    final methodsExcludeChat =
+        methods is Iterable &&
         !methods.contains('generateContent') &&
         !methods.contains('streamGenerateContent');
     return metadata['chat'] != false &&
@@ -102,9 +103,9 @@ abstract final class LlmConnectorRegistry {
   }
 
   static bool isConversationalModelId(String modelId) => !RegExp(
-        r'(^|[._:/-])(embed(?:ding)?|rerank(?:er)?|re-rank|whisper|tts|transcrib|imagen|dall-e)([._:/-]|$)|(^|[._:/-])grok(?:[._:/-][a-z0-9]+)*[._:/-]image([._:/-]|$)',
-        caseSensitive: false,
-      ).hasMatch(modelId);
+    r'(^|[._:/-])(embed(?:ding)?|rerank(?:er)?|re-rank|whisper|tts|transcrib|imagen|dall-e)([._:/-]|$)|(^|[._:/-])grok(?:[._:/-][a-z0-9]+)*[._:/-]image([._:/-]|$)',
+    caseSensitive: false,
+  ).hasMatch(modelId);
 
   static const List<LlmConnectorDefinition> all = [
     LlmConnectorDefinition(
@@ -203,8 +204,17 @@ abstract final class LlmConnectorRegistry {
       id: 'meta',
       displayName: 'Meta Muse Code',
       protocol: LlmNativeProtocol.metaResponses,
-      authTypes: {'oauth', 'api_key'},
+      authTypes: {'api_key'},
       modelCatalog: kPinnedMetaModels,
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'muse-code',
+      displayName: 'Meta Muse Code OAuth',
+      protocol: LlmNativeProtocol.metaResponses,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedMuseCodeModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
@@ -322,15 +332,15 @@ abstract final class LlmConnectorRegistry {
   /// M1 migrated legacy provider names before M2's provider registry existed.
   /// Keep those records routable while preserving their account IDs and refs.
   static String canonicalId(String id) => switch (id.trim()) {
-        'anthropic' => 'claude',
-        'openai' => 'openai-compatibility',
-        final normalized => normalized,
-      };
+    'anthropic' => 'claude',
+    'openai' => 'openai-compatibility',
+    final normalized => normalized,
+  };
 
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
-        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' => 'openai',
+        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' || 'muse-code' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -348,8 +358,7 @@ abstract final class LlmConnectorRegistry {
         'qwen' ||
         'kimi' ||
         'kimi-ai' ||
-        'kimi.ai' =>
-          'openai',
+        'kimi.ai' => 'openai',
         _ => null,
       };
 
@@ -367,6 +376,7 @@ abstract final class LlmConnectorRegistry {
     return switch (canonicalId(connectorType)) {
       'codex' => authType == 'oauth',
       'xai' || 'meta' => authType == 'api_key',
+      'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       _ => true,
     };
@@ -401,13 +411,14 @@ class LlmAccountConnectorService {
     required this.preferences,
     required this.credentialStore,
     Dio? dio,
-  }) : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 30),
-              ),
-            );
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 30),
+             ),
+           );
 
   Future<List<LlmAccount>> listAccounts() async {
     final lease =
@@ -498,10 +509,12 @@ class LlmAccountConnectorService {
       final accountIndex = accountRecords.indexWhere(
         (record) => record['id'] == accountId,
       );
-      final previousRecord =
-          accountIndex < 0 ? null : accountRecords[accountIndex];
-      final existing =
-          previousRecord == null ? null : LlmAccount.fromMap(previousRecord);
+      final previousRecord = accountIndex < 0
+          ? null
+          : accountRecords[accountIndex];
+      final existing = previousRecord == null
+          ? null
+          : LlmAccount.fromMap(previousRecord);
       if (existing != null &&
           existing.endpointConfig['legacyOcrProviderConfigId'] !=
               sourceConfigId) {
@@ -522,14 +535,14 @@ class LlmAccountConnectorService {
               capabilities: const {'vision': true},
             )
           : refreshModel
-              ? LlmUpstreamModel(
-                  id: existingModel.id,
-                  upstreamModelId: upstreamModelId,
-                  displayName: displayName,
-                  capabilities: existingModel.capabilities,
-                  config: existingModel.config,
-                )
-              : existingModel;
+          ? LlmUpstreamModel(
+              id: existingModel.id,
+              upstreamModelId: upstreamModelId,
+              displayName: displayName,
+              capabilities: existingModel.capabilities,
+              config: existingModel.config,
+            )
+          : existingModel;
       final endpointConfig = <String, dynamic>{
         ...?existing?.endpointConfig,
         if (existing == null || refreshEndpoint) 'baseUrl': baseUrl.trim(),
@@ -539,11 +552,11 @@ class LlmAccountConnectorService {
       final models = existingModel == null
           ? [...?existing?.models, model]
           : refreshModel
-              ? [
-                  for (final existingModel in existing.models)
-                    existingModel.id == localModelId ? model : existingModel,
-                ]
-              : existing!.models;
+          ? [
+              for (final existingModel in existing.models)
+                existingModel.id == localModelId ? model : existingModel,
+            ]
+          : existing!.models;
       var authType =
           existing?.authType ?? (apiKey.isEmpty ? 'none' : 'api_key');
       String? effectiveCredentialReference = existing?.credentialRef;
@@ -609,7 +622,8 @@ class LlmAccountConnectorService {
         }
       }
 
-      final connectionIdentityChanged = existing != null &&
+      final connectionIdentityChanged =
+          existing != null &&
           (existing.authType != authType ||
               (refreshEndpoint &&
                   existing.endpointConfig['baseUrl'] != baseUrl.trim()) ||
@@ -625,8 +639,9 @@ class LlmAccountConnectorService {
         endpointConfig: endpointConfig,
         models: models,
         policy: existing?.policy,
-        usageByWindow:
-            connectionIdentityChanged ? const {} : existing?.usageByWindow,
+        usageByWindow: connectionIdentityChanged
+            ? const {}
+            : existing?.usageByWindow,
         remainingQuota: connectionIdentityChanged
             ? const LlmMetricObservation.unknown()
             : existing?.remainingQuota ?? const LlmMetricObservation.unknown(),
@@ -654,7 +669,8 @@ class LlmAccountConnectorService {
       if (account.credentialRef == null) {
         accountRecord.remove('credentialRef');
       }
-      final accountChanged = existing == null ||
+      final accountChanged =
+          existing == null ||
           jsonEncode(existing.toMap()) != jsonEncode(account.toMap());
       if (accountChanged) {
         if (accountIndex < 0) {
@@ -667,12 +683,14 @@ class LlmAccountConnectorService {
       final groupIndex = groupRecords.indexWhere(
         (record) => record['id'] == groupId,
       );
-      final previousGroupRecord =
-          groupIndex < 0 ? null : groupRecords[groupIndex];
+      final previousGroupRecord = groupIndex < 0
+          ? null
+          : groupRecords[groupIndex];
       final existingGroup = previousGroupRecord == null
           ? null
           : LlmModelGroup.fromMap(previousGroupRecord);
-      final hasMember = existingGroup?.members.any(
+      final hasMember =
+          existingGroup?.members.any(
             (member) =>
                 member.accountId == accountId &&
                 member.localModelId == localModelId,
@@ -718,7 +736,8 @@ class LlmAccountConnectorService {
       };
       _validateModelGroupMembers(group, accountsById);
       final groupRecord = group.toMap();
-      final groupChanged = existingGroup == null ||
+      final groupChanged =
+          existingGroup == null ||
           jsonEncode(existingGroup.toMap()) != jsonEncode(groupRecord);
       if (groupChanged) {
         if (groupIndex < 0) {
@@ -867,8 +886,9 @@ class LlmAccountConnectorService {
       }
       previous = await preferences.getString(key);
       final records = await _readEnvelope(previous);
-      final updated =
-          records.where((record) => record['id'] != groupId).toList();
+      final updated = records
+          .where((record) => record['id'] != groupId)
+          .toList();
       if (updated.length == records.length) return;
       final encoded = _encodeEnvelope(updated);
       writeAttempted = true;
@@ -1082,6 +1102,7 @@ class LlmAccountConnectorService {
       'qwen',
       'grok-cli',
       'xai-oauth',
+      'muse-code',
       'bedrock',
       'vertex',
       'ollama',
@@ -1089,8 +1110,18 @@ class LlmAccountConnectorService {
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
     }
-    final accountEntitlementCatalog = account.connectorType == 'grok-cli' ||
+    final accountEntitlementCatalog =
+        account.connectorType == 'grok-cli' ||
         account.connectorType == 'xai-oauth';
+    if (account.connectorType == 'muse-code' &&
+        account.models.isNotEmpty &&
+        !refreshRemote) {
+      return List.unmodifiable(
+        account.models.where(
+          (model) => connector.modelCatalog.contains(model.upstreamModelId),
+        ),
+      );
+    }
     if (account.models.isNotEmpty &&
         (!refreshRemote || !hasRemoteCatalog) &&
         !accountEntitlementCatalog) {
@@ -1106,14 +1137,24 @@ class LlmAccountConnectorService {
       final discovered = await _discoverRemoteModels(account);
       if (account.connectorType == 'grok-cli' ||
           account.connectorType == 'xai-oauth') {
-        final entitledIds =
-            discovered.map((model) => model.upstreamModelId).toSet();
+        final entitledIds = discovered
+            .map((model) => model.upstreamModelId)
+            .toSet();
         return _mergeModelMappings(
           discovered,
           account.models
-              .where(
-                (model) => entitledIds.contains(model.upstreamModelId),
-              )
+              .where((model) => entitledIds.contains(model.upstreamModelId))
+              .toList(),
+        );
+      }
+      if (account.connectorType == 'muse-code') {
+        final entitledIds = discovered
+            .map((model) => model.upstreamModelId)
+            .toSet();
+        return _mergeModelMappings(
+          discovered,
+          account.models
+              .where((model) => entitledIds.contains(model.upstreamModelId))
               .toList(),
         );
       }
@@ -1179,7 +1220,7 @@ class LlmAccountConnectorService {
         account.authType == 'service_account') {
       return _refreshVertexServiceAccount(account, bundle, cancelToken);
     }
-    if (account.connectorType == 'meta' && account.authType == 'oauth') {
+    if (account.connectorType == 'muse-code' && account.authType == 'oauth') {
       return _refreshMetaDca(account, bundle, cancelToken);
     }
     if (account.authType != 'oauth') return false;
@@ -1210,7 +1251,8 @@ class LlmAccountConnectorService {
         'accessToken',
       ]);
       if (accessToken == null) throw const LlmAccountConnectorException();
-      final xaiRefreshScope = account.connectorType == 'grok-cli' ||
+      final xaiRefreshScope =
+          account.connectorType == 'grok-cli' ||
               account.connectorType == 'xai-oauth'
           ? _validatedXaiRefreshScope(tokenResponse, account.connectorType)
           : null;
@@ -1247,8 +1289,8 @@ class LlmAccountConnectorService {
       final seconds = expiresIn is num
           ? expiresIn.toInt()
           : expiresIn is String
-              ? int.tryParse(expiresIn)
-              : null;
+          ? int.tryParse(expiresIn)
+          : null;
       if (seconds != null && seconds > 0) {
         final expiry = DateTime.now().toUtc().add(Duration(seconds: seconds));
         updated['expires_at'] = expiry.toIso8601String();
@@ -1311,12 +1353,13 @@ class LlmAccountConnectorService {
         final expiry = expiryValue is String
             ? DateTime.tryParse(expiryValue)
             : expiryValue is num
-                ? DateTime.fromMillisecondsSinceEpoch(
-                    expiryValue.toInt() * 1000,
-                    isUtc: true,
-                  )
-                : null;
-        final isExpiring = expiry != null &&
+            ? DateTime.fromMillisecondsSinceEpoch(
+                expiryValue.toInt() * 1000,
+                isUtc: true,
+              )
+            : null;
+        final isExpiring =
+            expiry != null &&
             !expiry.isAfter(
               DateTime.now().toUtc().add(const Duration(seconds: 30)),
             );
@@ -1429,12 +1472,24 @@ class LlmAccountConnectorService {
       );
       final minted = _asJsonMap(response.data);
       final apiKey = _firstString(minted, const ['api_key', 'apiKey']);
-      if (apiKey == null) throw const LlmAccountConnectorException();
+      if (apiKey == null || minted?['is_subs_active'] != true) {
+        throw const LlmAccountConnectorException();
+      }
+      final email = _firstString(minted, const ['user_email', 'email']);
+      final priorEmail = _firstString(bundle, const ['email', 'user_email']);
+      if (email == null ||
+          priorEmail == null ||
+          priorEmail.toLowerCase() != email.toLowerCase()) {
+        throw const LlmAccountConnectorException();
+      }
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(minted ?? const <String, dynamic>{})
         ..['api_key'] = apiKey
         ..['access_token'] = apiKey
         ..['dca_token'] = dcaToken;
+      updated['email'] = email;
+      final name = _firstString(minted, const ['user_full_name', 'name']);
+      if (name != null) updated['name'] = name;
       if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       await saveAccount(account, secret: jsonEncode(updated));
       return true;
@@ -1519,8 +1574,8 @@ class LlmAccountConnectorService {
   static int? _intValue(Object? value) => value is num
       ? value.toInt()
       : value is String
-          ? int.tryParse(value)
-          : null;
+      ? int.tryParse(value)
+      : null;
 
   static Map<String, dynamic> _decodeCredentialBundle(String secret) {
     try {
@@ -1612,7 +1667,8 @@ class LlmAccountConnectorService {
           contentType: formContentType,
         );
       case 'kimi' || 'kimi-ai' || 'kimi.ai':
-        final domain = _firstString(bundle, const ['domain']) ??
+        final domain =
+            _firstString(bundle, const ['domain']) ??
             (account.connectorType == 'kimi' ? 'kimi.com' : 'kimi.ai');
         final host = domain.toLowerCase().contains('kimi.ai')
             ? 'auth.kimi.ai'
@@ -1707,7 +1763,8 @@ class LlmAccountConnectorService {
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
-    final isGemini = account.connectorType == 'gemini' ||
+    final isGemini =
+        account.connectorType == 'gemini' ||
         account.connectorType == 'aistudio' ||
         account.connectorType == 'gemini-interactions';
     if (account.connectorType == 'bedrock') {
@@ -1718,8 +1775,7 @@ class LlmAccountConnectorService {
       'claude' => 'https://api.anthropic.com/v1',
       'gemini' ||
       'aistudio' ||
-      'gemini-interactions' =>
-        'https://generativelanguage.googleapis.com',
+      'gemini-interactions' => 'https://generativelanguage.googleapis.com',
       'moonshot' => 'https://api.moonshot.ai/v1',
       'glm' => 'https://open.bigmodel.cn/api/paas/v4',
       'deepseek' => 'https://api.deepseek.com',
@@ -1727,11 +1783,13 @@ class LlmAccountConnectorService {
       'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       'grok-cli' => 'https://cli-chat-proxy.grok.com/v1',
       'xai-oauth' => 'https://api.x.ai/v1',
+      'muse-code' => 'https://api.meta.ai/v1',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       _ => null,
     };
-    final base = LlmNativeRequestBuilder._configString(
+    final base =
+        LlmNativeRequestBuilder._configString(
           account.endpointConfig,
           'baseUrl',
         ) ??
@@ -1745,16 +1803,20 @@ class LlmAccountConnectorService {
     final uri = account.connectorType == 'ollama'
         ? _ollamaModelListUri(base)
         : account.connectorType == 'vertex'
-            ? _vertexModelListUri(account.endpointConfig, base, secret)
-            : _modelListUri(base, isGemini: isGemini);
+        ? _vertexModelListUri(account.endpointConfig, base, secret)
+        : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
-    final usesGeminiOAuth = account.authType == 'oauth' &&
+    final usesGeminiOAuth =
+        account.authType == 'oauth' &&
         (account.connectorType == 'gemini' ||
             account.connectorType == 'aistudio');
-    final usesXaiOAuth = account.authType == 'oauth' &&
+    final usesXaiOAuth =
+        account.authType == 'oauth' &&
         (account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth');
+    final usesMuseOAuth =
+        account.authType == 'oauth' && account.connectorType == 'muse-code';
     final usesRefreshableOAuth = usesGeminiOAuth || usesXaiOAuth;
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
@@ -1810,9 +1872,18 @@ class LlmAccountConnectorService {
       if (usesGeminiOAuth) {
         headers['x-goog-user-project'] =
             LlmNativeRequestBuilder._requiredGoogleCloudProjectId(
-          account.endpointConfig,
-        );
+              account.endpointConfig,
+            );
       }
+    } else if (usesMuseOAuth) {
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      headers['Authorization'] =
+          'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
+      headers['User-Agent'] =
+          'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
+      headers['X-Client-Id'] = 'tbh:tui';
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
     } else {
@@ -1844,11 +1915,11 @@ class LlmAccountConnectorService {
       final expiry = expiryValue is String
           ? DateTime.tryParse(expiryValue)
           : expiryValue is num
-              ? DateTime.fromMillisecondsSinceEpoch(
-                  expiryValue.toInt() * 1000,
-                  isUtc: true,
-                )
-              : null;
+          ? DateTime.fromMillisecondsSinceEpoch(
+              expiryValue.toInt() * 1000,
+              isUtc: true,
+            )
+          : null;
       if (expiry != null &&
           !expiry.isAfter(
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
@@ -1911,6 +1982,10 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          if (account.connectorType == 'muse-code' &&
+              !kPinnedMuseCodeModels.contains(modelId)) {
+            continue;
+          }
           final methods = map['supportedGenerationMethods'];
           final actions = map['supportedActions'];
           final vertexActions = account.connectorType != 'vertex'
@@ -1951,9 +2026,11 @@ class LlmAccountConnectorService {
               // unknown when this Ollama server cannot describe them.
             }
           }
-          final isVertexImagen = account.connectorType == 'vertex' &&
+          final isVertexImagen =
+              account.connectorType == 'vertex' &&
               modelId.toLowerCase().contains('imagen');
-          final supportsImagenPredict = isVertexImagen &&
+          final supportsImagenPredict =
+              isVertexImagen &&
               actions is List &&
               actions.any(
                 (action) =>
@@ -1980,6 +2057,10 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if (account.connectorType == 'muse-code') ...{
+                  'chat': true,
+                  'streaming': true,
+                },
                 if (account.connectorType == 'vertex') ...{
                   'chat': vertexSupportsGenerateContent,
                   if (vertexSupportsStreaming) 'streaming': true,
@@ -2229,10 +2310,10 @@ class LlmAccountConnectorService {
   ) {
     final project =
         LlmNativeRequestBuilder._configString(config, 'projectId') ??
-            LlmNativeRequestBuilder._credentialBundleString(credential, const [
-              'project_id',
-              'projectId',
-            ]);
+        LlmNativeRequestBuilder._credentialBundleString(credential, const [
+          'project_id',
+          'projectId',
+        ]);
     final location =
         LlmNativeRequestBuilder._vertexLocation(config) ?? 'us-central1';
     if (project == null ||
@@ -2240,7 +2321,8 @@ class LlmAccountConnectorService {
         !RegExp(r'^(global|[a-z0-9-]+)$').hasMatch(location)) {
       throw const LlmAccountConnectorException();
     }
-    final parent = 'projects/${Uri.encodeComponent(project)}'
+    final parent =
+        'projects/${Uri.encodeComponent(project)}'
         '/locations/${Uri.encodeComponent(location)}/publishers/google';
     return Uri.parse(base).replace(path: '/v1/$parent/models');
   }
@@ -2311,8 +2393,8 @@ class LlmAccountConnectorService {
     final requestPath = path.endsWith('/models')
         ? path
         : isGemini && path.endsWith('/v1beta')
-            ? '$path/models'
-            : '$apiRoot$suffix';
+        ? '$path/models'
+        : '$apiRoot$suffix';
     return parsed.replace(path: requestPath, query: null, fragment: null);
   }
 
@@ -2407,7 +2489,8 @@ class LlmAccountConnectorService {
           account.credentialRef != previousReference) {
         throw const LlmAccountConnectorException();
       }
-      reference = account.credentialRef ??
+      reference =
+          account.credentialRef ??
           previousReference ??
           _newCredentialReference(account.id);
       final otherOwners = currentRecords
@@ -2468,18 +2551,18 @@ class LlmAccountConnectorService {
       if (previous != null) {
         final endpointConfigChanged =
             jsonEncode(previous['endpointConfig'] ?? const {}) !=
-                jsonEncode(account.endpointConfig);
+            jsonEncode(account.endpointConfig);
         final connectionIdentityChanged =
             previous['connectorType'] != account.connectorType ||
-                previous['authType'] != account.authType ||
-                endpointConfigChanged ||
-                credentialValueChanged;
+            previous['authType'] != account.authType ||
+            endpointConfigChanged ||
+            credentialValueChanged;
         if (connectionIdentityChanged) {
           // Provider quota belongs to the old connection and must not affect
           // routing or the account UI after its connector changes.
           savedRecord['usageByWindow'] = const <String, dynamic>{};
-          savedRecord['remainingQuota'] =
-              LlmMetricObservation.unknown().toMap();
+          savedRecord['remainingQuota'] = LlmMetricObservation.unknown()
+              .toMap();
           savedRecord['quotaSignals'] = const <String, dynamic>{};
         } else {
           // Account settings dialogs can stay open while requests record newer
@@ -2614,7 +2697,8 @@ class LlmAccountConnectorService {
         'weeklyRemainingPercent': LlmUsageWindow.week,
         'monthlyRemainingPercent': LlmUsageWindow.month,
       };
-      var changed = jsonEncode(nextRemainingQuota.toMap()) !=
+      var changed =
+          jsonEncode(nextRemainingQuota.toMap()) !=
           jsonEncode(account.remainingQuota.toMap());
       for (final entry in validSignals.entries) {
         final current =
@@ -2784,7 +2868,8 @@ class LlmAccountConnectorService {
                   encodedGroups)) {
         throw const LlmAccountConnectorException();
       }
-      final hasRemainingOwner = credentialReference != null &&
+      final hasRemainingOwner =
+          credentialReference != null &&
           accounts.any(
             (record) => record['credentialRef'] == credentialReference,
           );
@@ -2976,7 +3061,8 @@ class LlmAccountConnectorService {
       }
     }
     if (account.connectorType == 'vertex') {
-      final location = account.endpointConfig['location'] ??
+      final location =
+          account.endpointConfig['location'] ??
           account.endpointConfig['region'];
       if (location != null &&
           (location is! String ||
@@ -3076,9 +3162,9 @@ class LlmAccountConnectorService {
           };
           if (uri.queryParameters.keys.any((key) {
             final normalizedQueryKey = key.toLowerCase().replaceAll(
-                  RegExp(r'[^a-z]'),
-                  '',
-                );
+              RegExp(r'[^a-z]'),
+              '',
+            );
             return sensitiveQueryKeys.contains(normalizedQueryKey) ||
                 normalizedQueryKey.contains('apikey') ||
                 normalizedQueryKey.contains('accesskey') ||
@@ -3110,9 +3196,9 @@ class LlmAccountConnectorService {
     if (value is Map) {
       for (final entry in value.entries) {
         final normalized = entry.key.toString().toLowerCase().replaceAll(
-              RegExp(r'[^a-z]'),
-              '',
-            );
+          RegExp(r'[^a-z]'),
+          '',
+        );
         if (normalized == 'key' ||
             normalized.endsWith('key') ||
             normalized == 'token' ||
@@ -3211,6 +3297,12 @@ class LlmNativeRequestBuilder {
             !kPinnedKimiCodeModels.contains(modelId))) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'muse-code' &&
+        (account.authType != 'oauth' ||
+            !kPinnedMuseCodeModels.contains(modelId) ||
+            !account.models.any((model) => model.upstreamModelId == modelId))) {
+      throw const LlmAccountConnectorException();
+    }
     if ((account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth') &&
         !account.models.any((model) => model.upstreamModelId == modelId)) {
@@ -3301,7 +3393,7 @@ class LlmNativeRequestBuilder {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;
-      case 'meta':
+      case 'meta' || 'muse-code':
         headers['Authorization'] = 'Bearer $secret';
         headers['User-Agent'] =
             'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
@@ -3350,23 +3442,23 @@ class LlmNativeRequestBuilder {
             ),
           )
         : account.connectorType == 'bedrock'
-            ? AwsBedrockConverseAdapter.toConverse(body)
-            : account.connectorType == 'antigravity'
-                ? _antigravityPayload(account, credential, modelId, body)
-                : _isVertexImagen(
-                    account,
-                    modelId,
-                    config: config,
-                    nativeFormat: nativeFormat,
-                  )
-                    ? _vertexImagenPayload(body)
-                    : _applyBodyStreamOption(
-                        account: account,
-                        config: config,
-                        body: body,
-                        stream: stream,
-                        nativeFormat: nativeFormat,
-                      );
+        ? AwsBedrockConverseAdapter.toConverse(body)
+        : account.connectorType == 'antigravity'
+        ? _antigravityPayload(account, credential, modelId, body)
+        : _isVertexImagen(
+            account,
+            modelId,
+            config: config,
+            nativeFormat: nativeFormat,
+          )
+        ? _vertexImagenPayload(body)
+        : _applyBodyStreamOption(
+            account: account,
+            config: config,
+            body: body,
+            stream: stream,
+            nativeFormat: nativeFormat,
+          );
 
     var requestHeaders = headers;
     if (account.connectorType == 'bedrock') {
@@ -3426,30 +3518,29 @@ class LlmNativeRequestBuilder {
     LlmAccount account,
     Map<String, dynamic> config,
     String? nativeFormat,
-  ) =>
-      switch (account.connectorType) {
-        'codex' ||
-        'claude' ||
-        'kimi-coding' ||
-        'kimi' ||
-        'kimi-ai' ||
-        'kimi.ai' ||
-        'xai' ||
-        'grok-cli' ||
-        'xai-oauth' ||
-        'meta' ||
-        'gemini-interactions' ||
-        'openai-compatibility' ||
-        'openai-api' ||
-        'moonshot' ||
-        'glm' ||
-        'deepseek' ||
-        'minimax' ||
-        'qwen' =>
-          true,
-        'vertex' => _usesVertexInteractions(config, nativeFormat),
-        _ => false,
-      };
+  ) => switch (account.connectorType) {
+    'codex' ||
+    'claude' ||
+    'kimi-coding' ||
+    'kimi' ||
+    'kimi-ai' ||
+    'kimi.ai' ||
+    'xai' ||
+    'grok-cli' ||
+    'xai-oauth' ||
+    'meta' ||
+    'muse-code' ||
+    'gemini-interactions' ||
+    'openai-compatibility' ||
+    'openai-api' ||
+    'moonshot' ||
+    'glm' ||
+    'deepseek' ||
+    'minimax' ||
+    'qwen' => true,
+    'vertex' => _usesVertexInteractions(config, nativeFormat),
+    _ => false,
+  };
 
   static String _credentialValue(LlmAccount account, String? credential) {
     if (account.authType == 'none') return '';
@@ -3468,27 +3559,30 @@ class LlmNativeRequestBuilder {
       final candidates = switch (account.authType) {
         'api_key' => const ['api_key', 'apiKey', 'key'],
         'setup_token' => const [
-            'setup_token',
-            'setupToken',
-            'access_token',
-            'accessToken',
-          ],
-        'oauth' => account.connectorType == 'meta'
-            ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
-            : const ['access_token', 'accessToken'],
+          'setup_token',
+          'setupToken',
+          'access_token',
+          'accessToken',
+        ],
+        'oauth' =>
+          account.connectorType == 'meta' ||
+                  account.connectorType == 'muse-code'
+              ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
+              : const ['access_token', 'accessToken'],
         'session_token' => const [
-            'session_token',
-            'sessionToken',
-            'access_token',
-            'accessToken',
-          ],
+          'session_token',
+          'sessionToken',
+          'access_token',
+          'accessToken',
+        ],
         'service_account' => const ['access_token', 'accessToken'],
         _ => const <String>[],
       };
       for (final key in candidates) {
         final value = decoded[key];
         if (value is String && value.trim().isNotEmpty) {
-          if (account.connectorType == 'meta' &&
+          if ((account.connectorType == 'meta' ||
+                  account.connectorType == 'muse-code') &&
               account.authType == 'oauth' &&
               value.startsWith('dca:') &&
               decoded['api_key'] == null) {
@@ -3505,7 +3599,8 @@ class LlmNativeRequestBuilder {
     if (account.authType == 'service_account') {
       throw const LlmAccountConnectorException();
     }
-    if (account.connectorType == 'meta' &&
+    if ((account.connectorType == 'meta' ||
+            account.connectorType == 'muse-code') &&
         account.authType == 'oauth' &&
         credential.trim().startsWith('dca:')) {
       throw const LlmAccountConnectorException();
@@ -3529,7 +3624,8 @@ class LlmNativeRequestBuilder {
       if (decoded is! Map) return null;
       final serviceAccount = decoded['service_account'];
       for (final key in keys) {
-        final value = decoded[key] ??
+        final value =
+            decoded[key] ??
             (serviceAccount is Map ? serviceAccount[key] : null);
         if (value is String && value.trim().isNotEmpty) return value.trim();
       }
@@ -3555,11 +3651,13 @@ class LlmNativeRequestBuilder {
     payload['userAgent'] = 'antigravity';
     var requestType = payload['requestType'];
     if (requestType is! String || requestType.trim().isEmpty) {
-      requestType =
-          modelId.toLowerCase().contains('image') ? 'image_gen' : 'agent';
+      requestType = modelId.toLowerCase().contains('image')
+          ? 'image_gen'
+          : 'agent';
       payload['requestType'] = requestType;
     }
-    final projectId = _configString(account.endpointConfig, 'projectId') ??
+    final projectId =
+        _configString(account.endpointConfig, 'projectId') ??
         _projectIdFromCredential(credential);
     if (projectId == null || projectId.isEmpty) {
       payload.remove('project');
@@ -3636,8 +3734,8 @@ class LlmNativeRequestBuilder {
     String? query;
     final preserveLegacyOcrEndpoint =
         account.connectorType == 'openai-compatibility' &&
-            config['legacyOcrFullEndpoint'] == true &&
-            nativeFormat == null;
+        config['legacyOcrFullEndpoint'] == true &&
+        nativeFormat == null;
     switch (account.connectorType) {
       case 'codex':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
@@ -3681,7 +3779,7 @@ class LlmNativeRequestBuilder {
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
         path = '/exa.api_server_pb.ApiServerService/GetChatMessage';
-      case 'meta':
+      case 'meta' || 'muse-code':
         baseUrl = _baseUrl(
           config,
           _metaBaseUrl(credential) ?? 'https://api.meta.ai/v1',
@@ -3689,7 +3787,8 @@ class LlmNativeRequestBuilder {
         path = '/responses';
       case 'gemini' || 'aistudio':
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
-        path = '/v1beta/models/${Uri.encodeComponent(modelId)}:'
+        path =
+            '/v1beta/models/${Uri.encodeComponent(modelId)}:'
             '${stream ? 'streamGenerateContent' : 'generateContent'}';
         if (stream) query = 'alt=sse';
       case 'openai-api':
@@ -3720,7 +3819,8 @@ class LlmNativeRequestBuilder {
         }
         baseUrl =
             'https://${awsRegionalEndpointHost('bedrock-runtime', region)}';
-        path = '/model/${Uri.encodeComponent(modelId)}/'
+        path =
+            '/model/${Uri.encodeComponent(modelId)}/'
             '${stream ? 'converse-stream' : 'converse'}';
       case 'gemini-interactions':
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
@@ -3731,13 +3831,14 @@ class LlmNativeRequestBuilder {
         path = '/api/chat';
       case 'vertex':
         if (_usesVertexInteractions(config, nativeFormat)) {
-          final projectId = _configString(config, 'projectId') ??
+          final projectId =
+              _configString(config, 'projectId') ??
               _projectIdFromCredential(credential);
           baseUrl = _baseUrl(config, 'https://aiplatform.googleapis.com');
           path = projectId == null || projectId.isEmpty
               ? '/v1beta1/interactions'
               : '/v1beta1/projects/${Uri.encodeComponent(projectId)}'
-                  '/locations/global/interactions';
+                    '/locations/global/interactions';
           if (stream) query = 'alt=sse';
           break;
         }
@@ -3751,23 +3852,26 @@ class LlmNativeRequestBuilder {
               ? 'https://aiplatform.googleapis.com'
               : 'https://$location-aiplatform.googleapis.com',
         );
-        final projectId = _configString(config, 'projectId') ??
+        final projectId =
+            _configString(config, 'projectId') ??
             _projectIdFromCredential(credential);
         final model = Uri.encodeComponent(modelId);
-        final action = _isVertexImagen(
-          account,
-          modelId,
-          config: config,
-          nativeFormat: nativeFormat,
-        )
+        final action =
+            _isVertexImagen(
+              account,
+              modelId,
+              config: config,
+              nativeFormat: nativeFormat,
+            )
             ? 'predict'
             : stream
-                ? 'streamGenerateContent'
-                : 'generateContent';
+            ? 'streamGenerateContent'
+            : 'generateContent';
         if (projectId == null || projectId.isEmpty) {
           path = '/v1/publishers/google/models/$model:$action';
         } else {
-          path = '/v1/projects/${Uri.encodeComponent(projectId)}'
+          path =
+              '/v1/projects/${Uri.encodeComponent(projectId)}'
               '/locations/${Uri.encodeComponent(location)}'
               '/publishers/google/models/$model:$action';
         }
@@ -3796,8 +3900,9 @@ class LlmNativeRequestBuilder {
             '/responses',
             '/messages',
           ];
-          final currentSuffix =
-              endpointSuffixes.where(endpointPath.endsWith).firstOrNull;
+          final currentSuffix = endpointSuffixes
+              .where(endpointPath.endsWith)
+              .firstOrNull;
           if (currentSuffix == desiredPath) {
             path = '';
           } else {
@@ -3855,8 +3960,10 @@ class LlmNativeRequestBuilder {
   }
 
   static bool _isLoopbackHost(String host) {
-    final normalized =
-        host.toLowerCase().replaceAll('[', '').replaceAll(']', '');
+    final normalized = host
+        .toLowerCase()
+        .replaceAll('[', '')
+        .replaceAll(']', '');
     if (normalized == 'localhost' || normalized == '::1') return true;
     final octets = normalized.split('.');
     if (octets.length != 4 || octets.first != '127') return false;
@@ -3928,8 +4035,9 @@ class LlmNativeRequestBuilder {
     }
     if (body.containsKey('sampleCount')) {
       final value = body['sampleCount'];
-      parameters['sampleCount'] =
-          value is num ? value.toInt() : int.tryParse(value.toString()) ?? 0;
+      parameters['sampleCount'] = value is num
+          ? value.toInt()
+          : int.tryParse(value.toString()) ?? 0;
     }
     final instance = <String, dynamic>{'prompt': prompt};
     if (body.containsKey('negativePrompt')) {
@@ -3946,7 +4054,8 @@ class LlmNativeRequestBuilder {
     final host = base.host.toLowerCase();
     final hasCustomBaseUrl =
         _configString(account.endpointConfig, 'baseUrl') != null;
-    final supportsCustomApiKeyEndpoint = account.authType == 'api_key' &&
+    final supportsCustomApiKeyEndpoint =
+        account.authType == 'api_key' &&
         {'codex', 'claude', 'vertex'}.contains(account.connectorType);
     if (account.connectorType == 'ollama' && hasCustomBaseUrl) return;
     if (hasCustomBaseUrl && supportsCustomApiKeyEndpoint) return;
@@ -3964,11 +4073,10 @@ class LlmNativeRequestBuilder {
       'xai' || 'xai-oauth' => host == 'api.x.ai',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
-      'meta' => host == 'api.meta.ai',
+      'meta' || 'muse-code' => host == 'api.meta.ai',
       'gemini' ||
       'gemini-interactions' ||
-      'aistudio' =>
-        host == 'generativelanguage.googleapis.com',
+      'aistudio' => host == 'generativelanguage.googleapis.com',
       'openai-api' => host == 'api.openai.com',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
@@ -3976,8 +4084,9 @@ class LlmNativeRequestBuilder {
       'minimax' => {'api.minimax.io', 'api.minimaxi.com'}.contains(host),
       'qwen' => host == 'dashscope.aliyuncs.com',
       'bedrock' => host == bedrockHost,
-      'vertex' => host == 'aiplatform.googleapis.com' ||
-          host == '$location-aiplatform.googleapis.com',
+      'vertex' =>
+        host == 'aiplatform.googleapis.com' ||
+            host == '$location-aiplatform.googleapis.com',
       _ => false,
     };
     if (!allowed) throw const LlmAccountConnectorException();
@@ -4148,16 +4257,15 @@ LlmConnectorObservation parseLlmConnectorHeaderObservation(
 LlmConnectorObservation mergeLlmConnectorObservations(
   LlmConnectorObservation first,
   LlmConnectorObservation second,
-) =>
-    LlmConnectorObservation(
-      requestUsage: second.requestUsage.isKnown
-          ? second.requestUsage
-          : first.requestUsage,
-      remainingQuota: second.remainingQuota.isKnown
-          ? second.remainingQuota
-          : first.remainingQuota,
-      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
-    );
+) => LlmConnectorObservation(
+  requestUsage: second.requestUsage.isKnown
+      ? second.requestUsage
+      : first.requestUsage,
+  remainingQuota: second.remainingQuota.isKnown
+      ? second.remainingQuota
+      : first.remainingQuota,
+  quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+);
 
 class LlmConnectorSseObservationAccumulator {
   final String connectorType;
@@ -4305,7 +4413,8 @@ LlmConnectorObservation _parseDevinConnectUsage(
 
   while (offset + 5 <= response.length) {
     final flag = response[offset];
-    final length = (response[offset + 1] << 24) |
+    final length =
+        (response[offset + 1] << 24) |
         (response[offset + 2] << 16) |
         (response[offset + 3] << 8) |
         response[offset + 4];
@@ -4342,7 +4451,7 @@ LlmConnectorObservation _parseDevinConnectUsage(
 }
 
 ({num? promptTokens, num? completionTokens, num? cachedTokens})
-    _parseDevinFrameUsage(Uint8List payload) {
+_parseDevinFrameUsage(Uint8List payload) {
   var offset = 0;
   num? promptTokens;
   num? completionTokens;
@@ -4387,7 +4496,7 @@ LlmConnectorObservation _parseDevinConnectUsage(
 }
 
 ({num? promptTokens, num? completionTokens, num? cachedTokens})
-    _parseDevinUsage(Uint8List payload) {
+_parseDevinUsage(Uint8List payload) {
   var offset = 0;
   num? promptTokens;
   num? completionTokens;
@@ -4424,7 +4533,7 @@ LlmConnectorObservation _parseDevinConnectUsage(
 }
 
 ({num? promptTokens, num? completionTokens, num? cachedTokens})
-    _parseDevinDimensionGroup(Uint8List payload) {
+_parseDevinDimensionGroup(Uint8List payload) {
   var offset = 0;
   String? title;
   final metrics = <String, num>{};

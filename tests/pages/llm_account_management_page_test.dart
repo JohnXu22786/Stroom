@@ -26,17 +26,19 @@ void main() {
         discoveryAttempts++;
         if (discoveryAttempts == 1) {
           return ResponseBody.fromString(
-              '{"error":"temporarily unavailable"}', 503);
+            '{"error":"temporarily unavailable"}',
+            503,
+          );
         }
         return ResponseBody.fromString(
           jsonEncode({
             'data': [
-              {'id': 'grok-3'}
-            ]
+              {'id': 'grok-3'},
+            ],
           }),
           200,
           headers: const {
-            'content-type': ['application/json']
+            'content-type': ['application/json'],
           },
         );
       });
@@ -65,7 +67,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -120,8 +123,9 @@ void main() {
     final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
     expect(provider.displayName, 'Kimi Code CLI');
     expect(provider.supportedAuthTypes, {'oauth'});
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     final connectorButton = find.descendant(
       of: connectorDropdown,
       matching: find.byType(DropdownButton<String>),
@@ -137,10 +141,10 @@ void main() {
       ),
     );
     expect(modelField.readOnly, isTrue);
-    expect(
-      modelField.controller!.text.split('\n'),
-      ['kimi-for-coding', 'kimi-for-coding-highspeed'],
-    );
+    expect(modelField.controller!.text.split('\n'), [
+      'kimi-for-coding',
+      'kimi-for-coding-highspeed',
+    ]);
     expect(find.text('订阅 OAuth').last, findsOneWidget);
     await tester.enterText(find.byType(TextField).at(0), 'Kimi Code account');
     await tester.tap(find.text('保存'));
@@ -163,6 +167,117 @@ void main() {
     await tester.pumpAndSettle();
     expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
     expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('Meta Muse OAuth is separately addable from its API key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final museProvider = gateway.providerCatalog.findProvider('muse-code')!;
+    expect(museProvider.displayName, 'Meta Muse Code OAuth');
+    expect(museProvider.supportedAuthTypes, {'oauth'});
+    expect(gateway.providerCatalog.findProvider('meta')!.supportedAuthTypes, {
+      'api_key',
+    });
+    final dropdown = find.byType(DropdownButtonFormField<String>).at(0);
+    final button = find.descendant(
+      of: dropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(button).onChanged!('muse-code');
+    await tester.pumpAndSettle();
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+    await tester.enterText(find.byType(TextField).at(0), 'Muse account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(
+      oauthAuthorization.metaMuseDeviceAuthorizationAccounts,
+      hasLength(1),
+    );
+    expect(
+      oauthAuthorization
+          .metaMuseDeviceAuthorizationAccounts
+          .single
+          .connectorType,
+      'muse-code',
+    );
+    expect(find.text('META-1234'), findsOneWidget);
+    expect(find.text('https://www.meta.ai/device'), findsOneWidget);
+    expect(await service.listAccounts(), isEmpty);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('Muse OAuth model editor keeps account entitlements read-only', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'muse-entitlement-editor',
+        connectorType: 'muse-code',
+        authType: 'oauth',
+        displayName: 'Muse account',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'muse-entitled-model',
+            upstreamModelId: 'muse-spark-1.3',
+            displayName: 'Muse Spark',
+          ),
+        ],
+      ),
+      secret: jsonEncode({
+        'access_token': 'muse-minted-key',
+        'api_key': 'muse-minted-key',
+        'dca_token': 'dca:muse-device-token',
+        'email': 'muse@example.test',
+        'is_subs_active': true,
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.readOnly, isTrue);
+    expect(modelsField.controller!.text, 'muse-spark-1.3');
   });
 
   testWidgets('Grok Build and xAI OAuth modes are separate addable accounts', (
@@ -200,7 +315,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
       await tester.enterText(
-          find.byType(TextField).at(0), '$connectorId account');
+        find.byType(TextField).at(0),
+        '$connectorId account',
+      );
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
       expect(
@@ -234,8 +351,9 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
     final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     final connectorButton = find.descendant(
       of: connectorDropdown,
       matching: find.byType(DropdownButton<String>),
@@ -285,15 +403,15 @@ void main() {
         credentialStore: credentials,
       );
       final gateway = _testGateway(service, oauthDio: dio);
-      final flow =
-          await gateway.oauthAuthorization.beginKimiCodeDeviceAuthorization(
-        AiGatewayAccount(
-          id: 'kimi-code-secure',
-          connectorType: 'kimi-coding',
-          authType: 'oauth',
-          displayName: 'Kimi Code',
-        ),
-      );
+      final flow = await gateway.oauthAuthorization
+          .beginKimiCodeDeviceAuthorization(
+            AiGatewayAccount(
+              id: 'kimi-code-secure',
+              connectorType: 'kimi-coding',
+              authType: 'oauth',
+              displayName: 'Kimi Code',
+            ),
+          );
 
       expect(await service.listAccounts(), isEmpty);
       tokenResponse.complete(
@@ -323,8 +441,7 @@ void main() {
       expect(
         (await gateway.modelDiscovery.discoverModels(
           saved,
-        ))
-            .map((model) => model.upstreamModelId),
+        )).map((model) => model.upstreamModelId),
         ['kimi-for-coding', 'kimi-for-coding-highspeed'],
       );
       expect(storedCredential['access_token'], 'fixture-access-token');
@@ -370,8 +487,9 @@ void main() {
       service,
     ).providerCatalog.findProvider('claude')!;
     expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     final connectorButton = find.descendant(
       of: connectorDropdown,
@@ -501,61 +619,65 @@ void main() {
     expect(find.text('账号删除失败。'), findsOneWidget);
   });
 
-  test('xAI OAuth account deletion revokes its discovered refresh endpoint',
-      () async {
-    final requests = <RequestOptions>[];
-    final dio = Dio()
-      ..httpClientAdapter = _FunctionalAdapter((options) async {
-        requests.add(options);
-        if (options.uri.path == '/.well-known/openid-configuration') {
-          return ResponseBody.fromString(
-            jsonEncode({
-              'issuer': 'https://auth.x.ai',
-              'revocation_endpoint': 'https://auth.x.ai/oauth2/revoke',
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json']
-            },
-          );
-        }
-        return ResponseBody.fromString('', 200);
+  test(
+    'xAI OAuth account deletion revokes its discovered refresh endpoint',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path == '/.well-known/openid-configuration') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'issuer': 'https://auth.x.ai',
+                'revocation_endpoint': 'https://auth.x.ai/oauth2/revoke',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString('', 200);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'xai-oauth-revoke',
+          connectorType: 'xai-oauth',
+          authType: 'oauth',
+          displayName: 'xAI OAuth account',
+        ),
+        secret: jsonEncode({
+          'access_token': 'fixture-access-token',
+          'refresh_token': 'fixture-refresh-token',
+        }),
+      );
+      final gateway = _testGateway(service, oauthDio: dio);
+      final account = (await gateway.accountManagement.listAccounts()).single;
+
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+        isTrue,
+      );
+
+      expect(requests, hasLength(2));
+      expect(
+        requests.first.uri.toString(),
+        'https://auth.x.ai/.well-known/openid-configuration',
+      );
+      expect(requests.last.uri.toString(), 'https://auth.x.ai/oauth2/revoke');
+      expect(requests.last.data, {
+        'client_id': LlmOAuthTokenClient.xaiClientId,
+        'token': 'fixture-refresh-token',
+        'token_type_hint': 'refresh_token',
       });
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentialStore(),
-    );
-    await service.saveAccount(
-      LlmAccount(
-        id: 'xai-oauth-revoke',
-        connectorType: 'xai-oauth',
-        authType: 'oauth',
-        displayName: 'xAI OAuth account',
-      ),
-      secret: jsonEncode({
-        'access_token': 'fixture-access-token',
-        'refresh_token': 'fixture-refresh-token',
-      }),
-    );
-    final gateway = _testGateway(service, oauthDio: dio);
-    final account = (await gateway.accountManagement.listAccounts()).single;
-
-    expect(
-      await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
-      isTrue,
-    );
-
-    expect(requests, hasLength(2));
-    expect(requests.first.uri.toString(),
-        'https://auth.x.ai/.well-known/openid-configuration');
-    expect(requests.last.uri.toString(), 'https://auth.x.ai/oauth2/revoke');
-    expect(requests.last.data, {
-      'client_id': LlmOAuthTokenClient.xaiClientId,
-      'token': 'fixture-refresh-token',
-      'token_type_hint': 'refresh_token',
-    });
-    expect(await service.getAccount(account.id), isNull);
-  });
+      expect(await service.getAccount(account.id), isNull);
+    },
+  );
 
   testWidgets('does not revoke OAuth while local account deletion fails', (
     tester,
@@ -897,9 +1019,12 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -989,8 +1114,9 @@ void main() {
 
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -1068,8 +1194,9 @@ void main() {
         find.byType(TextField).at(0),
         'Production Bedrock',
       );
-      final connectorDropdown =
-          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -1112,8 +1239,9 @@ void main() {
       await tester.tap(find.byTooltip('添加账号'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
-      final connectorDropdown =
-          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -1167,8 +1295,9 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth policy');
-    final connectorDropdown =
-        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -1205,9 +1334,12 @@ void main() {
       ),
       secret: 'legacy-vertex-oauth-token',
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map<String, dynamic>;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -1287,9 +1419,12 @@ void main() {
       ),
       secret: 'vertex-api-key',
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map<String, dynamic>;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -1906,8 +2041,12 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata = selectorConfig
-        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
+    final capabilityMetadata =
+        selectorConfig
+                .models
+                .single
+                .legacyFields[kLlmModelCapabilitiesConfigField]
+            as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 
@@ -2526,18 +2665,18 @@ LlmChatRoutingRuntime _testGateway(
   LlmAccountConnectorService service, {
   Dio? oauthDio,
   AiGatewayOAuthAuthorization? oauthAuthorization,
-}) =>
-    LlmChatRoutingRuntime(
-      accountService: service,
-      routingService: LlmRoutingService(accountService: service),
-      oauthDio: oauthDio,
-      oauthAuthorization: oauthAuthorization,
-    );
+}) => LlmChatRoutingRuntime(
+  accountService: service,
+  routingService: LlmRoutingService(accountService: service),
+  oauthDio: oauthDio,
+  oauthAuthorization: oauthAuthorization,
+);
 
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];
   final deviceAuthorizationAccounts = <AiGatewayAccount>[];
   final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
@@ -2572,6 +2711,17 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginMetaMuseDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    metaMuseDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://www.meta.ai/device'),
+      userCode: 'META-1234',
+    );
+  }
+
+  @override
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
 }
 
@@ -2582,12 +2732,10 @@ class _PendingOAuthDeviceAuthorization
   final _completion = Completer<AiGatewayAccount>();
   var cancelled = false;
 
-  _PendingOAuthDeviceAuthorization({
-    Uri? verificationUri,
-    String? userCode,
-  })  : _verificationUri =
-            verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
-        _userCode = userCode ?? 'ABCD-EFGH';
+  _PendingOAuthDeviceAuthorization({Uri? verificationUri, String? userCode})
+    : _verificationUri =
+          verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
+      _userCode = userCode ?? 'ABCD-EFGH';
 
   @override
   Uri get verificationUri => _verificationUri;
@@ -2620,8 +2768,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}

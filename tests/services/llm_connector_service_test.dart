@@ -34,6 +34,7 @@ void main() {
           'xai-oauth',
           'devin',
           'meta',
+          'muse-code',
           'gemini',
           'gemini-interactions',
           'aistudio',
@@ -44,6 +45,17 @@ void main() {
       );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
       expect(LlmConnectorRegistry.find('kimi-coding')!.authTypes, {'oauth'});
+      expect(LlmConnectorRegistry.find('meta')!.authTypes, {'api_key'});
+      expect(LlmConnectorRegistry.find('muse-code')!.authTypes, {'oauth'});
+      expect(LlmConnectorRegistry.find('muse-code')!.modelCatalog.toSet(), {
+        'muse-spark-1.3',
+        'muse-spark-1.3-contributor',
+        'muse-spark-1.2',
+        'muse-spark-1.2-contributor',
+        'muse-spark-1.1',
+      });
+      expect(LlmOAuthProviderPolicy.forProvider('muse-code').supported, isTrue);
+      expect(LlmOAuthProviderPolicy.forProvider('meta').supported, isFalse);
       expect(
         LlmOAuthProviderPolicy.forProvider('kimi-coding').supported,
         isTrue,
@@ -96,6 +108,63 @@ void main() {
         );
       }
     });
+
+    test(
+      'Muse OAuth catalog stays account-scoped and source-limited',
+      () async {
+        RequestOptions? catalogRequest;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            catalogRequest = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'muse-spark-1.3'},
+                  {'id': 'muse-private-preview'},
+                  {'id': 'text-embedding-3-large'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'muse-catalog',
+            connectorType: 'muse-code',
+            authType: 'oauth',
+            displayName: 'Muse',
+            models: [
+              const LlmUpstreamModel(
+                id: 'saved-stale-model',
+                upstreamModelId: 'muse-spark-1.1',
+                displayName: 'Stale saved model',
+              ),
+            ],
+          ),
+          secret: jsonEncode({'api_key': 'muse-key'}),
+        );
+
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(models.map((model) => model.upstreamModelId), [
+          'muse-spark-1.3',
+        ]);
+        expect(catalogRequest?.uri.toString(), 'https://api.meta.ai/v1/models');
+        expect(catalogRequest?.headers['Authorization'], 'Bearer muse-key');
+        expect(models.single.capabilities, {'chat': true, 'streaming': true});
+      },
+    );
 
     test('registers the approved API-key providers with honest auth types', () {
       final expectedApiKeyProviders = {
@@ -386,8 +455,7 @@ void main() {
         expect(
           (await service.discoverModels(
             account,
-          ))
-              .map((model) => model.upstreamModelId),
+          )).map((model) => model.upstreamModelId),
           contains('claude-sonnet-4-6'),
         );
       },
@@ -410,9 +478,13 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved = (jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map)['items'] as List;
+        final saved =
+            (jsonDecode(
+                      preferences.values[LlmAccountMigrationService
+                          .accountsPreferenceKey]!,
+                    )
+                    as Map)['items']
+                as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -602,26 +674,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            {
-              'id': 'legacy-anthropic',
-              'connectorType': 'anthropic',
-              'authType': 'api_key',
-              'displayName': 'Legacy Anthropic',
-              'credentialRef': sharedRef,
-              'endpointConfig': {'host': 'https://claude.example.test'},
-            },
-            {
-              'id': 'legacy-openai',
-              'connectorType': 'openai',
-              'authType': 'api_key',
-              'displayName': 'Legacy OpenAI',
-              'credentialRef': 'legacy-openai-credential',
-              'endpointConfig': {'host': 'https://openai.example.test/v1'},
-            },
-          ],
-        });
+              'version': 1,
+              'items': [
+                {
+                  'id': 'legacy-anthropic',
+                  'connectorType': 'anthropic',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy Anthropic',
+                  'credentialRef': sharedRef,
+                  'endpointConfig': {'host': 'https://claude.example.test'},
+                },
+                {
+                  'id': 'legacy-openai',
+                  'connectorType': 'openai',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy OpenAI',
+                  'credentialRef': 'legacy-openai-credential',
+                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
+                },
+              ],
+            });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -678,19 +750,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -731,19 +803,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -1078,60 +1150,71 @@ void main() {
       expect(models, isNotEmpty);
     });
 
-    test('discovers entitled Grok and xAI OAuth models from their own hosts',
-        () async {
-      for (final connectorType in ['grok-cli', 'xai-oauth']) {
-        RequestOptions? captured;
-        final dio = Dio()
-          ..httpClientAdapter = _FunctionalAdapter((options) async {
-            captured = options;
-            return ResponseBody.fromString(
-              jsonEncode({
-                'data': [
-                  {'id': connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6'},
-                  {'id': 'grok-4-image'},
-                ],
-              }),
-              200,
-              headers: const {
-                'content-type': ['application/json']
-              },
-            );
-          });
-        final accountService = LlmAccountConnectorService(
-          preferences: _MemoryPreferences(),
-          credentialStore: _MemoryCredentials(),
-          dio: dio,
-        );
-        final account = await accountService.saveAccount(
-          _account('catalog-$connectorType', connectorType, authType: 'oauth'),
-          secret: jsonEncode({'access_token': '$connectorType-access'}),
-        );
+    test(
+      'discovers entitled Grok and xAI OAuth models from their own hosts',
+      () async {
+        for (final connectorType in ['grok-cli', 'xai-oauth']) {
+          RequestOptions? captured;
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              captured = options;
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'data': [
+                    {
+                      'id': connectorType == 'grok-cli'
+                          ? 'grok-4.7'
+                          : 'grok-4.6',
+                    },
+                    {'id': 'grok-4-image'},
+                  ],
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final accountService = LlmAccountConnectorService(
+            preferences: _MemoryPreferences(),
+            credentialStore: _MemoryCredentials(),
+            dio: dio,
+          );
+          final account = await accountService.saveAccount(
+            _account(
+              'catalog-$connectorType',
+              connectorType,
+              authType: 'oauth',
+            ),
+            secret: jsonEncode({'access_token': '$connectorType-access'}),
+          );
 
-        final models = await accountService.discoverModels(
-          account,
-          refreshRemote: true,
-        );
+          final models = await accountService.discoverModels(
+            account,
+            refreshRemote: true,
+          );
 
-        expect(
-          captured?.uri.host,
-          connectorType == 'grok-cli' ? 'cli-chat-proxy.grok.com' : 'api.x.ai',
-        );
-        expect(captured?.uri.path, '/v1/models');
-        expect(
-          captured?.headers['Authorization'],
-          'Bearer $connectorType-access',
-        );
-        expect(
-          captured?.headers.containsKey('X-XAI-Token-Auth'),
-          connectorType == 'grok-cli',
-        );
-        expect(
-          models.map((model) => model.upstreamModelId),
-          [connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6'],
-        );
-      }
-    });
+          expect(
+            captured?.uri.host,
+            connectorType == 'grok-cli'
+                ? 'cli-chat-proxy.grok.com'
+                : 'api.x.ai',
+          );
+          expect(captured?.uri.path, '/v1/models');
+          expect(
+            captured?.headers['Authorization'],
+            'Bearer $connectorType-access',
+          );
+          expect(
+            captured?.headers.containsKey('X-XAI-Token-Auth'),
+            connectorType == 'grok-cli',
+          );
+          expect(models.map((model) => model.upstreamModelId), [
+            connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6',
+          ]);
+        }
+      },
+    );
 
     test('refreshes expired xAI OAuth before model discovery', () async {
       for (final connectorType in ['grok-cli', 'xai-oauth']) {
@@ -1156,7 +1239,7 @@ void main() {
               ),
               200,
               headers: const {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           });
@@ -1590,9 +1673,12 @@ void main() {
           ),
           secret: 'vertex-api-key',
         );
-        final accountsEnvelope = jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map<String, dynamic>;
+        final accountsEnvelope =
+            jsonDecode(
+                  preferences.values[LlmAccountMigrationService
+                      .accountsPreferenceKey]!,
+                )
+                as Map<String, dynamic>;
         final accountRecord = Map<String, dynamic>.from(
           (accountsEnvelope['items'] as List).single as Map,
         )..['authType'] = 'oauth';
@@ -1674,18 +1760,16 @@ void main() {
         expect(requests, hasLength(2), reason: connector);
         expect(requests.first.uri.path, '/v1/models', reason: connector);
         expect(
-          requests[1].uri.queryParameters[
-              connector == 'openai-api' ? 'after' : 'after_id'],
+          requests[1].uri.queryParameters[connector == 'openai-api'
+              ? 'after'
+              : 'after_id'],
           'model-first',
           reason: connector,
         );
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'model-first',
-              'model-second',
-            ],
-            reason: connector);
+        expect(models.map((model) => model.upstreamModelId), [
+          'model-first',
+          'model-second',
+        ], reason: connector);
       }
     });
 
@@ -2736,109 +2820,125 @@ void main() {
       },
     );
 
-    test('refreshes each xAI OAuth mode without crossing API-key identity',
-        () async {
-      final captured = <String, RequestOptions>{};
-      Object? responseScope;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured[options.uri.host] = options;
-          final tokenResponse = <String, Object?>{
-            'access_token': 'fresh-${options.data['refresh_token']}',
-            'refresh_token': 'rotated-${options.data['refresh_token']}',
-            'expires_in': 3600,
-          };
-          if (responseScope != null) tokenResponse['scope'] = responseScope;
-          return ResponseBody.fromString(
-            jsonEncode(tokenResponse),
-            200,
-            headers: const {
-              'content-type': ['application/json']
-            },
+    test(
+      'refreshes each xAI OAuth mode without crossing API-key identity',
+      () async {
+        final captured = <String, RequestOptions>{};
+        Object? responseScope;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured[options.uri.host] = options;
+            final tokenResponse = <String, Object?>{
+              'access_token': 'fresh-${options.data['refresh_token']}',
+              'refresh_token': 'rotated-${options.data['refresh_token']}',
+              'expires_in': 3600,
+            };
+            if (responseScope != null) tokenResponse['scope'] = responseScope;
+            return ResponseBody.fromString(
+              jsonEncode(tokenResponse),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final accountService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+
+        for (final connectorType in ['grok-cli', 'xai-oauth']) {
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
+          responseScope =
+              'openid profile email offline_access $expectedModeScope';
+          final account = await accountService.saveAccount(
+            _account(
+              'refresh-$connectorType',
+              connectorType,
+              authType: 'oauth',
+            ),
+            secret: jsonEncode({
+              'access_token': 'old-access',
+              'refresh_token': 'refresh-$connectorType',
+              'token_endpoint': 'https://auth.x.ai/oauth/token',
+              'identity_sub': 'xai-account',
+              'oauth_contract': 'xai-device-v1',
+              'scope': responseScope,
+            }),
           );
-        });
-      final accountService = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
 
-      for (final connectorType in ['grok-cli', 'xai-oauth']) {
-        final expectedModeScope =
-            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
-        responseScope =
-            'openid profile email offline_access $expectedModeScope';
-        final account = await accountService.saveAccount(
-          _account('refresh-$connectorType', connectorType, authType: 'oauth'),
-          secret: jsonEncode({
-            'access_token': 'old-access',
-            'refresh_token': 'refresh-$connectorType',
-            'token_endpoint': 'https://auth.x.ai/oauth/token',
-            'identity_sub': 'xai-account',
-            'oauth_contract': 'xai-device-v1',
-            'scope': responseScope,
-          }),
+          expect(await accountService.refreshCredential(account), isTrue);
+          final refreshed =
+              jsonDecode((await accountService.readCredential(account.id))!)
+                  as Map;
+          expect(captured['auth.x.ai']?.uri.path, '/oauth/token');
+          expect(
+            captured['auth.x.ai']?.data['client_id'],
+            'b1a00492-073a-47ea-816f-4c329264a828',
+          );
+          expect(refreshed['access_token'], 'fresh-refresh-$connectorType');
+          expect(refreshed['refresh_token'], 'rotated-refresh-$connectorType');
+          expect(refreshed['identity_sub'], 'xai-account');
+          expect(refreshed['token_endpoint'], 'https://auth.x.ai/oauth/token');
+          expect(refreshed['scope'], responseScope);
+        }
+
+        for (final connectorType in ['grok-cli', 'xai-oauth']) {
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
+          final oppositeModeScope = connectorType == 'grok-cli'
+              ? 'api:access'
+              : 'grok-cli:access';
+          responseScope =
+              'openid profile email offline_access $oppositeModeScope';
+          final account = await accountService.saveAccount(
+            _account(
+              'refresh-mismatch-$connectorType',
+              connectorType,
+              authType: 'oauth',
+            ),
+            secret: jsonEncode({
+              'access_token': 'old-access',
+              'refresh_token': 'refresh-mismatch-$connectorType',
+              'token_endpoint': 'https://auth.x.ai/oauth/token',
+              'identity_sub': 'xai-account',
+              'oauth_contract': 'xai-device-v1',
+              'scope': 'openid profile email offline_access $expectedModeScope',
+            }),
+          );
+
+          await expectLater(
+            accountService.refreshCredential(account),
+            throwsA(isA<LlmAccountConnectorException>()),
+          );
+          final unchanged =
+              jsonDecode((await accountService.readCredential(account.id))!)
+                  as Map;
+          expect(unchanged['access_token'], 'old-access');
+          expect(
+            unchanged['scope'],
+            'openid profile email offline_access $expectedModeScope',
+          );
+        }
+
+        final apiKeyAccount = await accountService.saveAccount(
+          _account('xai-api-key', 'xai'),
+          secret: 'public-api-key',
         );
-
-        expect(await accountService.refreshCredential(account), isTrue);
-        final refreshed = jsonDecode(
-          (await accountService.readCredential(account.id))!,
-        ) as Map;
-        expect(captured['auth.x.ai']?.uri.path, '/oauth/token');
-        expect(captured['auth.x.ai']?.data['client_id'],
-            'b1a00492-073a-47ea-816f-4c329264a828');
-        expect(refreshed['access_token'], 'fresh-refresh-$connectorType');
-        expect(refreshed['refresh_token'], 'rotated-refresh-$connectorType');
-        expect(refreshed['identity_sub'], 'xai-account');
-        expect(refreshed['token_endpoint'], 'https://auth.x.ai/oauth/token');
-        expect(refreshed['scope'], responseScope);
-      }
-
-      for (final connectorType in ['grok-cli', 'xai-oauth']) {
-        final expectedModeScope =
-            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
-        final oppositeModeScope =
-            connectorType == 'grok-cli' ? 'api:access' : 'grok-cli:access';
-        responseScope =
-            'openid profile email offline_access $oppositeModeScope';
-        final account = await accountService.saveAccount(
-          _account('refresh-mismatch-$connectorType', connectorType,
-              authType: 'oauth'),
-          secret: jsonEncode({
-            'access_token': 'old-access',
-            'refresh_token': 'refresh-mismatch-$connectorType',
-            'token_endpoint': 'https://auth.x.ai/oauth/token',
-            'identity_sub': 'xai-account',
-            'oauth_contract': 'xai-device-v1',
-            'scope': 'openid profile email offline_access $expectedModeScope',
-          }),
-        );
-
+        expect(await accountService.refreshCredential(apiKeyAccount), isFalse);
         await expectLater(
-          accountService.refreshCredential(account),
+          accountService.saveAccount(
+            _account('xai-api-key-as-oauth', 'xai', authType: 'oauth'),
+            secret: jsonEncode({'access_token': 'oauth-token'}),
+          ),
           throwsA(isA<LlmAccountConnectorException>()),
         );
-        final unchanged = jsonDecode(
-          (await accountService.readCredential(account.id))!,
-        ) as Map;
-        expect(unchanged['access_token'], 'old-access');
-        expect(unchanged['scope'],
-            'openid profile email offline_access $expectedModeScope');
-      }
-
-      final apiKeyAccount = await accountService.saveAccount(
-        _account('xai-api-key', 'xai'),
-        secret: 'public-api-key',
-      );
-      expect(await accountService.refreshCredential(apiKeyAccount), isFalse);
-      await expectLater(
-        accountService.saveAccount(
-          _account('xai-api-key-as-oauth', 'xai', authType: 'oauth'),
-          secret: jsonEncode({'access_token': 'oauth-token'}),
-        ),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-    });
+      },
+    );
 
     test(
       'does not refresh CLI-only OAuth credentials without public contracts',
@@ -2861,12 +2961,7 @@ void main() {
           dio: dio,
         );
 
-        for (final connector in [
-          'antigravity',
-          'kimi',
-          'kimi-ai',
-          'kimi.ai',
-        ]) {
+        for (final connector in ['antigravity', 'kimi', 'kimi-ai', 'kimi.ai']) {
           final account = await refreshService.saveAccount(
             _account('refresh-$connector', connector, authType: 'oauth'),
             secret: jsonEncode({
@@ -2978,7 +3073,7 @@ void main() {
     );
 
     test(
-      'does not mint Meta credentials from a private DCA OAuth token',
+      'mints Muse OAuth keys without exposing credentials in account metadata',
       () async {
         RequestOptions? mintRequest;
         final dio = Dio()
@@ -2989,6 +3084,8 @@ void main() {
                 'api_key': 'meta-private-api-key',
                 'base_url': 'https://api.meta.ai/v1',
                 'subs_tier_name': 'Pro',
+                'user_email': 'muse@example.test',
+                'is_subs_active': true,
               }),
               200,
               headers: const {
@@ -3002,20 +3099,94 @@ void main() {
           dio: dio,
         );
         final account = await refreshService.saveAccount(
-          _account('meta-dca', 'meta', authType: 'oauth'),
-          secret: jsonEncode({'dca_token': 'dca:private-session-token'}),
+          _account('muse-dca', 'muse-code', authType: 'oauth'),
+          secret: jsonEncode({
+            'dca_token': 'dca:fixture-device-token',
+            'email': 'muse@example.test',
+          }),
         );
 
         expect(
-          LlmConnectorRegistry.find('meta')?.canRefreshCredentials,
+          LlmConnectorRegistry.find('muse-code')?.canRefreshCredentials,
           isTrue,
         );
+        expect(await refreshService.refreshCredential(account), isTrue);
+        expect(
+          mintRequest?.uri.toString(),
+          'https://api.meta.ai/muse-code/key',
+        );
+        expect(
+          mintRequest?.headers['Authorization'],
+          'Bearer dca:fixture-device-token',
+        );
+        final refreshed =
+            jsonDecode((await refreshService.readCredential(account.id))!)
+                as Map;
         final preferencesJson = preferences.values.values.join();
-        expect(await refreshService.refreshCredential(account), isFalse);
-        expect(mintRequest, isNull);
-        expect(preferencesJson, isNot(contains('dca:private-session-token')));
+        expect(refreshed['api_key'], 'meta-private-api-key');
+        expect(refreshed['access_token'], 'meta-private-api-key');
+        expect(refreshed['email'], 'muse@example.test');
+        expect(preferencesJson, isNot(contains('meta-private-api-key')));
+        expect(preferencesJson, isNot(contains('dca:fixture-device-token')));
       },
     );
+
+    test('rejects Muse DCA refresh without active entitled identity', () async {
+      for (final minted in [
+        {'api_key': 'unexpected-key', 'user_email': 'muse@example.test'},
+        {
+          'api_key': 'unexpected-key',
+          'user_email': 'muse@example.test',
+          'is_subs_active': 'true',
+        },
+        {'api_key': 'unexpected-key', 'is_subs_active': true},
+        {
+          'api_key': 'unexpected-key',
+          'user_email': 'other@example.test',
+          'is_subs_active': true,
+        },
+      ]) {
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString(
+              jsonEncode(minted),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final accountService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await accountService.saveAccount(
+          _account(
+            'muse-refresh-reject-${minted.length}',
+            'muse-code',
+            authType: 'oauth',
+          ),
+          secret: jsonEncode({
+            'access_token': 'old-muse-key',
+            'api_key': 'old-muse-key',
+            'dca_token': 'dca:fixture-device-token',
+            'email': 'muse@example.test',
+          }),
+        );
+
+        await expectLater(
+          accountService.refreshCredential(account),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(
+          await accountService.readCredential(account.id),
+          contains('old-muse-key'),
+        );
+      }
+    });
   });
 
   group('LlmNativeRequestBuilder', () {
@@ -3254,28 +3425,48 @@ void main() {
       expect(request.uri.queryParameters.containsKey('beta'), isFalse);
     });
 
-    test('uses Responses for Codex, Grok Build, and Meta', () {
-      for (final connector in ['codex', 'grok-cli', 'meta']) {
+    test('uses Responses for Codex, Grok Build, and Muse OAuth', () {
+      for (final connector in ['codex', 'grok-cli', 'muse-code']) {
+        final modelId = connector == 'muse-code' ? 'muse-spark-1.3' : 'model-1';
+        final models = connector == 'muse-code'
+            ? [
+                LlmUpstreamModel(
+                  id: 'muse-model',
+                  upstreamModelId: modelId,
+                  displayName: modelId,
+                ),
+              ]
+            : connector == 'grok-cli'
+            ? [_upstreamModel('model-1')]
+            : const <LlmUpstreamModel>[];
+        final credential = connector == 'muse-code'
+            ? jsonEncode({
+                'access_token': 'muse-minted-key',
+                'api_key': 'muse-minted-key',
+                'dca_token': 'dca:muse-device-token',
+              })
+            : jsonEncode({
+                'access_token': '$connector-access',
+                if (connector == 'codex') 'account_id': 'codex-account-1',
+              });
         final request = builder.build(
           account: _account(
             '$connector-1',
             connector,
             authType: 'oauth',
-            models: connector == 'grok-cli'
-                ? [_upstreamModel('model-1')]
-                : const [],
+            models: models,
           ),
-          credential: jsonEncode({
-            'access_token': '$connector-access',
-            if (connector == 'codex') 'account_id': 'codex-account-1',
-          }),
-          modelId: 'model-1',
-          body: const {'model': 'model-1', 'input': []},
+          credential: credential,
+          modelId: modelId,
+          body: {'model': modelId, 'input': []},
         );
 
         expect(request.uri.path, endsWith('/responses'), reason: connector);
         expect(request.method, 'POST');
-        expect(request.headers['Authorization'], 'Bearer $connector-access');
+        expect(
+          request.headers['Authorization'],
+          'Bearer ${connector == 'muse-code' ? 'muse-minted-key' : '$connector-access'}',
+        );
         if (connector == 'codex') {
           expect(request.headers['Chatgpt-Account-Id'], 'codex-account-1');
         }
@@ -3323,47 +3514,51 @@ void main() {
       }
     });
 
-    test('keeps Grok Build and native xAI OAuth request contracts separate',
-        () {
-      final grok = builder.build(
-        account: _account(
-          'grok-build',
-          'grok-cli',
-          authType: 'oauth',
-          models: [_upstreamModel('grok-4.7')],
-        ),
-        credential: jsonEncode({'access_token': 'grok-build-access'}),
-        modelId: 'grok-4.7',
-        body: const {'model': 'grok-4.7', 'input': []},
-        nativeFormat: 'responses',
-      );
-      final xai = builder.build(
-        account: _account(
-          'xai-oauth',
-          'xai-oauth',
-          authType: 'oauth',
-          models: [_upstreamModel('grok-4.7')],
-        ),
-        credential: jsonEncode({'access_token': 'xai-api-access'}),
-        modelId: 'grok-4.7',
-        body: const {'model': 'grok-4.7', 'input': []},
-        nativeFormat: 'responses',
-      );
+    test(
+      'keeps Grok Build and native xAI OAuth request contracts separate',
+      () {
+        final grok = builder.build(
+          account: _account(
+            'grok-build',
+            'grok-cli',
+            authType: 'oauth',
+            models: [_upstreamModel('grok-4.7')],
+          ),
+          credential: jsonEncode({'access_token': 'grok-build-access'}),
+          modelId: 'grok-4.7',
+          body: const {'model': 'grok-4.7', 'input': []},
+          nativeFormat: 'responses',
+        );
+        final xai = builder.build(
+          account: _account(
+            'xai-oauth',
+            'xai-oauth',
+            authType: 'oauth',
+            models: [_upstreamModel('grok-4.7')],
+          ),
+          credential: jsonEncode({'access_token': 'xai-api-access'}),
+          modelId: 'grok-4.7',
+          body: const {'model': 'grok-4.7', 'input': []},
+          nativeFormat: 'responses',
+        );
 
-      expect(
-          grok.uri, Uri.parse('https://cli-chat-proxy.grok.com/v1/responses'));
-      expect(grok.headers['Authorization'], 'Bearer grok-build-access');
-      expect(grok.headers['X-XAI-Token-Auth'], 'xai-grok-cli');
-      expect(grok.headers['x-grok-client-identifier'], 'grok-shell');
-      expect(
-        (grok.body as Map)['include'],
-        contains('reasoning.encrypted_content'),
-      );
-      expect(xai.uri, Uri.parse('https://api.x.ai/v1/responses'));
-      expect(xai.headers['Authorization'], 'Bearer xai-api-access');
-      expect(xai.headers.containsKey('X-XAI-Token-Auth'), isFalse);
-      expect(xai.headers.containsKey('x-grok-client-identifier'), isFalse);
-    });
+        expect(
+          grok.uri,
+          Uri.parse('https://cli-chat-proxy.grok.com/v1/responses'),
+        );
+        expect(grok.headers['Authorization'], 'Bearer grok-build-access');
+        expect(grok.headers['X-XAI-Token-Auth'], 'xai-grok-cli');
+        expect(grok.headers['x-grok-client-identifier'], 'grok-shell');
+        expect(
+          (grok.body as Map)['include'],
+          contains('reasoning.encrypted_content'),
+        );
+        expect(xai.uri, Uri.parse('https://api.x.ai/v1/responses'));
+        expect(xai.headers['Authorization'], 'Bearer xai-api-access');
+        expect(xai.headers.containsKey('X-XAI-Token-Auth'), isFalse);
+        expect(xai.headers.containsKey('x-grok-client-identifier'), isFalse);
+      },
+    );
 
     test('sets native body stream flags for body-controlled protocols', () {
       final cases = <(LlmAccount, String?, String?)>[
@@ -3845,8 +4040,7 @@ void main() {
       );
     });
 
-    test('prepares API-key AI Studio requests for Generative Language HTTP',
-        () {
+    test('prepares API-key AI Studio requests for Generative Language HTTP', () {
       const content = {
         'contents': [
           {
@@ -4163,64 +4357,64 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
-    test('executes both xAI OAuth modes on their own host and auth route',
-        () async {
-      for (final connectorType in ['grok-cli', 'xai-oauth']) {
-        RequestOptions? captured;
-        final dio = Dio()
-          ..httpClientAdapter = _FunctionalAdapter((options) async {
-            captured = options;
-            return ResponseBody.fromString(
-              jsonEncode({'output_text': 'reply'}),
-              200,
-              headers: const {
-                'content-type': ['application/json']
-              },
-            );
-          });
-        final credentials = _MemoryCredentials();
-        final accounts = LlmAccountConnectorService(
-          preferences: _MemoryPreferences(),
-          credentialStore: credentials,
-        );
-        final account = await accounts.saveAccount(
-          _account(
-            'http-$connectorType',
-            connectorType,
-            authType: 'oauth',
-            models: [
-              _upstreamModel('grok-4.7'),
-            ],
-          ),
-          secret: jsonEncode({'access_token': '$connectorType-access'}),
-        );
-        final client = LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        );
+    test(
+      'executes both xAI OAuth modes on their own host and auth route',
+      () async {
+        for (final connectorType in ['grok-cli', 'xai-oauth']) {
+          RequestOptions? captured;
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              captured = options;
+              return ResponseBody.fromString(
+                jsonEncode({'output_text': 'reply'}),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final credentials = _MemoryCredentials();
+          final accounts = LlmAccountConnectorService(
+            preferences: _MemoryPreferences(),
+            credentialStore: credentials,
+          );
+          final account = await accounts.saveAccount(
+            _account(
+              'http-$connectorType',
+              connectorType,
+              authType: 'oauth',
+              models: [_upstreamModel('grok-4.7')],
+            ),
+            secret: jsonEncode({'access_token': '$connectorType-access'}),
+          );
+          final client = LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          );
 
-        await client.request(
-          account: account,
-          modelId: 'grok-4.7',
-          body: const {'model': 'fixture-model', 'input': []},
-          nativeFormat: 'responses',
-        );
+          await client.request(
+            account: account,
+            modelId: 'grok-4.7',
+            body: const {'model': 'fixture-model', 'input': []},
+            nativeFormat: 'responses',
+          );
 
-        final expectedHost = connectorType == 'grok-cli'
-            ? 'cli-chat-proxy.grok.com'
-            : 'api.x.ai';
-        expect(captured?.uri.host, expectedHost);
-        expect(captured?.uri.path, '/v1/responses');
-        expect(
-          captured?.headers['Authorization'],
-          'Bearer $connectorType-access',
-        );
-        expect(
-          captured?.headers.containsKey('X-XAI-Token-Auth'),
-          connectorType == 'grok-cli',
-        );
-      }
-    });
+          final expectedHost = connectorType == 'grok-cli'
+              ? 'cli-chat-proxy.grok.com'
+              : 'api.x.ai';
+          expect(captured?.uri.host, expectedHost);
+          expect(captured?.uri.path, '/v1/responses');
+          expect(
+            captured?.headers['Authorization'],
+            'Bearer $connectorType-access',
+          );
+          expect(
+            captured?.headers.containsKey('X-XAI-Token-Auth'),
+            connectorType == 'grok-cli',
+          );
+        }
+      },
+    );
 
     test('sends and decodes public xAI and Meta Responses requests', () async {
       for (final connectorType in ['xai', 'meta']) {
@@ -4389,20 +4583,21 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-            'max_tokens': 100,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+                'max_tokens': 100,
+              },
+            );
 
         final preferencesJson = preferences.values.values.join();
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
@@ -4644,8 +4839,7 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route',
-        () async {
+    test('executes each pinned HTTP connector through its native route', () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -4684,6 +4878,28 @@ void main() {
           'meta-api-key',
           'https://api.meta.ai/v1/responses',
           const {'model': 'muse-code-model', 'input': []},
+        ),
+        (
+          _account(
+            'native-muse-code',
+            'muse-code',
+            authType: 'oauth',
+            models: [
+              const LlmUpstreamModel(
+                id: 'muse-model',
+                upstreamModelId: 'muse-spark-1.3',
+                displayName: 'Muse Spark',
+              ),
+            ],
+          ),
+          jsonEncode({
+            'access_token': 'muse-minted-key',
+            'api_key': 'muse-minted-key',
+            'dca_token': 'dca:muse-device-token',
+            'email': 'muse@example.test',
+          }),
+          'https://api.meta.ai/v1/responses',
+          const {'model': 'muse-spark-1.3', 'input': []},
         ),
         (
           _account('native-gemini', 'gemini'),
@@ -4758,6 +4974,7 @@ void main() {
         final saved = await accounts.saveAccount(account, secret: secret);
         final modelId = switch (account.connectorType) {
           'gemini' || 'gemini-interactions' || 'vertex' => 'gemini-3.1-pro',
+          'muse-code' => 'muse-spark-1.3',
           _ => 'connector-test-model',
         };
         await client.request(account: saved, modelId: modelId, body: body);
@@ -4768,10 +4985,18 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
+      final museRequest = requests.firstWhere(
+        (request) =>
+            request.uri.host == 'api.meta.ai' &&
+            (request.data as Map)['model'] == 'muse-spark-1.3',
+      );
+      expect(museRequest.headers['Authorization'], 'Bearer muse-minted-key');
+      expect(museRequest.headers['X-Client-Id'], 'tbh:tui');
+      expect(museRequest.headers['User-Agent'], contains('muse-build/1.3.0'));
     });
 
     test(
-      'does not route Meta CLI OAuth through its private mint endpoint',
+      'does not allow legacy Meta API-key accounts to use OAuth credentials',
       () async {
         var requestsSent = 0;
         final dio = Dio()
@@ -4784,18 +5009,12 @@ void main() {
           credentialStore: _MemoryCredentials(),
           dio: dio,
         );
-        final account = await accounts.saveAccount(
-          _account('meta-request', 'meta', authType: 'oauth'),
-          secret: jsonEncode({'dca_token': 'dca:request-token'}),
-        );
-
         await expectLater(
-          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-            account: account,
-            modelId: 'muse-code-model',
-            body: const {'model': 'muse-code-model', 'input': []},
+          accounts.saveAccount(
+            _account('meta-request', 'meta', authType: 'oauth'),
+            secret: jsonEncode({'dca_token': 'dca:request-token'}),
           ),
-          throwsA(isA<LlmConnectorAuthenticationRequired>()),
+          throwsA(isA<LlmAccountConnectorException>()),
         );
         expect(requestsSent, 0);
       },
@@ -4860,11 +5079,13 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims = jsonDecode(
-          utf8.decode(
-            base64Url.decode(base64Url.normalize(assertionParts[1])),
-          ),
-        ) as Map;
+        final claims =
+            jsonDecode(
+                  utf8.decode(
+                    base64Url.decode(base64Url.normalize(assertionParts[1])),
+                  ),
+                )
+                as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -5033,14 +5254,15 @@ void main() {
         _account('aistudio-http', 'aistudio'),
         secret: 'aistudio-test-api-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -5051,8 +5273,7 @@ void main() {
       expect(response.body, {'candidates': []});
     });
 
-    test('executes AI Studio OAuth requests with project attribution',
-        () async {
+    test('executes AI Studio OAuth requests with project attribution', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -5084,14 +5305,15 @@ void main() {
           'client_secret': 'aistudio-test-client-secret',
         }),
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -5113,16 +5335,16 @@ void main() {
         final preferences = _MemoryPreferences()
           ..values[LlmAccountMigrationService.accountsPreferenceKey] =
               jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': 'legacy-aistudio-relay',
-                'connectorType': 'aistudio',
-                'authType': 'relay',
-                'displayName': 'Legacy AI Studio session',
-              },
-            ],
-          });
+                'version': 1,
+                'items': [
+                  {
+                    'id': 'legacy-aistudio-relay',
+                    'connectorType': 'aistudio',
+                    'authType': 'relay',
+                    'displayName': 'Legacy AI Studio session',
+                  },
+                ],
+              });
         final accounts = LlmAccountConnectorService(
           preferences: preferences,
           credentialStore: _MemoryCredentials(),
@@ -5165,15 +5387,16 @@ void main() {
         _account('aistudio-stream', 'aistudio'),
         secret: 'aistudio-test-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+            stream: true,
+          );
       final event = utf8.encode('data: {"candidates":[]}\n\n');
       source.add(Uint8List.fromList(event));
       await source.close();
@@ -5295,15 +5518,16 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -5374,15 +5598,16 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -5392,8 +5617,9 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end =
-              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
+          final end = offset + 32768 < bytes.length
+              ? offset + 32768
+              : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -5432,15 +5658,16 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -5482,15 +5709,16 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -5534,15 +5762,16 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -5783,11 +6012,11 @@ void main() {
         final cancelToken = CancelToken();
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          cancelToken: cancelToken,
-        );
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              cancelToken: cancelToken,
+            );
 
         await refreshStarted.future;
         cancelToken.cancel('caller cancelled');
@@ -5878,11 +6107,11 @@ void main() {
         );
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'private-model',
-          body: const {'model': 'private-model', 'messages': []},
-          stream: true,
-        );
+              account: account,
+              modelId: 'private-model',
+              body: const {'model': 'private-model', 'messages': []},
+              stream: true,
+            );
 
         try {
           await expectLater(
@@ -5907,22 +6136,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-        'version': 1,
-        'items': [
-          {
-            'id': 'legacy-anthropic-quota',
-            'connectorType': 'anthropic',
-            'authType': 'api_key',
-            'displayName': 'Legacy Anthropic',
-          },
-          {
-            'id': 'legacy-openai-quota',
-            'connectorType': 'openai',
-            'authType': 'api_key',
-            'displayName': 'Legacy OpenAI',
-          },
-        ],
-      });
+            'version': 1,
+            'items': [
+              {
+                'id': 'legacy-anthropic-quota',
+                'connectorType': 'anthropic',
+                'authType': 'api_key',
+                'displayName': 'Legacy Anthropic',
+              },
+              {
+                'id': 'legacy-openai-quota',
+                'connectorType': 'openai',
+                'authType': 'api_key',
+                'displayName': 'Legacy OpenAI',
+              },
+            ],
+          });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -6274,15 +6503,9 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation(
-          'gemini',
-          {
-            'usageMetadata': {
-              'promptTokenCount': 12,
-              'candidatesTokenCount': 8
-            },
-          },
-          observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation('gemini', {
+        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
+      }, observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -6368,22 +6591,22 @@ void main() {
 }
 
 Uint8List _bedrockTestStream() => Uint8List.fromList([
-      ..._bedrockEvent('messageStart', {
-        'messageStart': {'role': 'assistant'},
-      }),
-      ..._bedrockEvent('contentBlockDelta', {
-        'contentBlockIndex': 0,
-        'delta': {'text': 'Bedrock answer'},
-      }),
-      ..._bedrockEvent('messageStop', {
-        'messageStop': {'stopReason': 'end_turn'},
-      }),
-      ..._bedrockEvent('metadata', {
-        'metadata': {
-          'usage': {'inputTokens': 7, 'outputTokens': 3},
-        },
-      }),
-    ]);
+  ..._bedrockEvent('messageStart', {
+    'messageStart': {'role': 'assistant'},
+  }),
+  ..._bedrockEvent('contentBlockDelta', {
+    'contentBlockIndex': 0,
+    'delta': {'text': 'Bedrock answer'},
+  }),
+  ..._bedrockEvent('messageStop', {
+    'messageStop': {'stopReason': 'end_turn'},
+  }),
+  ..._bedrockEvent('metadata', {
+    'metadata': {
+      'usage': {'inputTokens': 7, 'outputTokens': 3},
+    },
+  }),
+]);
 
 Uint8List _bedrockEvent(String name, Map<String, dynamic> payload) {
   final encodedName = utf8.encode(':event-type');
@@ -6481,20 +6704,19 @@ LlmAccount _account(
   String connector, {
   String authType = 'api_key',
   List<LlmUpstreamModel> models = const [],
-}) =>
-    LlmAccount(
-      id: id,
-      connectorType: connector,
-      authType: authType,
-      displayName: connector,
-      models: models,
-    );
+}) => LlmAccount(
+  id: id,
+  connectorType: connector,
+  authType: authType,
+  displayName: connector,
+  models: models,
+);
 
 LlmUpstreamModel _upstreamModel(String modelId) => LlmUpstreamModel(
-      id: 'model-$modelId',
-      upstreamModelId: modelId,
-      displayName: modelId,
-    );
+  id: 'model-$modelId',
+  upstreamModelId: modelId,
+  displayName: modelId,
+);
 
 Map<String, String> _requestForm(Object? body) {
   if (body is Map) return body.map((key, value) => MapEntry('$key', '$value'));
@@ -6558,8 +6780,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}
