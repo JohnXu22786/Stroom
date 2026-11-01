@@ -70,6 +70,12 @@ const kPinnedKimiModels = <String>[
   'kimi-k3-256k',
 ];
 
+// CLIProxyAPI's Kimi executor normalizes coding-plan aliases to these IDs.
+const kPinnedKimiCodeModels = <String>[
+  'kimi-for-coding',
+  'kimi-for-coding-highspeed',
+];
+
 const kPinnedXaiModels = <String>[
   'grok-4.7',
   'grok-4.7-build-fast',

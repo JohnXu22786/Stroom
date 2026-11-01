@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,6 +9,157 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test(
+    'Kimi Code device authorization exchanges a polled grant safely',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          if (request.uri.path.endsWith('/device_authorization')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'fixture-device-code',
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://www.kimi.com/code/verify',
+                'verification_uri_complete':
+                    'https://www.kimi.com/code/verify?user_code=ABCD-EFGH',
+                'expires_in': 600,
+                'interval': 5,
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'fixture-access-token',
+              'refresh_token': 'fixture-refresh-token',
+              'token_type': 'Bearer',
+              'scope': 'user:inference',
+              'expires_in': 3600,
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
+
+      final deviceCode = await client.startKimiDeviceAuthorization(
+        deviceId: 'stroom-device-1',
+      );
+      final pollingStarted = Stopwatch()..start();
+      final token = await client.pollKimiDeviceAuthorization(
+        deviceCode: deviceCode,
+        deviceId: 'stroom-device-1',
+      );
+
+      expect(
+        pollingStarted.elapsed,
+        greaterThanOrEqualTo(const Duration(seconds: 5)),
+      );
+      expect(requests, hasLength(2));
+      expect(requests.first.uri.host, 'auth.kimi.com');
+      expect(requests.first.uri.path, '/api/oauth/device_authorization');
+      expect(requests.first.headers['X-Msh-Platform'], 'CLIProxyAPI');
+      expect(requests.first.headers['X-Msh-Device-Id'], 'stroom-device-1');
+      expect(deviceCode.userCode, 'ABCD-EFGH');
+      expect(deviceCode.verificationUriComplete.host, 'www.kimi.com');
+      expect(requests.last.uri.path, '/api/oauth/token');
+      expect(requests.last.headers['X-Msh-Platform'], 'CLIProxyAPI');
+      expect(requests.last.data.toString(), contains('fixture-device-code'));
+      expect(requests.last.data.toString(), contains('grant_type'));
+      expect(requests.last.data.toString(), contains('device_code'));
+      expect(token['access_token'], 'fixture-access-token');
+      expect(token['refresh_token'], 'fixture-refresh-token');
+      expect(token['device_id'], 'stroom-device-1');
+      expect(token['oauth_contract'], 'kimi-code-device-v1');
+      expect(requests.last.toString(), isNot(contains('fixture-access-token')));
+    },
+  );
+
+  test('Kimi Code cancellation interrupts a pending polling delay', () async {
+    final responseReturned = Completer<void>();
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        responseReturned.complete();
+        return ResponseBody.fromString(
+          jsonEncode({'error': 'authorization_pending'}),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final cancelToken = CancelToken();
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = LlmKimiDeviceCode.fromOAuthResponse(
+      deviceCode: 'fixture-device-code',
+      userCode: 'ABCD-EFGH',
+      verificationUri: Uri.parse('https://www.kimi.com/code/verify'),
+      verificationUriComplete: Uri.parse(
+        'https://www.kimi.com/code/verify?user_code=ABCD-EFGH',
+      ),
+      expiresIn: const Duration(minutes: 1),
+      interval: const Duration(seconds: 5),
+    );
+    final polling = client.pollKimiDeviceAuthorization(
+      deviceCode: deviceCode,
+      deviceId: 'stroom-device-1',
+      cancelToken: cancelToken,
+    );
+
+    await responseReturned.future;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final stopwatch = Stopwatch()..start();
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+  });
+
+  test('Kimi Code cancellation interrupts the initial polling delay', () async {
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        tokenRequests++;
+        return ResponseBody.fromString(
+          jsonEncode({'error': 'authorization_pending'}),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final cancelToken = CancelToken();
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = LlmKimiDeviceCode.fromOAuthResponse(
+      deviceCode: 'fixture-device-code',
+      userCode: 'ABCD-EFGH',
+      verificationUri: Uri.parse('https://www.kimi.com/code/verify'),
+      verificationUriComplete: Uri.parse(
+        'https://www.kimi.com/code/verify?user_code=ABCD-EFGH',
+      ),
+      expiresIn: const Duration(minutes: 1),
+      interval: const Duration(seconds: 5),
+    );
+    final polling = client.pollKimiDeviceAuthorization(
+      deviceCode: deviceCode,
+      deviceId: 'stroom-device-1',
+      cancelToken: cancelToken,
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(tokenRequests, 0);
+  });
+
   group('LlmOAuthAuthorizationAttempt', () {
     test('creates separate ChatGPT registration attempts with PKCE', () {
       final callback = Uri.parse('http://127.0.0.1:54321/auth/callback');
@@ -148,13 +300,15 @@ void main() {
         hostId: 'urn:uuid:host',
       );
 
-      final callback = attempt.consumeCallback(redirect.replace(
-        queryParameters: {
-          'code': 'opaque#code-suffix',
-          'state': attempt.state,
-          'client_id': 'oaiapp_registered-client',
-        },
-      ));
+      final callback = attempt.consumeCallback(
+        redirect.replace(
+          queryParameters: {
+            'code': 'opaque#code-suffix',
+            'state': attempt.state,
+            'client_id': 'oaiapp_registered-client',
+          },
+        ),
+      );
 
       expect(callback.code, 'opaque#code-suffix');
     });
@@ -238,10 +392,7 @@ void main() {
         attempt.authorizationUri.queryParameters['redirect_uri'],
         redirect.toString(),
       );
-      expect(
-        attempt.authorizationUri.queryParameters['response_type'],
-        'code',
-      );
+      expect(attempt.authorizationUri.queryParameters['response_type'], 'code');
       expect(attempt.authorizationUri.queryParameters['code'], 'true');
       expect(
         attempt.authorizationUri.queryParameters['scope']!.split(' '),
@@ -260,15 +411,19 @@ void main() {
         isNot(attempt.codeVerifier),
       );
 
-      final callback = attempt.consumeCallback(redirect.replace(
-        queryParameters: {'code': 'claude-code', 'state': attempt.state},
-      ));
+      final callback = attempt.consumeCallback(
+        redirect.replace(
+          queryParameters: {'code': 'claude-code', 'state': attempt.state},
+        ),
+      );
       expect(callback.code, 'claude-code');
       expect(callback.clientId, '9d1c250a-e61b-44d9-88ed-5944d1962f5e');
       expect(
-        () => attempt.consumeCallback(redirect.replace(
-          queryParameters: {'code': 'second-use', 'state': attempt.state},
-        )),
+        () => attempt.consumeCallback(
+          redirect.replace(
+            queryParameters: {'code': 'second-use', 'state': attempt.state},
+          ),
+        ),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       final fragmentAttempt = LlmOAuthAuthorizationAttempt.claudeCode(
@@ -276,12 +431,14 @@ void main() {
       );
       expect(
         fragmentAttempt
-            .consumeCallback(redirect.replace(
-              queryParameters: {
-                'code': 'fragment-code#${fragmentAttempt.state}',
-                'state': fragmentAttempt.state,
-              },
-            ))
+            .consumeCallback(
+              redirect.replace(
+                queryParameters: {
+                  'code': 'fragment-code#${fragmentAttempt.state}',
+                  'state': fragmentAttempt.state,
+                },
+              ),
+            )
             .code,
         'fragment-code',
       );
@@ -295,55 +452,56 @@ void main() {
     });
   });
 
-  test('exchanges Claude Code PKCE credentials and keeps returned identity',
-      () async {
-    RequestOptions? captured;
-    final dio = Dio()
-      ..httpClientAdapter = _OAuthAdapter((options) async {
-        captured = options;
-        return ResponseBody.fromString(
-          jsonEncode({
-            'access_token': 'claude-access',
-            'refresh_token': 'claude-refresh',
-            'expires_in': 3600,
-            'account': {
-              'uuid': 'account-uuid',
-              'email_address': 'a@example.test',
-            },
-            'organization': {'uuid': 'org-uuid', 'name': 'Example Org'},
-          }),
-          200,
-        );
-      });
-    final attempt = LlmOAuthAuthorizationAttempt.claudeCode(
-      redirectUri: Uri.parse('http://localhost:54545/callback'),
-    );
-    final callbackUri = attempt.redirectUri.replace(
-      queryParameters: {'code': 'one-time-code', 'state': attempt.state},
-    );
-    final callback = attempt.consumeCallback(callbackUri);
+  test(
+    'exchanges Claude Code PKCE credentials and keeps returned identity',
+    () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'claude-access',
+              'refresh_token': 'claude-refresh',
+              'expires_in': 3600,
+              'account': {
+                'uuid': 'account-uuid',
+                'email_address': 'a@example.test',
+              },
+              'organization': {'uuid': 'org-uuid', 'name': 'Example Org'},
+            }),
+            200,
+          );
+        });
+      final attempt = LlmOAuthAuthorizationAttempt.claudeCode(
+        redirectUri: Uri.parse('http://localhost:54545/callback'),
+      );
+      final callbackUri = attempt.redirectUri.replace(
+        queryParameters: {'code': 'one-time-code', 'state': attempt.state},
+      );
+      final callback = attempt.consumeCallback(callbackUri);
 
-    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeClaudeCode(
-      attempt: attempt,
-      callback: callback,
-    );
+      final bundle = await LlmOAuthTokenClient(
+        dio: dio,
+      ).exchangeClaudeCode(attempt: attempt, callback: callback);
 
-    expect(
-      captured?.uri.toString(),
-      'https://platform.claude.com/v1/oauth/token',
-    );
-    expect(captured?.data, containsPair('grant_type', 'authorization_code'));
-    expect(
-      captured?.data,
-      containsPair('code_verifier', attempt.codeVerifier),
-    );
-    expect(bundle['access_token'], 'claude-access');
-    expect(bundle['refresh_token'], 'claude-refresh');
-    expect(bundle['account_uuid'], 'account-uuid');
-    expect(bundle['email'], 'a@example.test');
-    expect(bundle['organization_uuid'], 'org-uuid');
-    expect(bundle['organization_name'], 'Example Org');
-  });
+      expect(
+        captured?.uri.toString(),
+        'https://platform.claude.com/v1/oauth/token',
+      );
+      expect(captured?.data, containsPair('grant_type', 'authorization_code'));
+      expect(
+        captured?.data,
+        containsPair('code_verifier', attempt.codeVerifier),
+      );
+      expect(bundle['access_token'], 'claude-access');
+      expect(bundle['refresh_token'], 'claude-refresh');
+      expect(bundle['account_uuid'], 'account-uuid');
+      expect(bundle['email'], 'a@example.test');
+      expect(bundle['organization_uuid'], 'org-uuid');
+      expect(bundle['organization_name'], 'Example Org');
+    },
+  );
 
   test(
     'rejects a ChatGPT token response without the direct-token scope',

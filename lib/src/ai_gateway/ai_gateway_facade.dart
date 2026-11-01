@@ -11,6 +11,7 @@ import '../../models/llm_account.dart';
 import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
 import '../../services/llm_connector_http_client.dart';
+import '../../services/llm_connector_model_catalog.dart';
 import '../../services/llm_credential_store.dart';
 import '../../services/llm_oauth_flow.dart';
 import '../../services/llm_oauth_loopback.dart';
@@ -696,6 +697,32 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKimiCodeDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (account.connectorType != 'kimi-coding' ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      final deviceId = const Uuid().v4();
+      final code = await _tokenClient.startKimiDeviceAuthorization(
+        deviceId: deviceId,
+      );
+      return _LlmKimiCodeDeviceAuthorization(
+        account: account,
+        deviceCode: code,
+        deviceId: deviceId,
+        tokenClient: _tokenClient,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<void> revoke(AiGatewayAccount account) async {
     try {
       if (account.authType != 'oauth') {
@@ -722,9 +749,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       await _accountManagement.deleteAccount(account.id);
       return true;
     }
-    if (account.connectorType == 'claude') {
-      // The pinned Claude Code OAuth contract provides token refresh but no
-      // revocation endpoint; removing the local secure credential is complete.
+    if (account.connectorType == 'claude' ||
+        account.connectorType == 'kimi-coding') {
+      // These OAuth contracts provide token refresh but no revocation endpoint;
+      // removing the local secure credential is complete.
       await _accountManagement.deleteAccount(account.id);
       return true;
     }
@@ -840,6 +868,94 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   static bool _isGoogleCloudProjectId(Object? value) =>
       value is String &&
       RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$').hasMatch(value.trim());
+}
+
+class _LlmKimiCodeDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmKimiDeviceCode _deviceCode;
+  final String _deviceId;
+  final LlmOAuthTokenClient _tokenClient;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmKimiCodeDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmKimiDeviceCode deviceCode,
+    required String deviceId,
+    required LlmOAuthTokenClient tokenClient,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _deviceId = deviceId,
+        _tokenClient = tokenClient,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.verificationUri;
+
+  @override
+  Uri get verificationUriComplete => _deviceCode.verificationUriComplete;
+
+  @override
+  String get userCode => _deviceCode.userCode;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final tokenBundle = await _tokenClient.pollKimiDeviceAuthorization(
+        deviceCode: _deviceCode,
+        deviceId: _deviceId,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+      final models = _account.models.isNotEmpty
+          ? _account.models
+          : [
+              for (var index = 0; index < kPinnedKimiCodeModels.length; index++)
+                AiGatewayUpstreamModel(
+                  id: '${_account.id}:catalog:$index',
+                  upstreamModelId: kPinnedKimiCodeModels[index],
+                  displayName: kPinnedKimiCodeModels[index],
+                  capabilities: const {'chat': true, 'streaming': true},
+                  config: const {
+                    'catalogSource':
+                        'CLIProxyAPI@$kLlmConnectorReferenceRevision',
+                  },
+                ),
+            ];
+      return await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: _account.authType,
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          models: models,
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(tokenBundle),
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
 }
 
 class LlmChatRouteDiagnostic {

@@ -19,12 +19,11 @@ class LlmOAuthProviderPolicy {
   static const _policies = <String, LlmOAuthProviderPolicy>{
     'codex': LlmOAuthProviderPolicy._(providerId: 'codex', supported: true),
     'gemini': LlmOAuthProviderPolicy._(providerId: 'gemini', supported: true),
-    'aistudio':
-        LlmOAuthProviderPolicy._(providerId: 'aistudio', supported: true),
-    'claude': LlmOAuthProviderPolicy._(
-      providerId: 'claude',
+    'aistudio': LlmOAuthProviderPolicy._(
+      providerId: 'aistudio',
       supported: true,
     ),
+    'claude': LlmOAuthProviderPolicy._(providerId: 'claude', supported: true),
     'antigravity': LlmOAuthProviderPolicy._(
       providerId: 'antigravity',
       supported: false,
@@ -54,6 +53,10 @@ class LlmOAuthProviderPolicy {
       supported: false,
       reason:
           'Kimi Code CLI sign-in is not documented as a third-party inference authorization; the public model API uses API keys.',
+    ),
+    'kimi-coding': LlmOAuthProviderPolicy._(
+      providerId: 'kimi-coding',
+      supported: true,
     ),
     'google-code-assist': LlmOAuthProviderPolicy._(
       providerId: 'google-code-assist',
@@ -91,9 +94,50 @@ class LlmOAuthCallbackResult {
   });
 }
 
+/// Verification details returned by Kimi Code's device authorization grant.
+/// The device code remains in memory and is never surfaced by this object.
+class LlmKimiDeviceCode {
+  final String _deviceCode;
+  final String userCode;
+  final Uri verificationUri;
+  final Uri verificationUriComplete;
+  final Duration expiresIn;
+  final Duration interval;
+
+  /// Opaque value passed only to the Kimi token-poll request.
+  String get deviceCode => _deviceCode;
+
+  factory LlmKimiDeviceCode.fromOAuthResponse({
+    required String deviceCode,
+    required String userCode,
+    required Uri verificationUri,
+    required Uri verificationUriComplete,
+    required Duration expiresIn,
+    required Duration interval,
+  }) =>
+      LlmKimiDeviceCode._(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        expiresIn: expiresIn,
+        interval: interval,
+      );
+
+  const LlmKimiDeviceCode._({
+    required String deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.verificationUriComplete,
+    required this.expiresIn,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+}
+
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in
 /// memory until the matching loopback response is consumed.
 class LlmOAuthAuthorizationAttempt {
+  static const kimiCodeClientId = '17e5f671-d194-4dfb-9706-5516cb48c098';
   static const openAiIssuer = 'https://auth.openai.com';
   static const openAiResource = 'https://api.openai.com/v1';
   static const openAiDynamicClientId = 'dynamic_agent_client';
@@ -215,9 +259,7 @@ class LlmOAuthAuthorizationAttempt {
     );
   }
 
-  factory LlmOAuthAuthorizationAttempt.claudeCode({
-    required Uri redirectUri,
-  }) {
+  factory LlmOAuthAuthorizationAttempt.claudeCode({required Uri redirectUri}) {
     _validateLoopbackRedirect(
       redirectUri,
       '/callback',

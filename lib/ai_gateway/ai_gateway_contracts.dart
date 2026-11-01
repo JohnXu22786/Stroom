@@ -463,11 +463,26 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account, {
     Map<String, String> configuration = const {},
   });
+
+  Future<AiGatewayOAuthDeviceAuthorization> beginKimiCodeDeviceAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<void> revoke(AiGatewayAccount account);
 
   /// Deletes an OAuth account before attempting provider revocation. Returns
   /// false when local deletion succeeded but provider revocation did not.
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account);
+}
+
+/// Public, non-secret progress for a provider device-code login. Token values
+/// stay behind the Gateway and are saved directly to secure storage.
+abstract interface class AiGatewayOAuthDeviceAuthorization {
+  Uri get verificationUri;
+  Uri get verificationUriComplete;
+  String get userCode;
+  Future<AiGatewayAccount> get completed;
+  void cancel();
 }
 
 class AiGatewayOAuthException implements Exception {

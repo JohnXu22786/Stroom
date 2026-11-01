@@ -6,69 +6,106 @@ import 'package:stroom/ai_gateway/ai_gateway_protocol_bridges.dart';
 void main() {
   group('API protocol configuration', () {
     test(
-        'Codex defaults to Responses while OpenAI API keys stay Chat Completions',
-        () {
-      expect(
-          builtinDefaultApiProtocolForConnector('codex'), 'openai.responses');
-      expect(
-        builtinDefaultApiProtocolForConnector('openai-api'),
-        'openai.chat_completions',
-      );
-      expect(
-        supportedApiProtocolsForSupplier(
-          'openai.responses',
-          connectorType: 'codex',
-        ),
-        {'openai.responses'},
-      );
-      expect(
-        supportedApiProtocolsForSupplier(
-          'openai.chat_completions',
-          connectorType: 'openai-api',
-        ),
-        {'openai.chat_completions', 'openai.responses'},
-      );
-    });
-
-    test('xAI and Meta API keys default to their native Responses contract',
-        () {
-      for (final connector in ['xai', 'meta']) {
+      'Codex defaults to Responses while OpenAI API keys stay Chat Completions',
+      () {
         expect(
-          builtinDefaultApiProtocolForConnector(connector),
+          builtinDefaultApiProtocolForConnector('codex'),
           'openai.responses',
-          reason: connector,
+        );
+        expect(
+          builtinDefaultApiProtocolForConnector('openai-api'),
+          'openai.chat_completions',
         );
         expect(
           supportedApiProtocolsForSupplier(
-            builtinDefaultApiProtocolForConnector(connector),
-            connectorType: connector,
+            'openai.responses',
+            connectorType: 'codex',
           ),
           {'openai.responses'},
-          reason: connector,
         );
         expect(
-          resolveApiProtocol(
-            modelOverride: null,
-            supplierProtocol: null,
-            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'openai-api',
           ),
-          'openai.responses',
+          {'openai.chat_completions', 'openai.responses'},
+        );
+      },
+    );
+
+    test(
+      'Kimi Code OAuth uses supplier defaults and provider model overrides',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('kimi-coding'),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'kimi-coding',
+          ),
+          kCustomHttpApiProtocols,
         );
         expect(
           resolveApiProtocol(
-            modelOverride: 'openai.responses',
+            modelOverride: 'anthropic.messages',
             supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'kimi-coding',
+            ),
           ),
-          'openai.responses',
-          reason: 'model protocol overrides remain upstream configuration',
+          'anthropic.messages',
         );
         expect(
-          resolveConnectorProtocol('openai.responses', connector),
+          resolveConnectorProtocol('openai.responses', 'kimi-coding'),
           'openai.responses',
-          reason: 'auth identity does not choose the protocol',
+          reason: 'the auth connector cannot replace supplier/model protocol',
         );
-      }
-    });
+      },
+    );
+
+    test(
+      'xAI and Meta API keys default to their native Responses contract',
+      () {
+        for (final connector in ['xai', 'meta']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.responses',
+            reason: connector,
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              builtinDefaultApiProtocolForConnector(connector),
+              connectorType: connector,
+            ),
+            {'openai.responses'},
+            reason: connector,
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: null,
+              supplierProtocol: null,
+              builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+            ),
+            'openai.responses',
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: 'openai.responses',
+              supplierProtocol: 'openai.responses',
+            ),
+            'openai.responses',
+            reason: 'model protocol overrides remain upstream configuration',
+          );
+          expect(
+            resolveConnectorProtocol('openai.responses', connector),
+            'openai.responses',
+            reason: 'auth identity does not choose the protocol',
+          );
+        }
+      },
+    );
 
     test('migrates legacy provider and model endpoint types on read', () {
       final provider = ProviderConfigItem.fromMap({
@@ -154,10 +191,7 @@ void main() {
       expect(resolveConnectorProtocol(selected, 'openai-api'), selected);
       expect(resolveConnectorProtocol(selected, 'claude'), selected);
       expect(
-        resolveConnectorProtocol(
-          'google.gemini.generate_content',
-          'vertex',
-        ),
+        resolveConnectorProtocol('google.gemini.generate_content', 'vertex'),
         'google.gemini.generate_content',
       );
     });

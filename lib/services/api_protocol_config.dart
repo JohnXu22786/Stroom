@@ -67,6 +67,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
       'ollama' => 'ollama.chat',
+      'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
 
@@ -98,7 +99,11 @@ Set<String> supportedApiProtocolsForSupplier(
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },
-    'kimi' || 'kimi-ai' || 'kimi.ai' => kCustomHttpApiProtocols,
+    'kimi' ||
+    'kimi-ai' ||
+    'kimi.ai' ||
+    'kimi-coding' =>
+      kCustomHttpApiProtocols,
     _ => null,
   };
   if (builtinProtocols != null) return builtinProtocols;

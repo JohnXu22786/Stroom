@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
+import '../services/llm_connector_model_catalog.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -125,15 +127,8 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (result == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      final saved = result.requiresOAuthAuthorization
-          ? await gateway.oauthAuthorization.authorize(
-              result.account,
-              configuration: result.oauthConfiguration,
-            )
-          : await gateway.accountManagement.saveAccount(
-              result.account,
-              secret: result.secret.isEmpty ? null : result.secret,
-            );
+      final saved = await _saveAccountResult(gateway, result);
+      if (saved == null) return;
       await widget.onAccountSaved?.call(saved);
       await _reload();
     } catch (_) {
@@ -156,20 +151,44 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (result == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      final saved = result.requiresOAuthAuthorization
-          ? await gateway.oauthAuthorization.authorize(
-              result.account,
-              configuration: result.oauthConfiguration,
-            )
-          : await gateway.accountManagement.saveAccount(
-              result.account,
-              secret: result.secret.isEmpty ? null : result.secret,
-            );
+      final saved = await _saveAccountResult(gateway, result);
+      if (saved == null) return;
       await widget.onAccountSaved?.call(saved);
       await _reload();
     } catch (_) {
       _showError('账号保存失败。请检查账号信息和安全存储状态。');
     }
+  }
+
+  Future<AiGatewayAccount?> _saveAccountResult(
+    AiGatewayFacade gateway,
+    _AccountEditResult result,
+  ) async {
+    if (!result.requiresOAuthAuthorization) {
+      return gateway.accountManagement.saveAccount(
+        result.account,
+        secret: result.secret.isEmpty ? null : result.secret,
+      );
+    }
+    if (result.account.connectorType != 'kimi-coding') {
+      return gateway.oauthAuthorization.authorize(
+        result.account,
+        configuration: result.oauthConfiguration,
+      );
+    }
+
+    final authorization = await gateway.oauthAuthorization
+        .beginKimiCodeDeviceAuthorization(result.account);
+    if (!mounted) {
+      authorization.cancel();
+      return null;
+    }
+    return showDialog<AiGatewayAccount>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          _KimiCodeDeviceAuthorizationDialog(authorization: authorization),
+    );
   }
 
   Future<void> _deleteAccount(AiGatewayAccount account) async {
@@ -505,6 +524,79 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       ],
     );
   }
+}
+
+class _KimiCodeDeviceAuthorizationDialog extends StatefulWidget {
+  final AiGatewayOAuthDeviceAuthorization authorization;
+
+  const _KimiCodeDeviceAuthorizationDialog({required this.authorization});
+
+  @override
+  State<_KimiCodeDeviceAuthorizationDialog> createState() =>
+      _KimiCodeDeviceAuthorizationDialogState();
+}
+
+class _KimiCodeDeviceAuthorizationDialogState
+    extends State<_KimiCodeDeviceAuthorizationDialog> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authorization.completed.then(
+      (account) {
+        if (mounted) Navigator.of(context).pop(account);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _error = 'Kimi Code 授权失败，请重新开始登录。');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) widget.authorization.cancel();
+        },
+        child: AlertDialog(
+          title: const Text('登录 Kimi Code CLI'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('打开 Kimi 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+              const SizedBox(height: 12),
+              SelectableText(widget.authorization.userCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                widget.authorization.verificationUriComplete.toString(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await launchUrl(
+                  widget.authorization.verificationUriComplete,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('打开 Kimi'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
 }
 
 class _ManagementData {
@@ -1109,21 +1201,23 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       text: googleCloudProjectId is String ? googleCloudProjectId : '',
     );
     _models = TextEditingController(
-      text: account?.models
-              .map(
-                (model) => [
-                  model.upstreamModelId,
-                  ...model.capabilities.entries
-                      .where((entry) => entry.value is bool)
-                      .map(
-                        (entry) => entry.value == true
-                            ? entry.key
-                            : '${entry.key}=false',
-                      ),
-                ].join(','),
-              )
-              .join('\n') ??
-          '',
+      text: account?.connectorType == 'kimi-coding'
+          ? kPinnedKimiCodeModels.join('\n')
+          : account?.models
+                  .map(
+                    (model) => [
+                      model.upstreamModelId,
+                      ...model.capabilities.entries
+                          .where((entry) => entry.value is bool)
+                          .map(
+                            (entry) => entry.value == true
+                                ? entry.key
+                                : '${entry.key}=false',
+                          ),
+                    ].join(','),
+                  )
+                  .join('\n') ??
+              '',
     );
   }
 
@@ -1193,6 +1287,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _draftChanged = true;
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
+                    if (value == 'kimi-coding') {
+                      _models.text = kPinnedKimiCodeModels.join('\n');
+                    } else if (previousConnectorType == 'kimi-coding') {
+                      _models.clear();
+                    }
                     if (value == 'bedrock' &&
                         previousConnectorType != 'bedrock') {
                       _region.text = 'us-east-1';
@@ -1408,17 +1507,24 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _models,
                 minLines: 3,
                 maxLines: 7,
-                decoration: const InputDecoration(
+                readOnly: _connectorType == 'kimi-coding',
+                decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
-                  helperText: '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  helperText: _connectorType == 'kimi-coding'
+                      ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                      : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
-                onChanged: (_) => setState(() => _draftChanged = true),
+                onChanged: _connectorType == 'kimi-coding'
+                    ? null
+                    : (_) => setState(() => _draftChanged = true),
               ),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: widget.account != null && !_draftChanged
+                  onPressed: widget.account != null &&
+                          !_draftChanged &&
+                          _connectorType != 'kimi-coding'
                       ? _discoverModels
                       : null,
                   icon: const Icon(Icons.refresh),
@@ -1520,9 +1626,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged);
     if (_authType == 'oauth' && oauthLimitation != null) {
-      setState(
-        () => _error = '$oauthLimitation\n请选择受支持的认证方式后再保存此账号。',
-      );
+      setState(() => _error = '$oauthLimitation\n请选择受支持的认证方式后再保存此账号。');
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();
@@ -1538,6 +1642,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     for (final line in _models.text.split('\n')) {
       final parts = line.split(',').map((part) => part.trim()).toList();
       if (parts.isNotEmpty && parts.first.isNotEmpty) modelLines.add(parts);
+    }
+    if (_connectorType == 'kimi-coding' &&
+        modelLines.any(
+          (parts) => !kPinnedKimiCodeModels.contains(parts.first),
+        )) {
+      setState(() => _error = 'Kimi Code 账号只能使用已验证的 Coding Plan 模型。');
+      return;
     }
     final existingByLine = <int, AiGatewayUpstreamModel>{};
     final usedModelIds = <String>{};

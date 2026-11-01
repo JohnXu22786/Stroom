@@ -21,7 +21,7 @@ const String kLlmConnectorReferenceRevision =
     'd318bcc3afb9ea8782862f5e8cdb541afdc9dfa5';
 
 const _claudeOAuthClientId = LlmOAuthAuthorizationAttempt.claudeCodeClientId;
-const _kimiOAuthClientId = '17e5f671-d194-4dfb-9706-5516cb48c098';
+const _kimiOAuthClientId = LlmOAuthAuthorizationAttempt.kimiCodeClientId;
 const _xaiOAuthClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
 
 const kLlmAntigravityRequestUserAgent = 'antigravity/hub/2.9.1 darwin/arm64';
@@ -131,6 +131,14 @@ abstract final class LlmConnectorRegistry {
       protocol: LlmNativeProtocol.kimiChatCompletions,
       authTypes: {'oauth'},
       modelCatalog: kPinnedKimiModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'kimi-coding',
+      displayName: 'Kimi Code CLI',
+      protocol: LlmNativeProtocol.kimiChatCompletions,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedKimiCodeModels,
       canRefreshCredentials: true,
     ),
     LlmConnectorDefinition(
@@ -308,6 +316,7 @@ abstract final class LlmConnectorRegistry {
         'openai-compatibility' ||
         'openai-api' ||
         'moonshot' ||
+        'kimi-coding' ||
         'glm' ||
         'deepseek' ||
         'minimax' ||
@@ -1567,6 +1576,25 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
+      case 'kimi-coding':
+        final deviceId = _firstString(bundle, const ['device_id']);
+        if (deviceId == null) return null;
+        return _LlmTokenRefreshRequest(
+          uri: Uri.parse('https://auth.kimi.com/api/oauth/token'),
+          body: {
+            'client_id': _kimiOAuthClientId,
+            'grant_type': 'refresh_token',
+            'refresh_token': refreshToken,
+          },
+          contentType: formContentType,
+          headers: {
+            'X-Msh-Platform': 'CLIProxyAPI',
+            'X-Msh-Version': 'stroom',
+            'X-Msh-Device-Name': 'Stroom',
+            'X-Msh-Device-Model': 'Stroom',
+            'X-Msh-Device-Id': deviceId,
+          },
+        );
       case 'xai':
         final endpoint = _firstString(bundle, const [
           'token_endpoint',
@@ -1805,10 +1833,12 @@ class LlmAccountConnectorService {
                     for (final action in actions.whereType<String>())
                       action.toLowerCase().replaceAll('_', ''),
                 };
-          final vertexSupportsGenerateContent =
-              vertexActions.contains('generatecontent');
-          final vertexSupportsStreaming =
-              vertexActions.contains('streamgeneratecontent');
+          final vertexSupportsGenerateContent = vertexActions.contains(
+            'generatecontent',
+          );
+          final vertexSupportsStreaming = vertexActions.contains(
+            'streamgeneratecontent',
+          );
           var modelExtensions = map;
           var providerCapabilities = map['capabilities'];
           if (account.connectorType == 'ollama') {
@@ -3086,6 +3116,11 @@ class LlmNativeRequestBuilder {
             ))) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'kimi-coding' &&
+        (account.authType != 'oauth' ||
+            !kPinnedKimiCodeModels.contains(modelId))) {
+      throw const LlmAccountConnectorException();
+    }
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
@@ -3111,6 +3146,18 @@ class LlmNativeRequestBuilder {
       nativeFormat: nativeFormat,
     );
     switch (account.connectorType) {
+      case 'kimi-coding':
+        final deviceId = _credentialBundleString(credential, const [
+          'device_id',
+        ]);
+        if (deviceId == null) throw const LlmAccountConnectorException();
+        headers['Authorization'] = 'Bearer $secret';
+        headers['X-Msh-Platform'] = 'CLIProxyAPI';
+        headers['X-Msh-Version'] = 'stroom';
+        headers['X-Msh-Device-Name'] = 'Stroom';
+        headers['X-Msh-Device-Model'] = 'Stroom';
+        headers['X-Msh-Device-Id'] = deviceId;
+        break;
       case 'claude':
         if (account.authType == 'api_key') {
           headers['x-api-key'] = secret;
@@ -3258,6 +3305,7 @@ class LlmNativeRequestBuilder {
       switch (account.connectorType) {
         'codex' ||
         'claude' ||
+        'kimi-coding' ||
         'kimi' ||
         'kimi-ai' ||
         'kimi.ai' ||
@@ -3481,10 +3529,11 @@ class LlmNativeRequestBuilder {
             ? '/v1internal:streamGenerateContent'
             : '/v1internal:generateContent';
         if (stream) query = 'alt=sse';
-      case 'kimi' || 'kimi-ai' || 'kimi.ai':
+      case 'kimi-coding' || 'kimi' || 'kimi-ai' || 'kimi.ai':
         baseUrl = _baseUrl(
           config,
-          account.connectorType == 'kimi'
+          account.connectorType == 'kimi-coding' ||
+                  account.connectorType == 'kimi'
               ? 'https://api.kimi.com/coding'
               : 'https://api.kimi.ai/coding',
         );
@@ -3782,7 +3831,7 @@ class LlmNativeRequestBuilder {
       'codex' => {'chatgpt.com', 'api.openai.com'}.contains(host),
       'claude' => host == 'api.anthropic.com',
       'antigravity' => host == 'cloudcode-pa.googleapis.com',
-      'kimi' => host == 'api.kimi.com',
+      'kimi' || 'kimi-coding' => host == 'api.kimi.com',
       'kimi-ai' || 'kimi.ai' => host == 'api.kimi.ai',
       'xai' => {'cli-chat-proxy.grok.com', 'api.x.ai'}.contains(host),
       'devin' => host == 'server.codeium.com',
