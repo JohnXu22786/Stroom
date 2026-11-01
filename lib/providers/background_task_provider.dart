@@ -1523,10 +1523,9 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           '',
         );
       }
-      final numericSequence = chunks.join();
-      if (chunks.length > 1 &&
-          chunks.every((chunk) => RegExp(r'^\d+$').hasMatch(chunk)) &&
-          numericSequence.length >= 8) {
+      final numericPrefix =
+          chunks.takeWhile((chunk) => RegExp(r'^\d+$').hasMatch(chunk)).join();
+      if (chunks.length > 1 && numericPrefix.length >= 8) {
         return '${match.group(1)}[redacted]$trailingPunctuation';
       }
       final joinedSingleCharacterChunks = chunks.join().toLowerCase();
@@ -1748,14 +1747,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         '(?:(?:the|a|an|this|that|these|those)?(?:$objectAlternation))?)?\$',
         caseSensitive: false,
       ).hasMatch(joinedSingleCharacterChunks);
-      if (chunks.every((chunk) => chunk.length == 1) &&
-          (naturalAdverbs.contains(joinedSingleCharacterChunks) ||
-              naturalNouns.contains(joinedSingleCharacterChunks) ||
-              naturalContinuationWords.contains(joinedSingleCharacterChunks) ||
-              naturalPhraseConcatenations
-                  .contains(joinedSingleCharacterChunks) ||
-              joinedNaturalActionPhrase ||
-              joinedNaturalDocumentIdentifier)) {
+      if ((chunks.every((chunk) => chunk.length == 1) &&
+              (naturalAdverbs.contains(joinedSingleCharacterChunks) ||
+                  naturalNouns.contains(joinedSingleCharacterChunks) ||
+                  naturalContinuationWords
+                      .contains(joinedSingleCharacterChunks) ||
+                  naturalPhraseConcatenations
+                      .contains(joinedSingleCharacterChunks) ||
+                  joinedNaturalActionPhrase)) ||
+          joinedNaturalDocumentIdentifier) {
         return match.group(0)!;
       }
       if (chunks.length >= 8 &&
@@ -1775,6 +1775,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       var credentialSuffix = '';
       var foundCredential = false;
       var expectsDocumentIdentifierNumber = false;
+      var documentIdentifierDigitCount = 0;
       bool hasCredentialShape(String suffix) {
         final alphabeticSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
         final hasMarkerCredentialShape = RegExp(r'[0-9_]').hasMatch(suffix) &&
@@ -1798,24 +1799,27 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
             credentialSuffix.isEmpty &&
             (normalizedChunk == 'id' || normalizedChunk == 'no')) {
           expectsDocumentIdentifierNumber = true;
+          documentIdentifierDigitCount = 0;
           continue;
         }
         if (!foundCredential &&
             credentialSuffix.isEmpty &&
             expectsDocumentIdentifierNumber &&
             RegExp(r'^\d+$').hasMatch(chunk)) {
-          expectsDocumentIdentifierNumber = false;
-          if (chunk.length > 18) foundCredential = true;
+          documentIdentifierDigitCount += chunk.length;
+          if (documentIdentifierDigitCount > 18) foundCredential = true;
           continue;
         }
         expectsDocumentIdentifierNumber = false;
+        final normalizedNaturalChunk =
+            chunk.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
         final isNaturalChunk = naturalAdverbs.contains(chunk.toLowerCase()) ||
             naturalNouns.contains(chunk.toLowerCase()) ||
             naturalContinuationWords.contains(chunk.toLowerCase()) ||
             RegExp(
               r'^(?:v\d+(?:\.\d+)*|(?:id|no|release|version|chapter|section|page|step|part)\d{1,18}|\d{4})$',
               caseSensitive: false,
-            ).hasMatch(chunk);
+            ).hasMatch(normalizedNaturalChunk);
         if (!foundCredential && credentialSuffix.isEmpty && isNaturalChunk) {
           final adjacentOpaqueKeyTail =
               const {'key', 'secret', 'token'}.contains(normalizedChunk) &&
