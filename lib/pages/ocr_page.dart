@@ -76,12 +76,11 @@ class _OcrQualityOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final selected = value == groupValue;
-    return Container(
-      decoration: BoxDecoration(
-        color: selected ? cs.primaryContainer.withValues(alpha: 0.35) : null,
-        border: Border.all(
-          color: selected ? cs.primary : cs.outlineVariant,
-        ),
+    return Material(
+      color: selected ? cs.primaryContainer.withValues(alpha: 0.35) : null,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: selected ? cs.primary : cs.outlineVariant),
         borderRadius: BorderRadius.circular(12),
       ),
       child: RadioListTile<bool>(
