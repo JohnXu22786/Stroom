@@ -13,6 +13,7 @@ import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
+import 'package:stroom/task_flow/widgets/catcatch_policy_menu.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 import 'package:stroom/task_flow/widgets/io_type_indicator.dart';
 import 'package:stroom/utils/file_manifest.dart';
@@ -33,6 +34,28 @@ class _FakeAssistantsNotifier extends AssistantsNotifier {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('CatCatch policy menu includes downstream-filtered media output',
+      (tester) async {
+    String? selected;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CatCatchPolicyMenu(
+          outputPolicy: true,
+          value: 'followDownstream',
+          onSelected: (value) => selected = value,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    final unionOption = find.text('视频或音频（按下游筛选）');
+    expect(unionOption, findsNWidgets(2));
+    await tester.tap(unionOption.last);
+    await tester.pumpAndSettle();
+    expect(selected, 'followDownstream');
+  });
 
   Future<void> pumpPanel(
     WidgetTester tester, {
