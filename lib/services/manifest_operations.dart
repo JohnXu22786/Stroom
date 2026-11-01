@@ -1074,37 +1074,45 @@ class ManifestOperations<T extends FileRecord> {
       }
 
       // Decrement per record being deleted; only delete file when count reaches 0
-      for (final r in toRemoveRecords) {
-        final sn = storageNameOf(r);
-        final h = hashOf(r);
-        storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
-        if (storageNameCount[sn]! <= 0) {
-          final name = storageNameOf(r);
-          // Guard against names without extension
-          final dotIndex = name.lastIndexOf('.');
-          if (dotIndex == -1) continue;
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(name));
-          } else {
-            final dir = await _storageDir;
-            final file = File(_storedFilePath(dir, name));
-            if (await file.exists()) await file.delete();
+      try {
+        for (final r in toRemoveRecords) {
+          final sn = storageNameOf(r);
+          final h = hashOf(r);
+          storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
+          if (storageNameCount[sn]! <= 0) {
+            final name = storageNameOf(r);
+            // Guard against names without extension
+            final dotIndex = name.lastIndexOf('.');
+            if (dotIndex == -1) continue;
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(name));
+            } else {
+              final dir = await _storageDir;
+              final file = File(_storedFilePath(dir, name));
+              if (await file.exists()) await file.delete();
+            }
+            if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
           }
-          if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
-        }
-        // Thumbnail deletion: keyed by hash, not storageName
-        hashCount[h] = (hashCount[h] ?? 1) - 1;
-        if (hashCount[h]! <= 0) {
-          final thumbName = _thumbFileNameOf(r);
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(thumbName));
-          } else {
-            final dir = await _storageDir;
-            final thumbFile = File(_storedFilePath(dir, thumbName));
-            if (await thumbFile.exists()) await thumbFile.delete();
+          // Thumbnail deletion: keyed by hash, not storageName
+          hashCount[h] = (hashCount[h] ?? 1) - 1;
+          if (hashCount[h]! <= 0) {
+            final thumbName = _thumbFileNameOf(r);
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(thumbName));
+            } else {
+              final dir = await _storageDir;
+              final thumbFile = File(_storedFilePath(dir, thumbName));
+              if (await thumbFile.exists()) await thumbFile.delete();
+            }
+            await _deleteLegacyThumbIfImage(h);
           }
-          await _deleteLegacyThumbIfImage(h);
         }
+      } catch (error, stackTrace) {
+        if (deletesAudioRecords) {
+          await _restoreAudioPrimaryFiles(audioPrimaryFiles);
+          await _restoreAudioSidecars(audioSidecars);
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
 
       if (idsToDelete.isNotEmpty) {
