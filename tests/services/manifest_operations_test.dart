@@ -2489,8 +2489,7 @@ void main() {
       );
     });
 
-    testWidgets(
-        'removeFolderFromCache restores records after a failed write',
+    testWidgets('removeFolderFromCache restores records after a failed write',
         (WidgetTester t) async {
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_remove_folder_write_failure',
