@@ -4,6 +4,59 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('long body credentials exclude echoed request ID prefixes', () {
+    final credential = List.filled(700, 'x').join();
+    final echoedPrefix = credential.substring(0, 120);
+    const safeRequestId = 'req-safe-long-credential-201';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedPrefix},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode([echoedResponse, safeResponse]),
+        isNot(contains(echoedPrefix)));
+  });
+
+  test('long Bearer credentials exclude stripped URL and header echoes', () {
+    final token = 'opaque-long-bearer-${List.filled(700, 'y').join()}';
+    final echoedPrefix = token.substring(0, 120);
+    const safeRequestId = 'req-safe-long-bearer-202';
+    for (final request in [
+      {'headers': {'Authorization': 'Bearer $token'}},
+      {'url': 'https://ocr.test/v1?access_token=Bearer%20$token'},
+    ]) {
+      final excludedValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(request);
+      final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 401, 'requestId': echoedPrefix},
+        excludedValues: excludedValues,
+      )!;
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 429, 'requestId': safeRequestId},
+        excludedValues: excludedValues,
+      )!;
+
+      expect(echoedResponse, {'statusCode': 401});
+      expect(safeResponse, {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      });
+      expect(jsonEncode([echoedResponse, safeResponse]),
+          isNot(contains(echoedPrefix)));
+    }
+  });
   test('request URL credentials are recovered for response exclusions', () {
     const url =
         'https://user:oauth-userinfo-secret@ocr.test/v1?key=opaque-query-secret-87&access_token=opaque-token-secret-87&author=Alice&language=en';
