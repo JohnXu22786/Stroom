@@ -69,6 +69,10 @@ class ManifestOperations<T extends FileRecord> {
   @visibleForTesting
   Future<void> Function()? beforeFolderLoadForTesting;
 
+  /// Pauses a record mutation before its database write.
+  @visibleForTesting
+  Future<void> Function()? beforeRecordMutationPersistForTesting;
+
   /// Pauses audio folder deletion before deleting its record rows in tests.
   @visibleForTesting
   Future<void> Function()? beforeAudioFolderRecordDeleteForTesting;
@@ -137,8 +141,17 @@ class ManifestOperations<T extends FileRecord> {
     final cache = _cache!;
     final previous = cache[index];
     cache[index] = updated;
+    _recordMutationRevision++;
     try {
+      await beforeRecordMutationPersistForTesting?.call();
       await _dbUpdateRecord(updated.id, toMap(updated));
+      _recordMutationRevision++;
+      final currentCache = _cache;
+      if (currentCache != null) {
+        final currentIndex =
+            currentCache.indexWhere((record) => record.id == updated.id);
+        if (currentIndex != -1) currentCache[currentIndex] = updated;
+      }
     } catch (_) {
       if (identical(_cache, cache)) {
         final currentIndex =

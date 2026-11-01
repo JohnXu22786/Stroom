@@ -2566,6 +2566,115 @@ void main() {
           containsAll(['refresh', 'refresh/child']));
     });
 
+    testWidgets(
+        'forced refresh keeps a record mutation made after its snapshot',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_mutation_during_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final original = AudioRecord(
+        id: 'audio_mutated_during_refresh',
+        name: 'before',
+        hash: 'hash_mutated_during_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(original);
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      try {
+        await operations.renameRecord(original.id, 'after');
+      } finally {
+        releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+      }
+
+      expect((await refresh).single.name, 'after',
+          reason:
+              'a forced refresh must not replace an optimistic record mutation with its older snapshot');
+      expect((await operations.loadRecords()).single.name, 'after');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after');
+    });
+
+    testWidgets(
+        'forced refresh during a record write keeps the committed mutation',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_mutation_during_refresh_write',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final original = AudioRecord(
+        id: 'audio_mutated_during_refresh_write',
+        name: 'before',
+        hash: 'hash_mutated_during_refresh_write',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(original);
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      operations.beforeRecordMutationPersistForTesting = () async {
+        writeStarted.complete();
+        await releaseWrite.future;
+      };
+      final mutation = operations.renameRecord(original.id, 'after');
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      try {
+        await writeStarted.future;
+        final refresh =
+            operations.loadRecords(forceRefresh: true, throwOnError: true);
+        await recordSnapshotReady.future;
+
+        releaseFolderRead.complete();
+
+        expect((await refresh).single.name, 'before',
+            reason:
+                'the refresh snapshot is stale while the record write is paused');
+
+        releaseWrite.complete();
+        await mutation;
+
+        expect((await operations.loadRecords()).single.name, 'after',
+            reason:
+                'a successful mutation must remain visible if a stale refresh installed while its write was pending');
+      } finally {
+        if (!releaseWrite.isCompleted) releaseWrite.complete();
+        if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+        operations.beforeRecordMutationPersistForTesting = null;
+      }
+
+      expect((await operations.loadRecords()).single.name, 'after');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after');
+    });
+
     testWidgets('forced refresh keeps a single audio deletion absent',
         (WidgetTester t) async {
       final operations = ManifestOperations<AudioRecord>(
