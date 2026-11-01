@@ -68,6 +68,98 @@ class _MessageWebHostState extends State<MessageWebHost> {
     widget.onEvent({'type': 'ready'});
   }
 
+  Future<void> _ensureMacDocumentLoaded(
+    InAppWebViewController controller,
+    int generation,
+    File document,
+  ) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        !identical(controller, _controller) ||
+        generation != _macLoadGeneration) {
+      return;
+    }
+
+    try {
+      for (var attempt = 0; attempt < 25; attempt++) {
+        final currentUrl = await controller.getUrl();
+        if (currentUrl?.toString() == document.uri.toString()) {
+          final rendererReady = await controller.evaluateJavascript(
+            source: 'JSON.stringify(!!window.StroomMessageView)',
+          );
+          if (!mounted ||
+              !identical(controller, _controller) ||
+              generation != _macLoadGeneration) {
+            return;
+          }
+          if (rendererReady == 'true') {
+            _markMacDocumentReady();
+            return;
+          }
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (!mounted ||
+            !identical(controller, _controller) ||
+            generation != _macLoadGeneration) {
+          return;
+        }
+      }
+
+      final currentUrl = await controller.getUrl();
+      if (!mounted ||
+          !identical(controller, _controller) ||
+          generation != _macLoadGeneration) {
+        return;
+      }
+      if (currentUrl?.toString() == document.uri.toString()) {
+        final rendererReady = await controller.evaluateJavascript(
+          source: 'JSON.stringify(!!window.StroomMessageView)',
+        );
+        if (!mounted ||
+            !identical(controller, _controller) ||
+            generation != _macLoadGeneration) {
+          return;
+        }
+        if (rendererReady == 'true') {
+          _markMacDocumentReady();
+        }
+        final documentFinishedLoading = await controller.evaluateJavascript(
+          source: "JSON.stringify(document.readyState === 'complete')",
+        );
+        if (!mounted ||
+            !identical(controller, _controller) ||
+            generation != _macLoadGeneration) {
+          return;
+        }
+        // The initial request reached a still-loading document. Let its load
+        // callbacks finish before retrying and resetting renderer state.
+        // Only an explicit false proves the request is still loading. If the
+        // WebView cannot return this probe, allow the fallback to recover it.
+        if (documentFinishedLoading == 'false') return;
+      }
+      if (_macDocumentReady) return;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[MessageWebHost][initial-load-fallback] generation=$generation currentUrl=$currentUrl target=${document.uri}',
+        );
+      }
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri.uri(document.uri)),
+        allowingReadAccessTo: WebUri.uri(document.parent.uri),
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[MessageWebHost][load-error] $error');
+      }
+      if (mounted &&
+          identical(controller, _controller) &&
+          generation == _macLoadGeneration) {
+        setState(() => _macLoadFailed = true);
+      }
+    }
+  }
+
   static Future<File> _prepareMacDocument(String html) async {
     final content = utf8.encode(html);
     final digest = sha256.convert(content).toString();
@@ -245,6 +337,12 @@ class _MessageWebHostState extends State<MessageWebHost> {
               _macControllerGeneration = generation;
               _macDocumentReady = false;
               unawaited(_failMacLoadIfUnready(controller, generation));
+              final document = macDocument;
+              if (document != null) {
+                unawaited(
+                  _ensureMacDocumentLoaded(controller, generation, document),
+                );
+              }
             }
             controller.addJavaScriptHandler(
               handlerName: 'StroomMessageView',
