@@ -12736,7 +12736,11 @@ void main() {
     test(
       'legacy OCR instruction migration preserves reported authenticity but redacts a reported credential',
       () {
-        BackgroundTask taskFor(String id, String instruction) =>
+        BackgroundTask taskFor(
+          String id,
+          String instruction, {
+          String authorization = 'Bearer auth…',
+        }) =>
             BackgroundTask.fromMap({
               'id': id,
               'type': 'ocr',
@@ -12745,7 +12749,7 @@ void main() {
               'createdAt': DateTime(2025, 1, 1).toIso8601String(),
               'rawRequest': {
                 'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {'Authorization': 'Bearer auth…'},
+                'headers': {'Authorization': authorization},
                 'body': {
                   'model': 'vision-model',
                   'messages': [
@@ -12766,14 +12770,17 @@ void main() {
 
         const safePrompt = 'Read the receipt total carefully';
         const safeInstruction = 'The label reports authenticity';
+        const longerCredential = 'authenticity-longer-key-7391';
         final safeTask = taskFor(
           'legacy-ocr-reported-authenticity-natural-word',
           safeInstruction,
+          authorization: 'Bearer $longerCredential',
         );
         expect(
           OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
           '$safePrompt\n$safeInstruction',
         );
+        expect(jsonEncode(safeTask.toMap()), isNot(contains(longerCredential)));
 
         final credentialTask = taskFor(
           'legacy-ocr-reported-credential-echo',
@@ -12787,6 +12794,24 @@ void main() {
         );
         expect(credentialPersisted, contains(safePrompt));
         expect(credentialPersisted, isNot(contains('authorization')));
+
+        const authenticityKey = 'authenticity';
+        final authenticityTask = taskFor(
+          'legacy-ocr-reported-key-collision-echo',
+          'The label reports $authenticityKey',
+        );
+        final authenticityPersisted = jsonEncode(authenticityTask.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(authenticityTask.retryData!)
+              .instructionContent,
+          safePrompt,
+        );
+        expect(
+          jsonEncode(authenticityTask.retryData),
+          isNot(contains(authenticityKey)),
+        );
+        expect(authenticityPersisted, isNot(contains(authenticityKey)));
       },
     );
 
