@@ -12797,7 +12797,7 @@ void main() {
 
         const authenticityKey = 'authenticity';
         final authenticityTask = taskFor(
-          'legacy-ocr-reported-authenticity-credential-echo',
+          'legacy-ocr-reported-key-collision-echo',
           'The label reports $authenticityKey',
         );
         final authenticityPersisted = jsonEncode(authenticityTask.toMap());
