@@ -47,13 +47,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('主题'),
-          _buildThemeSettings(themeMode, themeNotifier),
-          const SizedBox(height: 24),
-          _buildSectionHeader('任务'),
-          _buildNotificationSettings(),
-          const SizedBox(height: 8),
-          _buildBackgroundOptimizationCard(),
+          _buildSectionHeader('常规设置'),
+          _buildGeneralSettings(themeMode, themeNotifier),
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
@@ -64,13 +59,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _buildSectionHeader('上下文管理'),
           _buildContextManagementSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('数据管理'),
-          _buildBackupSection(),
-          const SizedBox(height: 8),
-          _buildBrowserDataSection(),
-          const SizedBox(height: 24),
-          _buildSectionHeader('日志'),
-          _buildLogSection(),
+          _buildSectionHeader('管理'),
+          _buildManagementSettings(),
           const SizedBox(height: 24),
           _buildSectionHeader('关于'),
           _buildAboutSection(),
@@ -108,6 +98,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       trailing: trailing,
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildSettingsCard(List<Widget> tiles) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              tiles[i],
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
