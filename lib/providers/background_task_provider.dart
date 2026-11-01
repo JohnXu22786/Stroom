@@ -1694,6 +1694,9 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'then',
         'to',
         'with',
+        'please',
+        'you',
+        'should',
         'process',
         'points',
         'question',
@@ -1838,14 +1841,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
               ));
       if (!hasCredentialShape) return match.group(0)!;
       final sourceLead = match.group(0)!.substring(0, firstChunkOffset());
-      var safeTail = redactTrailingCredentials();
-      final soleNaturalAdverb =
-          RegExp(r'^\s+([a-z]+)([.!?]*)\s*$', caseSensitive: false)
-              .firstMatch(safeTail);
-      if (soleNaturalAdverb != null &&
-          naturalAdverbs.contains(soleNaturalAdverb.group(1)!.toLowerCase())) {
-        safeTail = soleNaturalAdverb.group(2)!;
-      }
+      final safeTail = redactTrailingCredentials();
       return '$sourceLead[redacted]$safeTail';
     });
     final chunkedCandidate = RegExp(

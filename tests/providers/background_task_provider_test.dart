@@ -15622,6 +15622,28 @@ void main() {
           isNot(contains('foobarxyz')),
         );
 
+        final credentialFragmentedAroundNaturalWord = taskFor(
+          'legacy-ocr-credential-fragmented-around-natural-word',
+          'Please read the documentation now. '
+              'Summarize the process foo carefully\nbarxyz.',
+        );
+        final credentialFragmentedAroundNaturalWordInstruction =
+            OcrRetrySnapshot.fromMap(
+          credentialFragmentedAroundNaturalWord.retryData!,
+        ).instructionContent!;
+        final credentialFragmentedAroundNaturalWordPersisted = jsonEncode(
+          credentialFragmentedAroundNaturalWord.toMap(),
+        );
+        expect(
+          credentialFragmentedAroundNaturalWordInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          credentialFragmentedAroundNaturalWordPersisted,
+          isNot(contains('foobarxyz')),
+        );
+
         final singleLetterCredentialChunk = taskFor(
           'legacy-ocr-single-letter-credential-chunk',
           'Please read the documentation a. bcdefxyz.',
