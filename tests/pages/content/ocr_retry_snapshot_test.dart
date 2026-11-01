@@ -188,6 +188,38 @@ void main() {
       });
     });
 
+    test('non-string image metadata keys preserve recognized image fields', () {
+      const reference =
+          'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin';
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': OcrRetrySnapshot.currentVersion,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': [
+          {
+            'storageRef': reference,
+            'format': 'png',
+            'name': 'receipt.png',
+            7: 'malformed-key',
+          },
+        ],
+        'batchMode': 'joint',
+        'perImageConcurrency': 1,
+        'requestSizeBudgetBytes': 1024,
+      });
+
+      expect(snapshot.hasInvalidImages, isFalse);
+      expect(snapshot.hasUnknownFields, isTrue);
+      expect(snapshot.needsMigration, isTrue);
+      expect(snapshot.images, hasLength(1));
+      expect(snapshot.images.single.storageRef, reference);
+      expect(snapshot.images.single.format, 'png');
+      expect(snapshot.images.single.name, 'receipt.png');
+      expect(snapshot.toMap()['images'], [
+        {'storageRef': reference, 'format': 'png', 'name': 'receipt.png'},
+      ]);
+    });
+
     test('infers format from valid inline bytes when metadata is malformed',
         () {
       final pngBytes = base64Decode(

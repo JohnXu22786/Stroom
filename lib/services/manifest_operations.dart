@@ -184,14 +184,40 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Web 上用 "storageDirName/fileName" 做前缀，与 Native 目录结构保持一致。
   /// Native 上 `tts_audio/<hash>.wav`  ↔  Web 上 key = `"tts_audio/<hash>.wav"`
-  String _webKey(String fileName) => '$storageDirName/$fileName';
+  String _webKey(String fileName) =>
+      '$storageDirName/${_validatedFileName(fileName)}';
+
+  String _validatedFileName(String fileName) {
+    if (!_isAudioTable) return fileName;
+    if (fileName.isEmpty ||
+        fileName == '.' ||
+        fileName == '..' ||
+        fileName.contains('/') ||
+        fileName.contains('\\') ||
+        fileName.contains(':') ||
+        fileName.contains('\u0000')) {
+      throw ArgumentError.value(
+        fileName,
+        'fileName',
+        'Audio storage file names must be a single path component.',
+      );
+    }
+    return fileName;
+  }
+
+  String _storedFilePath(String directory, String fileName) =>
+      p.join(directory, _validatedFileName(fileName));
+
+  void _validateRecordStorageName(T record) {
+    if (_isAudioTable) _validatedFileName(storageNameOf(record));
+  }
 
   Future<void> _deleteStoredFile(String name) async {
     if (_useWebFileStore) {
       await WebFileStore.delete(_webKey(name));
     } else {
       final dir = await _storageDir;
-      final file = File(p.join(dir, name));
+      final file = File(_storedFilePath(dir, name));
       if (await file.exists()) await file.delete();
     }
   }
@@ -199,13 +225,13 @@ class ManifestOperations<T extends FileRecord> {
   Future<bool> _storedFileExists(String name) async {
     if (_useWebFileStore) return WebFileStore.exists(_webKey(name));
     final dir = await _storageDir;
-    return File(p.join(dir, name)).exists();
+    return File(_storedFilePath(dir, name)).exists();
   }
 
   Future<Uint8List?> _readStoredFile(String name) async {
     if (_useWebFileStore) return WebFileStore.read(_webKey(name));
     final dir = await _storageDir;
-    final file = File(p.join(dir, name));
+    final file = File(_storedFilePath(dir, name));
     if (!await file.exists()) return null;
     return file.readAsBytes();
   }
@@ -215,7 +241,7 @@ class ManifestOperations<T extends FileRecord> {
       await WebFileStore.write(_webKey(name), bytes);
     } else {
       final dir = await _storageDir;
-      await File(p.join(dir, name)).writeAsBytes(bytes, flush: true);
+      await File(_storedFilePath(dir, name)).writeAsBytes(bytes, flush: true);
     }
   }
 
@@ -356,6 +382,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> _deleteAudioEntityFiles(T record) async {
     final storageName = storageNameOf(record);
+    _validatedFileName(storageName);
     final refCount =
         _cache!.where((r) => storageNameOf(r) == storageName).length;
     if (refCount <= 1 && storageName.lastIndexOf('.') == -1) return;
@@ -389,6 +416,7 @@ class ManifestOperations<T extends FileRecord> {
     // still available while the rows are restored for a retry.
     for (final record in records) {
       final storageName = storageNameOf(record);
+      _validatedFileName(storageName);
       storageCount[storageName] = (storageCount[storageName] ?? 1) - 1;
       final hash = hashOf(record);
       hashCount[hash] = (hashCount[hash] ?? 1) - 1;
@@ -456,6 +484,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> addRecord(T record, {void Function()? beforeCommit}) async {
     try {
+      _validateRecordStorageName(record);
       _validateRecordFolderPath(folderOf(record));
       await loadRecords();
       beforeCommit?.call();
@@ -499,7 +528,7 @@ class ManifestOperations<T extends FileRecord> {
         await WebFileStore.delete(_webKey(name));
       } else {
         final dir = await _storageDir;
-        final file = File(p.join(dir, name));
+        final file = File(_storedFilePath(dir, name));
         if (await file.exists()) await file.delete();
       }
       await onExtraDelete?.call(record);
@@ -515,7 +544,7 @@ class ManifestOperations<T extends FileRecord> {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
         final dir = await _storageDir;
-        final thumbFile = File(p.join(dir, thumbName));
+        final thumbFile = File(_storedFilePath(dir, thumbName));
         if (await thumbFile.exists()) await thumbFile.delete();
       }
       await _deleteLegacyThumbIfImage(hashOf(record));
@@ -666,7 +695,7 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(name));
           } else {
             final dir = await _storageDir;
-            final file = File(p.join(dir, name));
+            final file = File(_storedFilePath(dir, name));
             if (await file.exists()) await file.delete();
           }
           await onExtraDelete?.call(r);
@@ -680,7 +709,7 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
             final dir = await _storageDir;
-            final thumbFile = File(p.join(dir, thumbName));
+            final thumbFile = File(_storedFilePath(dir, thumbName));
             if (await thumbFile.exists()) await thumbFile.delete();
           }
           await _deleteLegacyThumbIfImage(h);
@@ -695,6 +724,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> updateRecord(T updated) async {
     try {
+      _validateRecordStorageName(updated);
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == updated.id);
       if (index != -1) {
@@ -757,7 +787,7 @@ class ManifestOperations<T extends FileRecord> {
         return fileName;
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       if (beforeCommit == null) {
         await File(filePath).writeAsBytes(data);
       } else {
@@ -779,7 +809,7 @@ class ManifestOperations<T extends FileRecord> {
         return WebFileStore.read(_webKey(fileName));
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       final file = File(filePath);
       if (await file.exists()) {
         return await file.readAsBytes();
@@ -810,7 +840,7 @@ class ManifestOperations<T extends FileRecord> {
       }
       final dir = await _storageDir;
       throwIfAsrAudioCanceled(cancelToken);
-      final file = File(p.join(dir, fileName));
+      final file = File(_storedFilePath(dir, fileName));
       final exists = await (fileExistsForTesting?.call(file) ?? file.exists());
       throwIfAsrAudioCanceled(cancelToken);
       if (!exists) return null;
@@ -840,7 +870,7 @@ class ManifestOperations<T extends FileRecord> {
         return true;
       }
       final dir = await _storageDir;
-      final file = File(p.join(dir, fileName));
+      final file = File(_storedFilePath(dir, fileName));
       if (await file.exists()) {
         await file.delete();
         return true;
@@ -862,7 +892,7 @@ class ManifestOperations<T extends FileRecord> {
         return exists ? _webKey(fileName) : null;
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       if (await File(filePath).exists()) {
         return filePath;
       }
@@ -980,7 +1010,7 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(name));
           } else {
             final dir = await _storageDir;
-            final file = File(p.join(dir, name));
+            final file = File(_storedFilePath(dir, name));
             if (await file.exists()) await file.delete();
           }
           if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
@@ -993,7 +1023,7 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
             final dir = await _storageDir;
-            final thumbFile = File(p.join(dir, thumbName));
+            final thumbFile = File(_storedFilePath(dir, thumbName));
             if (await thumbFile.exists()) await thumbFile.delete();
           }
           await _deleteLegacyThumbIfImage(h);

@@ -36,6 +36,36 @@ void main() {
     }
   });
 
+  group('AttachmentStorage 保存路径唯一性', () {
+    test('同一毫秒保存相同内容仍生成独立路径', () async {
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      AttachmentStorage.nowForTesting =
+          () => DateTime.fromMillisecondsSinceEpoch(123456789);
+      try {
+        final normalPaths = await Future.wait(List.generate(
+          8,
+          (_) => AttachmentStorage.saveFile('photo.png', bytes),
+        ));
+        final editedPaths = await Future.wait(List.generate(
+          8,
+          (_) => AttachmentStorage.saveEditedFile('photo.png', bytes),
+        ));
+
+        expect(normalPaths.toSet(), hasLength(normalPaths.length));
+        expect(editedPaths.toSet(), hasLength(editedPaths.length));
+
+        await AttachmentStorage.deleteFile(normalPaths.first);
+        expect(await AttachmentStorage.readFile(normalPaths.last), bytes,
+            reason: '删除一个普通附件不能删除另一个相同内容附件');
+        await AttachmentStorage.deleteFile(editedPaths.first);
+        expect(await AttachmentStorage.readFile(editedPaths.last), bytes,
+            reason: '删除一个编辑后附件不能删除另一个相同内容附件');
+      } finally {
+        AttachmentStorage.resetNowForTesting();
+      }
+    });
+  });
+
   group('AttachmentStorage 编辑后附件存储', () {
     test('saveEditedFile 返回 temp_edited/ 前缀路径，readFile 可读回（显示修复）', () async {
       // 回归：编辑后的图片之前被存到系统临时目录，但 storagePath 是

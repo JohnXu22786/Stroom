@@ -605,6 +605,41 @@ void main() {
     });
   });
 
+  test('audio storage names cannot escape the tts_audio directory', () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'audio-path-traversal-test-',
+    );
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final outsideFile = File('${directory.path}/outside.wav');
+    await outsideFile.writeAsBytes([7, 8, 9]);
+    final record = AudioRecord.fromMap({
+      'name': 'unsafe',
+      'hash': '../outside',
+      'format': 'wav',
+      'createdAt': DateTime(2024).toIso8601String(),
+      'size': 3,
+    });
+
+    expect(record.storagePath, '../outside.wav');
+    expect(await FileManifest.readFile(record.storagePath), isNull);
+    expect(await FileManifest.readFilePath(record.storagePath), isNull);
+    expect(await FileManifest.deleteFile(record.storagePath), isFalse);
+    await expectLater(
+      FileManifest.writeFile(record.storagePath, Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+    await expectLater(FileManifest.addRecord(record), throwsArgumentError);
+    expect(await outsideFile.readAsBytes(), [7, 8, 9]);
+  });
+
   group('Web manifest read failures', () {
     test('a failed initial read can be retried without losing the manifest',
         () async {

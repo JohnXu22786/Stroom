@@ -1332,6 +1332,45 @@ void main() {
     );
 
     test(
+      'legacy Authorization masks preserve ordinary secrets reading instructions',
+      () {
+        const instruction = 'Read the secrets in this image.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-read-secrets-natural-prompt',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('secret…')));
+      },
+    );
+
+    test(
       'legacy Authorization value matching a natural plural is redacted',
       () {
         final task = BackgroundTask.fromMap({
@@ -1927,6 +1966,76 @@ void main() {
         expect(snapshot.hasUnknownFields, isTrue);
         expect(snapshot.images.single.storageRef, storageRef);
         expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
+      },
+    );
+
+    test(
+      'restored OCR errors redact credentials found in nested future retry data',
+      () {
+        const credential = 'opaque-future-retry-credential-6274';
+        final task = BackgroundTask.fromMap({
+          'id': 'future-retry-error-credential-echo',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'error': 'Provider rejected credential: $credential',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [
+            {
+              'label': 'Submit OCR request',
+              'status': 'failed',
+              'error': 'Request failed with $credential',
+            },
+          ],
+          'ocrPageOutcomes': [
+            {
+              'imageIndex': 0,
+              'status': 'failed',
+              'error': 'Page failed with $credential',
+            },
+          ],
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'images': [
+              {
+                'storageRef': 'ocr_retry_cache/${'9' * 64}.bin',
+                'format': 'png',
+                'name': 'receipt.png',
+              },
+            ],
+            'instructionContent': 'Read the receipt total',
+            'futureSettings': {'recognitionMode': 'highAccuracy'},
+            'futureService': {'x-api-key': credential},
+          },
+        });
+
+        final serialized = task.toMap();
+        final persisted = jsonEncode(serialized);
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(task.id, 'future-retry-error-credential-echo');
+        expect(task.title, 'Failed OCR task');
+        expect(task.status, TaskStatus.failed);
+        expect(task.error, isNot(contains(credential)));
+        expect(task.steps.single.label, 'Submit OCR request');
+        expect(task.steps.single.error, isNot(contains(credential)));
+        expect(task.ocrPageOutcomes.single.imageIndex, 0);
+        expect(task.ocrPageOutcomes.single.error, isNot(contains(credential)));
+        expect(retryData['version'], 99);
+        expect(retryData['futureSettings'], {
+          'recognitionMode': 'highAccuracy',
+        });
+        expect(retryData['futureService'], isEmpty);
+        expect(snapshot.version, 99);
+        expect(
+          snapshot.images.single.storageRef,
+          'ocr_retry_cache/${'9' * 64}.bin',
+        );
+        expect(snapshot.instructionContent, 'Read the receipt total');
+        expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
+        expect(persisted, isNot(contains(credential)));
       },
     );
 
