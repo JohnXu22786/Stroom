@@ -42,8 +42,9 @@ void main() {
         .build()
         .toCompactSerialization();
     var returnedIdToken = validIdToken;
-    String? returnedScope =
+    Object? returnedScope =
         'openid profile email offline_access grok-cli:access';
+    var includeReturnedScope = true;
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
         requests.add(request);
@@ -97,7 +98,7 @@ void main() {
             'refresh_token': 'fixture-xai-refresh',
             'id_token': returnedIdToken,
             'token_type': 'Bearer',
-            'scope': returnedScope,
+            if (includeReturnedScope) 'scope': returnedScope,
             'expires_in': 3600,
           }),
           200,
@@ -163,6 +164,17 @@ void main() {
       client.pollXaiDeviceAuthorization(deviceCode: apiCode),
       throwsA(isA<LlmOAuthFlowException>()),
     );
+    returnedScope = '  ';
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: code),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    returnedScope = 42;
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: code),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    includeReturnedScope = false;
     returnedScope = null;
     final tokenWithoutScope = await client.pollXaiDeviceAuthorization(
       deviceCode: code,

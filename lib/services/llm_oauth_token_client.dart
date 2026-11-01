@@ -418,6 +418,9 @@ class LlmOAuthTokenClient {
           throw const LlmOAuthFlowException();
         }
         final grantedScope = _nonEmptyString(token['scope']);
+        if (token.containsKey('scope') && grantedScope == null) {
+          throw const LlmOAuthFlowException();
+        }
         if (grantedScope != null) {
           final grantedScopes = grantedScope.split(RegExp(r'\s+')).toSet();
           final requestedModeScope = deviceCode.scope.split(' ').last;
