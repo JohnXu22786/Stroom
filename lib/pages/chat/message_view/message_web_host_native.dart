@@ -271,6 +271,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
                   request.url.toString() != _macDocumentUri?.toString()) {
                 return null;
               }
+              if (kDebugMode) {
+                debugPrint('[MessageWebHost][custom-scheme] ${request.url}');
+              }
               return CustomSchemeResponse(
                 data: Uint8List.fromList(utf8.encode(widget.html)),
                 contentType: 'text/html',
@@ -307,6 +310,15 @@ class _MessageWebHostState extends State<MessageWebHost> {
                 _macDocumentNavigationStarted = false;
                 final generation = ++_macLoadGeneration;
                 unawaited(_failMacLoadIfUnready(controller, generation));
+                // WKWebView can accept loadUrl before Flutter attaches the
+                // platform view to its window, but it then never starts the
+                // navigation. Begin the custom-scheme request after this
+                // frame has attached the view.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || !identical(controller, _controller)) return;
+                  unawaited(_loadMacDocument(controller));
+                });
+                WidgetsBinding.instance.ensureVisualUpdate();
               }
               controller.addJavaScriptHandler(
                 handlerName: 'StroomMessageView',
@@ -345,9 +357,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
                   widget.onEvent(event);
                 },
               );
-              if (defaultTargetPlatform == TargetPlatform.macOS) {
-                unawaited(_loadMacDocument(controller));
-              }
             },
             onLoadStart: (controller, url) {
               if (defaultTargetPlatform == TargetPlatform.macOS &&
