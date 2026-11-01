@@ -558,9 +558,11 @@ class LlmOAuthTokenClient {
     final claimsJson = claims.toJson();
     final audience = claims.audience ?? const <String>[];
     final expiry = claims.expiry;
+    final authorizedParty = claimsJson['azp'];
     if (claims.issuer?.toString() != issuer ||
         !audience.contains(clientId) ||
-        (audience.length > 1 && claimsJson['azp'] != clientId) ||
+        (audience.length > 1 && authorizedParty != clientId) ||
+        (authorizedParty != null && authorizedParty != clientId) ||
         expiry == null ||
         !expiry.isAfter(DateTime.now().toUtc())) {
       throw const LlmOAuthFlowException();

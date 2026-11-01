@@ -154,6 +154,19 @@ void main() {
       throwsA(isA<LlmOAuthFlowException>()),
     );
     returnedIdToken = validIdToken;
+    final conflictingAzpToken = (JsonWebSignatureBuilder()
+          ..jsonContent = {...claims, 'azp': 'another-client'}
+          ..setProtectedHeader('typ', 'JWT')
+          ..setProtectedHeader('kid', 'xai-signing-key')
+          ..addRecipient(privateKey, algorithm: 'ES256'))
+        .build()
+        .toCompactSerialization();
+    returnedIdToken = conflictingAzpToken;
+    await expectLater(
+      client.pollXaiDeviceAuthorization(deviceCode: code),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    returnedIdToken = validIdToken;
     returnedScope = 'openid profile email offline_access api:access';
     await expectLater(
       client.pollXaiDeviceAuthorization(deviceCode: code),

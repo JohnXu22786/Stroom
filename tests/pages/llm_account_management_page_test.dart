@@ -16,6 +16,85 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('xAI OAuth model discovery can be retried from account editor', (
+    tester,
+  ) async {
+    var discoveryAttempts = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        discoveryAttempts++;
+        if (discoveryAttempts == 1) {
+          return ResponseBody.fromString(
+              '{"error":"temporarily unavailable"}', 503);
+        }
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'grok-3'}
+            ]
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json']
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+      dio: dio,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'xai-oauth-retry',
+        connectorType: 'xai-oauth',
+        authType: 'oauth',
+        displayName: 'xAI OAuth account',
+      ),
+      secret: jsonEncode({
+        'access_token': 'fixture-access-token',
+        'refresh_token': 'fixture-refresh-token',
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
+        'oauth_contract': 'xai-device-v1',
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号').last);
+    await tester.pumpAndSettle();
+
+    final refreshButton = find.widgetWithText(TextButton, '刷新模型目录');
+    expect(tester.widget<TextButton>(refreshButton).onPressed, isNotNull);
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(find.text('模型目录读取失败，请检查账号认证和连接设置。'), findsOneWidget);
+    expect(discoveryAttempts, 1);
+
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(discoveryAttempts, 2);
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('grok-3'));
+  });
+
   testWidgets('Kimi Code account uses the upstream device authorization flow', (
     tester,
   ) async {

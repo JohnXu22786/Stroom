@@ -1628,8 +1628,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 child: TextButton.icon(
                   onPressed: widget.account != null &&
                           !_draftChanged &&
-                          !{'kimi-coding', 'grok-cli', 'xai-oauth'}
-                              .contains(_connectorType)
+                          !{'kimi-coding'}.contains(_connectorType)
                       ? _discoverModels
                       : null,
                   icon: const Icon(Icons.refresh),
