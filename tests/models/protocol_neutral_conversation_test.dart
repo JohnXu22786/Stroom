@@ -1326,8 +1326,7 @@ void main() {
       expect(translated.sourceExtension?.data['wireMessage'], original);
     });
 
-    test(
-        'Responses reasoning item IDs are retained in compatible scopes', () {
+    test('Responses reasoning item IDs are retained in compatible scopes', () {
       final source = OpenAiResponsesBridge();
       final original = {
         'status': 'completed',

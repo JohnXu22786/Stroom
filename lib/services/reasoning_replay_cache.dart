@@ -22,9 +22,9 @@ class ReasoningReplayCache {
     this.capacity = defaultCapacity,
     this.ttl = defaultTtl,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now,
-       assert(capacity > 0),
-       assert(ttl > Duration.zero);
+  })  : _clock = clock ?? DateTime.now,
+        assert(capacity > 0),
+        assert(ttl > Duration.zero);
 
   int get length {
     _prune();
@@ -257,7 +257,10 @@ class ReasoningReplayCache {
         // Keep malformed arguments distinct as their original string.
       }
     }
-    return '__function_call__${jsonEncode(_canonicalize({'name': name, 'arguments': normalizedArguments}))}';
+    return '__function_call__${jsonEncode(_canonicalize({
+          'name': name,
+          'arguments': normalizedArguments
+        }))}';
   }
 
   static String _assistantTurnDigest(Map<String, dynamic> message) => sha256
@@ -353,16 +356,17 @@ class ReasoningReplayCache {
     required String protocolId,
     required String transcriptDigest,
     required String assistantTurnDigest,
-  }) => jsonEncode([
-    'portable',
-    providerId,
-    executorFamilyId,
-    modelId,
-    sessionId,
-    protocolId,
-    transcriptDigest,
-    assistantTurnDigest,
-  ]);
+  }) =>
+      jsonEncode([
+        'portable',
+        providerId,
+        executorFamilyId,
+        modelId,
+        sessionId,
+        protocolId,
+        transcriptDigest,
+        assistantTurnDigest,
+      ]);
 
   static String _opaqueKey({
     required String accountId,
@@ -373,17 +377,18 @@ class ReasoningReplayCache {
     required String protocolId,
     required String transcriptDigest,
     required String assistantTurnDigest,
-  }) => jsonEncode([
-    'opaque',
-    accountId,
-    providerId,
-    executorId,
-    modelId,
-    sessionId,
-    protocolId,
-    transcriptDigest,
-    assistantTurnDigest,
-  ]);
+  }) =>
+      jsonEncode([
+        'opaque',
+        accountId,
+        providerId,
+        executorId,
+        modelId,
+        sessionId,
+        protocolId,
+        transcriptDigest,
+        assistantTurnDigest,
+      ]);
 }
 
 abstract interface class _TimedEntry {

@@ -1364,12 +1364,10 @@ final class _OpenAiChatCompletionsBridge extends _MapBridge {
           data: {
             'text': reasoning is String ? reasoning : '',
             'complete': true,
-            if (replayItems is List)
-              'stroom.responsesOutputItems': replayItems,
+            if (replayItems is List) 'stroom.responsesOutputItems': replayItems,
             if (reasoningSignature is String)
               'thoughtSignature': reasoningSignature,
-            if (reasoningSignature is String)
-              'signature': reasoningSignature,
+            if (reasoningSignature is String) 'signature': reasoningSignature,
           },
         ),
       );

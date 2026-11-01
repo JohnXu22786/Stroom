@@ -1177,7 +1177,11 @@ void main() {
             },
           ],
         },
-        {'content': [{'type': 'text', 'text': 'follow-up'}]},
+        {
+          'content': [
+            {'type': 'text', 'text': 'follow-up'}
+          ]
+        },
       ],
     );
     final provider = LlmRoutedChatProvider(
@@ -1229,8 +1233,8 @@ void main() {
         .expand((message) => (message as Map)['content'] as List)
         .whereType<Map>()
         .toList();
-    final thinkingBlock = assistantBlocks
-        .firstWhere((block) => block['type'] == 'thinking');
+    final thinkingBlock =
+        assistantBlocks.firstWhere((block) => block['type'] == 'thinking');
     expect(thinkingBlock['thinking'], 'returned thought');
     expect(thinkingBlock['signature'], 'source-signature');
     expect(assistantBlocks.any((block) => block['type'] == 'tool_use'), isTrue);
@@ -3184,8 +3188,28 @@ void main() {
     final connector = _FakeConnectorClient(
       accounts,
       responseBodies: [
-        {'candidates': [{'content': {'parts': [{'text': 'streamed call'}]}}]},
-        {'candidates': [{'content': {'parts': [{'text': 'stream follow-up'}]}}]},
+        {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'streamed call'}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'stream follow-up'}
+                ]
+              }
+            }
+          ]
+        },
         {
           'candidates': [
             {
@@ -3202,7 +3226,17 @@ void main() {
             },
           ],
         },
-        {'candidates': [{'content': {'parts': [{'text': 'follow-up'}]}}]},
+        {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'follow-up'}
+                ]
+              }
+            }
+          ]
+        },
         {
           'candidates': [
             {
@@ -3221,7 +3255,17 @@ void main() {
             },
           ],
         },
-        {'candidates': [{'content': {'parts': [{'text': 'after call'}]}}]},
+        {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'after call'}
+                ]
+              }
+            }
+          ]
+        },
       ],
       streamBodies: [
         Stream<List<int>>.value(
@@ -3279,7 +3323,8 @@ void main() {
     final followUpParts = (connector.requestBody!['contents'] as List)
         .expand((message) => (message['parts'] as List).whereType<Map>());
     expect(
-      followUpParts.any((part) => part['thoughtSignature'] == 'opaque-signature'),
+      followUpParts
+          .any((part) => part['thoughtSignature'] == 'opaque-signature'),
       isTrue,
     );
 
@@ -3291,9 +3336,8 @@ void main() {
       {'role': 'assistant', 'content': 'answer'},
       {'role': 'user', 'content': 'continue'},
     ]);
-    final nonstreamFollowUpParts =
-        (connector.requestBody!['contents'] as List)
-            .expand((message) => (message['parts'] as List).whereType<Map>());
+    final nonstreamFollowUpParts = (connector.requestBody!['contents'] as List)
+        .expand((message) => (message['parts'] as List).whereType<Map>());
     final replayedThought = nonstreamFollowUpParts.firstWhere(
       (part) => part['thought'] == true,
     );

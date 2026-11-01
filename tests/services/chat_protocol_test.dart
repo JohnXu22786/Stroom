@@ -230,8 +230,7 @@ void main() {
       ),
     ];
 
-    test('OpenAI：工具调用历史不转发未验证的推理',
-        () {
+    test('OpenAI：工具调用历史不转发未验证的推理', () {
       final msgs = OpenAIProtocol().buildAssistantChainMessage(
         content: '我来查一下',
         toolCalls: calls,

@@ -20,7 +20,8 @@ void main() {
     int capacity = 128,
     Duration ttl = ReasoningReplayCache.defaultTtl,
     DateTime Function()? clock,
-  }) => ReasoningReplayCache(capacity: capacity, ttl: ttl, clock: clock);
+  }) =>
+      ReasoningReplayCache(capacity: capacity, ttl: ttl, clock: clock);
 
   List<Map<String, dynamic>> restore(
     ReasoningReplayCache cache,
@@ -32,16 +33,17 @@ void main() {
     String modelId = 'upstream-model',
     String sessionId = 'conversation-a',
     String protocolId = 'openai.chat_completions',
-  }) => cache.restore(
-    accountId: accountId,
-    providerId: providerId,
-    executorFamilyId: executorFamilyId,
-    executorId: executorId,
-    modelId: modelId,
-    sessionId: sessionId,
-    protocolId: protocolId,
-    requestMessages: messages,
-  );
+  }) =>
+      cache.restore(
+        accountId: accountId,
+        providerId: providerId,
+        executorFamilyId: executorFamilyId,
+        executorId: executorId,
+        modelId: modelId,
+        sessionId: sessionId,
+        protocolId: protocolId,
+        requestMessages: messages,
+      );
 
   void remember(
     ReasoningReplayCache cache, {
@@ -305,8 +307,8 @@ void main() {
     final mismatched = restore(cache, messages, accountId: 'account-b');
     expect(
       (mismatched[1]['tool_calls'] as List).single.containsKey(
-        'thoughtSignature',
-      ),
+            'thoughtSignature',
+          ),
       isFalse,
     );
     expect(mismatched[1].containsKey('stroom.reasoningSignature'), isFalse);
@@ -499,8 +501,8 @@ void main() {
     );
 
     expect(restored[1]['stroom.responsesOutputItems'], returnedItems);
-    final replayedMessage = AiGatewayProtocolBridges.openAiChatCompletions
-        .toStroom(restored[1]);
+    final replayedMessage =
+        AiGatewayProtocolBridges.openAiChatCompletions.toStroom(restored[1]);
     final request = AiGatewayProtocolBridges.buildRequest(
       'openai.responses',
       AiGatewayProtocolRequest(
@@ -618,7 +620,8 @@ void main() {
         cache,
         followUp,
         accountId: 'account-b',
-      )[1].containsKey('stroom.reasoningSignature'),
+      )[1]
+          .containsKey('stroom.reasoningSignature'),
       isFalse,
     );
     expect(cache.length, 0);

@@ -1246,9 +1246,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .where((item) => item['type'] == 'reasoning')
           .expand((item) {
             final summary = item['summary'];
-            return summary is List
-                ? summary.whereType<Map>()
-                : const <Map>[];
+            return summary is List ? summary.whereType<Map>() : const <Map>[];
           })
           .map((part) => _stringValue(part['text']) ?? '')
           .join();
@@ -1410,7 +1408,6 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     return const {};
   }
-
 
   Future<List<Attachment>> _storeStreamMedia(
     Map<String, dynamic> frame,
