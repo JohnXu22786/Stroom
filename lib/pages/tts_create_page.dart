@@ -682,7 +682,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 _sectionIcon(Icons.drive_file_rename_outline, cs),
                 const SizedBox(width: 10),
                 const Text('录音标题',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 if (widget.originalTitle != null)
                   FilterChip(
@@ -723,7 +724,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 _sectionIcon(Icons.subject_rounded, cs),
                 const SizedBox(width: 10),
                 const Text('转换文本',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 Text('语音内容',
                     style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
@@ -871,8 +873,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           style: TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w600)),
                       SizedBox(height: 2),
-                      Text('调整音色与声音表现',
-                          style: TextStyle(fontSize: 12)),
+                      Text('调整音色与声音表现', style: TextStyle(fontSize: 12)),
                     ],
                   ),
                 ),
