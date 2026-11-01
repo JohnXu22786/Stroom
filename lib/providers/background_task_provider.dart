@@ -1585,7 +1585,6 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'decoding',
         'key',
         'points',
-        'process',
         'further',
         'information',
         'document',
