@@ -15068,6 +15068,20 @@ void main() {
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
 
+        final spacedPrefixTask = taskFor(
+          'legacy-ocr-character-spaced-masked-prefix-echo',
+          'Please read d o c u m e n t a t i o n f o o b a r x y z carefully.',
+        );
+        final spacedPrefixInstruction = OcrRetrySnapshot.fromMap(
+          spacedPrefixTask.retryData!,
+        ).instructionContent!;
+        final spacedPrefixPersisted = jsonEncode(spacedPrefixTask.toMap());
+        expect(
+          spacedPrefixInstruction,
+          'Please read [redacted] carefully.',
+        );
+        expect(spacedPrefixPersisted, isNot(contains('foobarxyz')));
+
         const exactCredential = 'documentationchapter123456';
         final exactCredentialTask = taskFor(
           'legacy-ocr-natural-reference-exact-credential-echo',
@@ -15288,28 +15302,46 @@ void main() {
             'a r e c e i p t.\n'
             'Please read the documentation carefully before proceeding '
             'with configuration.';
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-spaced-natural-documentation-prompt',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer documentation…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': safePrompt},
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer documentation…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
                   ],
                 },
-              ],
-            },
-          },
-        });
+              },
+            });
+        final task = taskFor(
+          'legacy-ocr-spaced-natural-documentation-prompt',
+          safePrompt,
+        );
+        for (final entry in safePrompt.split('\n').asMap().entries) {
+          final isolatedTask = taskFor(
+            'legacy-ocr-spaced-natural-documentation-prompt-${entry.key}',
+            entry.value,
+          );
+          expect(
+            OcrRetrySnapshot.fromMap(
+              isolatedTask.retryData!,
+            ).instructionContent,
+            entry.value,
+            reason: entry.value,
+          );
+        }
         final instructionContent = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent!;

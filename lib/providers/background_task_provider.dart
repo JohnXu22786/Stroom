@@ -1526,8 +1526,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'workflows',
       'encryption',
     };
+    final spacedOpenMaskPrefixPattern =
+        prefix.split('').map(RegExp.escape).join(r'\s*');
     final chunkedCandidate = RegExp(
-      '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+      '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
       '((?:\\s+'
       '(?:[a-zA-Z0-9_/:;+=~@%-]|\\.(?=\\s+'
       '[a-zA-Z0-9_/:;+=~@%-]|[a-zA-Z0-9_/:;+=~@%-]))+)+)'
