@@ -10,6 +10,7 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
       _buildListTile(
         leading: const Icon(Icons.palette_outlined, color: Colors.deepPurple),
         title: '主题与显示',
+        subtitle: '深色模式、显示语言',
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.push(

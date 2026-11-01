@@ -13,9 +13,6 @@ class ThemeDisplaySettingsPage extends ConsumerStatefulWidget {
 
 class _ThemeDisplaySettingsPageState
     extends ConsumerState<ThemeDisplaySettingsPage> {
-  // Keep every language row in this order when adding locales: first its name
-  // in the currently selected display language, then its native/self-name in
-  // parentheses, and finally its locale ID in a separate badge.
   static const _languages = [
     _LanguageOption(displayName: '简体中文', nativeName: '简体中文', id: 'zh-cn'),
   ];
@@ -180,6 +177,13 @@ class _ThemeDisplaySettingsPageState
   }
 }
 
+/// A language row is shown as `displayName（nativeName）`, followed by a
+/// separate badge for `id`. `displayName` is the locale's name translated into
+/// the app's currently selected display language. `nativeName` is the
+/// language's own self-name (autonym), written in that language and shown in
+/// parentheses. `id` is its canonical BCP-47 locale identifier, shown in the
+/// badge after both names. Keep this order fixed; for zh-cn the values are
+/// `简体中文`, `简体中文`, and `zh-cn`.
 class _LanguageOption {
   const _LanguageOption({
     required this.displayName,

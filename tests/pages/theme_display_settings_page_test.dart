@@ -93,6 +93,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('深色模式、显示语言'), findsOneWidget);
     await tester.tap(find.text('主题与显示'));
     await tester.pumpAndSettle();
 
