@@ -1120,6 +1120,122 @@ void main() {
     expect(connector.requestedAccountIds, ['tool-only-account']);
   });
 
+  test('Anthropic nonstream returned thinking is replayed with its signature',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'anthropic-replay-account',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Anthropic replay account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'anthropic-replay-model',
+            upstreamModelId: 'claude-thinking',
+            displayName: 'Claude thinking',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'anthropic-replay-group',
+        displayName: 'Anthropic replay group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'anthropic-replay-account',
+            localModelId: 'anthropic-replay-model',
+            upstreamModelId: 'claude-thinking',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBodies: [
+        {
+          'content': [
+            {
+              'type': 'thinking',
+              'thinking': 'returned thought',
+              'signature': 'source-signature',
+            },
+            {'type': 'text', 'text': 'answer'},
+            {
+              'type': 'tool_use',
+              'id': 'source-tool-call',
+              'name': 'lookup',
+              'input': {'city': 'Paris'},
+            },
+          ],
+        },
+        {'content': [{'type': 'text', 'text': 'follow-up'}]},
+      ],
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'anthropic-replay-group',
+      localModelId: 'anthropic-replay-model',
+      endpointType: 'anthropic',
+      conversationId: 'anthropic-replay-conversation',
+    );
+
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      'answer',
+    );
+    await provider.chat(const [
+      {'role': 'user', 'content': 'hello'},
+      {
+        'role': 'assistant',
+        'content': 'answer',
+        'tool_calls': [
+          {
+            'id': 'client-tool-call',
+            'type': 'function',
+            'function': {
+              'name': 'lookup',
+              'arguments': '{"city":"Paris"}',
+            },
+          },
+        ],
+      },
+      {'role': 'tool', 'tool_call_id': 'client-tool-call', 'content': 'sunny'},
+      {'role': 'user', 'content': 'continue'},
+    ]);
+
+    final assistantBlocks = (connector.requestBody!['messages'] as List)
+        .where((message) => (message as Map)['role'] == 'assistant')
+        .expand((message) => (message as Map)['content'] as List)
+        .whereType<Map>()
+        .toList();
+    final thinkingBlock = assistantBlocks
+        .firstWhere((block) => block['type'] == 'thinking');
+    expect(thinkingBlock['thinking'], 'returned thought');
+    expect(thinkingBlock['signature'], 'source-signature');
+    expect(assistantBlocks.any((block) => block['type'] == 'tool_use'), isTrue);
+  });
+
   test(
     'Responses nonstreaming refusal content is returned to the caller',
     () async {
@@ -2659,6 +2775,18 @@ void main() {
       preferences: preferences,
       credentialStore: _MemoryCredentialStore(),
     );
+    const models = [
+      LlmUpstreamModel(
+        id: 'reasoning-replay-model',
+        upstreamModelId: 'source-model',
+        displayName: 'Reasoning replay model',
+        capabilities: {'streaming': true},
+      ),
+    ];
+    const endpointConfig = {
+      'apiProtocol': 'openai.chat_completions',
+      'baseUrl': 'https://provider.example.test/v1',
+    };
     await accounts.saveAccount(
       LlmAccount(
         id: 'reasoning-replay-account',
@@ -2666,20 +2794,22 @@ void main() {
         authType: 'api_key',
         displayName: 'Reasoning replay account',
         status: LlmAccountStatus.ready,
-        endpointConfig: {
-          'apiProtocol': 'openai.chat_completions',
-          'baseUrl': 'https://provider.example.test/v1',
-        },
-        models: const [
-          LlmUpstreamModel(
-            id: 'reasoning-replay-model',
-            upstreamModelId: 'source-model',
-            displayName: 'Reasoning replay model',
-            capabilities: {'streaming': true},
-          ),
-        ],
+        endpointConfig: endpointConfig,
+        models: models,
       ),
       secret: 'test-api-key',
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'reasoning-replay-account-b',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Reasoning replay fallback account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: endpointConfig,
+        models: models,
+      ),
+      secret: 'test-api-key-b',
     );
     await accounts.saveModelGroup(
       LlmModelGroup(
@@ -2688,6 +2818,11 @@ void main() {
         members: const [
           LlmModelGroupMember(
             accountId: 'reasoning-replay-account',
+            localModelId: 'reasoning-replay-model',
+            upstreamModelId: 'source-model',
+          ),
+          LlmModelGroupMember(
+            accountId: 'reasoning-replay-account-b',
             localModelId: 'reasoning-replay-model',
             upstreamModelId: 'source-model',
           ),
@@ -2737,6 +2872,17 @@ void main() {
     await provider.chatStream(const [
       {'role': 'user', 'content': 'question'},
     ]).toList();
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'reasoning-replay-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Reasoning replay account',
+        status: LlmAccountStatus.paused,
+        endpointConfig: endpointConfig,
+        models: models,
+      ),
+    );
     final nextTurnProvider = LlmRoutedChatProvider(
       runtime: runtime,
       groupId: 'reasoning-replay-group',
@@ -2751,6 +2897,10 @@ void main() {
     ]).toList();
 
     final requestMessages = connector.requestBody!['messages'] as List;
+    expect(connector.requestedAccountIds, [
+      'reasoning-replay-account',
+      'reasoning-replay-account-b',
+    ]);
     expect(
       (requestMessages[1] as Map)['reasoning_content'],
       'returned thought',
@@ -2790,7 +2940,7 @@ void main() {
         isolatedExecutorConnector.requestBody!['messages'] as List;
     expect(
       (isolatedRequestMessages[1] as Map).containsKey('reasoning_content'),
-      isFalse,
+      isTrue,
     );
   });
 

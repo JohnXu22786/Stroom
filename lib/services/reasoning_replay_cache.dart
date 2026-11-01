@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 /// Bounded, process-local replay of reasoning text actually returned by an
-/// upstream. Transcript content is represented only by a digest in cache keys.
+/// upstream. Portable and opaque entries have independent capacity bounds;
+/// transcript content is represented only by a digest in cache keys.
 class ReasoningReplayCache {
   static const defaultCapacity = 128;
   static const defaultTtl = Duration(hours: 1);
@@ -12,7 +13,10 @@ class ReasoningReplayCache {
   final int capacity;
   final Duration ttl;
   final DateTime Function() _clock;
-  final LinkedHashMap<String, _ReplayEntry> _entries = LinkedHashMap();
+  final LinkedHashMap<String, _PortableReasoningEntry> _portableEntries =
+      LinkedHashMap();
+  final LinkedHashMap<String, _OpaqueReplayEntry> _opaqueEntries =
+      LinkedHashMap();
 
   ReasoningReplayCache({
     this.capacity = defaultCapacity,
@@ -24,12 +28,13 @@ class ReasoningReplayCache {
 
   int get length {
     _prune();
-    return _entries.length;
+    return _portableEntries.length + _opaqueEntries.length;
   }
 
   void remember({
     required String accountId,
     required String providerId,
+    required String executorFamilyId,
     required String executorId,
     required String modelId,
     required String sessionId,
@@ -41,14 +46,16 @@ class ReasoningReplayCache {
     List<Map<String, dynamic>> returnedResponsesOutputItems = const [],
   }) {
     final reasoning = returnedReasoning;
+    final hasPortableReasoning = reasoning.trim().isNotEmpty;
     final hasResponsesReasoning = returnedResponsesOutputItems.any(
       (item) => item['type'] == 'reasoning',
     );
-    if ((reasoning.trim().isEmpty &&
-            returnedToolSignatures.isEmpty &&
-            !hasResponsesReasoning) ||
+    final hasOpaqueReplay =
+        returnedToolSignatures.isNotEmpty || hasResponsesReasoning;
+    if ((!hasPortableReasoning && !hasOpaqueReplay) ||
         accountId.isEmpty ||
         providerId.isEmpty ||
+        executorFamilyId.isEmpty ||
         executorId.isEmpty ||
         modelId.isEmpty ||
         sessionId.isEmpty ||
@@ -57,34 +64,59 @@ class ReasoningReplayCache {
       return;
     }
     _prune();
-    final key = _key(
-      accountId: accountId,
-      providerId: providerId,
-      executorId: executorId,
-      modelId: modelId,
-      sessionId: sessionId,
-      protocolId: protocolId,
-      transcriptDigest: transcriptDigest(requestMessages),
-      assistantTurnDigest: _assistantTurnDigest(returnedAssistantTurn),
-    );
-    _entries.remove(key);
-    _entries[key] = _ReplayEntry(
-      reasoning,
-      Map.unmodifiable(returnedToolSignatures),
-      [for (final item in returnedResponsesOutputItems) Map.unmodifiable(item)],
-      _clock().toUtc(),
-    );
-    while (_entries.length > capacity) {
-      _entries.remove(_entries.keys.first);
+    final transcriptHash = transcriptDigest(requestMessages);
+    final assistantTurnHash = _assistantTurnDigest(returnedAssistantTurn);
+    final createdAt = _clock().toUtc();
+    if (hasPortableReasoning) {
+      final key = _portableKey(
+        providerId: providerId,
+        executorFamilyId: executorFamilyId,
+        modelId: modelId,
+        sessionId: sessionId,
+        protocolId: protocolId,
+        transcriptDigest: transcriptHash,
+        assistantTurnDigest: assistantTurnHash,
+      );
+      _portableEntries.remove(key);
+      _portableEntries[key] = _PortableReasoningEntry(reasoning, createdAt);
+      while (_portableEntries.length > capacity) {
+        _portableEntries.remove(_portableEntries.keys.first);
+      }
+    }
+    if (hasOpaqueReplay) {
+      final key = _opaqueKey(
+        accountId: accountId,
+        providerId: providerId,
+        executorId: executorId,
+        modelId: modelId,
+        sessionId: sessionId,
+        protocolId: protocolId,
+        transcriptDigest: transcriptHash,
+        assistantTurnDigest: assistantTurnHash,
+      );
+      _opaqueEntries.remove(key);
+      _opaqueEntries[key] = _OpaqueReplayEntry(
+        Map.unmodifiable(returnedToolSignatures),
+        [
+          for (final item in returnedResponsesOutputItems)
+            Map.unmodifiable(item),
+        ],
+        createdAt,
+      );
+      while (_opaqueEntries.length > capacity) {
+        _opaqueEntries.remove(_opaqueEntries.keys.first);
+      }
     }
   }
 
   /// Returns copies of assistant messages with a matching source-returned
-  /// reasoning segment restored. A hit requires the exact prior transcript
-  /// prefix and the same account, provider, model, session, and protocol.
+  /// reasoning segment restored. Plain text replay uses the provider/executor
+  /// family and visible turn scope; opaque payloads additionally require the
+  /// exact source account and executor instance.
   List<Map<String, dynamic>> restore({
     required String accountId,
     required String providerId,
+    required String executorFamilyId,
     required String executorId,
     required String modelId,
     required String sessionId,
@@ -126,28 +158,39 @@ class ReasoningReplayCache {
       }
       final digest = transcriptDigest(requestMessages.take(index).toList());
       final assistantTurnDigest = _assistantTurnDigest(message);
-      final key = _key(
-        accountId: accountId,
-        providerId: providerId,
-        executorId: executorId,
-        modelId: modelId,
-        sessionId: sessionId,
-        protocolId: protocolId,
-        transcriptDigest: digest,
-        assistantTurnDigest: assistantTurnDigest,
+      final portableEntry = _readRecent(
+        _portableEntries,
+        _portableKey(
+          providerId: providerId,
+          executorFamilyId: executorFamilyId,
+          modelId: modelId,
+          sessionId: sessionId,
+          protocolId: protocolId,
+          transcriptDigest: digest,
+          assistantTurnDigest: assistantTurnDigest,
+        ),
       );
-      final entry = _entries.remove(key);
-      if (entry == null || _clock().toUtc().difference(entry.createdAt) > ttl) {
-        continue;
+      final opaqueEntry = _readRecent(
+        _opaqueEntries,
+        _opaqueKey(
+          accountId: accountId,
+          providerId: providerId,
+          executorId: executorId,
+          modelId: modelId,
+          sessionId: sessionId,
+          protocolId: protocolId,
+          transcriptDigest: digest,
+          assistantTurnDigest: assistantTurnDigest,
+        ),
+      );
+      if (portableEntry != null) {
+        message['reasoning_content'] = portableEntry.reasoning;
       }
-      _entries[key] = entry;
-      if (entry.reasoning.isNotEmpty) {
-        message['reasoning_content'] = entry.reasoning;
-      }
+      if (opaqueEntry == null) continue;
       if (protocolId == 'openai.responses' &&
-          entry.responsesOutputItems.isNotEmpty) {
+          opaqueEntry.responsesOutputItems.isNotEmpty) {
         message['stroom.responsesOutputItems'] = [
-          for (final item in entry.responsesOutputItems)
+          for (final item in opaqueEntry.responsesOutputItems)
             Map<String, dynamic>.from(item),
         ];
       }
@@ -156,13 +199,13 @@ class ReasoningReplayCache {
         message['tool_calls'] = [
           for (final raw in restoredCalls)
             if (raw is Map)
-              _restoreToolCallSignature(raw, entry.toolSignatures)
+              _restoreToolCallSignature(raw, opaqueEntry.toolSignatures)
             else
               raw,
         ];
       }
       final restoredContent = message['content'];
-      final thinkingSignature = entry.toolSignatures['__thinking__'];
+      final thinkingSignature = opaqueEntry.toolSignatures['__thinking__'];
       if (thinkingSignature != null) {
         message['stroom.reasoningSignature'] = thinkingSignature;
       }
@@ -262,11 +305,31 @@ class ReasoningReplayCache {
     }
   }
 
-  void clear() => _entries.clear();
+  void clear() {
+    _portableEntries.clear();
+    _opaqueEntries.clear();
+  }
 
   void _prune() {
     final now = _clock().toUtc();
-    _entries.removeWhere((_, entry) => now.difference(entry.createdAt) > ttl);
+    _portableEntries.removeWhere(
+      (_, entry) => now.difference(entry.createdAt) > ttl,
+    );
+    _opaqueEntries.removeWhere(
+      (_, entry) => now.difference(entry.createdAt) > ttl,
+    );
+  }
+
+  T? _readRecent<T extends _TimedEntry>(
+    LinkedHashMap<String, T> entries,
+    String key,
+  ) {
+    final entry = entries.remove(key);
+    if (entry == null || _clock().toUtc().difference(entry.createdAt) > ttl) {
+      return null;
+    }
+    entries[key] = entry;
+    return entry;
   }
 
   static String transcriptDigest(List<Map<String, dynamic>> messages) => sha256
@@ -282,7 +345,26 @@ class ReasoningReplayCache {
     return value;
   }
 
-  static String _key({
+  static String _portableKey({
+    required String providerId,
+    required String executorFamilyId,
+    required String modelId,
+    required String sessionId,
+    required String protocolId,
+    required String transcriptDigest,
+    required String assistantTurnDigest,
+  }) => jsonEncode([
+    'portable',
+    providerId,
+    executorFamilyId,
+    modelId,
+    sessionId,
+    protocolId,
+    transcriptDigest,
+    assistantTurnDigest,
+  ]);
+
+  static String _opaqueKey({
     required String accountId,
     required String providerId,
     required String executorId,
@@ -292,6 +374,7 @@ class ReasoningReplayCache {
     required String transcriptDigest,
     required String assistantTurnDigest,
   }) => jsonEncode([
+    'opaque',
     accountId,
     providerId,
     executorId,
@@ -303,16 +386,27 @@ class ReasoningReplayCache {
   ]);
 }
 
-class _ReplayEntry {
-  const _ReplayEntry(
-    this.reasoning,
+abstract interface class _TimedEntry {
+  DateTime get createdAt;
+}
+
+class _PortableReasoningEntry implements _TimedEntry {
+  const _PortableReasoningEntry(this.reasoning, this.createdAt);
+
+  final String reasoning;
+  @override
+  final DateTime createdAt;
+}
+
+class _OpaqueReplayEntry implements _TimedEntry {
+  const _OpaqueReplayEntry(
     this.toolSignatures,
     this.responsesOutputItems,
     this.createdAt,
   );
 
-  final String reasoning;
   final Map<String, String> toolSignatures;
   final List<Map<String, dynamic>> responsesOutputItems;
+  @override
   final DateTime createdAt;
 }

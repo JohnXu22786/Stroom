@@ -192,6 +192,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           messages,
           accountId: candidate.account.id,
           providerId: candidate.account.connectorType,
+          executorFamilyId: _executorReplayFamilyId(runtime.executor),
           executorId: _executorReplayScopeId(runtime.executor),
           modelId: candidate.upstreamModelId,
           protocolId: protocolId,
@@ -225,6 +226,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             accountId: candidate.account.id,
             providerId: candidate.account.connectorType,
             executorId: _executorReplayScopeId(runtime.executor),
+            executorFamilyId: _executorReplayFamilyId(runtime.executor),
             modelId: candidate.upstreamModelId,
             protocolId: protocolId,
             returnedResponsesOutputItems:
@@ -349,6 +351,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               messages,
               accountId: candidate.account.id,
               providerId: candidate.account.connectorType,
+              executorFamilyId: _executorReplayFamilyId(runtime.executor),
               executorId: _executorReplayScopeId(runtime.executor),
               modelId: candidate.upstreamModelId,
               protocolId: protocolId,
@@ -422,6 +425,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 accountId: candidate.account.id,
                 providerId: candidate.account.connectorType,
                 executorId: _executorReplayScopeId(runtime.executor),
+                executorFamilyId: _executorReplayFamilyId(runtime.executor),
                 modelId: candidate.upstreamModelId,
                 protocolId: protocolId,
                 returnedToolSignatures: returnedToolSignatures,
@@ -461,10 +465,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return id;
   }
 
+  static String _executorReplayFamilyId(AiGatewayExecutor executor) =>
+      executor.runtimeType.toString();
+
   List<Map<String, dynamic>> _messagesWithReasoningReplay(
     List<Map<String, dynamic>> messages, {
     required String accountId,
     required String providerId,
+    required String executorFamilyId,
     required String executorId,
     required String modelId,
     required String protocolId,
@@ -472,6 +480,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return _reasoningReplayCache.restore(
       accountId: accountId,
       providerId: providerId,
+      executorFamilyId: executorFamilyId,
       executorId: executorId,
       modelId: modelId,
       sessionId: conversationId ?? '',
@@ -485,6 +494,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String reasoning, {
     required String accountId,
     required String providerId,
+    required String executorFamilyId,
     required String executorId,
     required String modelId,
     required String protocolId,
@@ -497,6 +507,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     _reasoningReplayCache.remember(
       accountId: accountId,
       providerId: providerId,
+      executorFamilyId: executorFamilyId,
       executorId: executorId,
       modelId: modelId,
       sessionId: session,
@@ -1208,6 +1219,15 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic> data,
     String protocolId,
   ) {
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return '';
+      return blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .map((block) => _stringValue(block['thinking']) ?? '')
+          .join();
+    }
     if (protocolId == 'openai.chat_completions') {
       final choices = data['choices'];
       final message = choices is List && choices.isNotEmpty
@@ -1277,6 +1297,25 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         'tool_calls': message?['tool_calls'] ?? const [],
       };
     }
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (blocks is List)
+            for (final block in blocks.whereType<Map>())
+              if (block['type'] == 'tool_use')
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': block['name'],
+                    'arguments': jsonEncode(block['input'] ?? const {}),
+                  },
+                },
+        ],
+      };
+    }
     if (protocolId == 'openai.responses') {
       final output = data['output'];
       return {
@@ -1334,6 +1373,17 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic> data,
     String protocolId,
   ) {
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return const {};
+      final thinkingBlocks = blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .toList();
+      if (thinkingBlocks.length != 1) return const {};
+      final signature = _stringValue(thinkingBlocks.single['signature']);
+      return signature == null ? const {} : {'__thinking__': signature};
+    }
     if (protocolId == 'google.gemini.generate_content') {
       final candidates = data['candidates'];
       if (candidates is! List || candidates.isEmpty) return const {};

@@ -27,6 +27,7 @@ void main() {
     List<Map<String, dynamic>> messages, {
     String accountId = 'account-a',
     String providerId = 'openai-compatibility',
+    String executorFamilyId = 'gateway-executor-family',
     String executorId = 'gateway-executor',
     String modelId = 'upstream-model',
     String sessionId = 'conversation-a',
@@ -34,6 +35,7 @@ void main() {
   }) => cache.restore(
     accountId: accountId,
     providerId: providerId,
+    executorFamilyId: executorFamilyId,
     executorId: executorId,
     modelId: modelId,
     sessionId: sessionId,
@@ -43,24 +45,34 @@ void main() {
 
   void remember(
     ReasoningReplayCache cache, {
+    String accountId = 'account-a',
+    String providerId = 'openai-compatibility',
+    String executorFamilyId = 'gateway-executor-family',
+    String executorId = 'gateway-executor',
+    String modelId = 'upstream-model',
+    String sessionId = 'conversation-a',
+    String protocolId = 'openai.chat_completions',
     String reasoning = 'reasoning returned by upstream',
     Map<String, String> toolSignatures = const {},
+    List<Map<String, dynamic>> responsesOutputItems = const [],
     Map<String, dynamic> assistantTurn = const {
       'role': 'assistant',
       'content': 'answer',
     },
   }) {
     cache.remember(
-      accountId: 'account-a',
-      providerId: 'openai-compatibility',
-      executorId: 'gateway-executor',
-      modelId: 'upstream-model',
-      sessionId: 'conversation-a',
-      protocolId: 'openai.chat_completions',
+      accountId: accountId,
+      providerId: providerId,
+      executorFamilyId: executorFamilyId,
+      executorId: executorId,
+      modelId: modelId,
+      sessionId: sessionId,
+      protocolId: protocolId,
       requestMessages: sentMessages,
       returnedAssistantTurn: assistantTurn,
       returnedReasoning: reasoning,
       returnedToolSignatures: toolSignatures,
+      returnedResponsesOutputItems: responsesOutputItems,
     );
   }
 
@@ -100,15 +112,14 @@ void main() {
   });
 
   test(
-    'cache misses across account, provider, model, session, and protocol',
+    'cache misses across provider, executor family, model, session, and protocol',
     () {
       final cache = createCache();
       remember(cache);
 
       for (final scope in [
-        {'accountId': 'account-b'},
         {'providerId': 'another-provider'},
-        {'executorId': 'another-executor'},
+        {'executorFamilyId': 'another-executor-family'},
         {'modelId': 'another-model'},
         {'sessionId': 'another-conversation'},
         {'protocolId': 'openai.responses'},
@@ -116,6 +127,8 @@ void main() {
         final restored = cache.restore(
           accountId: scope['accountId'] ?? 'account-a',
           providerId: scope['providerId'] ?? 'openai-compatibility',
+          executorFamilyId:
+              scope['executorFamilyId'] ?? 'gateway-executor-family',
           executorId: scope['executorId'] ?? 'gateway-executor',
           modelId: scope['modelId'] ?? 'upstream-model',
           sessionId: scope['sessionId'] ?? 'conversation-a',
@@ -136,6 +149,78 @@ void main() {
       expect(followUp[1]['reasoning_content'], 'unscoped client copy');
     },
   );
+
+  test('portable reasoning crosses accounts but opaque state does not', () {
+    final cache = createCache();
+    final returnedItems = <Map<String, dynamic>>[
+      {
+        'type': 'reasoning',
+        'id': 'rs_account_a',
+        'encrypted_content': 'account-a-ciphertext',
+        'summary': [
+          {'type': 'summary_text', 'text': 'source summary'},
+        ],
+      },
+      {
+        'type': 'message',
+        'role': 'assistant',
+        'content': [
+          {'type': 'output_text', 'text': 'answer'},
+        ],
+      },
+    ];
+    remember(
+      cache,
+      protocolId: 'openai.responses',
+      reasoning: 'source summary',
+      toolSignatures: {'__thinking__': 'account-a-signature'},
+      responsesOutputItems: returnedItems,
+    );
+    final history = <Map<String, dynamic>>[
+      ...sentMessages,
+      {'role': 'assistant', 'content': 'answer'},
+      {'role': 'user', 'content': 'continue'},
+    ];
+
+    final siblingReplay = restore(
+      cache,
+      history,
+      accountId: 'account-b',
+      protocolId: 'openai.responses',
+    );
+    expect(siblingReplay[1]['reasoning_content'], 'source summary');
+    expect(siblingReplay[1].containsKey('stroom.reasoningSignature'), isFalse);
+    expect(
+      siblingReplay[1].containsKey('stroom.responsesOutputItems'),
+      isFalse,
+    );
+
+    final differentExecutorReplay = restore(
+      cache,
+      history,
+      accountId: 'account-a',
+      executorId: 'another-executor-instance',
+      protocolId: 'openai.responses',
+    );
+    expect(differentExecutorReplay[1]['reasoning_content'], 'source summary');
+    expect(
+      differentExecutorReplay[1].containsKey('stroom.responsesOutputItems'),
+      isFalse,
+    );
+    expect(
+      differentExecutorReplay[1].containsKey('stroom.reasoningSignature'),
+      isFalse,
+    );
+
+    final sourceReplay = restore(
+      cache,
+      history,
+      protocolId: 'openai.responses',
+    );
+    expect(sourceReplay[1]['reasoning_content'], 'source summary');
+    expect(sourceReplay[1]['stroom.reasoningSignature'], 'account-a-signature');
+    expect(sourceReplay[1]['stroom.responsesOutputItems'], returnedItems);
+  });
 
   test('a cache miss omits unscoped reasoning from the outbound copy', () {
     final cache = createCache();
@@ -232,6 +317,7 @@ void main() {
     cache.remember(
       accountId: 'account-a',
       providerId: 'openai-compatibility',
+      executorFamilyId: 'gateway-executor-family',
       executorId: 'gateway-executor',
       modelId: 'upstream-model',
       sessionId: 'conversation-a',
@@ -269,6 +355,7 @@ void main() {
     cache.remember(
       accountId: 'account-a',
       providerId: 'openai-compatibility',
+      executorFamilyId: 'gateway-executor-family',
       executorId: 'gateway-executor',
       modelId: 'upstream-model',
       sessionId: 'conversation-a',
@@ -303,6 +390,7 @@ void main() {
       cache.remember(
         accountId: 'account-a',
         providerId: 'openai-compatibility',
+        executorFamilyId: 'gateway-executor-family',
         executorId: 'gateway-executor',
         modelId: 'upstream-model',
         sessionId: 'conversation-a',
@@ -385,6 +473,7 @@ void main() {
     cache.remember(
       accountId: 'account-a',
       providerId: 'openai-compatibility',
+      executorFamilyId: 'gateway-executor-family',
       executorId: 'gateway-executor',
       modelId: 'upstream-model',
       sessionId: 'conversation-a',
@@ -456,6 +545,7 @@ void main() {
     cache.remember(
       accountId: 'account-a',
       providerId: 'openai-compatibility',
+      executorFamilyId: 'gateway-executor-family',
       executorId: 'gateway-executor',
       modelId: 'upstream-model',
       sessionId: 'conversation-b',
@@ -490,6 +580,46 @@ void main() {
         sessionId: 'conversation-b',
       )[1]['reasoning_content'],
       isNull,
+    );
+    expect(cache.length, 0);
+  });
+
+  test('opaque entries also expire and obey bounded capacity', () {
+    var now = DateTime.utc(2026, 1, 1);
+    final cache = createCache(
+      capacity: 1,
+      ttl: const Duration(minutes: 10),
+      clock: () => now,
+    );
+    remember(cache, reasoning: '', toolSignatures: {'__thinking__': 'old'});
+    remember(
+      cache,
+      accountId: 'account-b',
+      reasoning: '',
+      toolSignatures: {'__thinking__': 'new'},
+    );
+    expect(cache.length, 1);
+    expect(
+      restore(cache, followUp)[1].containsKey('stroom.reasoningSignature'),
+      isFalse,
+    );
+    expect(
+      restore(
+        cache,
+        followUp,
+        accountId: 'account-b',
+      )[1]['stroom.reasoningSignature'],
+      'new',
+    );
+
+    now = now.add(const Duration(minutes: 11));
+    expect(
+      restore(
+        cache,
+        followUp,
+        accountId: 'account-b',
+      )[1].containsKey('stroom.reasoningSignature'),
+      isFalse,
     );
     expect(cache.length, 0);
   });
