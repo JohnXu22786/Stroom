@@ -1496,6 +1496,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'individually',
       'meaningfully',
       'specifically',
+      'particularly',
+      'externally',
     };
     const naturalNouns = {
       'documentation',
@@ -1540,6 +1542,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'pages',
       'topic',
       'topics',
+      'user',
       'step',
       'steps',
       'workflow',
@@ -1562,7 +1565,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     final spacedOpenMaskPrefixPattern =
         prefix.split('').map(RegExp.escape).join(r'\s*');
     const spacedCredentialChunk =
-        r'(?:[a-zA-Z0-9_/:;+=~@%$#!&]|\.(?=[a-zA-Z0-9_/:;+=~@%$#!&]))+';
+        r'(?:[a-zA-Z0-9_/:;+=~@%$#!&-]|\.(?=[a-zA-Z0-9_/:;+=~@%$#!&-]))+';
     const spacedCredentialChunkSeparator = r'(?:[ \t]+|[\r\n]+[ \t]*)';
     const naturalSentenceActions = {
       'analyze',
@@ -1595,8 +1598,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     // appears in explicit credential-use context.
     final dottedCredentialCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
-      r'([a-zA-Z0-9_]{1,8})\.[ \t]+([a-zA-Z0-9_]{4,})'
-      r'([^\r\n]*)'
+      r'([a-zA-Z0-9_]{1,8})[ \t]*\.[ \t]+([a-zA-Z0-9_]{4,})'
+      r'([^\r\n]*(?:[\r\n]+[ \t]*[^\r\n]*)*)'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
     );
@@ -1611,13 +1614,24 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       final secondChunkIsNatural =
           naturalAdverbs.contains(secondChunk.toLowerCase()) ||
               naturalNouns.contains(secondChunk.toLowerCase());
+      final sentenceBoundary = RegExp(r'[.!?](?=\s)').firstMatch(sentenceTail);
+      final sentenceTailForClassification = sentenceBoundary == null
+          ? sentenceTail
+          : sentenceTail.substring(0, sentenceBoundary.start + 1);
       final naturalSentenceContinuation = RegExp(
         r'^\s+(?:(?:please\s+)?[a-z]+\s+)?(?:the|a|an|this|that|these|those)\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$|^\s+(?:with|for|to|on|about|from|into)\s+(?:(?:the|a|an)\s+)?[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$',
         caseSensitive: false,
-      ).hasMatch(sentenceTail);
+      ).hasMatch(sentenceTailForClassification);
       final standaloneNaturalAction =
           naturalSentenceActions.contains(secondChunk.toLowerCase()) &&
-              RegExp(r'^[.!?]*\s*$').hasMatch(sentenceTail);
+              RegExp(r'^[.!?]*\s*$').hasMatch(
+                sentenceTailForClassification,
+              );
+      final naturalYearTitleContinuation = RegExp(r'^\d{4}$')
+              .hasMatch(firstChunk) &&
+          naturalNouns.contains(secondChunk.toLowerCase()) &&
+          RegExp(r'^\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$', caseSensitive: false)
+              .hasMatch(sentenceTailForClassification);
       const naturalTailWords = {
         'a',
         'an',
@@ -1713,35 +1727,42 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         }
         naturalWordsBetweenChunks = 0;
       }
-      final naturalPromptLeadAfterPeriod = firstChunkIsNatural &&
-          (secondChunkIsNatural ||
-              naturalSentenceContinuation ||
-              standaloneNaturalAction);
-      if (naturalPromptLeadAfterPeriod && trailingCredentialSpans.isNotEmpty) {
-        trailingCredentialSpans
-            .sort((first, second) => first[0].compareTo(second[0]));
-        final mergedCredentialSpans = <List<int>>[];
-        for (final span in trailingCredentialSpans) {
-          if (mergedCredentialSpans.isEmpty ||
-              span[0] > mergedCredentialSpans.last[1]) {
-            mergedCredentialSpans.add(List<int>.from(span));
-          } else if (span[1] > mergedCredentialSpans.last[1]) {
-            mergedCredentialSpans.last[1] = span[1];
-          }
+      trailingCredentialSpans
+          .sort((first, second) => first[0].compareTo(second[0]));
+      final mergedCredentialSpans = <List<int>>[];
+      for (final span in trailingCredentialSpans) {
+        if (mergedCredentialSpans.isEmpty ||
+            span[0] > mergedCredentialSpans.last[1]) {
+          mergedCredentialSpans.add(List<int>.from(span));
+        } else if (span[1] > mergedCredentialSpans.last[1]) {
+          mergedCredentialSpans.last[1] = span[1];
         }
+      }
+      String redactTrailingCredentials() {
         var safeTail = sentenceTail;
         for (final span in mergedCredentialSpans.reversed) {
           safeTail = '${safeTail.substring(0, span[0])}[redacted]'
               '${safeTail.substring(span[1])}';
         }
+        return safeTail;
+      }
+
+      final naturalPromptLeadAfterPeriod = naturalYearTitleContinuation ||
+          (firstChunkIsNatural &&
+              (secondChunkIsNatural ||
+                  naturalSentenceContinuation ||
+                  standaloneNaturalAction));
+      if (naturalPromptLeadAfterPeriod && trailingCredentialSpans.isNotEmpty) {
+        final safeTail = redactTrailingCredentials();
         final firstChunkOffset = match.group(0)!.indexOf(firstChunk);
         final sourceLead = match.group(0)!.substring(0, firstChunkOffset);
         return '$sourceLead$firstChunk. $secondChunk$safeTail';
       }
-      final isNaturalSentence = firstChunkIsNatural &&
-          (secondChunkIsNatural ||
-              naturalSentenceContinuation ||
-              standaloneNaturalAction) &&
+      final isNaturalSentence = (naturalYearTitleContinuation ||
+              (firstChunkIsNatural &&
+                  (secondChunkIsNatural ||
+                      naturalSentenceContinuation ||
+                      standaloneNaturalAction))) &&
           trailingCredentialSpans.isEmpty;
       final hasCredentialShape = !isNaturalSentence &&
           ((joinedCredential.length >= 8 &&
@@ -1758,11 +1779,11 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                 minimumEntropy: 2.5,
                 maximumVowelRatio: 0.45,
               ));
-      final trailingPunctuation =
-          RegExp(r'[.!?;:)}\]"”’]+$').firstMatch(sentenceTail)?.group(0) ?? '';
-      return hasCredentialShape
-          ? '${match.group(1)}[redacted]$trailingPunctuation'
-          : match.group(0)!;
+      if (!hasCredentialShape) return match.group(0)!;
+      final firstChunkOffset = match.group(0)!.indexOf(firstChunk);
+      final sourceLead = match.group(0)!.substring(0, firstChunkOffset);
+      final safeTail = redactTrailingCredentials();
+      return '$sourceLead[redacted]$safeTail';
     });
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
@@ -2226,7 +2247,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       final naturalPrefixChunks = credentialStartChunkIndex > 0
           ? chunks.take(credentialStartChunkIndex).toList()
           : const <String>[];
+      final isOnlyNaturalAdverbPrefix = naturalPrefixChunks.length == 1 &&
+          naturalAdverbs.contains(naturalPrefixChunks.single.toLowerCase());
       final preserveNaturalPrefix = naturalPrefixChunks.isNotEmpty &&
+          !isOnlyNaturalAdverbPrefix &&
           _legacyOcrIsNaturalDocumentationContinuation(
             sanitized,
             match,
