@@ -604,7 +604,7 @@ bool _legacyOcrTextContainsCredential(
 
   final naturalDocumentationReference = text.replaceAll(
     RegExp(
-      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:chapter|section|page|step|part|id|c\s*h\s*a\s*p\s*t\s*e\s*r|s\s*e\s*c\s*t\s*i\s*o\s*n|p\s*a\s*g\s*e|s\s*t\s*e\s*p|p\s*a\s*r\s*t|i\s*d)[_-]?\s*(?:\s*\d){1,18}\b',
+      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:(?:chapter|section|page|step|part|id|c\s*h\s*a\s*p\s*t\s*e\s*r|s\s*e\s*c\s*t\s*i\s*o\s*n|p\s*a\s*g\s*e|s\s*t\s*e\s*p|p\s*a\s*r\s*t|i\s*d)[_-]?\s*(?:\s*\d){1,18}\b|(?:a\s+)?\d{1,4}-pages?\s+(?:guide|manual|overview|reference|documentation))',
       caseSensitive: false,
     ),
     '',
@@ -1900,7 +1900,9 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       }
       // Natural-looking chunks on either side can belong to the credential.
       // Drop the whole candidate once it matches the credential shape.
-      return '${match.group(1)}[redacted]$trailingPunctuation';
+      return explicitAuthenticationUseContext
+          ? '${match.group(1)}[redacted] to authenticate$trailingPunctuation'
+          : '${match.group(1)}[redacted]$trailingPunctuation';
     });
   }
   return sanitized;
