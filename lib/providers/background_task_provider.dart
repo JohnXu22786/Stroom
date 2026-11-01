@@ -746,16 +746,103 @@ bool _legacyOcrHasExactCredentialEcho(
   Iterable<String> credentialValues,
 ) =>
     credentialValues.any((value) {
-      final candidate = RegExp(
-            r'^(?:Bearer|Basic)\s+(.+)$',
-            caseSensitive: false,
-          ).firstMatch(value.trim())?.group(1) ??
-          value.trim();
-      return candidate.isNotEmpty &&
-          !candidate.contains('…') &&
-          !candidate.trimRight().endsWith('...') &&
-          text.contains(candidate);
+      final pattern = _legacyOcrExactCredentialEchoPattern(value);
+      final candidate = _legacyOcrExactCredentialCandidate(value);
+      if (pattern == null || candidate == null) return false;
+      return pattern.allMatches(text).any(
+            (match) => _legacyOcrShouldRedactExactCredentialOccurrence(
+              text,
+              match,
+              candidate,
+            ),
+          );
     });
+
+String? _legacyOcrExactCredentialCandidate(String value) {
+  final candidate = RegExp(
+        r'^(?:Bearer|Basic)\s+(.+)$',
+        caseSensitive: false,
+      ).firstMatch(value.trim())?.group(1) ??
+      value.trim();
+  if (candidate.isEmpty ||
+      candidate.contains('…') ||
+      candidate.trimRight().endsWith('...')) {
+    return null;
+  }
+  final compactCandidate = candidate.replaceAll(RegExp(r'\s+'), '');
+  return compactCandidate.isEmpty ? null : compactCandidate;
+}
+
+bool _legacyOcrShouldRedactExactCredentialOccurrence(
+  String text,
+  Match match,
+  String candidate,
+) {
+  final surroundingText = text.replaceRange(match.start, match.end, '');
+  if (surroundingText
+      .replaceAll(RegExp(r'[\s\p{P}]', unicode: true), '')
+      .isEmpty) {
+    return true;
+  }
+  final before = text.substring(0, match.start).trimRight();
+  final after = text.substring(match.end).trimLeft();
+  final explicitUseContext = RegExp(
+        r'\b(?:use|send|provide|enter|supply|pass|set)$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(
+        r'^(?:for (?:the )?request|to (?:process|read|recognize|extract)|as (?:the )?(?:key|token|credential|secret|password))\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  if (explicitUseContext) return true;
+  final hasMixedCase = RegExp(r'[a-z]').hasMatch(candidate) &&
+      RegExp(r'[A-Z]').hasMatch(candidate);
+  return RegExp(r'[-_0-9]').hasMatch(candidate) ||
+      hasMixedCase ||
+      _legacyOcrHasHighAlphabeticEntropy(
+        candidate,
+        minimumLength: 8,
+        minimumEntropy: 3.3,
+        maximumVowelRatio: 0.45,
+      );
+}
+
+RegExp? _legacyOcrExactCredentialEchoPattern(String value) {
+  final candidate = _legacyOcrExactCredentialCandidate(value);
+  if (candidate == null) return null;
+  final exactEchoPattern = candidate.runes
+      .map((rune) => RegExp.escape(String.fromCharCode(rune)))
+      .join(r'\s*');
+  return RegExp(
+    r'(^|[^\p{L}\p{M}\p{N}_])('
+    '$exactEchoPattern'
+    r')(?=$|[^\p{L}\p{M}\p{N}_])',
+    unicode: true,
+  );
+}
+
+String _legacyOcrRedactExactCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final pattern = _legacyOcrExactCredentialEchoPattern(value);
+    final candidate = _legacyOcrExactCredentialCandidate(value);
+    if (pattern == null || candidate == null) continue;
+    sanitized = sanitized.replaceAllMapped(pattern, (match) {
+      if (!_legacyOcrShouldRedactExactCredentialOccurrence(
+        sanitized,
+        match,
+        candidate,
+      )) {
+        return match.group(0)!;
+      }
+      return '${match.group(1)}[redacted]';
+    });
+  }
+  return sanitized;
+}
 
 bool _legacyOcrIsOnlyRedactedCredentialSpan(String text) => RegExp(
       r'^\s*\[redacted\][\s\p{P}]*$',
@@ -2445,8 +2532,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           credentialValues,
         );
     final redactedText = hadCredential
-        ? _legacyOcrRedactMaskedCredentialEchoes(
-            whitespaceRedactedText,
+        ? _legacyOcrRedactExactCredentialEchoes(
+            _legacyOcrRedactMaskedCredentialEchoes(
+              whitespaceRedactedText,
+              credentialValues,
+            ),
             credentialValues,
           )
         : sourceText;

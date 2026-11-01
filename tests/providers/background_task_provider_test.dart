@@ -3214,6 +3214,127 @@ void main() {
         );
         expect(knownCredentialPersisted, isNot(contains(exactCredential)));
 
+        final shortCredentialSubstringTask = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-credential-not-a-substring-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'X-Api-Key': 'key'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text': 'The monkey is visible. The note contains ékey.',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final shortCredentialSubstringPersisted =
+            jsonEncode(shortCredentialSubstringTask.toMap());
+        final shortCredentialSubstringRetryData = (jsonDecode(
+          shortCredentialSubstringPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            shortCredentialSubstringTask.retryData!,
+          ).instructionContent,
+          'The monkey is visible. The note contains ékey.',
+        );
+        expect(
+          shortCredentialSubstringRetryData['instructionContent'],
+          'The monkey is visible. The note contains ékey.',
+        );
+
+        final terminalShortCredentialTask = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-terminal-short-exact-credential',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'X-Api-Key': 'key'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'key'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final terminalShortCredentialPersisted =
+            jsonEncode(terminalShortCredentialTask.toMap());
+        final terminalShortCredentialRetryData = (jsonDecode(
+          terminalShortCredentialPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            terminalShortCredentialTask.retryData!,
+          ).instructionContent,
+          '[redacted]',
+        );
+        expect(
+          terminalShortCredentialRetryData['instructionContent'],
+          '[redacted]',
+        );
+        expect(
+          terminalShortCredentialPersisted,
+          isNot(contains('"instructionContent":"key"')),
+        );
+
+        final naturalArticleCredentialValueTask = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-common-short-key-is-a-natural-article',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'X-Api-Key': 'a'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'The image contains a receipt.'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final naturalArticleCredentialValuePersisted =
+            jsonEncode(naturalArticleCredentialValueTask.toMap());
+        final naturalArticleCredentialValueRetryData = (jsonDecode(
+          naturalArticleCredentialValuePersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            naturalArticleCredentialValueTask.retryData!,
+          ).instructionContent,
+          'The image contains a receipt.',
+        );
+        expect(
+          naturalArticleCredentialValueRetryData['instructionContent'],
+          'The image contains a receipt.',
+        );
+
         final maskedImageTask = BackgroundTask.fromMap({
           'id': 'legacy-ocr-masked-credential-image-description',
           'type': 'ocr',
