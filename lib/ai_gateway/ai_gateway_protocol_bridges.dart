@@ -1353,8 +1353,24 @@ final class _OpenAiChatCompletionsBridge extends _MapBridge {
         );
     }
     final reasoning = message['reasoning_content'];
-    if (reasoning is String && reasoning.isNotEmpty) {
-      content.add(StroomContentPart.reasoning(reasoning, complete: true));
+    final replayItems = message['stroom.responsesOutputItems'];
+    final reasoningSignature = message['stroom.reasoningSignature'];
+    if ((reasoning is String && reasoning.isNotEmpty) ||
+        (replayItems is List && replayItems.isNotEmpty) ||
+        (reasoningSignature is String && reasoningSignature.isNotEmpty)) {
+      content.add(
+        StroomContentPart(
+          type: 'reasoning',
+          data: {
+            'text': reasoning is String ? reasoning : '',
+            'complete': true,
+            if (replayItems is List) 'stroom.responsesOutputItems': replayItems,
+            if (reasoningSignature is String)
+              'thoughtSignature': reasoningSignature,
+            if (reasoningSignature is String) 'signature': reasoningSignature,
+          },
+        ),
+      );
     }
     final calls = message['tool_calls'];
     if (calls is List) {
@@ -1510,6 +1526,13 @@ final class _OpenAiResponsesBridge extends _MapBridge {
         retained['source'] is Map &&
         jsonEncode(retained['neutral']) == jsonEncode(_snapshot(message))) {
       return [super.fromStroom(message)];
+    }
+    final replayItems = _partsOfType(message, 'reasoning')
+        .map((part) => part.data['stroom.responsesOutputItems'])
+        .whereType<List>()
+        .firstOrNull;
+    if (replayItems != null && replayItems.every((item) => item is Map)) {
+      return [for (final item in replayItems) _copyMap(item as Map)];
     }
     final visibleParts = message.content.where(
       (part) => part.type == 'text' || part.type == 'image',

@@ -13,6 +13,7 @@ import 'anthropic_chat_provider.dart';
 import '../services/api_protocol_config.dart';
 import 'chat_api_provider.dart';
 import '../services/conversation_media_storage.dart';
+import '../services/reasoning_replay_cache.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
@@ -70,6 +71,11 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
 /// ChatAdapter provider that keeps the application's existing chat protocol
 /// while selecting an eligible account from the model's stable M1 group.
 class LlmRoutedChatProvider extends BaseChatProvider {
+  static final ReasoningReplayCache _processReasoningReplayCache =
+      ReasoningReplayCache();
+  static final Expando<String> _executorReplayScopeIds = Expando();
+  static int _nextExecutorReplayScopeId = 0;
+
   final Future<AiGatewayFacade> _runtime;
   final String groupId;
   final String localModelId;
@@ -77,6 +83,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   final String? apiProtocol;
   final String? apiProtocolOverride;
   final String? conversationId;
+  final ReasoningReplayCache _reasoningReplayCache;
   String? selectedAccountId;
   final ConversationMediaWriter? _saveMediaFile;
   List<Attachment> _lastMediaAttachments = const [];
@@ -97,8 +104,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     this.apiProtocolOverride,
     this.conversationId,
     this.selectedAccountId,
+    ReasoningReplayCache? reasoningReplayCache,
     ConversationMediaWriter? saveMediaFile,
   })  : _runtime = runtime,
+        _reasoningReplayCache =
+            reasoningReplayCache ?? _processReasoningReplayCache,
         _saveMediaFile = saveMediaFile;
 
   @override
@@ -178,8 +188,17 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
         final protocolId =
             _protocolFor(candidate.account, candidate.upstreamModelId);
-        final body = await _buildBody(
+        final replayMessages = _messagesWithReasoningReplay(
           messages,
+          accountId: candidate.account.id,
+          providerId: candidate.account.connectorType,
+          executorFamilyId: _executorReplayFamilyId(runtime.executor),
+          executorId: _executorReplayScopeId(runtime.executor),
+          modelId: candidate.upstreamModelId,
+          protocolId: protocolId,
+        );
+        final body = await _buildBody(
+          replayMessages,
           protocolId: protocolId,
           upstreamModelId: candidate.upstreamModelId,
           maxTokens: maxTokens,
@@ -201,6 +220,22 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           _lastResponseHeaders = response.headers;
           final result = _readCompletion(response.body, protocolId);
           _lastResponseData = result.data;
+          _rememberReturnedReasoning(
+            messages,
+            _completionReasoning(result.data, protocolId),
+            accountId: candidate.account.id,
+            providerId: candidate.account.connectorType,
+            executorId: _executorReplayScopeId(runtime.executor),
+            executorFamilyId: _executorReplayFamilyId(runtime.executor),
+            modelId: candidate.upstreamModelId,
+            protocolId: protocolId,
+            returnedResponsesOutputItems:
+                _completionResponsesOutputItems(result.data, protocolId),
+            returnedAssistantTurn:
+                _completionAssistantTurn(result.data, result.text, protocolId),
+            returnedToolSignatures:
+                _completionReasoningSignatures(result.data, protocolId),
+          );
           _lastMediaAttachments = await _storeStreamMedia(
             result.data,
             protocolId,
@@ -312,8 +347,17 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             }
             final protocolId =
                 _protocolFor(candidate.account, candidate.upstreamModelId);
-            final body = await _buildBody(
+            final replayMessages = _messagesWithReasoningReplay(
               messages,
+              accountId: candidate.account.id,
+              providerId: candidate.account.connectorType,
+              executorFamilyId: _executorReplayFamilyId(runtime.executor),
+              executorId: _executorReplayScopeId(runtime.executor),
+              modelId: candidate.upstreamModelId,
+              protocolId: protocolId,
+            );
+            final body = await _buildBody(
+              replayMessages,
               protocolId: protocolId,
               upstreamModelId: candidate.upstreamModelId,
               maxTokens: maxTokens,
@@ -336,20 +380,62 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               );
               _lastResponseStatusCode = response.statusCode;
               _lastResponseHeaders = response.headers;
+              final returnedResponsesOutputItems = <Map<String, dynamic>>[];
               final eventStream = await _parseStream(
                 response,
                 progress,
                 runtime: runtime,
                 accountId: candidate.account.id,
                 protocolId: protocolId,
+                returnedResponsesOutputItems: returnedResponsesOutputItems,
               );
+              final returnedReasoning = StringBuffer();
+              final returnedAssistantText = StringBuffer();
+              final returnedAssistantToolCalls = <Map<String, dynamic>>[];
+              final returnedToolSignatures = <String, String>{};
               await for (final event in eventStream) {
                 if (controller.isClosed) return;
+                if (event.isReasoning && event.text.isNotEmpty) {
+                  returnedReasoning.write(event.text);
+                } else if (!event.isReasoning && event.text.isNotEmpty) {
+                  returnedAssistantText.write(event.text);
+                }
+                final thinkingSignature = event.thinkingSignature;
+                if (thinkingSignature != null && thinkingSignature.isNotEmpty) {
+                  returnedToolSignatures['__thinking__'] = thinkingSignature;
+                }
+                for (final call in event.toolCalls ?? const []) {
+                  returnedAssistantToolCalls.add(
+                    Map<String, dynamic>.from(call),
+                  );
+                  final id = _stringValue(call['id']);
+                  final signature = _stringValue(call['thoughtSignature']);
+                  if (id != null && signature != null && signature.isNotEmpty) {
+                    returnedToolSignatures[id] = signature;
+                  }
+                }
                 if (event.usage == null) {
                   await progress.markOutputVisible();
                 }
                 controller.add(event);
               }
+              _rememberReturnedReasoning(
+                messages,
+                returnedReasoning.toString(),
+                accountId: candidate.account.id,
+                providerId: candidate.account.connectorType,
+                executorId: _executorReplayScopeId(runtime.executor),
+                executorFamilyId: _executorReplayFamilyId(runtime.executor),
+                modelId: candidate.upstreamModelId,
+                protocolId: protocolId,
+                returnedToolSignatures: returnedToolSignatures,
+                returnedResponsesOutputItems: returnedResponsesOutputItems,
+                returnedAssistantTurn: {
+                  'role': 'assistant',
+                  'content': returnedAssistantText.toString(),
+                  'tool_calls': returnedAssistantToolCalls,
+                },
+              );
             } on AiGatewayExecutionException catch (error) {
               if (error.kind != AiGatewayFailureKind.request) rethrow;
               _captureResponseFailure(error);
@@ -370,6 +456,69 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   Set<String> get _supportedConnectorTypes =>
       llmRoutedChatSupportedConnectorTypesForModelOverride(apiProtocolOverride);
+
+  static String _executorReplayScopeId(AiGatewayExecutor executor) {
+    final existing = _executorReplayScopeIds[executor];
+    if (existing != null) return existing;
+    final id = 'executor-${_nextExecutorReplayScopeId++}';
+    _executorReplayScopeIds[executor] = id;
+    return id;
+  }
+
+  static String _executorReplayFamilyId(AiGatewayExecutor executor) =>
+      executor.runtimeType.toString();
+
+  List<Map<String, dynamic>> _messagesWithReasoningReplay(
+    List<Map<String, dynamic>> messages, {
+    required String accountId,
+    required String providerId,
+    required String executorFamilyId,
+    required String executorId,
+    required String modelId,
+    required String protocolId,
+  }) {
+    return _reasoningReplayCache.restore(
+      accountId: accountId,
+      providerId: providerId,
+      executorFamilyId: executorFamilyId,
+      executorId: executorId,
+      modelId: modelId,
+      sessionId: conversationId ?? '',
+      protocolId: protocolId,
+      requestMessages: messages,
+    );
+  }
+
+  void _rememberReturnedReasoning(
+    List<Map<String, dynamic>> messages,
+    String reasoning, {
+    required String accountId,
+    required String providerId,
+    required String executorFamilyId,
+    required String executorId,
+    required String modelId,
+    required String protocolId,
+    Map<String, String> returnedToolSignatures = const {},
+    List<Map<String, dynamic>> returnedResponsesOutputItems = const [],
+    required Map<String, dynamic> returnedAssistantTurn,
+  }) {
+    final session = conversationId;
+    if (session == null || session.isEmpty) return;
+    _reasoningReplayCache.remember(
+      accountId: accountId,
+      providerId: providerId,
+      executorFamilyId: executorFamilyId,
+      executorId: executorId,
+      modelId: modelId,
+      sessionId: session,
+      protocolId: protocolId,
+      requestMessages: messages,
+      returnedAssistantTurn: returnedAssistantTurn,
+      returnedReasoning: reasoning,
+      returnedToolSignatures: returnedToolSignatures,
+      returnedResponsesOutputItems: returnedResponsesOutputItems,
+    );
+  }
 
   String _protocolFor(AiGatewayAccount account, String upstreamModelId) {
     if (apiProtocolOverride != null && apiProtocolOverride!.isNotEmpty) {
@@ -593,6 +742,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required AiGatewayFacade runtime,
     required String accountId,
     required String protocolId,
+    required List<Map<String, dynamic>> returnedResponsesOutputItems,
   }) async {
     final body = response.body;
     if (body is! Stream<List<int>>) {
@@ -711,6 +861,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (decoded is! Map) continue;
             final data = Map<String, dynamic>.from(decoded);
             _lastResponseData = data;
+            if (protocolId == 'openai.responses' &&
+                data['type'] == 'response.output_item.done') {
+              final item = data['item'];
+              if (item is Map) {
+                final responseItem = Map<String, dynamic>.from(item);
+                returnedResponsesOutputItems.add(responseItem);
+              }
+            }
             var geminiContentPartsHandled = false;
             if (protocolId == 'google.gemini.generate_content' &&
                 data['candidates'] is List) {
@@ -727,6 +885,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                       AIStreamEvent(
                         part['text'] as String,
                         isReasoning: part['thought'] == true,
+                        thinkingSignature:
+                            _stringValue(part['thoughtSignature']),
                         contentOrder:
                             part['thought'] == true ? null : nextContentOrder++,
                       ),
@@ -1053,6 +1213,200 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         protocolId,
       ),
     );
+  }
+
+  static String _completionReasoning(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return '';
+      return blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .map((block) => _stringValue(block['thinking']) ?? '')
+          .join();
+    }
+    if (protocolId == 'openai.chat_completions') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      return _stringValue(
+            message?['reasoning_content'] ?? message?['reasoning'],
+          ) ??
+          '';
+    }
+    if (protocolId == 'openai.responses') {
+      final output = data['output'];
+      if (output is! List) return '';
+      return output
+          .whereType<Map>()
+          .where((item) => item['type'] == 'reasoning')
+          .expand((item) {
+            final summary = item['summary'];
+            return summary is List ? summary.whereType<Map>() : const <Map>[];
+          })
+          .map((part) => _stringValue(part['text']) ?? '')
+          .join();
+    }
+    if (protocolId == 'google.gemini.generate_content') {
+      final candidates = data['candidates'];
+      if (candidates is! List || candidates.isEmpty) return '';
+      final content = _jsonMap(candidates.first)?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      if (rawParts is! List) return '';
+      return rawParts
+          .whereType<Map>()
+          .where((part) => part['thought'] == true)
+          .map((part) => _stringValue(part['text']) ?? '')
+          .join();
+    }
+    return '';
+  }
+
+  static List<Map<String, dynamic>> _completionResponsesOutputItems(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId != 'openai.responses' || data['output'] is! List) {
+      return const [];
+    }
+    return [
+      for (final item in (data['output'] as List).whereType<Map>())
+        Map<String, dynamic>.from(item),
+    ];
+  }
+
+  static Map<String, dynamic> _completionAssistantTurn(
+    Map<String, dynamic> data,
+    String text,
+    String protocolId,
+  ) {
+    if (protocolId == 'openai.chat_completions') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      return {
+        'role': 'assistant',
+        'content': message?['content'] ?? '',
+        'tool_calls': message?['tool_calls'] ?? const [],
+      };
+    }
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (blocks is List)
+            for (final block in blocks.whereType<Map>())
+              if (block['type'] == 'tool_use')
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': block['name'],
+                    'arguments': jsonEncode(block['input'] ?? const {}),
+                  },
+                },
+        ],
+      };
+    }
+    if (protocolId == 'openai.responses') {
+      final output = data['output'];
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (output is List)
+            for (final item in output.whereType<Map>())
+              if (item['type'] == 'function_call')
+                {
+                  'id': item['call_id'] ?? item['id'],
+                  'type': 'function',
+                  'function': {
+                    'name': item['name'],
+                    'arguments': item['arguments'] ?? '{}',
+                  },
+                },
+        ],
+      };
+    }
+    if (protocolId == 'google.gemini.generate_content') {
+      final candidates = data['candidates'];
+      final candidate = candidates is List && candidates.isNotEmpty
+          ? _jsonMap(candidates.first)
+          : null;
+      final content = candidate?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (rawParts is List)
+            for (final part in rawParts.whereType<Map>())
+              if (part['functionCall'] is Map)
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': (part['functionCall'] as Map)['name'],
+                    'arguments': jsonEncode(
+                      (part['functionCall'] as Map)['args'] ?? const {},
+                    ),
+                  },
+                },
+        ],
+      };
+    }
+    return {
+      'role': 'assistant',
+      'content': text,
+      'tool_calls': const [],
+    };
+  }
+
+  static Map<String, String> _completionReasoningSignatures(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return const {};
+      final thinkingBlocks = blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .toList();
+      if (thinkingBlocks.length != 1) return const {};
+      final signature = _stringValue(thinkingBlocks.single['signature']);
+      return signature == null ? const {} : {'__thinking__': signature};
+    }
+    if (protocolId == 'google.gemini.generate_content') {
+      final candidates = data['candidates'];
+      if (candidates is! List || candidates.isEmpty) return const {};
+      final content = _jsonMap(candidates.first)?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      if (rawParts is! List) return const {};
+      final signatures = <String, String>{};
+      for (final part in rawParts.whereType<Map>()) {
+        final signature = _stringValue(part['thoughtSignature']);
+        if (signature == null || signature.isEmpty) continue;
+        if (part['thought'] == true) {
+          signatures['__thinking__'] = signature;
+        }
+        final functionCall = _jsonMap(part['functionCall']);
+        final name = _stringValue(functionCall?['name']);
+        if (name != null && functionCall != null) {
+          signatures[ReasoningReplayCache.functionCallSignatureKey(
+            name: name,
+            arguments: functionCall['args'],
+          )] = signature;
+        }
+      }
+      return signatures;
+    }
+    return const {};
   }
 
   Future<List<Attachment>> _storeStreamMedia(

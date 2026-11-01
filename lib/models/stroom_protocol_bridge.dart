@@ -800,7 +800,13 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
   @override
   ProtocolMappingResult serializeMessage(StroomMessage message) {
     final original = originalMessage(message);
-    final supported = <String>{'text', 'tool_call', 'tool_result', 'refusal'};
+    final supported = <String>{
+      'text',
+      'reasoning',
+      'tool_call',
+      'tool_result',
+      'refusal',
+    };
     final supportsImages = message.role == 'user' &&
         message.content.any(
           (part) => part.type == 'image' && part.data['reference'] is String,
@@ -850,6 +856,7 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
       (part) => part.type == 'tool_result',
     );
     final refusals = message.content.where((part) => part.type == 'refusal');
+    final reasoning = message.content.where((part) => part.type == 'reasoning');
     final payload = {
       'role': message.role,
       'content': message.role == 'tool' && toolResults.isNotEmpty
@@ -863,6 +870,9 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
       if (message.usage != null) 'usage': message.usage,
       if (refusals.isNotEmpty)
         'refusal': refusals.map((part) => part.data['text'] ?? '').join(),
+      if (reasoning.isNotEmpty)
+        'reasoning_content':
+            reasoning.map((part) => part.data['text'] ?? '').join(),
       if (calls.isNotEmpty)
         'tool_calls': calls
             .map(

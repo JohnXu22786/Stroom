@@ -67,6 +67,25 @@ void main() {
       );
       expect(req.messages, hasLength(1));
     });
+
+    test(
+      'normal assistant history does not forward unscoped reasoning',
+      () async {
+        final req = await OpenAIProtocol().buildRequest(
+          history: [
+            ChatMessage(role: 'user', content: 'question'),
+            ChatMessage(
+              role: 'assistant',
+              content: 'answer',
+              reasoningContent: 'source-returned reasoning',
+            ),
+            ChatMessage(role: 'user', content: 'follow-up'),
+          ],
+        );
+
+        expect(req.messages[1], {'role': 'assistant', 'content': 'answer'});
+      },
+    );
   });
 
   group('AnthropicProtocol.buildRequest', () {
@@ -211,8 +230,7 @@ void main() {
       ),
     ];
 
-    test('OpenAI：单条 assistant 消息含 tool_calls + content + reasoning_content',
-        () {
+    test('OpenAI：工具调用历史不转发未验证的推理', () {
       final msgs = OpenAIProtocol().buildAssistantChainMessage(
         content: '我来查一下',
         toolCalls: calls,
@@ -222,7 +240,7 @@ void main() {
       final m = msgs[0];
       expect(m['role'], 'assistant');
       expect(m['content'], '我来查一下');
-      expect(m['reasoning_content'], '思考中');
+      expect(m.containsKey('reasoning_content'), isFalse);
       final tcs = m['tool_calls'] as List;
       expect(tcs, hasLength(1));
       expect((tcs[0] as Map)['function'], {
@@ -640,7 +658,7 @@ void main() {
       expect(req.messages[1]['role'], 'tool');
     });
 
-    test('OpenAI 重建时保留 reasoning_content（DeepSeek 兼容）', () async {
+    test('OpenAI 重建时不转发未验证的 reasoning_content', () async {
       final req = await OpenAIProtocol().buildRequest(
         history: [
           assistantWithTools(
@@ -657,7 +675,7 @@ void main() {
           ).copyWith(reasoningContent: '思考过程'),
         ],
       );
-      expect(req.messages[0]['reasoning_content'], '思考过程');
+      expect(req.messages[0].containsKey('reasoning_content'), isFalse);
     });
   });
 

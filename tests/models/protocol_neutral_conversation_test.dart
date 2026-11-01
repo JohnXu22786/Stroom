@@ -1326,6 +1326,45 @@ void main() {
       expect(translated.sourceExtension?.data['wireMessage'], original);
     });
 
+    test('Responses reasoning item IDs are retained in compatible scopes', () {
+      final source = OpenAiResponsesBridge();
+      final original = {
+        'status': 'completed',
+        'output': [
+          {
+            'type': 'reasoning',
+            'id': 'rs_item_1',
+            'encrypted_content': 'source-only-ciphertext',
+            'summary': [
+              {'type': 'summary_text', 'text': 'returned summary'},
+            ],
+          },
+        ],
+      };
+      final parsed = source.parseMessage(
+        original,
+        id: 'responses-reasoning-item',
+        sequence: 0,
+      );
+
+      final sameSource = source.serializeMessage(parsed);
+      final compatibleChat =
+          OpenAiChatCompletionsBridge().serializeMessage(parsed);
+
+      expect(
+        (sameSource.targetPayload!['output'] as List).single['id'],
+        'rs_item_1',
+      );
+      expect(
+        compatibleChat.targetPayload!['reasoning_content'],
+        'returned summary',
+      );
+      expect(
+        compatibleChat.targetPayload.toString(),
+        isNot(contains('source-only-ciphertext')),
+      );
+    });
+
     test('Responses reasoning summary extras report partial fidelity', () {
       final source = OpenAiResponsesBridge();
       final original = {
