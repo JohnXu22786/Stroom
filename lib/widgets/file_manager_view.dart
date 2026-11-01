@@ -1,9 +1,11 @@
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../utils/batch_rename.dart';
 import '../utils/batch_rename_execution.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/natural_sort.dart';
@@ -62,12 +64,7 @@ class _FrontEllipsisText extends StatelessWidget {
           // 连省略号都放不下，只显示省略号
           return _buildText(ellipsis, textAlign);
         }
-        if (_measureWidth(
-              text,
-              effectiveStyle,
-              textScaler,
-              textDirection,
-            ) <=
+        if (_measureWidth(text, effectiveStyle, textScaler, textDirection) <=
             maxWidth) {
           // 完整文本放得下，直接显示
           return _buildText(text, textAlign);
@@ -184,6 +181,10 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<String?> Function(List<String> names, String targetDirectory)?
       onExportFolders;
 
+  /// Builds the exported logical path when it differs from the stored record
+  /// name, such as audio whose actual format is detected from its bytes.
+  final Future<String> Function(T record)? userVisibleExportPathBuilder;
+
   /// 单个文件夹导出。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
   final Future<String?> Function(String name)? onExportFolder;
@@ -234,6 +235,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onExportFile,
     this.onExportFiles,
     this.onExportFolders,
+    this.userVisibleExportPathBuilder,
     this.onExportFolder,
     required this.onRenameFolder,
     required this.onMoveFolder,
@@ -685,12 +687,12 @@ class _FileManagerViewState<T extends FileRecord>
         ] else ...[
           if (_lastBatchRename != null)
             IconButton(
-                key: const Key('fm_batch_rename_history'),
-                tooltip: '上次批量重命名结果与撤销',
-                icon: const Icon(Icons.history),
-                onPressed: _batchRenameActive
-                    ? null
-                    : () => _applyBatchRenamePlan(null)),
+              key: const Key('fm_batch_rename_history'),
+              tooltip: '上次批量重命名结果与撤销',
+              icon: const Icon(Icons.history),
+              onPressed:
+                  _batchRenameActive ? null : () => _applyBatchRenamePlan(null),
+            ),
           // Extra app bar actions (e.g. task list button)
           if (widget.config.extraAppBarActions != null)
             ...widget.config.extraAppBarActions!(),
@@ -800,10 +802,7 @@ class _FileManagerViewState<T extends FileRecord>
       );
     }
 
-    final allItems = <dynamic>[
-      for (final f in subFolders) f,
-      ...currentFiles,
-    ];
+    final allItems = <dynamic>[for (final f in subFolders) f, ...currentFiles];
 
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),
@@ -901,10 +900,7 @@ class _FileManagerViewState<T extends FileRecord>
       );
     }
 
-    final allItems = <dynamic>[
-      for (final f in subFolders) f,
-      ...currentFiles,
-    ];
+    final allItems = <dynamic>[for (final f in subFolders) f, ...currentFiles];
 
     return GridView.builder(
       padding: const EdgeInsets.all(8),
@@ -1007,10 +1003,7 @@ class _FileManagerViewState<T extends FileRecord>
               child: PopupMenuButton<String>(
                 key: Key('fm_grid_folder_popup_$folderName'),
                 icon: const Icon(Icons.more_vert, size: 18),
-                onSelected: (value) => _onFolderPopupAction(
-                  value,
-                  folderName,
-                ),
+                onSelected: (value) => _onFolderPopupAction(value, folderName),
                 itemBuilder: (_) => _buildFolderPopupMenu(),
                 padding: EdgeInsets.zero,
                 iconSize: 18,
@@ -1064,9 +1057,8 @@ class _FileManagerViewState<T extends FileRecord>
                     child: hasThumbnailBuilder
                         ? _putThumbnailCache(
                             file.id,
-                            () => widget.config.fileThumbnailBuilder!.call(
-                              file,
-                            ),
+                            () =>
+                                widget.config.fileThumbnailBuilder!.call(file),
                           )
                         : widget.config.fileIconBuilder(file),
                   ),
@@ -1213,10 +1205,8 @@ class _FileManagerViewState<T extends FileRecord>
                   PopupMenuButton<String>(
                     key: Key('fm_folder_popup_$folderName'),
                     icon: const Icon(Icons.more_vert, size: 20),
-                    onSelected: (value) => _onFolderPopupAction(
-                      value,
-                      folderName,
-                    ),
+                    onSelected: (value) =>
+                        _onFolderPopupAction(value, folderName),
                     itemBuilder: (_) => _buildFolderPopupMenu(),
                   ),
               ],
@@ -1387,9 +1377,10 @@ class _FileManagerViewState<T extends FileRecord>
                 decoration: BoxDecoration(
                   color: hasThumbnailBuilder
                       ? null
-                      : Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
+                      : Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 clipBehavior: hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
@@ -1968,6 +1959,31 @@ class _FileManagerViewState<T extends FileRecord>
       topLevelFolders,
     );
 
+    if (!kIsWeb && adjustedFileIds.isNotEmpty && topLevelFolders.isNotEmpty) {
+      final selectedFiles = widget.sortedRecords
+          .where((record) => adjustedFileIds.contains(record.id))
+          .toList();
+      final filePaths = <String>[];
+      for (final file in selectedFiles) {
+        filePaths.add(
+          await widget.userVisibleExportPathBuilder?.call(file) ??
+              (file.folder.isEmpty
+                  ? '${file.name}.${file.format}'
+                  : '${file.folder}/${file.name}.${file.format}'),
+        );
+      }
+      try {
+        validateUserVisibleExportPaths(
+          files: filePaths,
+          folders: topLevelFolders,
+        );
+      } on StateError {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('所选文件与文件夹的导出路径冲突')));
+        return;
+      }
+    }
+
     // 第一次导出选择的目录会传递给后续导出，
     // 避免混合选择（文件+文件夹）时弹出两次目录选择
     String? chosenDir;
@@ -2026,10 +2042,7 @@ class _FileManagerViewState<T extends FileRecord>
     for (final name in topLevelFolders) {
       excluded.add(name);
       excluded.addAll(
-        widget.manifestBridge.getAllDescendantFolderPaths(
-          name,
-          widget.folders,
-        ),
+        widget.manifestBridge.getAllDescendantFolderPaths(name, widget.folders),
       );
     }
     final targetFolders =
@@ -2139,10 +2152,7 @@ class _FileManagerViewState<T extends FileRecord>
     for (final name in topLevelFolders) {
       excluded.add(name);
       excluded.addAll(
-        widget.manifestBridge.getAllDescendantFolderPaths(
-          name,
-          widget.folders,
-        ),
+        widget.manifestBridge.getAllDescendantFolderPaths(name, widget.folders),
       );
     }
     final targetFolders =
@@ -2160,11 +2170,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (!mounted) return;
     // 同名冲突或原地不动时取消整批操作
-    if (!_validateFolderTargets(
-      topLevelFolders,
-      selectedFolder,
-      liveFolders,
-    )) {
+    if (!_validateFolderTargets(topLevelFolders, selectedFolder, liveFolders)) {
       return;
     }
     final adjustedFileIds = _fileIdsExcludingFolderFiles(
@@ -2253,14 +2259,15 @@ class _FileManagerViewState<T extends FileRecord>
     return BatchRenameSnapshot([
       for (final r in widget.sortedRecords)
         BatchRenameItem(
-            id: r.id,
-            isFolder: false,
-            name: r.name,
-            format: r.format,
-            folder: r.folder,
-            createdAt: r.createdAt,
-            modifiedAt: r.modifiedAt,
-            size: r.size),
+          id: r.id,
+          isFolder: false,
+          name: r.name,
+          format: r.format,
+          folder: r.folder,
+          createdAt: r.createdAt,
+          modifiedAt: r.modifiedAt,
+          size: r.size,
+        ),
     ], widget.folders);
   }
 
@@ -2271,14 +2278,15 @@ class _FileManagerViewState<T extends FileRecord>
       await widget.onRefresh();
       if (!mounted) return;
       final result = await showBatchRenameRunDialog(
-          context: context,
-          plan: plan,
-          history: plan == null ? _lastBatchRename : null,
-          bridge: widget.manifestBridge,
-          readSnapshot: _renameSnapshot,
-          renameFile: widget.onRenameFile,
-          renameFolder: widget.onRenameFolder,
-          onChangesApplied: _followBatchRenameFolders);
+        context: context,
+        plan: plan,
+        history: plan == null ? _lastBatchRename : null,
+        bridge: widget.manifestBridge,
+        readSnapshot: _renameSnapshot,
+        renameFile: widget.onRenameFile,
+        renameFolder: widget.onRenameFolder,
+        onChangesApplied: _followBatchRenameFolders,
+      );
       if (!mounted) return;
       setState(() => _lastBatchRename = result);
       _exitSelectionMode();
@@ -2460,9 +2468,7 @@ class _FileManagerViewState<T extends FileRecord>
         return;
       }
       // 目标位置（或其下）已存在同名文件夹：拒绝，避免静默合并两个文件夹
-      final parentPath = widget.manifestBridge.getParentFolderPath(
-        folderName,
-      );
+      final parentPath = widget.manifestBridge.getParentFolderPath(folderName);
       final newFullPath = parentPath.isEmpty ? result : '$parentPath/$result';
       if (widget.folders.any(
         (f) => f == newFullPath || f.startsWith('$newFullPath/'),
@@ -2823,8 +2829,10 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                 decoration: const InputDecoration(
                   labelText: '格式',
                   border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
                 ),
                 items: widget.formatOptions
                     .map((f) => DropdownMenuItem(value: f, child: Text(f)))
@@ -2850,10 +2858,10 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
           onPressed: () {
             // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
             // 避免按钮无响应让用户困惑（含空名称）
-            Navigator.pop(
-              context,
-              (widget.controller.text.trim(), _selectedFormat),
-            );
+            Navigator.pop(context, (
+              widget.controller.text.trim(),
+              _selectedFormat,
+            ));
           },
           child: const Text('重命名'),
         ),

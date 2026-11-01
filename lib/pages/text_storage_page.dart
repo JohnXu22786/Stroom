@@ -146,9 +146,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
           }
           continue;
         }
@@ -240,9 +239,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
       return;
     }
 
@@ -284,9 +282,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final content = await TextManifest.readText(file.storagePath);
       if (content == null || content.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -343,30 +340,49 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final records = ref.read(textRecordsProvider);
       var exportedCount = 0;
+      final archiveFiles = <String, Uint8List>{};
+      final exportPaths = <String>{};
+      final selectedFiles = ids
+          .map((id) => records.firstWhere((record) => record.id == id))
+          .toList();
+      validateUserVisibleExportPaths(
+        files: selectedFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+      );
 
-      for (final id in ids) {
-        final file = records.firstWhere((r) => r.id == id);
+      for (final file in selectedFiles) {
         final content = await TextManifest.readText(file.storagePath);
-        if (content == null || content.isEmpty) continue;
+        if (content == null) continue;
 
         final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
 
         if (kIsWeb) {
           final data = Uint8List.fromList(utf8.encode(content));
-          // Web 端逐文件保存：用户取消保存时不计数
-          final saved = await saveFileWithType(
-            dialogTitle: '导出文本',
-            fileName: exportName,
-            extensions: [file.format],
-            bytes: data,
-            initialDirectory: SystemPickDirectories.documents(),
-          );
-          if (saved == null) continue;
+          archiveFiles[relativePath] = data;
         } else {
-          final outputPath = p.join(outputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsString(content);
         }
         exportedCount++;
+      }
+
+      if (kIsWeb && exportedCount > 0) {
+        final saved = await saveFileWithType(
+          dialogTitle: '导出文本',
+          fileName: '文本导出.zip',
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(files: archiveFiles),
+          initialDirectory: SystemPickDirectories.documents(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
       }
 
       // Web 端全部保存被取消时返回 null（与原生端取消目录选择一致，
@@ -407,9 +423,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content: const Text(
-              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
-            ),
+            content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -419,7 +433,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
               ElevatedButton(
                 key: const Key('fm_web_export_individual_btn'),
                 onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                child: const Text('逐个导出文件'),
+                child: const Text('下载 ZIP 文件'),
               ),
             ],
           ),
@@ -429,6 +443,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
         final records = ref.read(textRecordsProvider);
         var exportedCount = 0;
+        final archiveFiles = <String, Uint8List>{};
+        final exportPaths = <String>{};
         for (final folderName in names) {
           final folderFiles = records
               .where(
@@ -439,24 +455,38 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
               .toList();
           for (final file in folderFiles) {
             final content = await TextManifest.readText(file.storagePath);
-            if (content == null || content.isEmpty) continue;
+            if (content == null) continue;
             final exportName = '${file.name}.${file.format}';
             final data = Uint8List.fromList(utf8.encode(content));
             // 用户取消保存时不计数
-            final saved = await saveFileWithType(
-              dialogTitle: '导出文本',
-              fileName: exportName,
-              extensions: [file.format],
-              bytes: data,
-              initialDirectory: SystemPickDirectories.documents(),
-            );
-            if (saved == null) continue;
+            final relativePath = p.posix.join(file.folder, exportName);
+            if (!exportPaths.add(relativePath)) {
+              throw StateError('导出路径重复: $relativePath');
+            }
+            archiveFiles[relativePath] = data;
             exportedCount++;
           }
         }
-        // 全部保存被取消时返回 null（保持选择模式不退出），
-        // 且不显示「已导出 0 个文件」提示
-        if (exportedCount == 0) return null;
+        exportedCount = archiveFiles.length;
+        final saved = await saveFileWithType(
+          dialogTitle: '导出文本文件夹',
+          fileName: '文本文件夹导出.zip',
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(
+            files: archiveFiles,
+            folders: {
+              ...names,
+              ...ref.read(textFolderListProvider).where(
+                    (folder) => names.any(
+                      (name) => folder == name || folder.startsWith('$name/'),
+                    ),
+                  ),
+            },
+          ),
+          initialDirectory: SystemPickDirectories.documents(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -481,27 +511,48 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final records = ref.read(textRecordsProvider);
       var exportedCount = 0;
+      final exportPaths = <String>{};
 
-      for (final folderName in names) {
-        // 包含所有后代文件夹中的文件，完整保留层级
-        final folderFiles = records
-            .where(
-              (r) =>
-                  r.folder == folderName || r.folder.startsWith('$folderName/'),
-            )
-            .toList();
+      final selectedFolders = <String>{
+        ...names,
+        ...ref.read(textFolderListProvider).where(
+              (folder) => names.any(
+                (name) => folder == name || folder.startsWith('$name/'),
+              ),
+            ),
+      };
+      final folderFiles = records
+          .where(
+            (record) => names.any(
+              (name) =>
+                  record.folder == name || record.folder.startsWith('$name/'),
+            ),
+          )
+          .toList();
+      validateUserVisibleExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        folders: selectedFolders,
+      );
+      for (final folderName in selectedFolders) {
+        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+      }
 
-        for (final file in folderFiles) {
-          final content = await TextManifest.readText(file.storagePath);
-          if (content == null || content.isEmpty) continue;
+      for (final file in folderFiles) {
+        final content = await TextManifest.readText(file.storagePath);
+        if (content == null) continue;
 
-          final exportName = '${file.name}.${file.format}';
-          final fileDir = p.join(outputDir, file.folder);
-          await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsString(content);
-          exportedCount++;
+        final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
         }
+        final fileDir = p.join(outputDir, file.folder);
+        await Directory(fileDir).create(recursive: true);
+        final outputPath = p.join(fileDir, exportName);
+        await File(outputPath).writeAsString(content);
+        exportedCount++;
       }
 
       if (mounted) {
