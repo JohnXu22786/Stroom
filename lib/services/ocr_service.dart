@@ -631,6 +631,9 @@ class OcrService {
                       : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
+      if (const {'max_tokens', 'temperature', 'top_p'}.contains(name)) {
+        continue;
+      }
       if (name == 'model' || name == 'messages') {
         throw ArgumentError.value(
           name,
