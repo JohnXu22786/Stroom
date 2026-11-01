@@ -1,4 +1,5 @@
 import '../utils/atomic_file.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -62,6 +63,7 @@ class ManifestOperations<T extends FileRecord> {
   bool _dirty = false;
   Set<String> _folderCache = {};
   int _recordMutationRevision = 0;
+  final Map<String, Future<void>> _recordMutationTails = {};
 
   /// Pauses a forced refresh between reading records and reading folders.
   @visibleForTesting
@@ -128,6 +130,41 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.updateTextRecord(id, updates);
     } else {
       await ManifestDatabase.updateAudioRecord(id, updates);
+    }
+  }
+
+  Future<void> _persistCachedRecordMutation(int index, T updated) async {
+    final cache = _cache!;
+    final previous = cache[index];
+    cache[index] = updated;
+    try {
+      await _dbUpdateRecord(updated.id, toMap(updated));
+    } catch (_) {
+      if (identical(_cache, cache)) {
+        final currentIndex =
+            cache.indexWhere((record) => identical(record, updated));
+        if (currentIndex != -1) cache[currentIndex] = previous;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _withRecordMutationLock(
+    String id,
+    Future<void> Function() operation,
+  ) async {
+    final previous = _recordMutationTails[id] ?? Future<void>.value();
+    final release = Completer<void>();
+    final tail = previous.then((_) => release.future);
+    _recordMutationTails[id] = tail;
+    await previous;
+    try {
+      await operation();
+    } finally {
+      release.complete();
+      if (identical(_recordMutationTails[id], tail)) {
+        _recordMutationTails.remove(id);
+      }
     }
   }
 
@@ -725,7 +762,10 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> updateRecord(T updated) async {
+  Future<void> updateRecord(T updated) =>
+      _withRecordMutationLock(updated.id, () => _updateRecord(updated));
+
+  Future<void> _updateRecord(T updated) async {
     try {
       _validateRecordStorageName(updated);
       await loadRecords();
@@ -734,8 +774,7 @@ class ManifestOperations<T extends FileRecord> {
         if (folderOf(updated) != folderOf(_cache![index])) {
           _validateRecordFolderPath(folderOf(updated));
         }
-        _cache![index] = updated;
-        await _dbUpdateRecord(updated.id, toMap(updated));
+        await _persistCachedRecordMutation(index, updated);
       }
     } catch (e, st) {
       await AppLogService.error(
@@ -744,13 +783,16 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> renameRecord(String id, String newName) async {
+  Future<void> renameRecord(String id, String newName) =>
+      _withRecordMutationLock(id, () => _renameRecord(id, newName));
+
+  Future<void> _renameRecord(String id, String newName) async {
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
-        _cache![index] = copyName(_cache![index], newName);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        final renamed = copyName(_cache![index], newName);
+        await _persistCachedRecordMutation(index, renamed);
       }
     } catch (e, st) {
       await AppLogService.error(
@@ -759,14 +801,17 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> moveRecord(String id, String targetFolder) async {
+  Future<void> moveRecord(String id, String targetFolder) =>
+      _withRecordMutationLock(id, () => _moveRecord(id, targetFolder));
+
+  Future<void> _moveRecord(String id, String targetFolder) async {
     try {
       _validateRecordFolderPath(targetFolder);
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
-        _cache![index] = copyFolder(_cache![index], targetFolder);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        final moved = copyFolder(_cache![index], targetFolder);
+        await _persistCachedRecordMutation(index, moved);
         await _ensureFolderPathTracked(targetFolder);
       }
     } catch (e, st) {

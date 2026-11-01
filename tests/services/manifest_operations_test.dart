@@ -44,6 +44,7 @@ void main() {
   });
 
   tearDown(() {
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
   });
 
@@ -2288,6 +2289,139 @@ void main() {
   // ====================================================================
   // Folder tracking behaviors
   // ====================================================================
+
+  group('record mutation cache rollback', () {
+    void failNextRecordWrite(StateError failure) {
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+    }
+
+    testWidgets('updateRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_update_write_failure',
+        name: 'before',
+        hash: 'hash_update_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.updateRecord(original.copyWithName('after')),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.name, 'before',
+          reason: 'a failed update must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'before',
+          reason: 'the failed update must leave persisted data unchanged');
+    });
+
+    testWidgets('renameRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_rename_write_failure',
+        name: 'before',
+        hash: 'hash_rename_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.renameRecord(original.id, 'after'),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.name, 'before',
+          reason: 'a failed rename must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'before',
+          reason: 'the failed rename must leave persisted data unchanged');
+    });
+
+    testWidgets('moveRecord restores the cached record after write failure',
+        (WidgetTester t) async {
+      final original = AudioRecord(
+        id: 'audio_move_write_failure',
+        name: 'record',
+        hash: 'hash_move_write_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(original);
+      final failure = StateError('injected record write failure');
+      failNextRecordWrite(failure);
+
+      await expectLater(
+        FileManifest.moveRecord(original.id, 'target'),
+        throwsA(same(failure)),
+      );
+
+      expect((await FileManifest.loadRecords()).single.folder, '',
+          reason: 'a failed move must not remain visible through the cache');
+      expect((await ManifestDatabase.getAllAudioRecords()).single['folder'], '',
+          reason: 'the failed move must leave persisted data unchanged');
+      expect(
+        await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords),
+        isEmpty,
+        reason: 'a failed record write must not track its target folder',
+      );
+    });
+
+    testWidgets('same-record mutations serialize across a failed write',
+        (WidgetTester t) async {
+      final original = VideoRecord(
+        id: 'video_overlapping_write_failure',
+        name: 'before',
+        hash: 'hash_overlapping_write_failure',
+        format: 'mp4',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await VideoManifest.addRecord(original);
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      final failure = StateError('injected record write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        writeStarted.complete();
+        await releaseWrite.future;
+        throw failure;
+      };
+
+      final failedUpdate = VideoManifest.updateRecord(
+        original.copyWithName('failed update'),
+      );
+      await writeStarted.future;
+      final followingRename = VideoManifest.renameRecord(
+        original.id,
+        'successful rename',
+      );
+      releaseWrite.complete();
+
+      await expectLater(failedUpdate, throwsA(same(failure)));
+      await followingRename;
+
+      expect(
+          (await VideoManifest.loadRecords()).single.name, 'successful rename');
+      expect((await ManifestDatabase.getAllVideoRecords()).single['name'],
+          'successful rename');
+    });
+  });
 
   group('folder tracking', () {
     Future<void> expectWebFolderSaveFailureCanRetry(
