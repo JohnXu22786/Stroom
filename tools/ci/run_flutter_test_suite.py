@@ -183,6 +183,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/tap_outside_unfocus_test.dart",
         "widgets/drag_sort_area_test.dart",
         "widgets/preview_chip_test.dart",
+        "widgets/shared_popup_menu_destructive_dividers_test.dart",
         "widgets/transform_stretch_overscroll_test.dart",
         "widgets/update_dialog_test.dart",
         "pages/application_quit_confirmation_test.dart",

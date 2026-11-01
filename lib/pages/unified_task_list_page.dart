@@ -444,6 +444,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'clear_failed',
                 child: ListTile(

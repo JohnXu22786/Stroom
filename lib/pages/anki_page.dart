@@ -383,6 +383,7 @@ class _DeckCard extends ConsumerWidget {
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: 'add', child: Text('添加卡片')),
                   const PopupMenuItem(value: 'rename', child: Text('重命名')),
+                  const PopupMenuDivider(),
                   const PopupMenuItem(
                       value: 'delete',
                       child: Text('删除', style: TextStyle(color: Colors.red))),

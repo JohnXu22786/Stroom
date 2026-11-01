@@ -370,6 +370,7 @@ class FlowBlockCard extends ConsumerWidget {
         _menuItem(4, isFirst ? '上移（已在最前）' : '上移', callbacks[4]),
         _menuItem(5, isLast ? '下移（已在最后）' : '下移', callbacks[5]),
         _menuItem(6, '替换功能块', callbacks[6]),
+        if (callbacks[7] != null) const PopupMenuDivider(),
         _menuItem(7, '删除功能块', callbacks[7]),
       ],
     );

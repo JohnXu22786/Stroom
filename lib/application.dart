@@ -505,6 +505,18 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
+                  popupMenuTheme: PopupMenuThemeData(
+                    color: colorScheme.surfaceContainerHigh,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.35,
+                        ),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {
                       TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -515,6 +527,18 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
+                  popupMenuTheme: PopupMenuThemeData(
+                    color: darkColorScheme.surfaceContainerHigh,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: darkColorScheme.outlineVariant.withValues(
+                          alpha: 0.35,
+                        ),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {
                       TargetPlatform.android: CupertinoPageTransitionsBuilder(),
