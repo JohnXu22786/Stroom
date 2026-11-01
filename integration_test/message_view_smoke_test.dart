@@ -21,10 +21,23 @@ void main() {
             html: '''<!doctype html>
 <script>
 window.StroomMessageView = {};
-window.flutter_inappwebview.callHandler("StroomMessageView", {
-  type: "probeBridge",
-  marker: "macos-local-document"
-});
+let bridgeAnnounced = false;
+function announceBridgeReady() {
+  if (bridgeAnnounced) return true;
+  const bridge = window.flutter_inappwebview;
+  if (!bridge || typeof bridge.callHandler !== "function") return false;
+  bridgeAnnounced = true;
+  bridge.callHandler("StroomMessageView", { type: "ready" });
+  bridge.callHandler("StroomMessageView", {
+    type: "probeBridge",
+    marker: "macos-local-document"
+  });
+  return true;
+}
+window.addEventListener("flutterInAppWebViewPlatformReady", announceBridgeReady);
+const probeTimer = setInterval(() => {
+  if (announceBridgeReady()) clearInterval(probeTimer);
+}, 25);
 </script>''',
             commands: probeCommands,
             onEvent: probeEvents.add,
