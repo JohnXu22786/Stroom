@@ -1,3 +1,4 @@
+import "./structured-clone-polyfill.js";
 import {
   createContext,
   useContext,
