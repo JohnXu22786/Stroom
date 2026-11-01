@@ -966,7 +966,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: _hasReusablePageResults
+                    onChanged: _ocrStarting ||
+                            _isProcessing ||
+                            _hasReusablePageResults
                         ? null
                         : (idx) {
                             if (idx == null) return;
@@ -1037,7 +1039,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   minWidth: 40,
                   minHeight: 40,
                 ),
-                onPressed: _hasReusablePageResults
+                onPressed: _ocrStarting ||
+                        _isProcessing ||
+                        _hasReusablePageResults
                     ? null
                     : () {
                         showDialog<void>(

@@ -2554,8 +2554,10 @@ void main() {
 
   group('OcrPage - instruction selector', () {
     testWidgets(
-      'keeps the submitted instruction when selection changes during preflight',
+      'locks instruction selection during image preparation and preflight',
       (tester) async {
+        final preparationStarted = Completer<void>();
+        final finishPreparation = Completer<OcrImagePayload>();
         final preflightStarted = Completer<void>();
         final finishPreflight = Completer<int?>();
         final notifier = _InspectableBackgroundTaskNotifier();
@@ -2567,12 +2569,21 @@ void main() {
         await tester.pumpWidget(
           _buildTestApp(
             entries: [_createOcrEntry(withModels: true)],
-            testImages: [_createValidOcrTestImage()],
+            testImages: [
+              SelectedImage(
+                bytes: _createValidOcrTestImage().bytes,
+                format: 'png',
+              ),
+            ],
             backgroundTasksNotifier: notifier,
             ocrInstructions: const [
               OcrInstruction(name: 'Instruction A', content: 'original prompt'),
               OcrInstruction(name: 'Instruction B', content: 'changed prompt'),
             ],
+            testImagePayloadPreparer: (bytes) {
+              preparationStarted.complete();
+              return finishPreparation.future;
+            },
             testRequestSizePreflight: (config, _) {
               preflightConfig = config;
               preflightStarted.complete();
@@ -2604,14 +2615,30 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('开始识别'));
         await tester.pump();
+        await preparationStarted.future;
+
+        var instructionSelector = tester
+            .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .last;
+        expect(instructionSelector.onChanged, isNull);
+        expect(find.text('Instruction A'), findsOneWidget);
+
+        finishPreparation.complete(
+          OcrImagePayload(
+            bytes: _createValidOcrTestImage().bytes,
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        );
+        await tester.pump();
         await preflightStarted.future;
 
-        await tester.tap(find.text('Instruction A'));
-        // The OCR progress indicator remains active while preflight is held,
-        // so pump a fixed duration instead of waiting for global settlement.
-        await tester.pump(const Duration(milliseconds: 500));
-        await tester.tap(find.text('Instruction B').last);
-        await tester.pump(const Duration(milliseconds: 500));
+        instructionSelector = tester
+            .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .last;
+        expect(instructionSelector.onChanged, isNull);
+        expect(find.text('Instruction A'), findsOneWidget);
 
         finishPreflight.complete(defaultOcrRequestSizeBudgetBytes);
         await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);

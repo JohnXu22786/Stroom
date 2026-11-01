@@ -1458,6 +1458,537 @@ void main() {
     );
 
     test(
+      'supported OCR retry data drops legacy Authorization echoes',
+      () {
+        const apiKey = 'supported-retry-api-key-7391';
+        const instruction = 'Read the receipt total carefully';
+        final storageRef = 'ocr_retry_cache/${'a' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'supported-retry-auth-echo',
+          'type': 'ocr',
+          'title': 'Failed receipt OCR',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'modelRef': {
+              'configId': 'provider-config',
+              'modelId': 'vision-model',
+            },
+            'images': [
+              {
+                'storageRef': storageRef,
+                'format': 'png',
+                'name': 'receipt.png',
+              },
+            ],
+            'instructionContent': '$instruction; use $apiKey',
+            'saveFolder': 'receipts',
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final serialized = task.toMap();
+        final persisted = jsonEncode(serialized);
+        final snapshot = OcrRetrySnapshot.fromMap(
+          serialized['retryData'] as Map<String, dynamic>,
+        );
+
+        expect(task.id, 'supported-retry-auth-echo');
+        expect(task.title, 'Failed receipt OCR');
+        expect(task.status, TaskStatus.failed);
+        expect(snapshot.configId, 'provider-config');
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.instructionContent, instruction);
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains('rawRequest')));
+      },
+    );
+
+    test(
+      'unsupported OCR retry data without a request keeps only safe fields',
+      () {
+        const apiKey = 'unsupported-retry-api-key-4812';
+        final storageRef = 'ocr_retry_cache/${'b' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'unsupported-retry-secret-extension',
+          'type': 'ocr',
+          'title': 'Failed invoice OCR',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {
+              'configId': 'provider-config',
+              'modelId': 'vision-model',
+            },
+            'images': [
+              {
+                'storageRef': storageRef,
+                'format': 'png',
+                'name': 'invoice.png',
+              },
+            ],
+            'instructionContent': 'Read the invoice total carefully',
+            'saveFolder': 'invoices',
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+            'apiKey': apiKey,
+            'futureMetadata': 'unknown extension',
+          },
+        });
+
+        final serialized = task.toMap();
+        final persisted = jsonEncode(serialized);
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(task.id, 'unsupported-retry-secret-extension');
+        expect(task.title, 'Failed invoice OCR');
+        expect(task.status, TaskStatus.failed);
+        expect(task.error, 'OCR request failed');
+        expect(snapshot.configId, 'provider-config');
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.version, 99);
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.instructionContent, 'Read the invoice total carefully');
+        expect(retryData.containsKey('apiKey'), isFalse);
+        expect(retryData.containsKey('futureMetadata'), isFalse);
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains('futureMetadata')));
+      },
+    );
+
+    test(
+      'malformed OCR retry data omits credential-valued config references',
+      () {
+        const apiKey = 'config-reference-api-key-7391';
+        final task = BackgroundTask.fromMap({
+          'id': 'malformed-retry-config-credential',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {'configId': apiKey, 'modelId': 'vision-model'},
+            'images': [],
+            'instructionContent': 'Read the document carefully',
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the document carefully'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(task.title, 'Failed OCR task');
+        expect(task.status, TaskStatus.failed);
+        expect(snapshot.configId, isNull);
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.version, 99);
+        expect(snapshot.instructionContent, 'Read the document carefully');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'malformed supported OCR retry data omits credential echoes in safe fields',
+      () {
+        const apiKey = 'malformed-supported-field-key-6104';
+        final storageRef = 'ocr_retry_cache/${'9' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'malformed-supported-retry-secret-echo',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': [
+              {'storageRef': storageRef, 'format': 'jpeg', 'name': apiKey},
+            ],
+            'instructionContent': 'Read safely',
+            'saveFolder': apiKey,
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+            'futureMetadata': true,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.images.single.name, isNull);
+        expect(retryData['saveFolder'], '');
+        expect(snapshot.instructionContent, 'Read safely');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'supported OCR retry data omits credential-valued config references',
+      () {
+        const apiKey = 'supported-config-reference-api-key-4812';
+        final task = BackgroundTask.fromMap({
+          'id': 'supported-retry-config-credential',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'error': 'OCR request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'modelRef': {'configId': apiKey, 'modelId': 'vision-model'},
+            'images': [],
+            'instructionContent': 'Read the document carefully',
+            'saveFolder': '',
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the document carefully'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.configId, isNull);
+        expect(snapshot.modelId, 'vision-model');
+        expect(snapshot.instructionContent, 'Read the document carefully');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'supported OCR retry data omits credential echoes from safe fields',
+      () {
+        const apiKey = 'supported-retry-other-field-key-9413';
+        final storageRef = 'ocr_retry_cache/${'e' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'supported-retry-other-field-credential',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': [
+              {'storageRef': storageRef, 'format': 'jpeg', 'name': apiKey},
+            ],
+            'instructionContent': 'Read the document carefully',
+            'saveFolder': apiKey,
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+          },
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.images.single.name, isNull);
+        expect(retryData.containsKey('saveFolder'), isFalse);
+        expect(snapshot.instructionContent, 'Read the document carefully');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'supported OCR retry data strips recognizable keys without raw request',
+      () {
+        const apiKey = 'sk-proj-abcdefgh1234';
+        final storageRef = 'ocr_retry_cache/${'8' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'supported-retry-recognizable-key-without-request',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': [
+              {'storageRef': storageRef, 'format': 'jpeg', 'name': apiKey},
+            ],
+            'instructionContent': 'Read this document',
+            'saveFolder': 'receipts',
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1048576,
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.images.single.name, isNull);
+        expect(snapshot.instructionContent, 'Read this document');
+        expect(retryData['saveFolder'], 'receipts');
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+      },
+    );
+
+    test('malformed legacy OCR retry data preserves safe image names', () {
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-retry-safe-image-name',
+        'type': 'ocr',
+        'title': 'Failed OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'retryData': {
+          'type': 'ocr',
+          'images': [
+            {'name': 'photo1', 'format': 'jpeg', 'bytes': 'base64data'},
+          ],
+          'modelIndex': 1,
+        },
+      });
+
+      final serialized = task.toMap();
+      final retryData = serialized['retryData'] as Map<String, dynamic>;
+      final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+      expect(snapshot.images.single.name, 'photo1');
+      expect(snapshot.legacyModelIndex, 1);
+    });
+
+    test('malformed OCR retry version recovers legacy image count', () {
+      final task = BackgroundTask.fromMap({
+        'id': 'malformed-ocr-retry-version-image-count',
+        'type': 'ocr',
+        'title': 'Failed OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'retryData': {'version': 'bad'},
+        'rawRequest': {
+          'imageCount': 2,
+          'body': {
+            'model': 'legacy-ocr-model',
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': 'Extract the invoice total.'},
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+
+      expect(snapshot.version, -1);
+      expect(snapshot.imageEntryCount, 2);
+      expect(snapshot.modelId, 'legacy-ocr-model');
+      expect(snapshot.instructionContent, 'Extract the invoice total.');
+    });
+
+    test('safe unsupported OCR retry data keeps existing migration inputs', () {
+      final bytes = base64Encode([1, 2, 3, 4]);
+      final storageRef = 'ocr_retry_cache/${'c' * 64}.bin';
+      final retryData = <String, dynamic>{
+        'type': 'ocr',
+        'version': 99,
+        'modelRef': {'configId': 'saved-config', 'modelId': 'saved-model'},
+        'instructionContent': 'Read this image',
+        'images': [
+          {'bytes': bytes, 'format': 'png', 'name': 'photo1'},
+          {'storageRef': storageRef, 'format': 'jpeg', 'name': 'photo2'},
+        ],
+      };
+
+      final task = BackgroundTask.fromMap({
+        'id': 'safe-unsupported-retry-preserved',
+        'type': 'ocr',
+        'title': 'Failed OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'retryData': retryData,
+      });
+
+      expect(task.retryData, retryData);
+    });
+
+    test('unsafe unsupported OCR retry data retains unparsed cache ownership',
+        () {
+      const apiKey = 'unsafe-retry-extension-key-4812';
+      final storageRef = 'ocr_retry_cache/${'d' * 64}.bin';
+      final task = BackgroundTask.fromMap({
+        'id': 'unsafe-unsupported-retry-cache-ownership',
+        'type': 'ocr',
+        'title': 'Failed OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'retryData': {
+          'type': 'ocr',
+          'version': 99,
+          'images': [
+            {1: 'malformed image map', 'storageRef': storageRef},
+          ],
+          'apiKey': apiKey,
+        },
+      });
+
+      final serialized = task.toMap();
+      final retryData = serialized['retryData'] as Map<String, dynamic>;
+      final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+      expect(snapshot.version, 99);
+      expect(snapshot.images.single.storageRef, storageRef);
+      expect(retryData.containsKey('apiKey'), isFalse);
+      expect(jsonEncode(serialized), isNot(contains(apiKey)));
+    });
+
+    test(
+      'unsupported OCR retry data strips named secrets echoed in safe fields',
+      () {
+        const apiKey = 'unsupported-task-key-echo-7584';
+        const headerKey = 'opaque-x-api-key-2941';
+        const googleKey = 'opaque-x-goog-api-key-7350';
+        const passwordValue = 'opaque-task-password-3198';
+        final safeStorageRef = 'ocr_retry_cache/${'f' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'unsupported-retry-named-secret-echo',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'instructionContent': 'Read this document carefully',
+            'saveFolder': 'receipts',
+            'images': [
+              {
+                'storageRef': safeStorageRef,
+                'format': 'jpeg',
+                'name': apiKey,
+              },
+              {
+                'storageRef': 'ocr_retry_cache/${'a' * 64}.bin',
+                'format': 'png',
+                'name': 'photo2.png',
+              },
+              {
+                'storageRef': 'ocr_retry_cache/${'b' * 64}.bin',
+                'format': 'jpeg',
+                'name': headerKey,
+              },
+              {
+                'storageRef': 'ocr_retry_cache/${'c' * 64}.bin',
+                'format': 'jpeg',
+                'name': googleKey,
+              },
+              {
+                'storageRef': 'ocr_retry_cache/${'e' * 64}.bin',
+                'format': 'png',
+                'name': passwordValue,
+              },
+            ],
+            'apiKey': apiKey,
+            'clientKey': apiKey,
+            'X-Api-Key': headerKey,
+            'X-Goog-Api-Key': googleKey,
+            'password': passwordValue,
+          },
+        });
+
+        final serialized = task.toMap();
+        final retryData = serialized['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(snapshot.version, 99);
+        expect(snapshot.instructionContent, 'Read this document carefully');
+        expect(retryData['saveFolder'], 'receipts');
+        expect(snapshot.images, hasLength(5));
+        expect(snapshot.images.first.storageRef, safeStorageRef);
+        expect(snapshot.images.first.name, isNull);
+        expect(snapshot.images[1].name, 'photo2.png');
+        expect(snapshot.images[2].name, isNull);
+        expect(snapshot.images[3].name, isNull);
+        expect(snapshot.images[4].name, isNull);
+        expect(retryData.containsKey('apiKey'), isFalse);
+        expect(retryData.containsKey('clientKey'), isFalse);
+        expect(retryData.containsKey('X-Api-Key'), isFalse);
+        expect(retryData.containsKey('X-Goog-Api-Key'), isFalse);
+        expect(retryData.containsKey('password'), isFalse);
+        expect(jsonEncode(serialized), isNot(contains(apiKey)));
+        expect(jsonEncode(serialized), isNot(contains(headerKey)));
+        expect(jsonEncode(serialized), isNot(contains(googleKey)));
+        expect(jsonEncode(serialized), isNot(contains(passwordValue)));
+      },
+    );
+
+    test(
       'legacy OCR migration omits model IDs matching an auth credential',
       () {
         const apiKey = 'opaque-provider-secret-value-92';
@@ -2236,6 +2767,71 @@ void main() {
 
         expect(migratedInstruction, instruction);
         expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
+      'legacy OCR retry preserves dotted token properties and redacts token echoes',
+      () {
+        const instruction = 'Use configuration.token for request';
+        BackgroundTask legacyTask(String id, String instructionText) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'token…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instructionText},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        final safeTask = legacyTask(
+          'legacy-ocr-dotted-token-property',
+          instruction,
+        );
+        final persistedSafeTask = jsonEncode(safeTask.toMap());
+        final restoredSafeInstruction = OcrRetrySnapshot.fromMap(
+          BackgroundTask.fromMap(
+            jsonDecode(persistedSafeTask) as Map<String, dynamic>,
+          ).retryData!,
+        ).instructionContent;
+
+        final echoTask = legacyTask(
+          'legacy-ocr-token-echoes',
+          'Use token for request\nAuthorization: token',
+        );
+        final persistedEchoTask = jsonEncode(echoTask.toMap());
+        final restoredEchoTask = BackgroundTask.fromMap(
+          jsonDecode(persistedEchoTask) as Map<String, dynamic>,
+        );
+        final restoredEchoInstruction = OcrRetrySnapshot.fromMap(
+          restoredEchoTask.retryData!,
+        ).instructionContent;
+
+        expect(restoredSafeInstruction, contains(instruction));
+        expect(persistedSafeTask, contains(instruction));
+        expect(restoredEchoTask.id, 'legacy-ocr-token-echoes');
+        expect(restoredEchoTask.title, 'legacy OCR request');
+        expect(restoredEchoTask.retryData, isNotNull);
+        expect(
+            restoredEchoInstruction, isNot(contains('Use token for request')));
+        expect(
+            restoredEchoInstruction, isNot(contains('Authorization: token')));
+        expect(persistedEchoTask, isNot(contains('Use token for request')));
+        expect(persistedEchoTask, isNot(contains('Authorization: token')));
       },
     );
 
@@ -12134,6 +12730,88 @@ void main() {
           expect(persisted, contains('Use [redacted] to process this image'));
           expect(persisted, isNot(contains(apiKey)));
         }
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves reported authenticity but redacts a reported credential',
+      () {
+        BackgroundTask taskFor(
+          String id,
+          String instruction, {
+          String authorization = 'Bearer auth…',
+        }) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': authorization},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {
+                          'type': 'text',
+                          'text': 'Read the receipt total carefully',
+                        },
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const safePrompt = 'Read the receipt total carefully';
+        const safeInstruction = 'The label reports authenticity';
+        const longerCredential = 'authenticity-longer-key-7391';
+        final safeTask = taskFor(
+          'legacy-ocr-reported-authenticity-natural-word',
+          safeInstruction,
+          authorization: 'Bearer $longerCredential',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          '$safePrompt\n$safeInstruction',
+        );
+        expect(jsonEncode(safeTask.toMap()), isNot(contains(longerCredential)));
+
+        final credentialTask = taskFor(
+          'legacy-ocr-reported-credential-echo',
+          'The label reports authorization',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
+          safePrompt,
+        );
+        expect(credentialPersisted, contains(safePrompt));
+        expect(credentialPersisted, isNot(contains('authorization')));
+
+        const authenticityKey = 'authenticity';
+        final authenticityTask = taskFor(
+          'legacy-ocr-reported-key-collision-echo',
+          'The label reports $authenticityKey',
+        );
+        final authenticityPersisted = jsonEncode(authenticityTask.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(authenticityTask.retryData!)
+              .instructionContent,
+          safePrompt,
+        );
+        expect(
+          jsonEncode(authenticityTask.retryData),
+          isNot(contains(authenticityKey)),
+        );
+        expect(authenticityPersisted, isNot(contains(authenticityKey)));
       },
     );
 

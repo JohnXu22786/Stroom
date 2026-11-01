@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/data_safety_manager.dart';
@@ -11,13 +12,36 @@ import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+class _IsolatedDocumentsPathProvider extends PathProviderPlatform {
+  _IsolatedDocumentsPathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory isolatedAppDir;
+  late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    originalPathProvider = PathProviderPlatform.instance;
+    isolatedAppDir = await Directory.systemTemp.createTemp(
+      'stroom_data_migration_test_',
+    );
+    PathProviderPlatform.instance =
+        _IsolatedDocumentsPathProvider(isolatedAppDir.path);
     AppStorage.resetCache();
+  });
+
+  tearDown(() async {
+    PathProviderPlatform.instance = originalPathProvider;
+    AppStorage.resetCache();
+    await isolatedAppDir.delete(recursive: true);
   });
 
   group('DataMigrationService - legacy global format version', () {

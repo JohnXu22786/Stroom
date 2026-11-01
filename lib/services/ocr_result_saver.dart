@@ -91,14 +91,16 @@ class OcrResultSaver {
       }
       _checkActive();
     }
+    _checkActive();
+    if (!notifier.startSaveRetry(taskId)) {
+      throw StateError('OCR结果保存重试已开始');
+    }
     final cancellationOwner = notifier.registerCancellationForGeneration(
       taskId,
       taskGeneration,
       cancel,
     );
     try {
-      _checkActive();
-      notifier.startSaveRetry(taskId);
       _checkActive();
       return await saveResult(
         task.result!,

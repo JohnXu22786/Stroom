@@ -171,13 +171,20 @@ class OcrService {
   String? _lastErrorType;
 
   /// Safe diagnostic maps for task persistence and the error detail view.
+  List<String> get _diagnosticRequestCredentialValues =>
+      OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': lastRequestHeaders,
+        'url': lastRequestUrl,
+        'body': lastRequestBody,
+      });
+
   Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
         url: lastRequestUrl,
         imageCount: _lastImageCount,
         imageBytes: _lastImageBytes,
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
-        excludedValues: [config.apiKey],
+        excludedValues: [config.apiKey, ..._diagnosticRequestCredentialValues],
       );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
@@ -189,10 +196,7 @@ class OcrService {
         errorType: _lastErrorType ?? error?.runtimeType.toString(),
         headers: lastResponseHeaders,
         data: lastResponseData,
-        excludedValues: {
-          config.apiKey,
-          ...OcrDiagnosticSnapshot.credentialValuesFromUrl(lastRequestUrl),
-        },
+        excludedValues: [config.apiKey, ..._diagnosticRequestCredentialValues],
       );
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -259,6 +263,22 @@ class OcrService {
     }
     final body = _buildRequestBody(contents);
     return _encodedBodyLength(body);
+  }
+
+  /// Largest raw image length whose base64 data URI can fit the configured
+  /// request budget, including this request's actual JSON envelope.
+  int maxRawImageBytesWithinRequestBudget({String imageFormat = 'jpeg'}) {
+    final contents = <Map<String, dynamic>>[
+      _buildImageContent('data:image/$imageFormat;base64,'),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+    final baseRequestBytes = _encodedBodyLength(_buildRequestBody(contents));
+    final base64BudgetBytes = config.requestSizeBudgetBytes - baseRequestBytes;
+    if (base64BudgetBytes < 4) return 0;
+    return (base64BudgetBytes ~/ 4) * 3;
   }
 
   /// Close the underlying client when this service owns its lifetime.

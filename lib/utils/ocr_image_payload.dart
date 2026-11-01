@@ -5,6 +5,9 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+/// Bound decoded OCR image memory to roughly 200 MiB of RGBA pixels.
+const int maxOcrImagePixels = 50 * 1000 * 1000;
+
 /// A decoded and validated image payload ready to send to an OCR provider.
 ///
 /// [format] is derived from the encoded bytes and uses `jpeg` for JPEG files.
@@ -27,14 +30,23 @@ class OcrImagePayload {
 }
 
 /// Validates and prepares OCR bytes away from the UI isolate where available.
-Future<OcrImagePayload> prepareOcrImagePayload(Uint8List bytes) async {
+Future<OcrImagePayload> prepareOcrImagePayload(
+  Uint8List bytes, {
+  int? maxReencodedPngBytes,
+}) async {
   try {
-    return await Isolate.run(() => prepareOcrImagePayloadSync(bytes));
+    return await Isolate.run(() => prepareOcrImagePayloadSync(
+          bytes,
+          maxReencodedPngBytes: maxReencodedPngBytes,
+        ));
   } on FormatException {
     rethrow;
   } catch (_) {
     // Web and constrained test runtimes may not support spawning isolates.
-    return prepareOcrImagePayloadSync(bytes);
+    return prepareOcrImagePayloadSync(
+      bytes,
+      maxReencodedPngBytes: maxReencodedPngBytes,
+    );
   }
 }
 
@@ -134,7 +146,10 @@ OcrImagePayload applyOcrImageImportQualitySync(
 }
 
 /// Synchronous core shared by the background and fallback paths.
-OcrImagePayload prepareOcrImagePayloadSync(Uint8List bytes) {
+OcrImagePayload prepareOcrImagePayloadSync(
+  Uint8List bytes, {
+  int? maxReencodedPngBytes,
+}) {
   if (bytes.isEmpty) {
     throw const FormatException('图片为空，请重新选择。');
   }
@@ -144,9 +159,56 @@ OcrImagePayload prepareOcrImagePayloadSync(Uint8List bytes) {
     throw FormatException(_unsupportedFormatMessage(bytes));
   }
 
+  late final img.Decoder decoder;
+  late final img.DecodeInfo decodeInfo;
+  try {
+    final foundDecoder = img.findDecoderForData(bytes);
+    if (foundDecoder == null) throw const FormatException('无法解码图片');
+    decoder = foundDecoder;
+    final info = decoder.startDecode(bytes);
+    if (info == null) throw const FormatException('无法解码图片');
+    decodeInfo = info;
+  } catch (_) {
+    throw const FormatException(
+      '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
+    );
+  }
+
+  if (decodeInfo.width * decodeInfo.height > maxOcrImagePixels) {
+    throw const FormatException(
+      '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。',
+    );
+  }
+
+  int? encodedOrientation = img.decodeJpgExif(bytes)?.imageIfd.orientation;
+  if (encodedOrientation == null && decoder is img.WebPDecoder) {
+    final exif = decoder.info?.exif;
+    if (exif != null && exif.isNotEmpty) {
+      try {
+        encodedOrientation = img.ExifData.fromInputBuffer(
+          img.InputBuffer(exif.codeUnits),
+        ).imageIfd.orientation;
+      } catch (_) {}
+    }
+  }
+  if (encodedOrientation != null &&
+      encodedOrientation != 1 &&
+      maxReencodedPngBytes != null) {
+    final pixelCount = decodeInfo.width * decodeInfo.height;
+    final worstCasePngBytes =
+        pixelCount * 4 + pixelCount ~/ 100 + decodeInfo.height + 1024;
+    if (worstCasePngBytes > maxReencodedPngBytes) {
+      throw const FormatException(
+        '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。',
+      );
+    }
+  }
+
   late final img.Image decoded;
   try {
-    final image = img.decodeImage(bytes);
+    // OCR sends the original encoded image, so validate only its first frame
+    // instead of allocating every frame of an animated image.
+    final image = decoder.decodeFrame(0);
     if (image == null) throw const FormatException('无法解码图片');
     decoded = image;
   } catch (_) {
@@ -155,8 +217,7 @@ OcrImagePayload prepareOcrImagePayloadSync(Uint8List bytes) {
     );
   }
 
-  final orientation = img.decodeJpgExif(bytes)?.imageIfd.orientation ??
-      decoded.exif.imageIfd.orientation;
+  final orientation = encodedOrientation ?? decoded.exif.imageIfd.orientation;
   if (orientation != null && orientation != 1) {
     try {
       // The JPEG decoder already applies EXIF orientation while decoding.

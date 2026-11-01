@@ -198,6 +198,40 @@ void main() {
     });
   });
 
+  test(
+      'request customParams secretAccessKey excludes echoed IDs and keeps safe IDs',
+      () {
+    const credential = 'opaque-custom-secret-access-key-198';
+    const safeRequestId = 'req-safe-custom-credential-198';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'secretAccessKey': credential},
+    });
+
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': credential,
+        'data': {'id': credential},
+      },
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 429,
+        'requestId': credential,
+        'data': {'id': safeRequestId},
+      },
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(credential));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
   test('request body Bearer tokens exclude bare echoed IDs but keep safe IDs',
       () {
     const apiToken = 'opaque-body-bearer-token-194';
