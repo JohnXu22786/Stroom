@@ -1501,8 +1501,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     };
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-      '((?:[ \\t\\r\\n]+[a-zA-Z0-9_./:;+=~-]+)+)'
-      r'(?=$|[^a-zA-Z0-9_./:;+=~-])',
+      '((?:[ \\t\\r\\n]+'
+      '(?:[a-zA-Z0-9_/:;+=~@%-]|\\.(?=[ \\t\\r\\n]+'
+      '[a-zA-Z0-9_/:;+=~@%-]|[a-zA-Z0-9_/:;+=~@%-]))+)+)'
+      r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(chunkedCandidate, (match) {
@@ -1755,6 +1757,20 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
               joinedNaturalActionPhrase ||
               joinedNaturalDocumentIdentifier)) {
         return match.group(0)!;
+      }
+      if (chunks.length >= 8 &&
+          chunks.every((chunk) => chunk.length == 1) &&
+          !_legacyOcrHasNaturalWordContinuation(
+            prefix,
+            joinedSingleCharacterChunks,
+          ) &&
+          _legacyOcrHasHighAlphabeticEntropy(
+            joinedSingleCharacterChunks,
+            minimumLength: 8,
+            minimumEntropy: 2.5,
+            maximumVowelRatio: 0.45,
+          )) {
+        return '${match.group(1)}[redacted]$trailingPunctuation';
       }
       var credentialSuffix = '';
       var foundCredential = false;

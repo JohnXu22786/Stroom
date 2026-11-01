@@ -15010,6 +15010,8 @@ void main() {
           'foo. barxyz',
           'foo: barxyz',
           'foo; barxyz',
+          'foo@barxyz',
+          'foo%barxyz',
           'foo bar carefully',
           'key abc123',
           'p a s s w o r d',
