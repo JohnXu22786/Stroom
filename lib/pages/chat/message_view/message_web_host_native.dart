@@ -67,7 +67,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
     try {
       // WebKit's loadData call returns without starting navigation in the
       // macOS host. Write into its initial about:blank main document instead.
-      // Wait until Flutter submits the frame so the native view is attached.
+      // Defer the write so replacing the document doesn't invalidate the
+      // JavaScript evaluation that schedules it.
       if (kDebugMode) {
         debugPrint(
           '[MessageWebHost][document-write] generation=$generation htmlLength=${widget.html.length}',
@@ -76,21 +77,18 @@ class _MessageWebHostState extends State<MessageWebHost> {
       final documentState = await controller.evaluateJavascript(
         source: '''
 (() => {
-  document.open();
-  document.write(${jsonEncode(widget.html)});
-  document.close();
-  return JSON.stringify({
-    url: location.href,
-    state: document.readyState,
-    bridge: typeof window.flutter_inappwebview,
-    renderer: typeof window.StroomMessageView
-  });
+  window.setTimeout(() => {
+    document.open();
+    document.write(${jsonEncode(widget.html)});
+    document.close();
+  }, 0);
+  return true;
 })()
 ''',
       );
       if (kDebugMode) {
         debugPrint(
-          '[MessageWebHost][document-write-complete] generation=$generation state=$documentState',
+          '[MessageWebHost][document-write-scheduled] generation=$generation accepted=$documentState',
         );
       }
     } catch (error) {
