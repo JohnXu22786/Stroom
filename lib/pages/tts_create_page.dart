@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/gestures.dart';
 
@@ -560,6 +561,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     value: clampedIndex,
                     isDense: true,
                     isExpanded: true,
@@ -1003,6 +1006,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
           initialValue: model.voices.any((v) => v.id == _selectedVoice)
               ? _selectedVoice
               : model.voices.first.id,

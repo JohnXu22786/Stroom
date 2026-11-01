@@ -26,6 +26,7 @@ import 'services/snapshot_service.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
 import 'widgets/tap_outside_unfocus.dart';
+import 'widgets/stroom_menu_style.dart';
 
 /// 启动后任务（更新检查 + 备份检查）的进程级去重标记。
 ///
@@ -505,17 +506,9 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
-                  popupMenuTheme: PopupMenuThemeData(
-                    color: colorScheme.surfaceContainerHigh,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.35,
-                        ),
-                        width: 0.5,
-                      ),
-                    ),
+                  popupMenuTheme: StroomMenuStyle.popupMenu(colorScheme),
+                  dropdownMenuTheme: DropdownMenuThemeData(
+                    menuStyle: StroomMenuStyle.dropdownMenu(colorScheme),
                   ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {
@@ -527,17 +520,9 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
-                  popupMenuTheme: PopupMenuThemeData(
-                    color: darkColorScheme.surfaceContainerHigh,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: darkColorScheme.outlineVariant.withValues(
-                          alpha: 0.35,
-                        ),
-                        width: 0.5,
-                      ),
-                    ),
+                  popupMenuTheme: StroomMenuStyle.popupMenu(darkColorScheme),
+                  dropdownMenuTheme: DropdownMenuThemeData(
+                    menuStyle: StroomMenuStyle.dropdownMenu(darkColorScheme),
                   ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {

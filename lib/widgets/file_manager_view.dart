@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../utils/batch_rename.dart';
 import '../utils/batch_rename_execution.dart';
@@ -2825,6 +2826,8 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
             if (widget.showFormatDropdown) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 key: const Key('fm_rename_file_format_dropdown'),
                 initialValue: _selectedFormat,
                 decoration: const InputDecoration(

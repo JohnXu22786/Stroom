@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
@@ -509,6 +510,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   const EdgeInsets.symmetric(horizontal: 8),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
+                                  dropdownColor: StroomMenuStyle.surface(context),
+                                  borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
                                   items: ParamType.values
@@ -666,6 +669,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
+                        dropdownColor: StroomMenuStyle.surface(context),
+                        borderRadius: StroomMenuStyle.borderRadius,
                         value: _responseFormat,
                         isDense: true,
                         isExpanded: true,
@@ -764,6 +769,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
+                        dropdownColor: StroomMenuStyle.surface(context),
+                        borderRadius: StroomMenuStyle.borderRadius,
                         value: _timestampGranularities,
                         isDense: true,
                         isExpanded: true,
