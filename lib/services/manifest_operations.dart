@@ -494,10 +494,13 @@ class ManifestOperations<T extends FileRecord> {
         record: toMap(record),
         folderPaths: folders,
         beforeCommit: beforeCommit,
+        afterCommit: () {
+          _cache!.removeWhere((existing) => existing.id == record.id);
+          _cache!.add(record);
+          _folderCache.addAll(folders);
+          _recordMutationRevision++;
+        },
       );
-      _cache!.add(record);
-      _folderCache.addAll(folders);
-      _recordMutationRevision++;
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);

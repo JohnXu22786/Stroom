@@ -775,6 +775,13 @@ class ManifestDatabase {
   static Future<T> withAudioRecordMutationLock<T>(
     Future<T> Function() operation,
   ) {
+    return withRecordMutationLock(operation);
+  }
+
+  /// Keeps a JSON record mutation and its cache update ordered as one action.
+  static Future<T> withRecordMutationLock<T>(
+    Future<T> Function() operation,
+  ) {
     if (_useJsonStore) return _withJsonRecordRegistrationLock(operation);
     return operation();
   }
@@ -787,6 +794,7 @@ class ManifestDatabase {
     required Map<String, dynamic> record,
     required Iterable<String> folderPaths,
     void Function()? beforeCommit,
+    void Function()? afterCommit,
   }) async {
     try {
       final folderTable = ManifestTables.folderTableFor(recordTable);
@@ -800,10 +808,14 @@ class ManifestDatabase {
           final folders = data[folderTable] as List<dynamic>? ?? <dynamic>[];
           data[recordTable] = records;
           data[folderTable] = folders;
+          final previousRecords = List<dynamic>.of(records);
           final insertedFolders = <String>[];
           var writeAttempted = false;
 
           if (isTextRecord) beforeCommit?.call();
+          records.removeWhere(
+            (existing) => existing is Map && existing['id'] == record['id'],
+          );
           records.add(record);
           try {
             for (final path in folderPaths) {
@@ -819,7 +831,9 @@ class ManifestDatabase {
             );
             if (isTextRecord) beforeCommit?.call();
           } catch (error, stackTrace) {
-            records.remove(record);
+            records
+              ..clear()
+              ..addAll(previousRecords.cast<Map<String, dynamic>>());
             for (final path in insertedFolders) {
               folders.remove(path);
             }
@@ -835,6 +849,7 @@ class ManifestDatabase {
             }
             Error.throwWithStackTrace(error, stackTrace);
           }
+          afterCommit?.call();
         });
         return;
       }
@@ -857,6 +872,7 @@ class ManifestDatabase {
         }
         if (isTextRecord) beforeCommit?.call();
       });
+      afterCommit?.call();
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertRecordWithFolders failed', e, stackTrace);

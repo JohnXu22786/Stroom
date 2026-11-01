@@ -605,6 +605,79 @@ void main() {
     });
   });
 
+  group('JSON record insertion duplicate IDs', () {
+    testWidgets('replaces the existing row and keeps folder entries',
+        (WidgetTester t) async {
+      const id = 'duplicate_image_id';
+      final firstInsert = ImageManifest.addRecord(ImageRecord(
+        id: id,
+        name: 'before',
+        hash: 'duplicate-before',
+        format: 'png',
+        createdAt: DateTime(2024),
+        size: 1,
+        folder: 'first',
+      ));
+      final replacementInsert = ImageManifest.addRecord(ImageRecord(
+        id: id,
+        name: 'after',
+        hash: 'duplicate-after',
+        format: 'png',
+        createdAt: DateTime(2024),
+        size: 2,
+        folder: 'second',
+      ));
+      await Future.wait([firstInsert, replacementInsert]);
+
+      expect((await ImageManifest.loadRecords()).map((record) => record.name),
+          ['after']);
+      expect(
+        (await ManifestDatabase.getAllImageRecords()).map((row) => row['id']),
+        [id],
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        containsAll(['first', 'second']),
+      );
+    });
+
+    testWidgets('failed replacement restores the previous row and folders',
+        (WidgetTester t) async {
+      const id = 'duplicate_image_id_rollback';
+      await ManifestDatabase.insertRecordWithFolders(
+        recordTable: ManifestTables.imageRecords,
+        record: {'id': id, 'name': 'before'},
+        folderPaths: const ['images', 'images/original'],
+      );
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (path == 'images/failed') {
+          throw StateError('injected folder failure');
+        }
+      };
+
+      await expectLater(
+        ManifestDatabase.insertRecordWithFolders(
+          recordTable: ManifestTables.imageRecords,
+          record: {'id': id, 'name': 'after'},
+          folderPaths: const ['images', 'images/failed'],
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await ManifestDatabase.getAllImageRecords(), [
+        {'id': id, 'name': 'before'},
+      ]);
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        containsAll(['images', 'images/original']),
+      );
+    });
+  });
+
   test('audio storage names cannot escape the tts_audio directory', () async {
     final originalPathProvider = PathProviderPlatform.instance;
     final directory = await Directory.systemTemp.createTemp(
