@@ -55,6 +55,12 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
             textSections: s.textChunks.any((c) => c.isNotEmpty)
                 ? List<String>.from(s.textChunks)
                 : null,
+            blocks: legacyToBlocks(
+              reasoningSections: s.reasoningSections,
+              textChunks: s.textChunks,
+              toolCalls: s.accumulatedToolCalls,
+              toolCallRoundStarts: s.toolCallRoundStarts,
+            ),
             toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
                 ? List<int>.from(s.toolCallRoundStarts)
                 : null,

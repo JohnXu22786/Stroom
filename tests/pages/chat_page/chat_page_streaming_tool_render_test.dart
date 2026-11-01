@@ -64,7 +64,8 @@ Widget _buildTestApp(_HangingStreamManager manager) {
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child:
+        const MaterialApp(home: ChatPage.withNativeMessageRendererForTesting()),
   );
 }
 
@@ -413,7 +414,8 @@ void main() {
             providerEntriesProvider
                 .overrideWith((ref) => ProviderEntriesNotifier()),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       // Let _initialize + _loadConversationMessages (and the initial

@@ -229,7 +229,8 @@ Widget _buildTestApp(_ImmediateStreamManager manager) {
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child:
+        const MaterialApp(home: ChatPage.withNativeMessageRendererForTesting()),
   );
 }
 
@@ -375,7 +376,8 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
     await _pumpLoaded(tester);
 
@@ -601,7 +603,8 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
     await _pumpLoaded(tester);
 
@@ -669,7 +672,8 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
     await _pumpLoaded(tester);
 
@@ -853,7 +857,8 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
     await _pumpLoaded(tester);
     expect(find.text('web_search'), findsOneWidget, reason: '前置：a1 的折叠工具卡片应可见');
@@ -1013,7 +1018,8 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
     await _pumpLoaded(tester);
 

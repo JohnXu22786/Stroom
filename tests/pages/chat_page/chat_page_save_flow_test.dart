@@ -56,7 +56,9 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Scaffold(body: ChatPage())),
+          child: const MaterialApp(
+              home: Scaffold(
+                  body: ChatPage.withNativeMessageRendererForTesting())),
         ),
       );
       await tester.pump();

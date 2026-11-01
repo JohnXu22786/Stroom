@@ -39,7 +39,9 @@ void chatPageGroup3() {
       await tester.pump(const Duration(milliseconds: 100));
 
       navKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const ChatPage()),
+        MaterialPageRoute(
+            builder: (_) =>
+                const ChatPage.withNativeMessageRendererForTesting()),
       );
       for (int i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 50));

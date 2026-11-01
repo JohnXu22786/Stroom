@@ -8,6 +8,7 @@ import '../models/chat_message.dart';
 import '../models/assistant.dart' show Assistant;
 import '../models/built_in_assistants.dart';
 import '../models/message_block.dart';
+import '../models/message_block_conversion.dart' show assistantBlocks;
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
 import '../pages/chat/utils/format_chat_error.dart' show formatChatErrorMessage;

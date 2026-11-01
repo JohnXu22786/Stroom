@@ -182,6 +182,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final oldCtrl = _controller;
     _controller = InMemoryChatController();
     _history.clear();
+    _messageThumbnails.clear();
     _chatSegments.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();
@@ -309,6 +310,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _resolveEnabledToolsForActiveConversation();
       if (messages.isEmpty) {
         _clearConversationView();
+        _loadedConversationId = activeId;
         return;
       }
 
@@ -345,47 +347,15 @@ extension _ChatPageMessagesExt on _ChatPageState {
       await AppLogService.info('ChatPage', '开始加载 $msgCount 条消息到 _history');
       for (final msg in messages) {
         loadedHistory.add(msg);
-        // Restore reasoning sections from persisted ChatMessage.
-        // Prefer the new multi-section [reasoningSections] field over the
-        // legacy single-string [reasoningContent] for backward compatibility.
-        if (msg.reasoningSections != null &&
-            msg.reasoningSections!.isNotEmpty) {
-          loadedReasoningContents[msg.id] =
-              List<String>.from(msg.reasoningSections!);
-        } else if (msg.reasoningContent != null &&
-            msg.reasoningContent!.isNotEmpty) {
-          loadedReasoningContents[msg.id] = [msg.reasoningContent!];
-        }
+        final reasoning = msg.blocks
+                ?.whereType<ReasoningBlock>()
+                .map((block) => block.text)
+                .toList() ??
+            <String>[];
+        if (reasoning.isNotEmpty) loadedReasoningContents[msg.id] = reasoning;
 
-        // Build unified segments for the full Agent chain.
-        // Build segments from blocks (unified path since v0.4.50).
-        // If blocks are absent (periodic persist or old data), build
-        // them from legacy fields on the fly.
-        // For roundStarts-era messages, REBUILD blocks from the legacy
-        // fields instead of trusting the persisted ones: blocks saved
-        // before the empty-section fix were built by the empty-skipping
-        // legacyToBlocks, whose ordinal ReasoningSegment indices
-        // misalign with the raw reasoningSections indices whenever a
-        // middle tool round had no reasoning (interior '' placeholder) —
-        // the reloaded message then rendered the wrong section (or none).
-        // Rebuilding is idempotent for correctly-aligned blocks
-        // (compactedAt markers are carried by the legacy toolCalls).
-        final rebuiltBlocks = legacyToBlocks(
-          reasoningSections: msg.reasoningSections ?? [],
-          textChunks: msg.textSections ?? [],
-          toolCalls: msg.toolCalls ?? [],
-          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
-        );
-        final blocks = (msg.toolCallRoundStarts != null)
-            ? rebuiltBlocks
-            : (msg.blocks ?? rebuiltBlocks);
-        final segments = blocksToSegments(blocks);
-        // Fallback: no textSections, use content as single trailing block
-        if (segments.isEmpty && msg.content.isNotEmpty) {
-          segments.add(TextSegment(msg.content));
-        } else if (msg.textSections == null && msg.content.isNotEmpty) {
-          segments.add(TextSegment(msg.content));
-        }
+        // Startup migration and message writers supply canonical blocks.
+        final segments = blocksToSegments(msg.blocks ?? []);
         if (segments.isNotEmpty) {
           loadedChatSegments[msg.id] = segments;
         }
@@ -440,8 +410,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final isInitialEntryOrSwitch =
           _loadedConversationId != activeId || _history.isEmpty;
       _loadedConversationId = activeId;
-      _pendingInitialScrollAdjustment =
-          isInitialEntryOrSwitch || _pendingInitialScrollAdjustment;
+      _pendingInitialScrollAdjustment = !_useWebMessages &&
+          (isInitialEntryOrSwitch || _pendingInitialScrollAdjustment);
       if (_pendingInitialScrollAdjustment) {
         _initialAdjustStepsTaken = 0;
         _initialAdjustChaseFrames = 0;

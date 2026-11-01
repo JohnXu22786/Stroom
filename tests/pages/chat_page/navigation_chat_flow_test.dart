@@ -74,7 +74,8 @@ Widget createChatFlowTestApp({
               );
             case '/chat':
               return MaterialPageRoute(
-                builder: (_) => const ChatPage(),
+                builder: (_) =>
+                    const ChatPage.withNativeMessageRendererForTesting(),
                 settings: settings,
               );
             default:

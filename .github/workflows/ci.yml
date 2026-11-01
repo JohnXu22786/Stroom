@@ -2,7 +2,7 @@ name: CI Checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'v*', 'release/*']
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
@@ -41,6 +41,307 @@ jobs:
           cache-dependency-path: tools/math_editor_test/package-lock.json
       - run: npm ci --prefix tools/math_editor_test
       - run: npm test --prefix tools/math_editor_test
+
+  dsh-message-view:
+    name: DSH message renderer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/message_renderer/package-lock.json
+      - run: npm ci --prefix tools/message_renderer
+      - run: npm test --prefix tools/message_renderer
+      - name: Verify bundled assets are current
+        run: git diff --exit-code -- assets/vendor/dsh_message_view
+
+  message-platform-linux:
+    name: Message view Linux build and smoke test
+    runs-on: ubuntu-24.04
+    # WPE WebKit's bubblewrap sandbox requires these permissions inside Docker.
+    container:
+      image: debian:trixie
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+    steps:
+      - name: Install Linux WebView dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - name: Trust the restored Flutter SDK in the container
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - run: xvfb-run flutter test -d linux integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-web:
+    name: Message view Web build and smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build web --release
+      - uses: browser-actions/setup-chrome@v2
+        id: setup-chrome
+        with:
+          install-chromedriver: true
+      - name: Run browser-driven Web message view smoke test
+        run: |
+          "${{ steps.setup-chrome.outputs.chromedriver-path }}" --port=4444 > /tmp/chromedriver.log 2>&1 &
+          chromedriver_pid=$!
+          trap 'kill "$chromedriver_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4444/status >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4444/status >/dev/null || { cat /tmp/chromedriver.log; exit 1; }
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d web-server --browser-name=chrome --chrome-binary="${{ steps.setup-chrome.outputs.chrome-path }}" --driver-port=4444
+
+  message-platform-android:
+    name: Message view Android build and smoke test
+    runs-on: ubuntu-24.04
+    env:
+      STROOM_CI_ANDROID_ABI: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build Android APK
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/android-build.log"
+          flutter build apk --debug 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          if [ "$result" -ne 0 ]; then
+            details="$(tail -n 30 "$log" | tr '\r\n' ' ' | sed 's/%/%25/g')"
+            printf '::error title=Android build details::%s\n' "$details"
+          fi
+          exit "$result"
+      - uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 30
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          script: >-
+            bash -c 'set +e; timeout --signal=TERM --kill-after=15s 12m flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --verbose 2>&1 | tee "$RUNNER_TEMP/android-message-smoke.log"; result=${PIPESTATUS[0]}; if [ "$result" -ne 0 ]; then adb -s emulator-5554 logcat -d -t 500 > "$RUNNER_TEMP/android-message-logcat.log"; fi; exit "$result"'
+      - name: Summarize Android smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### Android message smoke failure details'
+            if [ -f "$RUNNER_TEMP/android-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/android-message-smoke.log"
+              echo '```'
+              details="$(tail -n 40 "$RUNNER_TEMP/android-message-smoke.log" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-12000)"
+            else
+              echo 'The emulator action failed before the smoke-test script created its log.'
+              details="The emulator action failed before the smoke-test script created its log."
+            fi
+            if [ -f "$RUNNER_TEMP/android-message-logcat.log" ]; then
+              echo '```text'
+              logcat_tail="$(grep -Ei 'chromium|webview|flutter|fatal exception|crash' "$RUNNER_TEMP/android-message-logcat.log" | tail -n 80 || true)"
+              printf '%s\n' "$logcat_tail"
+              echo '```'
+              logcat_details="$(printf '%s\n' "$logcat_tail" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-4000)"
+              details="$details Android logcat: $logcat_details"
+            fi
+            "$ANDROID_HOME/platform-tools/adb" devices -l || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+          printf '::error title=Android smoke failure details::%s\n' "$details"
+
+  message-platform-windows:
+    name: Message view Windows build and smoke test
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - run: flutter test -d windows integration_test/message_view_smoke_test.dart --reporter expanded
+
+  message-platform-macos:
+    name: Message view macOS build and smoke test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Build macOS app
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/macos-build.log"
+          flutter build macos --release 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          if [ "$result" -ne 0 ]; then
+            details="$(tail -n 30 "$log" | tr '\r\n' ' ' | sed 's/%/%25/g')"
+            printf '::error title=macOS build details::%s\n' "$details"
+          fi
+          exit "$result"
+      - name: Run macOS message view smoke test
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/macos-message-smoke.log"
+          app="$GITHUB_WORKSPACE/build/macos/Build/Products/Debug/stroom.app"
+          activation_log="$RUNNER_TEMP/macos-activation.log"
+          set -o pipefail
+          flutter test -d macos integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 \
+            | tee "$log" \
+            | while IFS= read -r line; do
+                printf '%s\n' "$line"
+                case "$line" in
+                  *'Failed to foreground app'*)
+                    : > "$activation_log"
+                    if [ ! -d "$app" ]; then
+                      printf 'macOS foreground retry could not find app: %s\n' "$app"
+                      break
+                    fi
+                    printf 'Retrying macOS app activation: %s\n' "$app"
+                    activated=0
+                    for attempt in $(seq 1 40); do
+                      if open "$app" >>"$activation_log" 2>&1; then
+                        printf 'macOS foreground request succeeded on attempt %s\n' "$attempt"
+                        activated=1
+                        break
+                      fi
+                      sleep 0.25
+                    done
+                    if [ "$activated" -eq 0 ]; then
+                      printf 'macOS foreground request failed after 10 seconds\n'
+                      cat "$activation_log"
+                    fi
+                    ;;
+                esac
+              done
+          result=${PIPESTATUS[0]}
+          exit "$result"
+      - name: Summarize macOS smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### macOS message smoke failure details'
+            if [ -f "$RUNNER_TEMP/macos-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/macos-message-smoke.log"
+              echo '```'
+              details="$(tail -n 40 "$RUNNER_TEMP/macos-message-smoke.log" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-12000)"
+            else
+              echo 'The smoke-test step did not create its log.'
+              details='The smoke-test step did not create its log.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+          printf '::error title=macOS smoke failure details::%s\n' "$details"
+
+  message-platform-ios:
+    name: Message view iOS simulator build and smoke test
+    # Flutter's iOS log-reader fix is tested with the Xcode 26 SDK required by
+    # the current video_player_avfoundation release.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          # Flutter 3.44.9 can race its iOS simulator log reader and miss the
+          # VM service URI; verify with the upstream fix until it reaches stable.
+          channel: master
+          flutter-version: c3ed85ef987759ee54a6bce275490cde2a238dc1
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - run: flutter build ios --simulator --debug --no-codesign
+      - name: Boot an available iOS simulator
+        shell: bash
+        run: |
+          simulator_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")))')"
+          simulator_state="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["state"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")))')"
+          if [ "$simulator_state" != "Booted" ]; then
+            xcrun simctl boot "$simulator_id"
+          fi
+          xcrun simctl bootstatus "$simulator_id" -b
+          echo "IOS_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+      - name: Run iOS message view smoke test
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/ios-message-smoke.log"
+          flutter drive --verbose --driver=test_driver/integration_test.dart --target=integration_test/message_view_smoke_test.dart -d "$IOS_SIMULATOR_ID" 2>&1 | tee "$log"
+          result=${PIPESTATUS[0]}
+          exit "$result"
+      - name: Summarize iOS smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### iOS message smoke failure details'
+            if [ -f "$RUNNER_TEMP/ios-message-smoke.log" ]; then
+              echo '```text'
+              tail -n 100 "$RUNNER_TEMP/ios-message-smoke.log"
+              echo '```'
+              details="$(tail -n 40 "$RUNNER_TEMP/ios-message-smoke.log" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-12000)"
+            else
+              echo 'The smoke-test step did not create its log.'
+              details='The smoke-test step did not create its log.'
+            fi
+            xcrun simctl list devices | tail -n 40
+            simulator_log="$(xcrun simctl spawn "$IOS_SIMULATOR_ID" log show --last 5m --style compact --predicate 'process == "Runner" OR process == "stroom"' 2>/dev/null | tail -n 100 || true)"
+            if [ -n "$simulator_log" ]; then
+              echo '```text'
+              printf '%s\n' "$simulator_log"
+              echo '```'
+              simulator_details="$(printf '%s\n' "$simulator_log" | tr '\r\n' ' ' | sed 's/%/%25/g' | cut -c1-4000)"
+              details="$details Simulator logs: $simulator_details"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+          printf '::error title=iOS smoke failure details::%s\n' "$details"
 
   # ── Format Check ──────────────────────────────────────────────────────────
   format:

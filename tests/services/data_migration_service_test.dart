@@ -101,7 +101,8 @@ void main() {
 
       // 值损坏的 chat 部分按 0 处理并迁移到当前版本。
       final stored = await DataMigrationService.getStoredPartVersions();
-      expect(stored[DataMigrationService.partChat], equals(1),
+      expect(stored[DataMigrationService.partChat],
+          equals(DataParts.currentVersions[DataParts.chat]),
           reason: '值类型损坏的部分按 0 处理并重新迁移');
       // 值正常的 settings 部分保持原记录，不被降级或重迁。
       expect(stored[DataMigrationService.partSettings],
@@ -366,7 +367,8 @@ void main() {
       expect(result.needsMigration, isTrue);
 
       final stored = await DataMigrationService.getStoredPartVersions();
-      expect(stored[DataMigrationService.partChat], equals(1),
+      expect(stored[DataMigrationService.partChat],
+          equals(DataParts.currentVersions[DataParts.chat]),
           reason: '落后的 chat 部分被迁移到当前版本');
       expect(stored[DataMigrationService.partSettings], equals(5),
           reason: '超前的 settings 部分必须保持原值，绝不降级');

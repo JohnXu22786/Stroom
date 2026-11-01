@@ -8,6 +8,7 @@ environment:
   flutter: ">=3.38.0"
 
 dependencies:
+  web: ^1.1.1
   flutter:
     sdk: flutter
 
@@ -49,8 +50,9 @@ dependencies:
   flutter_chat_core: ^2.9.0
   markdown_widget: ^2.3.2+8
   flutter_highlight: ^0.7.0
+  html: ^0.15.7
 
-  flutter_inappwebview: ^6.1.5
+  flutter_inappwebview: 6.2.0-beta.3
 
   # Image Editor
   pro_image_editor: ^13.0.0
@@ -71,7 +73,7 @@ dependencies:
   cupertino_icons: ^1.0.9
   material_color_utilities: ^0.13.0
   idb_shim: ^2.9.6+1
-  archive: ^4.0.9
+  archive: 4.5.0
   # 桌面平台磁盘剩余空间查询（dart:ffi 辅助库）
   ffi: ^2.1.4
   url_launcher: ^6.3.2
@@ -113,6 +115,9 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/vendor/dsh_message_view/index.html
+    - assets/vendor/dsh_message_view/DSH-LICENSE.txt
+    - assets/vendor/dsh_message_view/THIRD-PARTY-NOTICES.txt
     - assets/images/
     - assets/vendor/
     - assets/vendor/mermaid/

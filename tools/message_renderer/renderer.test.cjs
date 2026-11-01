@@ -1,0 +1,1059 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const { JSDOM } = require("jsdom");
+
+const wait = () => new Promise((resolve) => setTimeout(resolve, 60));
+async function view({ legacy = false } = {}) {
+  const events = [];
+  const dom = new JSDOM(
+    readFileSync("../../assets/vendor/dsh_message_view/index.html", "utf8"),
+    {
+      runScripts: "dangerously",
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        if (legacy) {
+          delete window.Array.prototype.at;
+          delete window.Object.hasOwn;
+          const NativeRegExp = window.RegExp;
+          const oldConstructor = (args) => {
+            if (String(args[1] || "").includes("d"))
+              throw new SyntaxError("match indices unavailable");
+          };
+          window.RegExp = new Proxy(NativeRegExp, {
+            construct(target, args) {
+              oldConstructor(args);
+              return Reflect.construct(target, args);
+            },
+            apply(target, receiver, args) {
+              oldConstructor(args);
+              return Reflect.apply(target, receiver, args);
+            },
+          });
+        }
+        window.SVGElement.prototype.getBBox = () => ({
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 24,
+        });
+        window.SVGElement.prototype.getComputedTextLength = () => 80;
+        window.flutter_inappwebview = {
+          callHandler: (name, event) => {
+            events.push(event);
+            return Promise.resolve();
+          },
+        };
+        window.matchMedia = () => ({
+          matches: false,
+          addEventListener() {},
+          removeEventListener() {},
+        });
+        window.ResizeObserver = class {
+          observe() {}
+          disconnect() {}
+        };
+        window.IntersectionObserver = class {
+          constructor(callback) {
+            this.callback = callback;
+          }
+          observe(target) {
+            this.callback([{ target, isIntersecting: true }]);
+          }
+          unobserve() {}
+          disconnect() {}
+        };
+        window.HTMLElement.prototype.scrollIntoView = function () {
+          this.dataset.scrolled = "yes";
+        };
+        window.HTMLElement.prototype.scrollTo = function (options) {
+          this.scrollTop = options.top;
+        };
+      },
+    },
+  );
+  for (
+    let attempt = 0;
+    attempt < 50 && !dom.window.document.getElementById("transcript");
+    attempt++
+  )
+    await wait();
+  assert.ok(
+    dom.window.document.getElementById("transcript"),
+    "renderer became ready",
+  );
+  return {
+    dom,
+    events,
+    receive: (command) => dom.window.StroomMessageView.receive(command),
+  };
+}
+function snapshot(session, messages, extra = {}) {
+  return {
+    type: "snapshot",
+    session,
+    messages,
+    theme: { dark: false, fontSize: 16 },
+    hasOlder: false,
+    ...extra,
+  };
+}
+const message = (id, blocks, extra = {}) => ({
+  id,
+  role: "assistant",
+  blocks,
+  actions: ["copy", "save", "retry", "raw", "json", "delete"],
+  ...extra,
+});
+
+test("user message timestamps are rendered in local time", async () => {
+  const v = await view();
+  const createdAt = "2026-05-06T07:08:00.000Z";
+  v.receive(
+    snapshot("timestamps", [
+      message("user", [], {
+        role: "user",
+        content: "Question",
+        createdAt,
+        actions: [],
+      }),
+      message("assistant", [{ type: "text", text: "Answer" }], {
+        createdAt,
+        actions: [],
+      }),
+    ]),
+  );
+  await wait();
+
+  const doc = v.dom.window.document;
+  const timestamp = doc.querySelector(
+    '[data-message-id="user"] time.message-timestamp',
+  );
+  assert.ok(timestamp, "user messages retain their visible timestamp");
+  const date = new Date(createdAt);
+  const pad = (value) => String(value).padStart(2, "0");
+  assert.equal(
+    timestamp.textContent,
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  );
+  assert.equal(timestamp.getAttribute("datetime"), createdAt);
+  assert.equal(
+    doc.querySelector('[data-message-id="assistant"] time.message-timestamp'),
+    null,
+    "assistant timestamps remain hidden",
+  );
+  v.dom.window.close();
+});
+
+test("multilingual chat text does not force a Chinese screen reader language", async () => {
+  const v = await view();
+  assert.equal(v.dom.window.document.documentElement.getAttribute("lang"), null);
+  v.dom.window.close();
+});
+
+test("new image attachments on a patched message request thumbnails once", async () => {
+  const v = await view();
+  v.receive(snapshot("images", [message("m", [], { streaming: true })]));
+  await wait();
+
+  const attachment = {
+    id: "image-1",
+    fileName: "diagram.png",
+    fileType: "image",
+  };
+  v.receive({
+    type: "patch",
+    session: "images",
+    messages: [message("m", [], { streaming: true, attachments: [attachment] })],
+  });
+  await wait();
+
+  const thumbnailActions = () =>
+    v.events.filter(
+      (event) => event.type === "action" && event.action === "thumbnail",
+    );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(thumbnailActions())),
+    [
+      {
+        type: "action",
+        session: "images",
+        messageId: "m",
+        action: "thumbnail",
+        attachmentId: "image-1",
+      },
+    ],
+    "a new attachment on an existing message requests its thumbnail",
+  );
+
+  v.receive({
+    type: "patch",
+    session: "images",
+    messages: [
+      message("m", [{ type: "text", text: "continued" }], {
+        streaming: true,
+        attachments: [attachment],
+      }),
+    ],
+  });
+  await wait();
+  assert.equal(thumbnailActions().length, 1);
+  assert.equal(
+    v.dom.window.document.querySelector(
+      '[data-message-id="m"] .attachment img',
+    ),
+    null,
+    "the thumbnail action remains pending until Flutter returns its result",
+  );
+  v.dom.window.close();
+});
+
+test("DSH Markdown preserves safe extensions, tools and incomplete streaming fences", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("a", [
+      message(
+        "m",
+        [
+          {
+            type: "text",
+            text: "前<br>后 <u>**下划线**</u>\n\n<script>window.bad=1</script>\n\n$\\ce{H2O}$",
+          },
+          { type: "reasoning", text: "想法", isComplete: true },
+          {
+            type: "tool_call",
+            id: "t",
+            name: "read",
+            arguments: { file: "a" },
+            status: "completed",
+            result: "输出",
+          },
+          { type: "text", text: "```html\n<h1>标题</h1>", streaming: true },
+        ],
+        { streaming: true },
+      ),
+    ]),
+  );
+  await wait();
+  const doc = v.dom.window.document;
+  assert.equal(doc.querySelector("u strong")?.textContent, "下划线");
+  assert.ok(doc.querySelector("br"));
+  assert.equal(v.dom.window.bad, undefined);
+  assert.deepEqual(
+    [...doc.querySelectorAll("[data-block-type]")].map(
+      (n) => n.dataset.blockType,
+    ),
+    ["text", "reasoning", "tool_call", "text"],
+  );
+  assert.equal(doc.querySelector('[data-action="html"]')?.disabled, true);
+  v.receive(
+    snapshot("a", [
+      message("m", [
+        { type: "text", text: "```html\n<h1>标题</h1>\n```\n\n$\\ce{H2O}$" },
+      ]),
+    ]),
+  );
+  await wait();
+  assert.ok(doc.querySelector(".katex"));
+  assert.ok(doc.querySelector("iframe.stroom-html-preview"));
+  assert.equal(doc.querySelector('[data-action="html"]'), null);
+  v.dom.window.close();
+});
+
+test("a running tool that fails opens its details after a live patch", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("tool-status", [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "running",
+          result: null,
+        },
+      ]),
+    ]),
+  );
+  await wait();
+
+  const doc = v.dom.window.document;
+  const runningRow = doc.querySelector(".tool-row [data-disclosure-row]");
+  assert.equal(runningRow?.getAttribute("aria-expanded"), "false");
+  assert.equal(doc.querySelector(".tool-summary")?.textContent, "执行中");
+  assert.equal(doc.querySelector(".tool-detail"), null);
+
+  v.receive({
+    type: "patch",
+    session: "tool-status",
+    order: ["m"],
+    messages: [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "error",
+          result: "permission denied",
+        },
+      ]),
+    ],
+  });
+  await wait();
+
+  const failedRow = doc.querySelector(".tool-row [data-disclosure-row]");
+  assert.equal(failedRow?.getAttribute("aria-expanded"), "true");
+  assert.equal(doc.querySelector(".tool-detail pre")?.textContent, "permission denied");
+
+  failedRow.click();
+  await wait();
+  assert.equal(
+    doc.querySelector(".tool-row [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    "false",
+    "the user can collapse the failure details",
+  );
+  v.receive({
+    type: "patch",
+    session: "tool-status",
+    order: ["m"],
+    messages: [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "error",
+          result: "permission denied (updated)",
+        },
+      ]),
+    ],
+  });
+  await wait();
+  assert.equal(
+    doc.querySelector(".tool-row [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    "false",
+    "later result patches must preserve the user's collapsed state",
+  );
+  v.dom.window.close();
+});
+
+test("Markdown links open supported schemes and preserve local anchors", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("links", [
+      message("m", [
+        {
+          type: "text",
+          text: "[web](https://example.com) [mail](mailto:a@example.com) [call](tel:+1-555-0100) [text](sms:+1-555-0100) [note](#footnote)",
+        },
+      ]),
+    ]),
+  );
+  await wait();
+  const doc = v.dom.window.document;
+  const links = [...doc.querySelectorAll("a")];
+  assert.equal(links.length, 5);
+  const localAnchor = links.find(
+    (link) => link.getAttribute("href") === "#footnote",
+  );
+  assert.ok(localAnchor, "Markdown fragment links remain available in the page");
+
+  const anchorClick = new v.dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+  });
+  localAnchor.dispatchEvent(anchorClick);
+  assert.equal(anchorClick.defaultPrevented, false);
+  assert.deepEqual(v.events.filter((event) => event.type === "link"), []);
+
+  const modifiedClick = new v.dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: true,
+  });
+  links[0].dispatchEvent(modifiedClick);
+  assert.equal(modifiedClick.defaultPrevented, false);
+  assert.deepEqual(v.events.filter((event) => event.type === "link"), []);
+
+  for (const link of links.filter((link) => link !== localAnchor)) {
+    const click = new v.dom.window.MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    link.dispatchEvent(click);
+    assert.equal(click.defaultPrevented, true);
+  }
+  assert.deepEqual(
+    v.events.filter((event) => event.type === "link").map((event) => event.uri),
+    [
+      "https://example.com",
+      "mailto:a@example.com",
+      "tel:+1-555-0100",
+      "sms:+1-555-0100",
+    ],
+  );
+  v.dom.window.close();
+});
+
+test("session replacement invalidates old updates and actions contain stable targets", async () => {
+  const v = await view();
+  v.receive(snapshot("a", [message("old", [{ type: "text", text: "旧" }])]));
+  await wait();
+  v.receive(
+    snapshot("b", [
+      message("new", [{ type: "reasoning", text: "新推理", isComplete: true }]),
+    ]),
+  );
+  await wait();
+  v.receive({
+    type: "patch",
+    session: "a",
+    messages: [message("old", [{ type: "text", text: "迟到" }])],
+  });
+  await wait();
+  const doc = v.dom.window.document;
+  assert.equal(doc.querySelector('[data-message-id="old"]'), null);
+  doc.querySelector('[data-action="reasoning"]').click();
+  doc.querySelector('[data-action="copy"]').click();
+  assert.deepEqual(JSON.parse(JSON.stringify(v.events.slice(-2))), [
+    {
+      type: "action",
+      session: "b",
+      messageId: "new",
+      action: "reasoning",
+      blockIndex: 0,
+    },
+    { type: "action", session: "b", messageId: "new", action: "copy" },
+  ]);
+  assert.equal(
+    doc.querySelector('[data-action="like"], [data-action="dislike"]'),
+    null,
+  );
+  v.dom.window.close();
+});
+
+test("prepend retains messages and search selects the requested occurrence", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("a", [message("m", [{ type: "text", text: "你好世界，你好" }])]),
+  );
+  await wait();
+  v.receive({
+    type: "patch",
+    session: "a",
+    messages: [message("older", [{ type: "text", text: "过去" }])],
+    order: ["older", "m"],
+  });
+  await wait();
+  v.receive({
+    type: "search",
+    session: "a",
+    query: "你好",
+    messageId: "m",
+    occurrence: 1,
+  });
+  await wait();
+  const doc = v.dom.window.document;
+  assert.deepEqual(
+    [...doc.querySelectorAll("[data-message-id]")].map(
+      (n) => n.dataset.messageId,
+    ),
+    ["older", "m"],
+  );
+  assert.equal(doc.querySelector("mark.current")?.textContent, "你好");
+  assert.equal(doc.querySelector("mark.current")?.dataset.scrolled, "yes");
+  v.receive({
+    type: "patch",
+    session: "a",
+    messages: [message("m", [{ type: "text", text: "你好新内容，你好" }])],
+  });
+  await wait();
+  assert.equal(
+    doc.querySelector('[data-message-id="m"] [data-search-text]').textContent,
+    "你好新内容，你好",
+  );
+  assert.equal(doc.querySelector("mark.current")?.textContent, "你好");
+  v.dom.window.close();
+});
+
+test("older WebKit without Array.at still renders assistant Markdown", async () => {
+  const v = await view({ legacy: true });
+  v.receive(
+    snapshot("a", [
+      message("m", [{ type: "text", text: "hello<br><u>world</u>" }]),
+    ]),
+  );
+  await wait();
+  assert.equal(v.dom.window.document.querySelector("u")?.textContent, "world");
+  v.dom.window.close();
+});
+
+test("code blocks keep line numbers and language-specific wrap defaults", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("m", [
+          {
+            type: "text",
+            text: "```js\nconst first = 1;\nconst second = 2;\n```\n\n```text\nfirst line\nsecond line\n```",
+          },
+        ]),
+      ]),
+    );
+    await wait();
+    const doc = v.dom.window.document;
+    const [codeCard, proseCard] = doc.querySelectorAll(
+      ".stroom-code-card .md-code-block",
+    );
+    assert.ok(codeCard?.querySelector("pre"), "code is rendered by DSH's CodeBlock");
+    assert.equal(codeCard.getAttribute("data-line-numbers"), "true");
+    assert.equal(proseCard.getAttribute("data-line-numbers"), "true");
+    assert.equal(
+      codeCard.querySelectorAll("pre .line").length,
+      2,
+      "the DSH code block keeps both source lines available beside its gutter",
+    );
+    assert.equal(codeCard.getAttribute("data-code-wrap"), "false");
+    assert.equal(
+      v.dom.window.getComputedStyle(codeCard.querySelector("pre")).whiteSpace,
+      "pre",
+    );
+    assert.equal(proseCard.getAttribute("data-code-wrap"), "true");
+    assert.equal(
+      v.dom.window.getComputedStyle(proseCard.querySelector("pre")).whiteSpace,
+      "pre-wrap",
+    );
+    const wrapButton = codeCard.querySelector('[aria-label="自动换行"]');
+    assert.equal(wrapButton.getAttribute("aria-pressed"), "false");
+    wrapButton.click();
+    await wait();
+    assert.equal(codeCard.getAttribute("data-code-wrap"), "true");
+    assert.equal(
+      v.dom.window.getComputedStyle(codeCard.querySelector("pre")).whiteSpace,
+      "pre-wrap",
+    );
+    assert.equal(
+      wrapButton.getAttribute("aria-pressed"),
+      "true",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("legacy WebKit highlights code and provides Mermaid's missing API", async () => {
+  const v = await view({ legacy: true });
+  try {
+    v.receive(
+      snapshot("a", [
+        message("m", [
+          { type: "text", text: "```js\nconst answer = 42;\n```" },
+        ]),
+      ]),
+    );
+    await wait();
+    const doc = v.dom.window.document;
+    const tokens = doc.querySelectorAll(
+      '.stroom-code-card .md-code-block pre span[style*="--shiki-"]',
+    );
+    assert.ok(
+      tokens.length > 1,
+      "JavaScript grammar emits colored tokens without RegExp match indices",
+    );
+    assert.equal(v.dom.window.Object.hasOwn({ value: 1 }, "value"), true);
+    assert.equal(
+      v.dom.window.Object.hasOwn(Object.create({ value: 1 }), "value"),
+      false,
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("stream following resumes at bottom and pauses when reading earlier text", async () => {
+  const v = await view();
+  try {
+    const e = v.dom.window.document.getElementById("transcript");
+    let top = 0,
+      extent = 40;
+    Object.defineProperties(e, {
+      clientHeight: { get: () => 100 },
+      scrollHeight: { get: () => extent },
+      scrollTop: {
+        get: () => top,
+        set: (value) => {
+          top = Math.max(0, Math.min(value, Math.max(0, extent - 100)));
+        },
+      },
+    });
+    v.receive(snapshot("a", [message("m", [{ type: "text", text: "short" }])]));
+    await wait();
+    extent = 240;
+    v.receive({
+      type: "patch",
+      session: "a",
+      messages: [message("m", [{ type: "text", text: "long" }])],
+    });
+    await wait();
+    assert.equal(top, 140, "initial short conversation follows growth");
+    e.dispatchEvent(
+      new v.dom.window.WheelEvent("wheel", { deltaY: -60, bubbles: true }),
+    );
+    e.scrollTop = 40;
+    e.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    extent = 340;
+    v.receive({
+      type: "patch",
+      session: "a",
+      messages: [message("m", [{ type: "text", text: "longer" }])],
+    });
+    await wait();
+    assert.equal(top, 40, "upward reading retains position");
+    e.scrollTop = 240;
+    e.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    extent = 440;
+    v.receive({
+      type: "patch",
+      session: "a",
+      messages: [message("m", [{ type: "text", text: "latest" }])],
+    });
+    await wait();
+    assert.equal(top, 340, "manual return to bottom resumes following");
+    v.receive({
+      type: "search",
+      session: "a",
+      query: "latest",
+      messageId: "m",
+      occurrence: 0,
+    });
+    await wait();
+    e.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    extent = 540;
+    v.receive({
+      type: "patch",
+      session: "a",
+      messages: [message("m", [{ type: "text", text: "latest addition" }])],
+    });
+    await wait();
+    assert.equal(top, 340, "search location does not resume following");
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("empty switch snapshot positions first loaded history at the last user", async () => {
+  const v = await view();
+  try {
+    const e = v.dom.window.document.getElementById("transcript");
+    let top = 0,
+      extent = 0;
+    Object.defineProperties(e, {
+      clientHeight: { get: () => 100 },
+      scrollHeight: { get: () => extent },
+      scrollTop: {
+        get: () => top,
+        set: (x) => {
+          top = Math.max(0, Math.min(x, Math.max(0, extent - 100)));
+        },
+      },
+    });
+    Object.defineProperty(v.dom.window.HTMLElement.prototype, "offsetTop", {
+      configurable: true,
+      get() {
+        return this.classList.contains("user") ? 120 : 0;
+      },
+    });
+    v.receive(
+      snapshot("a", [message("stream", [], { streaming: true })], {
+        historyLoaded: false,
+      }),
+    );
+    await wait();
+    extent = 500;
+    v.receive({
+      type: "patch",
+      session: "a",
+      historyLoaded: true,
+      messages: [
+        message("u", [], { role: "user" }),
+        message("m", [{ type: "text", text: "long reply" }]),
+      ],
+    });
+    await wait();
+    assert.equal(
+      top,
+      120,
+      "loading completes before initial last-user positioning",
+    );
+    extent = 600;
+    v.receive({
+      type: "patch",
+      session: "a",
+      messages: [message("m", [{ type: "text", text: "longer reply" }])],
+    });
+    await wait();
+    assert.equal(top, 120, "reading initial reply does not jump to bottom");
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("search preserves paragraph and message-block boundaries and joins inline text", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("m", [
+          { type: "text", text: "foo\n\nbar\n\nfo**ob**ar" },
+          { type: "text", text: "foo" },
+          { type: "text", text: "bar" },
+        ]),
+      ]),
+    );
+    await wait();
+    v.receive({ type: "search", session: "a", query: "foobar" });
+    await wait();
+    const results = v.events.filter((e) => e.type === "searchResults").at(-1);
+    assert.deepEqual(JSON.parse(JSON.stringify(results.matches)), [
+      { messageId: "m", occurrence: 0 },
+    ]);
+    assert.equal(
+      [...v.dom.window.document.querySelectorAll("mark")]
+        .map((n) => n.textContent)
+        .join(""),
+      "foobar",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("search highlights original offsets after Unicode lowercase expansion", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("unicode", [{ type: "text", text: "İfoo" }]),
+      ]),
+    );
+    await wait();
+    v.receive({ type: "search", session: "a", query: "foo" });
+    await wait();
+
+    assert.equal(
+      v.dom.window.document.querySelector("mark")?.textContent,
+      "foo",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("search matches Greek final sigma case-insensitively", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [message("greek", [{ type: "text", text: "ΟΣ" }])]),
+    );
+    await wait();
+    v.receive({ type: "search", session: "a", query: "Σ" });
+    await wait();
+
+    const results = v.events.filter((event) => event.type === "searchResults").at(-1);
+    assert.deepEqual(JSON.parse(JSON.stringify(results.matches)), [
+      { messageId: "greek", occurrence: 0 },
+    ]);
+    assert.equal(v.dom.window.document.querySelector("mark")?.textContent, "Σ");
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("inline HTML waits for a closed fence and compares height with the transcript viewport", async () => {
+  const v = await view();
+  try {
+    const doc = v.dom.window.document;
+    const transcript = doc.getElementById("transcript");
+    let viewportHeight = 300;
+    Object.defineProperty(transcript, "clientHeight", {
+      configurable: true,
+      get: () => viewportHeight,
+    });
+    const update = (text, streaming) =>
+      v.receive(
+        snapshot("a", [
+          message("m", [{ type: "text", text, streaming }], { streaming }),
+        ]),
+      );
+    const sendPreviewMessage = (iframe, kind, height, reportedViewport = viewportHeight) =>
+      v.dom.window.dispatchEvent(
+        new v.dom.window.MessageEvent("message", {
+          source: iframe.contentWindow,
+          data: {
+            type: "stroom-html-preview",
+            token: iframe.dataset.previewToken,
+            kind,
+            height,
+            viewportHeight: reportedViewport,
+          },
+        }),
+      );
+    update(
+      "```HTML\n<script>document.body.dataset.previewRan = 'yes'</script>\n<h1>short</h1>\n```\t\n\nmore prose",
+      true,
+    );
+    await wait();
+    let iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe, "closed uppercase fence renders inline while later prose streams");
+    let previewWindow = doc.querySelector(".stroom-html-preview-window");
+    assert.ok(previewWindow, "the visible content is clipped by a separate wrapper");
+    assert.equal(iframe.getAttribute("sandbox"), "allow-scripts");
+    assert.match(iframe.getAttribute("srcdoc"), /document\.body\.dataset\.previewRan/);
+    assert.equal(iframe.style.height, "300px", "viewport-relative pages start at the conversation viewport height");
+    assert.equal(
+      iframe.closest(".stroom-code-card").querySelector("button"),
+      null,
+      "small inline HTML has no Stroom action buttons",
+    );
+    sendPreviewMessage(iframe, "height", 40);
+    await wait();
+    assert.equal(iframe.style.height, "300px", "measuring content does not shrink the page viewport");
+    assert.equal(previewWindow.style.height, "40px", "short HTML shrinks its visible wrapper to content height");
+    sendPreviewMessage(iframe, "height", 150);
+    await wait();
+    viewportHeight = 100;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a pending resize measurement does not use stale content height");
+    assert.equal(iframe.style.height, "100px");
+    assert.equal(previewWindow.style.height, "100px", "the wrapper stays clipped to the new viewport during remeasurement");
+    sendPreviewMessage(iframe, "height", 150, 300);
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a height report for the previous viewport is ignored");
+    sendPreviewMessage(iframe, "height", 50);
+    await wait();
+    assert.equal(previewWindow.style.height, "50px", "viewport-relative content can shrink after the viewport shrinks");
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"));
+    viewportHeight = 250;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.equal(iframe.style.height, "250px", "the page viewport follows the conversation viewport when it changes");
+    sendPreviewMessage(iframe, "height", 250);
+    await wait();
+    assert.equal(previewWindow.style.height, "250px");
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "content at the viewport limit stays inline");
+    sendPreviewMessage(iframe, "height", 251);
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    let button = doc.querySelector('.html-fullscreen-fallback [data-action="html"]');
+    assert.ok(button, "content taller than the transcript offers the Flutter preview");
+    button.click();
+    assert.equal(v.events.at(-1).action, "html");
+
+    viewportHeight = 400;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "fullscreen fallback stays after the viewport grows so HTML scripts do not rerun");
+    update("```HTML\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "CRLF fence renders inline");
+    iframe = doc.querySelector("iframe.stroom-html-preview");
+    sendPreviewMessage(iframe, "height", 300);
+    await wait();
+    viewportHeight = 200;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a new viewport waits for the matching iframe measurement");
+    sendPreviewMessage(iframe, "height", 300, 200);
+    await wait();
+    assert.ok(doc.querySelector('.html-fullscreen-fallback [data-action="html"]'), "shrinking the transcript below the measured height selects fullscreen");
+    update("> ```HTML\n> <h1>quoted</h1>\n> ```\n\nmore", true);
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "quoted fence renders inline");
+    update("```html\n<h1>tail</h1>", true);
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "open streaming fence stays as code");
+    assert.ok(doc.querySelector(".md-code-block"));
+    update("```html\n<h1>tail</h1>", false);
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "an unclosed fence never executes, even after streaming ends");
+
+    const prefix =
+      "first paragraph\n\nsecond paragraph\n\nthird paragraph\n\n";
+    update(prefix, true);
+    await wait();
+    const openTail = `${prefix}\`\`\`html\n<h1>tail</h1>`;
+    update(openTail, true);
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    assert.ok(doc.querySelector(".md-code-block"));
+
+    const closedTail = `${openTail}\n\`\`\``;
+    update(closedTail, true);
+    await wait();
+    iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe, "closed fence in a re-parsed streaming tail becomes inline HTML");
+    sendPreviewMessage(iframe, "height", 500);
+    await wait();
+    button = doc.querySelector('.html-fullscreen-fallback [data-action="html"]');
+    assert.ok(button, "oversized tail offers fullscreen");
+    button.click();
+    assert.equal(v.events.at(-1).sourceStart, closedTail.indexOf("```"));
+    assert.equal(v.events.at(-1).sourceEnd, closedTail.length);
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("generated renderer CSP allows network resources used by sandboxed HTML", () => {
+  const html = readFileSync(
+    "../../assets/vendor/dsh_message_view/index.html",
+    "utf8",
+  );
+  const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.ok(policy);
+  assert.match(policy, /default-src 'none'/);
+  for (const directive of [
+    "script-src",
+    "style-src",
+    "img-src",
+    "font-src",
+    "connect-src",
+    "media-src",
+    "frame-src",
+  ]) {
+    const rule = policy
+      .split(";")
+      .map((part) => part.trim().split(/\s+/))
+      .find(([name]) => name === directive);
+    assert.ok(
+      rule?.some((source) => source === "https:" || source === "http:"),
+      `${directive} must allow network sources`,
+    );
+  }
+});
+
+test("inline HTML execution errors fall back to the DSH code block", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("m", [
+          { type: "text", text: "```html\n<script>throw new Error('preview failed')</script>\n```" },
+        ]),
+      ]),
+    );
+    await wait();
+    const doc = v.dom.window.document;
+    const iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe);
+    v.dom.window.dispatchEvent(
+      new v.dom.window.MessageEvent("message", {
+        source: iframe.contentWindow,
+        data: {
+          type: "stroom-html-preview",
+          token: iframe.dataset.previewToken,
+          kind: "error",
+        },
+      }),
+    );
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    assert.ok(doc.querySelector(".md-code-block"));
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("a previous Mermaid source toggle does not suppress an updated HTML preview", async () => {
+  const v = await view();
+  try {
+    const doc = v.dom.window.document;
+    const update = (text) =>
+      v.receive(
+        snapshot("source-mode", [
+          message("m", [{ type: "text", text }]),
+        ]),
+      );
+    update("```mermaid\ngraph TD; A-->B\n```");
+    await wait();
+    const sourceToggle = doc.querySelector('[aria-label="查看源码"]');
+    assert.ok(sourceToggle, "Mermaid exposes its source toggle");
+    sourceToggle.click();
+    await wait();
+    assert.ok(doc.querySelector(".md-code-block"), "the source toggle shows Mermaid source");
+
+    update("```html\n<h1>Inline preview</h1>\n```");
+    await wait();
+    assert.ok(
+      doc.querySelector("iframe.stroom-html-preview"),
+      "the same block position can render HTML after Mermaid source mode was used",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("the DSH scroll-to-bottom button requests the Stroom command", async () => {
+  const v = await view();
+  try {
+    const transcript = v.dom.window.document.getElementById("transcript");
+    let scrollTop = 0;
+    Object.defineProperties(transcript, {
+      scrollHeight: { configurable: true, get: () => 1000 },
+      clientHeight: { configurable: true, get: () => 300 },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Math.max(0, Math.min(value, 700));
+        },
+      },
+    });
+
+    v.receive(snapshot("scroll", [message("m", [])]));
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector(".to-bottom"),
+      null,
+      "the button stays hidden at the bottom",
+    );
+    scrollTop = 600;
+    transcript.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    const button = v.dom.window.document.querySelector(".to-bottom");
+    assert.ok(button, "the button appears when the transcript is scrolled up");
+
+    button.click();
+    assert.deepEqual(JSON.parse(JSON.stringify(v.events.at(-1))), {
+      type: "scrollBottom",
+      session: "scroll",
+    });
+    assert.equal(
+      scrollTop,
+      600,
+      "the DSH button delegates scrolling to Flutter instead of bypassing it",
+    );
+
+    v.receive({ type: "scrollBottom", session: "scroll" });
+    assert.equal(scrollTop, 700, "Flutter's response scrolls the transcript");
+    transcript.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector(".to-bottom"),
+      null,
+      "the button hides after Flutter returns the scroll command",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
