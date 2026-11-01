@@ -2371,8 +2371,7 @@ void main() {
 
       expect((await FileManifest.loadRecords()).single.folder, '',
           reason: 'a failed move must not remain visible through the cache');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['folder'],
-          '',
+      expect((await ManifestDatabase.getAllAudioRecords()).single['folder'], '',
           reason: 'the failed move must leave persisted data unchanged');
       expect(
         await ManifestDatabase.getAllFolders(
@@ -2417,8 +2416,8 @@ void main() {
       await expectLater(failedUpdate, throwsA(same(failure)));
       await followingRename;
 
-      expect((await VideoManifest.loadRecords()).single.name,
-          'successful rename');
+      expect(
+          (await VideoManifest.loadRecords()).single.name, 'successful rename');
       expect((await ManifestDatabase.getAllVideoRecords()).single['name'],
           'successful rename');
     });
