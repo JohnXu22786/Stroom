@@ -58,6 +58,48 @@ class _ModelOption {
   );
 }
 
+class _OcrQualityOption extends StatelessWidget {
+  const _OcrQualityOption({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final bool groupValue;
+  final String title;
+  final String subtitle;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final selected = value == groupValue;
+    return Material(
+      color: selected ? cs.primaryContainer.withValues(alpha: 0.35) : null,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: selected ? cs.primary : cs.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: RadioListTile<bool>(
+        value: value,
+        groupValue: groupValue,
+        onChanged: (value) {
+          if (value != null) onChanged(value);
+        },
+        title: Text(title),
+        subtitle: Text(subtitle),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        dense: true,
+        activeColor: cs.primary,
+      ),
+    );
+  }
+}
+
 /// Collect all available models with their source provider info from ALL
 /// configured OCR provider configs (not just the first one).
 /// Only includes configs with valid host and API key.
@@ -513,6 +555,82 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     setState(() => _selectedInstructionIndex = idx);
   }
 
+  Future<void> _showOcrSettingsPanel() async {
+    var selectedQuality = _useOriginalImageQuality;
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.tune_outlined),
+              SizedBox(width: 12),
+              Text('识别设置'),
+            ],
+          ),
+          content: SizedBox(
+            width: 360,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '图片画质',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '选择发送给模型的图片细节程度。',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    _OcrQualityOption(
+                      value: false,
+                      groupValue: selectedQuality,
+                      title: '标准画质',
+                      subtitle: '压缩尺寸，适合多数情况',
+                      onChanged: (value) =>
+                          setDialogState(() => selectedQuality = value),
+                    ),
+                    const SizedBox(height: 8),
+                    _OcrQualityOption(
+                      value: true,
+                      groupValue: selectedQuality,
+                      title: '原图 / 高细节',
+                      subtitle: '保留更多细节，图片和请求更大',
+                      onChanged: (value) =>
+                          setDialogState(() => selectedQuality = value),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (save == true && mounted) {
+      setState(() => _useOriginalImageQuality = selectedQuality);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(providerEntriesProvider);
@@ -523,38 +641,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         title: const Text('文字识别'),
         centerTitle: true,
         actions: [
-          PopupMenuButton<bool>(
+          IconButton(
             key: const Key('ocr_page_settings'),
-            tooltip: '图片画质设置',
-            enabled: !_isProcessing,
-            onSelected: (useOriginal) =>
-                setState(() => _useOriginalImageQuality = useOriginal),
-            itemBuilder: (context) => [
-              CheckedPopupMenuItem<bool>(
-                value: false,
-                checked: !_useOriginalImageQuality,
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('标准画质'),
-                    Text('压缩尺寸，适合多数情况', style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-              CheckedPopupMenuItem<bool>(
-                value: true,
-                checked: _useOriginalImageQuality,
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('原图 / 高细节'),
-                    Text('保留更多细节，图片和请求更大', style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
+            tooltip: '识别设置',
+            onPressed: _isProcessing ? null : _showOcrSettingsPanel,
             icon: const Icon(Icons.settings_outlined),
           ),
           if (_selectedImages.length > 1 &&
