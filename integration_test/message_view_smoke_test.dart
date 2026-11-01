@@ -95,6 +95,15 @@ const probeTimer = setInterval(() => {
           debugPrint(
             'DSH native smoke: about:blank url=${await blankController?.getUrl()} progress=${await blankController?.getProgress()} events=$blankEvents',
           );
+          await blankController?.loadUrl(
+            urlRequest: URLRequest(url: WebUri('about:blank')),
+          );
+          for (var i = 0; i < 20; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          debugPrint(
+            'DSH native smoke: explicit about:blank load url=${await blankController?.getUrl()} progress=${await blankController?.getProgress()} events=$blankEvents',
+          );
         }
         expect(
           probeEvents.any((e) => e['type'] == 'ready'),
