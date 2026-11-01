@@ -161,11 +161,26 @@ class _MessageWebHostState extends State<MessageWebHost> {
           !_macDocumentReady &&
           !_macLoadFailed) {
         final deadline = DateTime.now().add(const Duration(seconds: 10));
+        Object? lastReadyProbe;
         while (DateTime.now().isBefore(deadline) &&
             mounted &&
             identical(controller, _controller) &&
             !_macDocumentReady &&
             !_macLoadFailed) {
+          try {
+            lastReadyProbe = await controller.evaluateJavascript(
+              source: 'JSON.stringify(!!window.StroomMessageView)',
+            );
+            if (lastReadyProbe == true || lastReadyProbe == 'true') {
+              _macDocumentNavigationStarted = true;
+              _macDocumentReady = true;
+              widget.onEvent({'type': 'ready'});
+              break;
+            }
+          } catch (_) {
+            // WKWebView may reject JavaScript evaluation while the first
+            // provisional navigation is still in progress.
+          }
           await Future<void>.delayed(const Duration(milliseconds: 250));
         }
         if (mounted &&
@@ -174,7 +189,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
             !_macLoadFailed) {
           if (kDebugMode) {
             debugPrint(
-              '[MessageWebHost][load-timeout] macOS document did not become ready',
+              '[MessageWebHost][load-timeout] macOS document did not become ready; '
+              'last probe=$lastReadyProbe',
             );
           }
           setState(() => _macLoadFailed = true);
