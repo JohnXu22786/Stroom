@@ -381,11 +381,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   }
 
   /// 批量导出文件。返回用户最终使用的导出目录
-  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
     try {
+      final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
       String? outputDir;
-      if (kIsWeb) {
+      if (useArchive) {
         outputDir = '';
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
@@ -432,7 +433,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           throw StateError('导出路径重复: $relativePath');
         }
 
-        if (kIsWeb) {
+        if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
           final fileDir = p.join(outputDir, file.folder);
@@ -443,7 +444,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         exportedCount++;
       }
 
-      if (kIsWeb && exportedCount > 0) {
+      if (useArchive && exportedCount > 0) {
         final saved = await saveFileWithType(
           dialogTitle: '导出音频',
           fileName: '音频导出.zip',
@@ -463,7 +464,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
       }
-      return outputDir;
+      return useArchive ? '' : outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -478,35 +479,37 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   }
 
   /// 批量导出文件夹（保留完整文件夹层级，含子文件夹内容）。
-  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；Web 端返回 ''）。
+  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFolders(
     List<String> names,
     String targetDirectory,
   ) async {
     try {
-      if (kIsWeb) {
-        if (!mounted) return null;
-        final action = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('文件夹导出'),
-            content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
-            actions: [
-              TextButton(
-                key: const Key('fm_web_export_cancel_btn'),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                key: const Key('fm_web_export_individual_btn'),
-                onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                child: const Text('下载 ZIP 文件'),
-              ),
-            ],
-          ),
-        );
+      if (kIsWeb || SystemPickDirectories.isNativeMobile) {
+        if (kIsWeb) {
+          if (!mounted) return null;
+          final action = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('文件夹导出'),
+              content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
+              actions: [
+                TextButton(
+                  key: const Key('fm_web_export_cancel_btn'),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  key: const Key('fm_web_export_individual_btn'),
+                  onPressed: () => Navigator.pop(ctx, 'exportFiles'),
+                  child: const Text('下载 ZIP 文件'),
+                ),
+              ],
+            ),
+          );
 
-        if (action != 'exportFiles' || !mounted) return null;
+          if (action != 'exportFiles' || !mounted) return null;
+        }
 
         final records = ref.read(audioRecordsProvider);
         var exportedCount = 0;

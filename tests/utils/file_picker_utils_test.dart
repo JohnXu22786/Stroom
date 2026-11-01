@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart'
@@ -122,5 +123,20 @@ void main() {
       filePickerLocationLabel(Uri.parse('blob:https://example.test/id')),
       'blob:https://example.test/id',
     );
+  });
+
+  test('export archive keeps visible nested paths and empty folders', () {
+    final bytes = encodeUserVisibleExportArchive(
+      files: {
+        '旅行/2026/海边/photo.jpg': Uint8List.fromList([1, 2, 3]),
+      },
+      folders: const ['旅行/空目录'],
+    );
+
+    final entries = ZipDecoder().decodeBytes(bytes);
+    final names = entries.map((entry) => entry.name).toSet();
+    expect(names, contains('旅行/2026/海边/photo.jpg'));
+    expect(names, contains('旅行/空目录/'));
+    expect(names, isNot(contains('hash123.jpg')));
   });
 }
