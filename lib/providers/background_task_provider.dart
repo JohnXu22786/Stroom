@@ -2196,16 +2196,18 @@ String _legacyOcrRedactWhitespaceSplitMaskedCredentialEchoes(
         .trim()
         .split(RegExp(r'\s+'))
         .last;
-    if (prefix.isEmpty) continue;
+    if (prefix.toLowerCase() != 'documentation') continue;
     final prefixPattern = prefix.split('').map(RegExp.escape).join(r'\s*');
     final whitespaceSplitEcho = RegExp(
       '(^|[^a-zA-Z0-9])($prefixPattern)(\\s+)'
-      r'([a-zA-Z0-9][a-zA-Z0-9_./+~-]*)'
+      r'([a-zA-Z0-9][a-zA-Z0-9_./+~-]*|[-_./+~][a-zA-Z0-9][a-zA-Z0-9_./+~-]*)'
       r'(?=$|[^a-zA-Z0-9_])',
       caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(whitespaceSplitEcho, (match) {
-      final suffix = match.group(4)!;
+      final rawSuffix = match.group(4)!;
+      final suffix = rawSuffix.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
+      if (suffix.isEmpty) return match.group(0)!;
       if (_legacyOcrHasNaturalAlphaContinuation(suffix.toLowerCase()) ||
           _legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
           _legacyOcrIsNaturalReadDocumentationContinuation(
@@ -2221,7 +2223,8 @@ String _legacyOcrRedactWhitespaceSplitMaskedCredentialEchoes(
       if (!_legacyOcrTextContainsMaskedCredential(compactEcho, [value])) {
         return match.group(0)!;
       }
-      return '${match.group(1)}[redacted]';
+      final trailingPunctuation = rawSuffix.substring(suffix.length);
+      return '${match.group(1)}[redacted]$trailingPunctuation';
     });
   }
   return sanitized;

@@ -3003,6 +3003,11 @@ void main() {
           'The note says documentation ${List.filled(129, 'A').join()}.',
           'The note says [redacted].',
         );
+        expectMigrated(
+          'legacy-ocr-documentation-punctuation-split-echo',
+          'The note says documentation -ABCDEF.',
+          'The note says [redacted].',
+        );
 
         const safePrompt = 'Please read the documentation carefully.';
         final safeTask = taskFor(
