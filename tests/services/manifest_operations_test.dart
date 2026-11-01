@@ -2038,6 +2038,89 @@ void main() {
 
   group('removeFolder', () {
     testWidgets(
+        'failed non-audio record deletion preserves cache and files for retry',
+        (WidgetTester t) async {
+      const fileBytes = [1, 2, 3];
+      const thumbnailBytes = [4, 5];
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'test_image_folder_delete_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'image_folder_delete_failure',
+        name: 'keep after failed deletion',
+        hash: 'hash_image_folder_delete_failure',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: fileBytes.length,
+        folder: 'image_folder_delete_failure',
+      );
+      await operations.addFolder(record.folder);
+      await operations.writeFile(
+        record.storagePath,
+        Uint8List.fromList(fileBytes),
+      );
+      await operations.writeFile(
+        '${record.hash}_thumb.png',
+        Uint8List.fromList(thumbnailBytes),
+      );
+      await operations.addRecord(record);
+
+      final failure = StateError('injected image folder record delete failure');
+      operations.beforeNonAudioFolderRecordDeleteForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw failure;
+        };
+      };
+
+      try {
+        await expectLater(
+          operations.removeFolder(record.folder),
+          throwsA(same(failure)),
+        );
+        expect(
+          (await ManifestDatabase.getAllImageRecords())
+              .map((row) => row['id']),
+          contains(record.id),
+          reason: 'a failed deletion must leave its database row intact',
+        );
+        expect(
+          (await operations.loadRecords()).map((cached) => cached.id),
+          contains(record.id),
+          reason: 'a failed deletion must leave the cached record available',
+        );
+        expect(
+          await operations.readFile(record.storagePath),
+          equals(fileBytes),
+          reason: 'a failed deletion must leave the primary file available',
+        );
+        expect(
+          await operations.readFile('${record.hash}_thumb.png'),
+          equals(thumbnailBytes),
+          reason: 'a failed deletion must leave the thumbnail available',
+        );
+      } finally {
+        operations.beforeNonAudioFolderRecordDeleteForTesting = null;
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+
+      await operations.removeFolder(record.folder);
+
+      expect(await ManifestDatabase.getAllImageRecords(), isEmpty,
+          reason: 'retry must remove the persisted record');
+      expect(await operations.loadRecords(), isEmpty,
+          reason: 'retry must remove the record from cache');
+      expect(await operations.readFile(record.storagePath), isNull,
+          reason: 'successful retry must remove the primary file');
+      expect(await operations.readFile('${record.hash}_thumb.png'), isNull,
+          reason: 'successful retry must remove the thumbnail');
+    });
+
+    testWidgets(
         'deletes records in folder + nested descendants, folder entries and files',
         (WidgetTester t) async {
       final inFolder = ImageRecord(

@@ -77,6 +77,10 @@ class ManifestOperations<T extends FileRecord> {
   @visibleForTesting
   Future<void> Function()? beforeAudioFolderRecordDeleteForTesting;
 
+  /// Pauses non-audio folder deletion before deleting its record rows in tests.
+  @visibleForTesting
+  Future<void> Function()? beforeNonAudioFolderRecordDeleteForTesting;
+
   /// Injects a failure before deleting an audio primary file in focused tests.
   @visibleForTesting
   Future<void> Function(String name)? beforeAudioPrimaryDeleteForTesting;
@@ -1057,6 +1061,16 @@ class ManifestOperations<T extends FileRecord> {
           ? await _snapshotAudioSidecars(toRemoveRecords, storageNameCount)
           : <String, Uint8List>{};
 
+      final deletesAudioRecords = _isAudioTable && idsToDelete.isNotEmpty;
+      if (idsToDelete.isNotEmpty && !deletesAudioRecords) {
+        // Commit metadata before removing files so a failed row write leaves
+        // the existing cache and bytes available for a retry.
+        await beforeNonAudioFolderRecordDeleteForTesting?.call();
+        await _dbDeleteRecords(idsToDelete);
+        _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+        _recordMutationRevision++;
+      }
+
       // Decrement per record being deleted; only delete file when count reaches 0
       for (final r in toRemoveRecords) {
         final sn = storageNameOf(r);
@@ -1091,7 +1105,6 @@ class ManifestOperations<T extends FileRecord> {
         }
       }
 
-      final deletesAudioRecords = _isAudioTable && idsToDelete.isNotEmpty;
       if (idsToDelete.isNotEmpty) {
         if (deletesAudioRecords) {
           _cache!.removeWhere((r) => idsToDelete.contains(r.id));
@@ -1113,9 +1126,6 @@ class ManifestOperations<T extends FileRecord> {
           // invalidate any refresh that has not reached its revision check.
           _cache!.removeWhere((r) => idsToDelete.contains(r.id));
           _recordMutationRevision++;
-        } else {
-          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-          await _dbDeleteRecords(idsToDelete);
         }
       }
     } catch (e, st) {
