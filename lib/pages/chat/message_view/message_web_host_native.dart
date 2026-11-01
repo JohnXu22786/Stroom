@@ -22,6 +22,8 @@ class MessageWebHost extends StatefulWidget {
 }
 
 class _MessageWebHostState extends State<MessageWebHost> {
+  static final Uri _macDocumentUri = Uri.parse('https://stroom.invalid/');
+
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
   Key _macWebViewKey = UniqueKey();
@@ -32,59 +34,10 @@ class _MessageWebHostState extends State<MessageWebHost> {
 
   bool _trustedDocument(Uri uri) {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return uri.toString() == 'about:blank';
+      return uri.toString() == _macDocumentUri.toString();
     }
     return uri.scheme == 'file' &&
         uri.path.endsWith('/assets/vendor/dsh_message_view/index.html');
-  }
-
-  String get _macDocumentHtml {
-    const bridge = '''<script>
-window.flutter_inappwebview = {
-  callHandler: (handlerName, ...args) => {
-    if (handlerName === 'StroomMessageView') {
-      window.parent.postMessage({type: 'stroom-event', handlerName, args}, '*');
-    }
-    return Promise.resolve();
-  }
-};
-window.addEventListener('DOMContentLoaded', () => {
-  window.dispatchEvent(new Event('flutterInAppWebViewPlatformReady'));
-}, {once: true});
-window.addEventListener('message', event => {
-  if (event.source === window.parent && event.data?.type === 'stroom-command') {
-    window.StroomMessageView?.receive(event.data.command);
-  }
-});
-</script>''';
-    final doctypeEnd = widget.html.toLowerCase().startsWith('<!doctype')
-        ? widget.html.indexOf('>')
-        : -1;
-    if (doctypeEnd < 0) return '$bridge${widget.html}';
-    return widget.html.replaceRange(doctypeEnd + 1, doctypeEnd + 1, bridge);
-  }
-
-  String get _macWrapperHtml {
-    final document = jsonEncode(_macDocumentHtml)
-        .replaceAll('<', r'\u003C')
-        .replaceAll('>', r'\u003E')
-        .replaceAll('&', r'\u0026');
-    return '''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}
-iframe{display:block}
-</style></head><body><iframe title="Stroom message content" sandbox="allow-scripts"></iframe>
-<script>
-const frame = document.querySelector('iframe');
-window.addEventListener('message', event => {
-  if (event.source !== frame.contentWindow ||
-      event.data?.type !== 'stroom-event' ||
-      event.data.handlerName !== 'StroomMessageView' ||
-      !Array.isArray(event.data.args)) return;
-  window.flutter_inappwebview.callHandler(event.data.handlerName, ...event.data.args);
-});
-frame.srcdoc = $document;
-</script></body></html>''';
   }
 
   Future<void> _failMacLoadIfUnready(
@@ -124,12 +77,7 @@ frame.srcdoc = $document;
     _pending = _pending.then((_) async {
       if (!mounted || !identical(controller, _controller)) return;
       await controller.evaluateJavascript(
-        source: defaultTargetPlatform == TargetPlatform.macOS
-            ? 'document.querySelector("iframe")?.contentWindow?.postMessage(${jsonEncode({
-                    'type': 'stroom-command',
-                    'command': command
-                  })}, "*");'
-            : 'window.StroomMessageView?.receive(${jsonEncode(command)});',
+        source: 'window.StroomMessageView?.receive(${jsonEncode(command)});',
       );
     }).catchError((Object error) {
       if (mounted) debugPrint('[MessageWebHost] $error');
@@ -152,16 +100,16 @@ frame.srcdoc = $document;
               ? _macWebViewKey
               : null,
           // WebView2 NavigateToString has a 2 MiB limit. Load the bundled file
-          // on native platforms except macOS, which serves it inside a
-          // sandboxed srcdoc frame.
+          // on native platforms except macOS, which loads it as the main
+          // document from memory.
           initialFile: defaultTargetPlatform == TargetPlatform.macOS
               ? null
               : 'assets/vendor/dsh_message_view/index.html',
           initialUrlRequest: null,
           initialData: defaultTargetPlatform == TargetPlatform.macOS
               ? InAppWebViewInitialData(
-                  data: _macWrapperHtml,
-                  baseUrl: WebUri('about:blank'),
+                  data: widget.html,
+                  baseUrl: WebUri(_macDocumentUri.toString()),
                 )
               : null,
           initialSettings: InAppWebViewSettings(
@@ -185,7 +133,7 @@ frame.srcdoc = $document;
             }
             if (defaultTargetPlatform == TargetPlatform.macOS &&
                 request.isForMainFrame == true &&
-                request.url.toString() == 'about:blank' &&
+                request.url.toString() == _macDocumentUri.toString() &&
                 !_macDocumentReady &&
                 mounted) {
               setState(() => _macLoadFailed = true);
@@ -265,9 +213,6 @@ frame.srcdoc = $document;
             if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
           },
           onLoadStop: (controller, url) async {
-            // macOS hosts the renderer in an iframe; only its scoped bridge
-            // event can report renderer readiness.
-            if (defaultTargetPlatform == TargetPlatform.macOS) return;
             final ready = await controller.evaluateJavascript(
               source: 'JSON.stringify(!!window.StroomMessageView)',
             );
@@ -292,17 +237,15 @@ JSON.stringify({
                 debugPrint('[MessageWebHost][not-ready] $url: $error');
               }
             }
-            if (defaultTargetPlatform == TargetPlatform.macOS &&
-                !rendererReady) {
-              unawaited(
-                _failMacLoadIfUnready(controller, _macLoadGeneration),
-              );
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              if (!rendererReady) {
+                unawaited(
+                  _failMacLoadIfUnready(controller, _macLoadGeneration),
+                );
+              }
+              return;
             }
             if (mounted && rendererReady) {
-              _macDocumentReady = true;
-              if (defaultTargetPlatform == TargetPlatform.macOS) {
-                setState(() => _macLoadFailed = false);
-              }
               widget.onEvent({'type': 'ready'});
             }
           },
