@@ -91,18 +91,19 @@ window.addEventListener("message", (event) => {
     InAppWebViewController controller,
     Map<String, dynamic> command,
   ) {
-    _pending = _pending
-        .then((_) async {
-          if (!mounted || !identical(controller, _controller)) return;
-          await controller.evaluateJavascript(
-            source: defaultTargetPlatform == TargetPlatform.macOS
-                ? 'document.querySelector("iframe")?.contentWindow?.postMessage(${jsonEncode({'type': 'stroom-command', 'command': command})}, "*");'
-                : 'window.StroomMessageView?.receive(${jsonEncode(command)});',
-          );
-        })
-        .catchError((Object error) {
-          if (mounted) debugPrint('[MessageWebHost] $error');
-        });
+    _pending = _pending.then((_) async {
+      if (!mounted || !identical(controller, _controller)) return;
+      await controller.evaluateJavascript(
+        source: defaultTargetPlatform == TargetPlatform.macOS
+            ? 'document.querySelector("iframe")?.contentWindow?.postMessage(${jsonEncode({
+                    'type': 'stroom-command',
+                    'command': command
+                  })}, "*");'
+            : 'window.StroomMessageView?.receive(${jsonEncode(command)});',
+      );
+    }).catchError((Object error) {
+      if (mounted) debugPrint('[MessageWebHost] $error');
+    });
   }
 
   @override
@@ -154,8 +155,8 @@ iframe{display:block}
                   defaultTargetPlatform != TargetPlatform.macOS,
               resourceCustomSchemes:
                   defaultTargetPlatform == TargetPlatform.macOS
-                  ? ['stroom-message']
-                  : const [],
+                      ? ['stroom-message']
+                      : const [],
             ),
             onLoadResourceWithCustomScheme: (controller, request) {
               if (defaultTargetPlatform != TargetPlatform.macOS ||
@@ -197,29 +198,37 @@ iframe{display:block}
                   '[MessageWebHost][created] platform=$defaultTargetPlatform htmlLength=${widget.html.length}',
                 );
               }
-              if (defaultTargetPlatform == TargetPlatform.macOS) {
+              final generation = defaultTargetPlatform == TargetPlatform.macOS
+                  ? ++_macLoadGeneration
+                  : null;
+              if (generation != null) {
                 _macDocumentReady = false;
-                final generation = ++_macLoadGeneration;
                 unawaited(_failMacLoadIfUnready(controller, generation));
               }
               controller.addJavaScriptHandler(
                 handlerName: 'StroomMessageView',
                 callback: (JavaScriptHandlerFunctionData data) {
-                  final trustedMacFrame =
-                      defaultTargetPlatform == TargetPlatform.macOS &&
+                  final trustedMacFrame = defaultTargetPlatform ==
+                          TargetPlatform.macOS &&
                       !data.isMainFrame &&
                       data.requestUrl.toString() == _macDocumentUri?.toString();
-                  final trustedFrame =
-                      defaultTargetPlatform == TargetPlatform.macOS
+                  final trustedFrame = defaultTargetPlatform ==
+                          TargetPlatform.macOS
                       ? trustedMacFrame
                       : data.isMainFrame && _trustedDocument(data.requestUrl);
+                  final staleMacView =
+                      defaultTargetPlatform == TargetPlatform.macOS &&
+                          (generation != _macLoadGeneration ||
+                              !identical(controller, _controller));
                   final rejection = !mounted
                       ? 'unmounted'
-                      : !trustedFrame
-                      ? 'untrusted-frame:${data.requestUrl}'
-                      : data.args.length != 1 || data.args.first is! Map
-                      ? 'invalid-arguments'
-                      : null;
+                      : staleMacView
+                          ? 'stale-webview'
+                          : !trustedFrame
+                              ? 'untrusted-frame:${data.requestUrl}'
+                              : data.args.length != 1 || data.args.first is! Map
+                                  ? 'invalid-arguments'
+                                  : null;
                   if (rejection != null) {
                     if (kDebugMode) {
                       debugPrint(
@@ -262,6 +271,9 @@ iframe{display:block}
               if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
             },
             onLoadStop: (controller, url) async {
+              // macOS hosts the renderer in an iframe; only its scoped bridge
+              // event can report renderer readiness.
+              if (defaultTargetPlatform == TargetPlatform.macOS) return;
               final ready = await controller.evaluateJavascript(
                 source: 'JSON.stringify(!!window.StroomMessageView)',
               );
@@ -328,6 +340,7 @@ JSON.stringify({
                     TextButton.icon(
                       onPressed: () => setState(() {
                         _macWebViewKey = UniqueKey();
+                        _macLoadGeneration++;
                         _macDocumentReady = false;
                         _macLoadFailed = false;
                       }),
