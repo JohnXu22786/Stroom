@@ -699,7 +699,7 @@ void main() {
         defaultModelId: 'claude',
         defaultProviderName: 'Provider',
       );
-      expect(flowChatEndpointType(assistant, providers), 'anthropic');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
       expect(
         flowChatEndpointType(null, providers, fallback: 'anthropic'),
         'anthropic',
@@ -765,7 +765,7 @@ void main() {
         defaultModelName: 'Model B | $providerName',
       );
 
-      expect(flowChatEndpointType(assistant, providers), 'anthropic');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
     },
   );
 
