@@ -191,10 +191,10 @@ const probeTimer = setInterval(() => {
 
       await tester.pumpWidget(render('**updated smoke**'));
       await tester.pump();
-      expect(await search('native smoke'), isEmpty);
       final updated = await search('updated smoke');
       expect(updated, hasLength(1));
       expect(updated.single['messageId'], 'assistant-1');
+      expect(await search('native smoke'), isEmpty);
       debugPrint('DSH native smoke: message patch search passed');
       expect(tester.takeException(), isNull);
       debugPrint('DSH native smoke: disposing document');
