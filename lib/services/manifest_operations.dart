@@ -456,6 +456,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> addRecord(T record, {void Function()? beforeCommit}) async {
     try {
+      _validateRecordFolderPath(folderOf(record));
       await loadRecords();
       beforeCommit?.call();
       final folders = _folderPathAndAncestors(folderOf(record));
@@ -697,6 +698,9 @@ class ManifestOperations<T extends FileRecord> {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == updated.id);
       if (index != -1) {
+        if (folderOf(updated) != folderOf(_cache![index])) {
+          _validateRecordFolderPath(folderOf(updated));
+        }
         _cache![index] = updated;
         await _dbUpdateRecord(updated.id, toMap(updated));
       }
@@ -724,6 +728,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> moveRecord(String id, String targetFolder) async {
     try {
+      _validateRecordFolderPath(targetFolder);
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
@@ -877,8 +882,7 @@ class ManifestOperations<T extends FileRecord> {
       await loadRecords();
       final name = folderName.trim();
       if (name.isEmpty) return;
-      final baseName = FolderPathUtils.getFolderBaseName(name);
-      final err = FolderPathUtils.validateFolderName(baseName);
+      final err = FolderPathUtils.validateFolderPath(name);
       if (err != null) return;
       if (!_folderCache.contains(name)) {
         await ManifestDatabase.insertFolder(name, recordTable: tableName);
@@ -894,6 +898,7 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> addFolderPath(String folderPath) async {
     try {
       await loadRecords();
+      if (FolderPathUtils.validateFolderPath(folderPath) != null) return;
       if (!_folderCache.contains(folderPath)) {
         await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
         _folderCache.add(folderPath);
@@ -1087,6 +1092,13 @@ class ManifestOperations<T extends FileRecord> {
         await ManifestDatabase.insertFolder(p, recordTable: tableName);
         _folderCache.add(p);
       }
+    }
+  }
+
+  void _validateRecordFolderPath(String folderPath) {
+    final error = FolderPathUtils.validateFolderPath(folderPath);
+    if (error != null) {
+      throw ArgumentError.value(folderPath, 'folder', error);
     }
   }
 

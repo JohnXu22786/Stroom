@@ -2924,6 +2924,69 @@ void main() {
           contains('ordinary/audio'));
     });
 
+    testWidgets('folder registration rejects trailing-space parent segments',
+        (WidgetTester t) async {
+      await FileManifest.addFolder('foo /bar');
+      await FileManifest.addFolderPath('baz /qux');
+
+      final folders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords);
+      expect(folders, isNot(contains('foo /bar')),
+          reason: 'addFolder must reject invalid parent segments');
+      expect(folders, isNot(contains('baz /qux')),
+          reason: 'addFolderPath must reject invalid parent segments');
+    });
+
+    testWidgets('record writes reject trailing-space parent segments',
+        (WidgetTester t) async {
+      final record = AudioRecord(
+        id: 'audio_safe_folder_path',
+        name: 'audio',
+        hash: 'hash_safe_folder_path',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'safe',
+      );
+      await FileManifest.addRecord(record);
+
+      await expectLater(
+        FileManifest.addRecord(AudioRecord(
+          id: 'audio_invalid_folder_path',
+          name: 'audio',
+          hash: 'hash_invalid_folder_path',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'foo /bar',
+        )),
+        throwsArgumentError,
+      );
+      await expectLater(
+        FileManifest.moveRecord(record.id, 'foo /bar'),
+        throwsArgumentError,
+      );
+      await expectLater(
+        FileManifest.updateRecord(AudioRecord(
+          id: record.id,
+          name: record.name,
+          hash: record.hash,
+          format: record.format,
+          createdAt: record.createdAt,
+          size: record.size,
+          folder: 'foo /bar',
+        )),
+        throwsArgumentError,
+      );
+
+      final records = await FileManifest.loadRecords();
+      expect(records.map((entry) => entry.id), contains(record.id));
+      expect(records.map((entry) => entry.id),
+          isNot(contains('audio_invalid_folder_path')));
+      expect(records.firstWhere((entry) => entry.id == record.id).folder,
+          equals('safe'));
+    });
+
     testWidgets('addRecord tracks folder and all ancestors',
         (WidgetTester t) async {
       await VideoManifest.addRecord(VideoRecord(
