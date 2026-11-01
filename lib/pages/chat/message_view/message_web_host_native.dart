@@ -73,19 +73,24 @@ class _MessageWebHostState extends State<MessageWebHost> {
           '[MessageWebHost][document-write] generation=$generation htmlLength=${widget.html.length}',
         );
       }
-      await controller.evaluateJavascript(
+      final documentState = await controller.evaluateJavascript(
         source: '''
 (() => {
   document.open();
   document.write(${jsonEncode(widget.html)});
   document.close();
-  return true;
+  return JSON.stringify({
+    url: location.href,
+    state: document.readyState,
+    bridge: typeof window.flutter_inappwebview,
+    renderer: typeof window.StroomMessageView
+  });
 })()
 ''',
       );
       if (kDebugMode) {
         debugPrint(
-          '[MessageWebHost][document-write-complete] generation=$generation',
+          '[MessageWebHost][document-write-complete] generation=$generation state=$documentState',
         );
       }
     } catch (error) {
