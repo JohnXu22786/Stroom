@@ -1497,6 +1497,62 @@ void main() {
     );
 
     test(
+      'direct OCR task construction sanitizes credentials before persistence',
+      () {
+        const authCredential = 'direct-ocr-auth-credential-5172';
+        const apiCredential = 'direct-ocr-api-key-5172';
+        final storageRef = 'ocr_retry_cache/${'d' * 64}.bin';
+        final task = BackgroundTask(
+          id: 'direct-ocr-retry-credential-sanitization',
+          type: BackgroundTaskType.ocr,
+          title: 'Failed OCR task',
+          status: TaskStatus.failed,
+          retryData: {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {'configId': 'saved-config', 'modelId': 'saved-model'},
+            'images': [
+              {
+                'storageRef': storageRef,
+                'format': 'png',
+                'name': 'receipt.png',
+              },
+            ],
+            'instructionContent': 'Read the receipt total',
+            'futureSettings': {'recognitionMode': 'highAccuracy'},
+            'futureAuth': {'authorization': 'Bearer $authCredential'},
+            'futureService': {
+              'headers': {'x-api-key': apiCredential},
+            },
+          },
+        );
+
+        final retryData = task.retryData!;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+        final persisted = jsonEncode(task.toMap());
+
+        expect(retryData['version'], 99);
+        expect(retryData['modelRef'], {
+          'configId': 'saved-config',
+          'modelId': 'saved-model',
+        });
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.instructionContent, 'Read the receipt total');
+        expect(retryData['futureSettings'], {
+          'recognitionMode': 'highAccuracy',
+        });
+        expect(retryData.containsKey('futureAuth'), isFalse);
+        expect(retryData['futureService'], {'headers': {}});
+        expect(snapshot.hasUnknownFields, isTrue);
+        expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
+        expect(jsonEncode(retryData), isNot(contains(authCredential)));
+        expect(jsonEncode(retryData), isNot(contains(apiCredential)));
+        expect(persisted, isNot(contains(authCredential)));
+        expect(persisted, isNot(contains(apiCredential)));
+      },
+    );
+
+    test(
       'supported OCR retry data drops legacy Authorization echoes',
       () {
         const apiKey = 'supported-retry-api-key-7391';

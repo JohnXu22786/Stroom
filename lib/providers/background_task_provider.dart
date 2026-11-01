@@ -3174,6 +3174,32 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
             ));
 }
 
+Map<String, dynamic>? _sanitizeOcrRetryDataForConstruction({
+  required String taskId,
+  required Map<String, dynamic>? retryData,
+  required Map<String, dynamic>? rawRequest,
+  required Iterable<String> credentialValues,
+}) {
+  if (retryData == null) return null;
+  final normalized = _retryDataFromTaskMap({
+    'id': taskId,
+    'type': BackgroundTaskType.ocr.name,
+    'retryData': retryData,
+    if (rawRequest != null) 'rawRequest': rawRequest,
+  });
+  if (normalized == null) return null;
+  return Map<String, dynamic>.from(
+    _withoutCredentialEchoes(
+      normalized,
+      {
+        ...credentialValues,
+        ..._legacyOcrCredentialValues(rawRequest),
+        ..._credentialValuesFromOcrRetryData(retryData),
+      },
+    ) as Map,
+  );
+}
+
 List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
   if (rawOutcomes is! List) return const [];
   final outcomesByImageIndex = <int, OcrPageOutcome>{};
@@ -3245,7 +3271,7 @@ class BackgroundTask {
     this.downloadedFilePath,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
-    this.retryData,
+    Map<String, dynamic>? retryData,
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
@@ -3302,6 +3328,17 @@ class BackgroundTask {
                 ),
               )
             : rawResponse,
+        retryData = type == BackgroundTaskType.ocr
+            ? _sanitizeOcrRetryDataForConstruction(
+                taskId: id,
+                retryData: retryData,
+                rawRequest: rawRequest,
+                credentialValues: _combinedOcrCredentialValues(
+                  ocrDiagnosticCredentialValues,
+                  ocrCredentialValuesForSanitization,
+                ),
+              )
+            : retryData,
         ocrPageOutcomes = type == BackgroundTaskType.ocr
             ? List.unmodifiable(
                 ocrPageOutcomes.map(
