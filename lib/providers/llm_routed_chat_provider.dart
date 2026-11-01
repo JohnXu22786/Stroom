@@ -32,7 +32,11 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'kimi-ai',
           'kimi.ai',
         },
-      'google.gemini.generate_content' => const {'gemini', 'aistudio'},
+      'google.gemini.generate_content' => const {
+          'gemini',
+          'aistudio',
+          'vertex',
+        },
       'google.gemini.interactions' => const {'gemini-interactions'},
       'ollama.chat' => const {'ollama'},
       _ => const {

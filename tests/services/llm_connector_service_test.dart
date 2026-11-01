@@ -11,6 +11,7 @@ import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/aws_sigv4.dart';
+import '../fixtures/vertex_service_account.dart';
 
 void main() {
   group('LlmConnectorRegistry', () {
@@ -152,6 +153,29 @@ void main() {
         containsAll({'api_key', 'service_account'}),
       );
       expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('vertex'),
+        'google.gemini.generate_content',
+        reason: 'Vertex models must be routable through Chat and Task Flow',
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'vertex',
+          'service_account',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'vertex',
+          'api_key',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported('vertex', 'oauth'),
+        isFalse,
+      );
+      expect(
         LlmConnectorRegistry.find('vertex')!.authTypes,
         isNot(contains('oauth')),
       );
@@ -183,6 +207,47 @@ void main() {
         preferences: preferences,
         credentialStore: credentials,
       );
+    });
+
+    test('accepts Vertex service-account models as model-group members',
+        () async {
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'vertex-service-group-account',
+          connectorType: 'vertex',
+          authType: 'service_account',
+          displayName: 'Vertex service account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'projectId': 'vertex-project'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'gemini-flash-local',
+              upstreamModelId: 'gemini-2.5-flash',
+              displayName: 'Gemini 2.5 Flash',
+              capabilities: {'chat': true},
+            ),
+          ],
+        ),
+        secret: jsonEncode(kVertexTestServiceAccount),
+      );
+
+      final group = await service.saveModelGroup(
+        LlmModelGroup(
+          id: 'vertex-service-group',
+          displayName: 'Vertex service group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'vertex-service-group-account',
+              localModelId: 'gemini-flash-local',
+              upstreamModelId: 'gemini-2.5-flash',
+            ),
+          ],
+        ),
+      );
+
+      expect(account.authType, 'service_account');
+      expect(group.members.single.accountId, account.id);
+      expect((await service.listModelGroups()).single.id, group.id);
     });
 
     test(
@@ -1047,9 +1112,9 @@ void main() {
       'refreshes missing and expired Vertex service-account tokens before discovery',
       () async {
         for (final bundle in [
-          Map<String, dynamic>.from(_vertexServiceAccount),
+          Map<String, dynamic>.from(kVertexTestServiceAccount),
           {
-            ..._vertexServiceAccount,
+            ...kVertexTestServiceAccount,
             'access_token': 'expired-vertex-token',
             'expires_at': '2000-01-01T00:00:00Z',
           },
@@ -1131,7 +1196,15 @@ void main() {
                   {
                     'name': 'publishers/google/models/gemini-2.5-flash',
                     'displayName': 'Gemini 2.5 Flash',
-                    'supportedActions': ['generateContent'],
+                    'supportedActions': [
+                      'generateContent',
+                      'streamGenerateContent',
+                    ],
+                  },
+                  {
+                    'name': 'publishers/google/models/gemini-stream-only',
+                    'displayName': 'Streaming-only Gemini',
+                    'supportedActions': ['streamGenerateContent'],
                   },
                   {
                     'name': 'publishers/google/models/text-embedding-005',
@@ -1164,7 +1237,7 @@ void main() {
                 .add(const Duration(hours: 1))
                 .toIso8601String(),
             'service_account': {
-              ..._vertexServiceAccount,
+              ...kVertexTestServiceAccount,
               'project_id': 'credential-project',
             },
           }),
@@ -1189,6 +1262,10 @@ void main() {
           'gemini-2.5-flash',
         ]);
         expect(models.single.displayName, 'Gemini 2.5 Flash');
+        expect(models.single.capabilities, {
+          'chat': true,
+          'streaming': true,
+        });
       },
     );
 
@@ -3992,7 +4069,7 @@ void main() {
             authType: 'service_account',
             displayName: 'Vertex account',
           ),
-          secret: jsonEncode(_vertexServiceAccount),
+          secret: jsonEncode(kVertexTestServiceAccount),
         );
         final client = LlmConnectorHttpClient(
           accountService: accounts,
@@ -4021,7 +4098,7 @@ void main() {
           form['grant_type'],
           'urn:ietf:params:oauth:grant-type:jwt-bearer',
         );
-        expect(claims['iss'], _vertexServiceAccount['client_email']);
+        expect(claims['iss'], kVertexTestServiceAccount['client_email']);
         expect(
           claims['scope'],
           'https://www.googleapis.com/auth/cloud-platform',
@@ -4038,7 +4115,7 @@ void main() {
         );
         expect(
           preferences.values.values.join(),
-          isNot(contains(_vertexServiceAccount['private_key'] as String)),
+          isNot(contains(kVertexTestServiceAccount['private_key'] as String)),
         );
         expect(
           await accounts.readCredential(account.id),
@@ -4046,6 +4123,111 @@ void main() {
         );
       },
     );
+
+    test('executes Vertex API-key requests in unary and streaming modes',
+        () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path.contains('streamGenerateContent')) {
+            return ResponseBody(
+              Stream.value(
+                Uint8List.fromList(
+                  utf8.encode(
+                    'data: {"candidates":[{"content":{"parts":[{"text":"streamed"}]}}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2}}\n\n',
+                  ),
+                ),
+              ),
+              200,
+              headers: const {
+                'content-type': ['text/event-stream'],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': 'unary'},
+                    ],
+                  },
+                },
+              ],
+              'usageMetadata': {
+                'promptTokenCount': 5,
+                'candidatesTokenCount': 3,
+                'totalTokenCount': 8,
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'vertex-api-key-modes',
+          connectorType: 'vertex',
+          authType: 'api_key',
+          displayName: 'Vertex API key',
+          endpointConfig: const {
+            'projectId': 'vertex-project',
+            'location': 'us-central1',
+          },
+        ),
+        secret: 'vertex-api-key',
+      );
+      final client = LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      );
+
+      final unary = await client.request(
+        account: account,
+        modelId: 'gemini-2.5-flash',
+        body: const {'contents': []},
+      );
+      final streamed = await client.request(
+        account: account,
+        modelId: 'gemini-2.5-flash',
+        body: const {'contents': []},
+        stream: true,
+      );
+
+      expect(
+        (unary.body as Map)['candidates']
+            .single['content']['parts']
+            .single['text'],
+        'unary',
+      );
+      expect(unary.observation.requestUsage.value, 8);
+      final streamBytes = (await (streamed.body as Stream<List<int>>).toList())
+          .expand((chunk) => chunk)
+          .toList();
+      expect(utf8.decode(streamBytes), contains('"text":"streamed"'));
+      expect((await streamed.completedObservation)?.requestUsage.value, 6);
+      expect(requests, hasLength(2));
+      expect(requests.first.uri.path, contains(':generateContent'));
+      expect(requests.last.uri.path, contains(':streamGenerateContent'));
+      expect(requests.last.uri.queryParameters['alt'], 'sse');
+      expect(
+          requests.every((request) =>
+              request.headers['x-goog-api-key'] == 'vertex-api-key'),
+          isTrue);
+      expect(
+          requests.every((request) =>
+              request.uri.host == 'us-central1-aiplatform.googleapis.com'),
+          isTrue);
+    });
 
     test('executes AI Studio HTTP requests with the stored API key', () async {
       RequestOptions? captured;
@@ -5517,41 +5699,6 @@ LlmAccount _account(
       authType: authType,
       displayName: connector,
     );
-
-const _vertexServiceAccount = {
-  'type': 'service_account',
-  'project_id': 'vertex-project',
-  'private_key_id': 'test-key',
-  'private_key': '''-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAuDOwXO14ltE1j2O0iDSuqtbw/1kMKjeiki3oehk2zNoUte42
-/s2rX15nYCkKtYG/r8WYvKzb31P4Uow1S4fFydKNWxgX4VtEjHgeqfPxeCL9wiJc
-9KkEt4fyhj1Jo7193gCLtovLAFwPzAMbFLiXWkfqalJ5Z77fOE4Mo7u4pEgxNPgL
-VFGe0cEOAsHsKlsze+m1pmPHwWNVTcoKe5o0hOzy6hCPgVc6me6Y7aO8Fb4OVg0l
-XQdQpWn2ikVBpzBcZ6InnYyJ/CJNa3WL1LJ65mmYnfHtKGoMqhLK48OReguwRwwF
-e9/2+8UcdZcN5rsvt7yg3ZrKNH8rx+wZ36sRewIDAQABAoIBAQCn1HCcOsHkqDlk
-rDOQ5m8+uRhbj4bF8GrvRWTL2q1TeF/mY2U4Q6wg+KK3uq1HMzCzthWz0suCb7+R
-dq4YY1ySxoSEuy8G5WFPmyJVNy6Lh1Yty6FmSZlCn1sZdD3kMoK8A0NIz5Xmffrm
-pu3Fs2ozl9K9jOeQ3xgC9RoPFLrm8lHJ45Vn+SnTxZnsXT6pwpg3TnFIx5ZinU8k
-l0Um1n80qD2QQDakQ5jyr2odAELLBDlyCkxAglBXAVt4nk9Kl6nxb4snd9dnrL70
-WjLynWQsDczaV9TZIl2hYkMud+9OLVlUUtB+0c5b0p2t2P0sLltDaq3H6pT6yu2G
-8E86J9IBAoGBAPJaTNV5ysVOFn+YwWwRztzrvNArUJkVq8abN0gGp3gUvDEZnvzK
-weF7+lfZzcwVRmQkL3mWLzzZvCx77RfulAzLi5iFuRBPhhhxAPDiDuyL9B7O81G/
-M/W5DPctGOyD/9cnLuh72oij0unc5MLSfzJf8wblpcjJnPBDqIVh6Qt9AoGBAMKT
-Gacf4iSj1xW+0wrnbZlDuyCl6Msptj8ePcvLQrFqQmBwsXmWgVR+gFc/1G3lRft0
-QC6chsmafQHIIPpaDjq3sQ01/tUu7LXL+g/Hw9XtUHbkg3sZIQBtC26rKdStfHNS
-KTvuCgn/dAJNjiohfhWMt9R4Q6E5FV6PqQHJzPJXAoGAC41qZDKuC8GxKNvrPG+M
-4NML6RBngySZT5pOhExs5zh10BFclshDfbAfOtjTCotpE5T1/mG+VrQ6WBSANMfW
-ntWFDfwx2ikwRzH7zX+5HmV9eYp75sWqgGgVyiKIMZ4JMARaJBLjU+gbQbKZ5P+L
-uKcCOq3vvSZ/KKTQ/6qvJTECgYBiWgbCgoxF5wdmd4Gn5llw+lqRYyur3hbACuJD
-rCe3FDYfF3euNRSEiDkJYTtYnWbldtqmdPpw14VOrEF3KqQ8q/Nz8RIx4jlGn6dz
-6I8mCIH+xv1q8MXMuFHqC9zmIxdgF2y+XVF3wkd6jodI5oscC3g0juHokbkqhkVw
-oPfWmwKBgBfR6jv0gWWeWTfkNwj+cMLHQV1uvz6JyLH5K4iISEDFxYkd37jrHB8A
-9hz9UDfmCbSs2j8CXDg7zCayM6tfu4Vtx+8S5g3oN6sa1JXFY1Os7SoXhTfX9M+7
-QpYYDJZwkgZrVQoKMIdCs9xfyVhZERq945NYLekwE1t2W+tOVBgR
------END RSA PRIVATE KEY-----''',
-  'client_email': 'vertex-test@example.iam.gserviceaccount.com',
-  'client_id': '1234567890',
-};
 
 Map<String, String> _requestForm(Object? body) {
   if (body is Map) return body.map((key, value) => MapEntry('$key', '$value'));

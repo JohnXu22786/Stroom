@@ -31,10 +31,19 @@ The table separates account/authentication support from availability in the curr
 | Moonshot AI / Kimi API, GLM, DeepSeek, MiniMax, Qwen Cloud | API key | Routed through their configured OpenAI-compatible Chat Completions endpoints. Kimi Code CLI OAuth is not supported. |
 | AWS Bedrock | AWS access key/secret credentials or the platform AWS credential chain | Stroom converts the chat request to Bedrock Converse. The selected AWS region, IAM policy, model ID, and account access must permit the request. |
 | Ollama | No credential or API key | Ollama's service-specific `/api/chat` adapter; it is not a general OpenAI wire protocol. The configured Ollama host must be reachable from this device. The adapter accepts mapped local image data and tools but rejects unsupported content such as remote image URLs or image-detail hints. |
-| Google Vertex AI | Service-account JSON or Vertex API-key configuration can be saved/discovered | Vertex account records are not currently connected to the Chat/Task Flow model-group adapter. Do not treat a saved Vertex credential or discovered model as proof that Chat or Task Flow can call it. Vertex OAuth and Vertex Interactions are not supported. |
+| Google Vertex AI | Service-account JSON or Vertex API key | Vertex Gemini models that support `generateContent` can be selected in Chat and Task Flow model groups. Service-account credentials use refreshed Google access tokens; API keys use Vertex key authentication. The project and location must match the model and credential. Vertex OAuth is not supported. |
 | Legacy/first-party subscription labels (Claude Code, Antigravity, Grok Build, Kimi Code, Devin, Meta Muse) | No supported Chat/Task Flow OAuth account in this release | Legacy records may remain visible for migration or deletion, but Stroom does not reuse CLI/private session credentials. Use a provider's documented API key through a supported connector when available. This does not add account-specific protocol or quota support for those legacy labels. |
 
 OpenAI Realtime and xAI Voice Realtime have separate API-key WebSocket adapters in the Gateway library. They are not model-group Chat/Task Flow connectors and do not create a Stroom external gateway or local listener.
+
+### Google Vertex AI setup
+
+1. In **LLM accounts and model groups**, add **Google Vertex AI** and choose **Service account** or **API key**.
+2. For a service account, paste its JSON key. Stroom keeps it in secure storage and refreshes its access token when needed. The JSON `project_id` can supply the project automatically; otherwise enter the Google Cloud project ID. For an API key, enter the project ID explicitly.
+3. Set the Vertex location (the default is `us-central1`), then discover or enter a conversational Gemini model available to that project and location.
+4. Add the model to a group and select that group in Chat or a Task Flow chat block. Requests use Vertex's native Gemini `generateContent` protocol, with streaming when the selected model supports it.
+
+The Google Gemini Interactions connector calls the Google Generative Language API. It is separate from Vertex AI and does not make Vertex Interactions requests. Vertex OAuth is not available through this account flow.
 
 ## Request formats and capability limits
 
