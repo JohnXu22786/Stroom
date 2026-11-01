@@ -94,6 +94,16 @@ void main() {
         LlmNativeProtocol.geminiGenerateContent,
       );
       expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('codex'),
+        'openai',
+        reason: 'Codex OAuth must be addable to Chat and Task Flow groups',
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('openai-api'),
+        'openai',
+        reason: 'OpenAI API-key Chat Completions remains separate',
+      );
+      expect(
         LlmConnectorRegistry.chatAdapterEndpointType('aistudio'),
         'google.gemini.generate_content',
       );
@@ -4256,6 +4266,7 @@ void main() {
         secret: jsonEncode({
           'access_token': 'private-access-token',
           'client_id': 'registered-openai-client',
+          'account_id': 'codex-http-account',
         }),
       );
       final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
@@ -4268,6 +4279,7 @@ void main() {
 
       expect(captured?.uri.toString(), 'https://api.openai.com/v1/responses');
       expect(captured?.headers['Authorization'], 'Bearer private-access-token');
+      expect(captured?.headers['Chatgpt-Account-Id'], 'codex-http-account');
       expect(response.statusCode, 200);
       expect(response.body, containsPair('id', 'resp-1'));
       expect(response.observation.requestUsage.value, 12);

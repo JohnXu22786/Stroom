@@ -43,6 +43,112 @@ void main() {
     );
   });
 
+  test('Codex OAuth is routable only through the Responses protocol', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.responses'),
+      contains('codex'),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      isNot(contains('codex')),
+    );
+  });
+
+  test('invokes a Codex OAuth model-group member through Responses', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'codex-route-account',
+        connectorType: 'codex',
+        authType: 'oauth',
+        displayName: 'Codex',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-route-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT-5 Codex',
+          ),
+        ],
+      ),
+      secret: jsonEncode({'access_token': 'codex-route-token'}),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'codex-route-group',
+        displayName: 'Codex group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'codex-route-account',
+            localModelId: 'codex-route-model',
+            upstreamModelId: 'gpt-5-codex',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'output_text': 'Codex reply',
+        'output': [
+          {
+            'type': 'message',
+            'role': 'assistant',
+            'content': [
+              {'type': 'output_text', 'text': 'Codex reply'},
+            ],
+          },
+        ],
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    expect(
+      await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'codex-route-group',
+        localModelId: 'codex-route-model',
+        requiredCapabilities: const {'chat'},
+      ),
+      hasLength(1),
+    );
+    expect(
+      await runtime.modelDiscovery.discoverGroupModels(
+        groupId: 'codex-route-group',
+        localModelId: 'codex-route-model',
+        requiredCapabilities: const {'vision'},
+      ),
+      isEmpty,
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: 'codex-route-group',
+      localModelId: 'codex-route-model',
+      endpointType: 'openai',
+      apiProtocol: 'openai.responses',
+    );
+
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      'Codex reply',
+    );
+    expect(connector.requestedAccountIds, ['codex-route-account']);
+    expect(connector.requestedModelIds, ['gpt-5-codex']);
+    expect(connector.lastNativeFormat, 'responses');
+  });
+
   test(
       'uses the selected routed account protocol when no model override exists',
       () async {

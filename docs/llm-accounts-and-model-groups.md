@@ -21,7 +21,7 @@ The table separates account/authentication support from availability in the curr
 
 | Connector or service | Supported account authentication | Request path and practical limits |
 | --- | --- | --- |
-| OpenAI Codex / ChatGPT | Supported OAuth account flow; legacy/API-key records may be retained | The Codex account type is not connected to the current Chat/Task Flow model-group adapter. Do not treat Codex OAuth as a supported Chat model route. OpenAI API-key chat is configured separately below. |
+| OpenAI Codex / ChatGPT | Supported OAuth account flow; legacy/API-key records may be retained | Codex OAuth model groups use the OpenAI Responses protocol and the Codex upstream endpoint/account identity headers. OpenAI API-key accounts are separate and keep their Chat Completions default. |
 | OpenAI API | API key | Chat/Task Flow uses the OpenAI-compatible Chat Completions path. A Responses bridge is implemented behind an account protocol setting, but the current account editor does not expose a Responses selector. This is API billing/authentication, separate from ChatGPT OAuth. |
 | Anthropic API | API key | Anthropic Messages. Claude Code OAuth is shown as unsupported: Stroom does not import CLI login state or use CLI-only inference endpoints. |
 | Google Gemini Developer API | API key or supported Google OAuth | Google Generative Language `generateContent` and streaming `streamGenerateContent`; OAuth uses a user-managed Cloud project. |
@@ -41,7 +41,7 @@ OpenAI Realtime and xAI Voice Realtime have separate API-key WebSocket adapters 
 Stroom stores a provider-neutral conversation and translates each request to the connector's upstream contract:
 
 - **OpenAI Chat Completions** uses message arrays, tool calls, and Chat Completions streaming events. It is the default for OpenAI-compatible and several API-key account types.
-- **OpenAI Responses** uses Responses input items, output items, tool results, and typed events. Its bridge is implemented separately from Chat Completions. The current account editor does not expose the protocol setting needed to select it; Codex OAuth is not a Chat/Task Flow route. Do not assume an OpenAI API key or a Codex account automatically uses Responses.
+- **OpenAI Responses** uses Responses input items, output items, tool results, and typed events. Its bridge is implemented separately from Chat Completions. Codex OAuth model groups select Responses by default. OpenAI API-key accounts keep the Chat Completions default; API protocol is configured independently from authentication.
 - **Anthropic Messages** uses Anthropic content blocks, tool-use/result blocks, thinking data, and Anthropic stream events. It is used for Anthropic API-key accounts.
 - **Gemini GenerateContent** uses Gemini `contents`/`parts`, `generateContent` or `streamGenerateContent`, function calls, and Gemini usage/safety fields.
 - **Gemini Interactions** uses `/v1beta/interactions`, interaction steps/outputs, and `previous_interaction_id` continuation. It has its own mapper and limits; a Gemini GenerateContent account is not silently treated as an Interactions account.

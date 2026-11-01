@@ -61,6 +61,7 @@ String firstNonEmptyProtocol(Iterable<String?> values) {
 
 String builtinDefaultApiProtocolForConnector(String? connectorType) =>
     switch (connectorType) {
+      'codex' => 'openai.responses',
       'claude' => 'anthropic.messages',
       'gemini' || 'aistudio' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',

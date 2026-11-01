@@ -6,11 +6,11 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/provider_models.dart';
 
 void main() {
-  test('only synthesizes selectors for ChatAdapter protocols', () {
+  test('synthesizes a Responses selector for a Codex OAuth model group', () {
     final account = LlmAccount(
       id: 'codex-account',
       connectorType: 'codex',
-      authType: 'api_key',
+      authType: 'oauth',
       displayName: 'Codex account',
       models: const [
         LlmUpstreamModel(
@@ -32,11 +32,18 @@ void main() {
       ],
     );
 
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+
+    expect(config.id, 'codex-group');
+    expect(config.apiProtocol, 'openai.responses');
     expect(
-      buildLlmModelGroupProviderConfigs(accounts: [account], groups: [group]),
-      isEmpty,
+      llmModelGroupMemberReferenceForModelId(config.models.single.modelId),
+      (groupId: 'codex-group', localModelId: 'codex-model'),
     );
-    expect(llmChatEndpointTypeForConnector(account.connectorType), isNull);
+    expect(llmChatEndpointTypeForConnector(account.connectorType), 'openai');
   });
 
   test(

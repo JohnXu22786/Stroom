@@ -27,6 +27,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       'openai.responses' => const {
           'openai-compatibility',
           'openai-api',
+          'codex',
           'kimi',
           'kimi-ai',
           'kimi.ai',

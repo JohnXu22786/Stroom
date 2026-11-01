@@ -269,6 +269,7 @@ abstract final class LlmConnectorRegistry {
 
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
+        'codex' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
