@@ -36,6 +36,7 @@ String previewExtensionForResource(MediaResource resource) {
     'video/quicktime': 'mov',
     'video/x-matroska': 'mkv',
     'audio/mpeg': 'mp3',
+    'audio/ogg': 'ogg',
     'audio/wav': 'wav',
     'audio/x-wav': 'wav',
     'audio/mp4': 'm4a',
