@@ -97,7 +97,8 @@ class _ManualDownloads extends CatCatchNotifier {
                 url: 'https://x/one.mp4', name: 'one', ext: 'mp4')
             : null,
         metadata: {
-          if (flowManagedSelection) catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
+          if (flowManagedSelection)
+            catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
           if (confirming) 'pendingConfirm': 'special_format',
           if (deferSingleResourceSelection)
             'deferSingleResourceSelection': 'true',
@@ -978,12 +979,12 @@ void main() {
         ),
       ],
     );
-    late _ManualDownloads downloads;
+    _ManualDownloads? downloads;
     final container = make(
       scheduler: TaskFlowScheduler(coreCount: 4),
       downloads: (ref) {
         downloads = _ManualDownloads(ref);
-        return downloads;
+        return downloads!;
       },
     );
     final service = container.read(taskFlowExecutionServiceProvider);
@@ -991,14 +992,23 @@ void main() {
     final id = (await service.launchFlowMany(
       'flow',
       [const FlowRunInput(text: 'https://example.com/unclassified')],
-    )).single;
-    final taskId = downloads.idsByUrl['https://example.com/unclassified']!;
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/unclassified') ??
+          false,
+      'unclassified CatCatch task creation',
+    );
+    final activeDownloads = downloads!;
+    final taskId =
+        activeDownloads.idsByUrl['https://example.com/unclassified']!;
     await _waitFor(() => !scheduler.holds(id), 'deferred resource picker');
 
     var heldDuringSelection = false;
-    downloads.onSelect = (_) => heldDuringSelection = scheduler.holds(id);
-    const media = MediaResource(
-      url: 'https://x/one.bin', name: 'one', ext: 'bin');
+    activeDownloads.onSelect = (_) => heldDuringSelection = scheduler.holds(id);
+    const media =
+        MediaResource(url: 'https://x/one.bin', name: 'one', ext: 'bin');
     expect(
       await service.performManualCatCatchAction(
         taskId,
@@ -1009,7 +1019,7 @@ void main() {
       isTrue,
     );
     expect(heldDuringSelection, isTrue);
-    expect(downloads.selected, [taskId]);
+    expect(activeDownloads.selected, [taskId]);
     await service.cancelExecution(id);
   });
 

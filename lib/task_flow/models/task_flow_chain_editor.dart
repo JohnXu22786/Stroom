@@ -145,8 +145,7 @@ class TaskFlowChainEditor {
     if (index < 0 || _valuesEqual(_blocks[index].params, params)) return false;
     _remember();
     final block = _blocks[index];
-    _blocks = [..._blocks]
-      ..[index] = TaskFlowBlock(
+    _blocks = [..._blocks]..[index] = TaskFlowBlock(
         id: block.id,
         typeKey: block.typeKey,
         params: _copyValue(params) as Map<String, dynamic>,
@@ -232,15 +231,20 @@ class TaskFlowChainEditor {
         issues.add(TaskFlowChainIssue(block.id, index, '功能块已不受支持，请替换或删除此步骤'));
       } else {
         final previousBlock = index == 0 ? null : blocks[index - 1];
+        final previousIsUnsupported =
+            previousBlock != null && previousBlock.getDefinition() == null;
         final constrainedOutputs = previousBlock == null
             ? previousOutputs
             : previousBlock.outputTypesForNext(definition.inputType);
-        if (constrainedOutputs.isEmpty ||
-            !definition.acceptsAnyOutput(constrainedOutputs)) {
-          final followsDownstream = previousBlock?.followsDownstreamOutput == true;
+        if (!previousIsUnsupported &&
+            (constrainedOutputs.isEmpty ||
+                !definition.acceptsAnyOutput(constrainedOutputs))) {
+          final followsDownstream =
+              previousBlock?.followsDownstreamOutput == true;
           final anyOutput = previousOutputs.length == 1 &&
               previousOutputs.single == IOType.any;
-          final outputLabel = previousOutputs.map((type) => type.label).join('或');
+          final outputLabel =
+              previousOutputs.map((type) => type.label).join('或');
           issues.add(
             TaskFlowChainIssue(
               block.id,

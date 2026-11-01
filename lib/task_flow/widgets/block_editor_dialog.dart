@@ -106,8 +106,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         if (p.type == BlockParamType.string ||
             p.type == BlockParamType.secret ||
             p.type == BlockParamType.number) {
-          if (p.key == 'outputPolicy' ||
-              p.key == 'resourceSelectionPolicy') {
+          if (p.key == 'outputPolicy' || p.key == 'resourceSelectionPolicy') {
             continue;
           }
           _controllers[p.key] = TextEditingController(
@@ -173,8 +172,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     }
 
     final outputType = widget.block.copyWithParams(_params).outputTypeLabel;
-    final temporaryOutput =
-        widget.allowTemporaryOutput &&
+    final temporaryOutput = widget.allowTemporaryOutput &&
         isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
@@ -313,7 +311,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   ...def.params
                       .where(
                         (param) =>
-                          !temporaryOutput ||
+                            !temporaryOutput ||
                             param.type != BlockParamType.filePath,
                       )
                       .map((param) => _buildParamField(param, cs)),
@@ -407,8 +405,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           : (isOutput
               ? (_params['audioOutput'] == true ? 'audio' : 'video')
               : (_params['automaticResourceSelection'] == true
-                    ? 'automatic'
-                    : 'manual'));
+                  ? 'automatic'
+                  : 'manual'));
       return CatCatchPolicyMenu(
         outputPolicy: isOutput,
         value: selected,
@@ -423,8 +421,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller =
-            _controllers[param.key] ??
+        final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -454,9 +451,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           param.configType,
           value,
         );
-        final selectedIndex = selected == null
-            ? null
-            : models.indexOf(selected);
+        final selectedIndex =
+            selected == null ? null : models.indexOf(selected);
         final customParams =
             selected?.model.customParams ?? const <CustomParam>[];
         return Column(
@@ -502,8 +498,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     final voice = _params['voice'];
                     if (voice != null &&
                         !models[v].model.voices.any(
-                          (entry) => entry.id == voice,
-                        )) {
+                              (entry) => entry.id == voice,
+                            )) {
                       _params['voice'] = '';
                     }
                   });
@@ -615,8 +611,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final currentOption = voiceOptions
             .where(
               (o) =>
-                o.id == current &&
-                selected != null &&
+                  o.id == current &&
+                  selected != null &&
                   ttsModels[o.modelIndex] == selected,
             )
             .firstOrNull;
@@ -769,14 +765,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final h = totalSec ~/ 3600;
         final m = (totalSec % 3600) ~/ 60;
         final s = totalSec % 60;
-        final hCtrl =
-            _controllers['${param.key}_h'] ??
+        final hCtrl = _controllers['${param.key}_h'] ??
             TextEditingController(text: h == 0 ? '' : '$h');
-        final mCtrl =
-            _controllers['${param.key}_m'] ??
+        final mCtrl = _controllers['${param.key}_m'] ??
             TextEditingController(text: m == 0 ? '' : '$m');
-        final sCtrl =
-            _controllers['${param.key}_s'] ??
+        final sCtrl = _controllers['${param.key}_s'] ??
             TextEditingController(text: s == 0 ? '' : '$s');
         _controllers['${param.key}_h'] = hCtrl;
         _controllers['${param.key}_m'] = mCtrl;
@@ -792,10 +785,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
 
         InputDecoration dec() => InputDecoration(
               isDense: true,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 8,
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
               ),
             );
         return Row(
@@ -836,8 +830,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller =
-            _controllers[param.key] ??
+        final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;

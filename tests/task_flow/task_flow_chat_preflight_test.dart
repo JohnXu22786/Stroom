@@ -71,7 +71,8 @@ void main() {
       ),
       throwsA(isA<TaskFlowValidationException>()
           .having((e) => e.blockIndex, 'chat block', 1)
-          .having((e) => e.message, 'unsupported CatCatch output', contains('视频'))),
+          .having(
+              (e) => e.message, 'unsupported CatCatch output', contains('视频'))),
     );
   });
 

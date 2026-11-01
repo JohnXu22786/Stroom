@@ -128,7 +128,9 @@ void registerCatCatchPr708PolicyTests() {
       executions.addSubTask(execId, subTask);
       late String taskId;
       var reads = 0;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -265,7 +267,9 @@ void registerCatCatchPr708PolicyTests() {
         status: TaskStatus.waiting);
     executions.addSubTask(execId, subTask);
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+    when(() => notifier.addTask(any(), any(),
+            taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

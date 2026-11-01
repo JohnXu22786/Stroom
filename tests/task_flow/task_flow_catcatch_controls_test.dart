@@ -18,8 +18,8 @@ class _FlowActions extends Fake implements TaskFlowExecutionService {
   Future<bool> Function(String, bool, void Function(CatCatchNotifier))? run;
 
   @override
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action,
+  Future<bool> performManualCatCatchAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
       {String? selectedMediaUrl}) async {
     calls.add((taskId, selecting));
     selectedUrls.add(selectedMediaUrl);
@@ -61,6 +61,7 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
   late _Downloads downloads;
   final actions = _FlowActions(() => downloads);
   await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
       overrides: [
         taskFlowExecutionServiceProvider.overrideWithValue(actions),
         catcatchTasksProvider.overrideWith((ref) {

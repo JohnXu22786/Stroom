@@ -603,7 +603,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final encodedCandidates =
         state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
     if (encodedCandidates != null) {
-      final allowedUrls = (jsonDecode(encodedCandidates) as List).cast<String>();
+      final allowedUrls =
+          (jsonDecode(encodedCandidates) as List).cast<String>();
       if (!allowedUrls.contains(media.url)) return;
     }
 

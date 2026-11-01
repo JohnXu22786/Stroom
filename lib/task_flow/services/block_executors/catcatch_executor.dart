@@ -60,9 +60,8 @@ Future<String> executeCatCatchBlock({
       blockTitle: def.label,
     );
   }
-  final resolvedOutputType = outputTypes.length == 1
-      ? outputTypes.single
-      : null;
+  final resolvedOutputType =
+      outputTypes.length == 1 ? outputTypes.single : null;
   final desiredType = resolvedOutputType;
   final selectionPolicy = block.catCatchResourceSelectionPolicy;
   final automatic = selectionPolicy != 'manual';
@@ -145,7 +144,7 @@ Future<String> executeCatCatchBlock({
       // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
       return catcatchNotifier.state.any(
         (current) =>
-          current.id == taskId &&
+            current.id == taskId &&
             current.status == catcatch.TaskStatus.completed,
       );
     } catch (_) {
@@ -168,9 +167,8 @@ Future<String> executeCatCatchBlock({
         blockTitle: def.label,
       );
     }
-    final task = catcatchNotifier.state
-        .where((t) => t.id == taskId)
-        .firstOrNull;
+    final task =
+        catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
     if (task == null) {
       execNotifier.updateSubTaskStatus(
@@ -186,8 +184,7 @@ Future<String> executeCatCatchBlock({
     }
 
     final signature = _progressSignatureOf(task);
-    final awaitingSelection =
-        task.selectedMedia == null &&
+    final awaitingSelection = task.selectedMedia == null &&
         task.steps.any(
           (step) =>
               step.type == catcatch.StepType.userSelecting &&
@@ -262,8 +259,7 @@ Future<String> executeCatCatchBlock({
         manualPickerOpen = true;
       }
     }
-    final intentionallyWaiting =
-        task.status == catcatch.TaskStatus.paused ||
+    final intentionallyWaiting = task.status == catcatch.TaskStatus.paused ||
         promptOpen ||
         (!automatic && (awaitingSelection || awaitingConfirmation));
     if (!automatic &&
@@ -411,8 +407,7 @@ Future<String> executeCatCatchBlock({
               task.detectedMedia,
               desiredType: desiredType,
             );
-            if (automaticWithPrompt &&
-                (promptOpen || candidates.length != 1)) {
+            if (automaticWithPrompt && (promptOpen || candidates.length != 1)) {
               // Keep the existing resource picker active until the user picks.
               continue;
             }

@@ -135,7 +135,8 @@ void main() {
       expect(follow.possibleOutputTypes, [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(IOType.audio), [IOType.audio]);
       expect(follow.outputTypesForNext(IOType.video), [IOType.video]);
-      expect(follow.outputTypesForNext(IOType.any), [IOType.video, IOType.audio]);
+      expect(
+          follow.outputTypesForNext(IOType.any), [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(null), [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(IOType.text), isEmpty);
       expect(follow.getDefinition()?.possibleOutputTypes,
@@ -144,7 +145,8 @@ void main() {
       expect(follow.getDefinition()?.outputType, isNot(IOType.any));
     });
 
-    test('legacy CatCatch audioOutput still overrides the new output policy', () {
+    test('legacy CatCatch audioOutput still overrides the new output policy',
+        () {
       final legacyAudio = TaskFlowBlock(
         typeKey: BlockType.catcatch,
         params: {'audioOutput': true},

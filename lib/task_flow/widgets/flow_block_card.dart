@@ -384,9 +384,10 @@ class FlowBlockCard extends ConsumerWidget {
     int action,
     String label,
     VoidCallback? callback,
-  ) => PopupMenuItem(
-    value: action,
-    enabled: callback != null,
-    child: Text(label),
-  );
+  ) =>
+      PopupMenuItem(
+        value: action,
+        enabled: callback != null,
+        child: Text(label),
+      );
 }

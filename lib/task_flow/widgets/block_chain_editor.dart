@@ -113,9 +113,9 @@ class BlockChainEditor extends StatelessWidget {
                       onInsertAfter: onInsertBlock == null
                           ? null
                           : () => _showAddBlockSheet(
-                              context,
-                              insertIndex: index + 1,
-                            ),
+                                context,
+                                insertIndex: index + 1,
+                              ),
                     ),
                   ],
                 );
@@ -323,9 +323,8 @@ class BlockChainEditor extends StatelessWidget {
   Widget _buildInsertControl(BuildContext context, int index) {
     final compatible = _insertionCandidates(index).isNotEmpty;
     return Tooltip(
-      message: compatible
-          ? '在步骤 ${index + 1} 前插入功能块'
-          : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
+      message:
+          compatible ? '在步骤 ${index + 1} 前插入功能块' : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
       child: TextButton.icon(
         key: ValueKey('insert-block-$index'),
         onPressed: compatible
@@ -358,9 +357,8 @@ class BlockChainEditor extends StatelessWidget {
 
     final insertionIndex = insertIndex ?? blocks.length;
     final availableTypes = _insertionCandidates(insertionIndex);
-    final previousBlock = insertionIndex == 0
-        ? null
-        : blocks[insertionIndex - 1];
+    final previousBlock =
+        insertionIndex == 0 ? null : blocks[insertionIndex - 1];
     final previousLabel = insertionIndex == 0
         ? inputType.label
         : previousBlock?.outputTypeLabel ?? '未知';
@@ -398,7 +396,9 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 insertIndex == null ? '选择功能块' : '插入功能块',
-                style: Theme.of(scrollCtx).textTheme.titleMedium
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
@@ -496,7 +496,9 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 '替换功能块',
-                style: Theme.of(scrollCtx).textTheme.titleMedium
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),

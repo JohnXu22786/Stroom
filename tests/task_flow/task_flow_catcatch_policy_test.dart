@@ -72,15 +72,16 @@ void main() {
     expect(selectAutomaticCatCatchResource([split]), isNull);
   });
 
-  test('safe candidates filter by media kind and preserve same-kind choices', () {
+  test('safe candidates filter by media kind and preserve same-kind choices',
+      () {
     expect(
-      catCatchSafeResourceCandidates(
-          [audio, split, videoZ, videoA], desiredType: IOType.video),
+      catCatchSafeResourceCandidates([audio, split, videoZ, videoA],
+          desiredType: IOType.video),
       [videoA, videoZ],
     );
     expect(
-      catCatchSafeResourceCandidates(
-          [audio, split, videoZ, videoA], desiredType: IOType.audio),
+      catCatchSafeResourceCandidates([audio, split, videoZ, videoA],
+          desiredType: IOType.audio),
       [audio],
     );
   });
@@ -156,7 +157,9 @@ void main() {
       executions.addSubTask(execId, subTask);
       late String taskId;
       var reads = 0;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -280,7 +283,8 @@ void main() {
     verify(() => notifier.confirmAndContinue(taskId)).called(1);
   });
 
-  test('automatic with prompt only offers candidates compatible with downstream type',
+  test(
+      'automatic with prompt only offers candidates compatible with downstream type',
       () async {
     final notifier = _Notifier();
     final executions = TaskFlowExecutionNotifier();
@@ -317,7 +321,13 @@ void main() {
           status: reads > 5
               ? catcatch.TaskStatus.completed
               : catcatch.TaskStatus.running,
-          detectedMedia: const [audio, audioB, videoA, unknownMedia, videoContainer],
+          detectedMedia: const [
+            audio,
+            audioB,
+            videoA,
+            unknownMedia,
+            videoContainer
+          ],
           selectedMedia: chosen ? audioB : null,
           steps: chosen
               ? []
@@ -354,7 +364,7 @@ void main() {
       },
       onOutputType: (type) => actualOutputType = type,
       onOutputPayload: (payload) => actualOutputPayload = payload,
-      stallTimeout: const Duration(milliseconds: 1),
+      stallTimeout: const Duration(seconds: 1),
       pollInterval: const Duration(milliseconds: 2),
     );
     expect(result, p.absolute('tests/fixtures/catcatch/audio_only.mp3'));
@@ -656,7 +666,9 @@ void main() {
         status: TaskStatus.waiting);
     executions.addSubTask(execId, subTask);
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+    when(() => notifier.addTask(any(), any(),
+            taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

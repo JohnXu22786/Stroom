@@ -44,8 +44,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   bool _isFlowActionPending(String taskId) =>
       widget.isFlowManaged && _pendingFlowActions.contains(taskId);
 
-  Future<void> _performFlowAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action,
+  Future<void> _performFlowAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
       {String? selectedMediaUrl}) async {
     if (!_pendingFlowActions.add(taskId)) return;
     setState(() {});

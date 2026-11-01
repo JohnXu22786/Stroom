@@ -13,8 +13,8 @@ import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
-import 'package:stroom/task_flow/widgets/catcatch_policy_menu.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
+import 'package:stroom/task_flow/widgets/io_type_indicator.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/provider_models.dart';
@@ -92,13 +92,15 @@ void main() {
     final policyButton = find.byKey(const ValueKey('catcatch-output-policy'));
     expect(policyButton, findsOneWidget);
     expect(
-      tester.widget<CatCatchPolicyMenu>(policyButton).value,
+      tester.widget<PopupMenuButton<String>>(policyButton).initialValue,
       'audio',
     );
     expect(
-      tester.widget<CatCatchPolicyMenu>(
-        find.byKey(const ValueKey('catcatch-resource-selection-policy')),
-      ).value,
+      tester
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const ValueKey('catcatch-resource-selection-policy')),
+          )
+          .initialValue,
       'automatic',
     );
     expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
@@ -123,6 +125,25 @@ void main() {
     expect(saved?.params['outputPolicy'], 'followDownstream');
     expect(saved?.possibleOutputTypes, [IOType.video, IOType.audio]);
     expect(saved?.getDefinition()?.outputType, IOType.video);
+  });
+
+  testWidgets('Follow downstream output indicator shows a media union',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: IOTypeIndicator(
+            type: IOType.video,
+            possibleTypes: [IOType.video, IOType.audio],
+            isInput: false,
+            labelOverride: '视频或音频（按下游筛选）',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.perm_media), findsOneWidget);
+    expect(find.text('输出: 视频或音频（按下游筛选）'), findsOneWidget);
   });
 
   ProviderEntriesState _ttsEntries() {

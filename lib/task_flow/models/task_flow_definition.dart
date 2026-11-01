@@ -53,9 +53,8 @@ class TaskFlowBlock {
       inputType: definition.inputType,
       // Keep the legacy scalar field concrete. Consumers that need to reason
       // about all possible outputs must use possibleOutputTypes.
-      outputType: outputTypes.length == 1
-          ? outputTypes.single
-          : definition.outputType,
+      outputType:
+          outputTypes.length == 1 ? outputTypes.single : definition.outputType,
       possibleOutputTypes: outputTypes,
       icon: definition.icon,
       color: definition.color,
@@ -74,10 +73,9 @@ class TaskFlowBlock {
       'audio' => CatCatchOutputPolicy.audio,
       'followDownstream' => CatCatchOutputPolicy.followDownstream,
       'video' => CatCatchOutputPolicy.video,
-      _ =>
-        params['audioOutput'] == true
-            ? CatCatchOutputPolicy.audio
-            : CatCatchOutputPolicy.video,
+      _ => params['audioOutput'] == true
+          ? CatCatchOutputPolicy.audio
+          : CatCatchOutputPolicy.video,
     };
     switch (policy) {
       case CatCatchOutputPolicy.video:
@@ -260,7 +258,8 @@ class TaskFlowDefinition {
     IOType? inputType,
     List<TaskFlowBlock>? blocks,
     DateTime? updatedAt,
-  }) => TaskFlowDefinition(
+  }) =>
+      TaskFlowDefinition(
         id: id,
         name: name ?? this.name,
         description: description ?? this.description,
@@ -292,8 +291,7 @@ class TaskFlowDefinition {
         inputType: map['inputType'] != null
             ? IOType.fromJson(map['inputType'] as String)
             : IOType.text,
-        blocks:
-            (map['blocks'] as List?)
+        blocks: (map['blocks'] as List?)
                 ?.map(
                   (b) => TaskFlowBlock.fromMap(
                     Map<String, dynamic>.from(b as Map),

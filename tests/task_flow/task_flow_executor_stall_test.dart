@@ -66,7 +66,9 @@ void main() {
       final notifier = _MockCatCatchNotifier();
       final removedIds = <String>[];
       late String capturedTaskId;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((inv) {
         capturedTaskId = inv.namedArguments[#taskId] as String;
         return capturedTaskId;
@@ -110,7 +112,9 @@ void main() {
       final notifier = _MockCatCatchNotifier();
       var reads = 0;
       late String capturedTaskId;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((inv) {
         capturedTaskId = inv.namedArguments[#taskId] as String;
         return capturedTaskId;
@@ -163,7 +167,9 @@ void main() {
       var reads = 0;
       var removeRead = -1;
       late String capturedTaskId;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((inv) {
         capturedTaskId = inv.namedArguments[#taskId] as String;
         return capturedTaskId;

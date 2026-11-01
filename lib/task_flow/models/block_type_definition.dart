@@ -147,8 +147,7 @@ class BlockTypeDefinition {
 
   /// Concrete output kinds this definition may produce. The list preserves
   /// unions without assigning them the special semantics of [IOType.any].
-  List<IOType> get possibleOutputTypes =>
-      _possibleOutputTypes ?? [outputType];
+  List<IOType> get possibleOutputTypes => _possibleOutputTypes ?? [outputType];
 
   // ========================================================================
   // Built-in block types
@@ -397,7 +396,8 @@ class BlockTypeDefinition {
       if (!prevOutputs.any(b.acceptsInput)) return false;
       final possibleOutputs = b.possibleOutputTypes;
       if (nextInput != null &&
-          !possibleOutputs.any((output) => output.isCompatibleWith(nextInput))) {
+          !possibleOutputs
+              .any((output) => output.isCompatibleWith(nextInput))) {
         return false;
       }
       return true;
@@ -433,9 +433,8 @@ class BlockTypeDefinition {
         'inputType': inputType.toJson(),
         'outputType': outputType.toJson(),
         if (_possibleOutputTypes != null)
-          'possibleOutputTypes': _possibleOutputTypes
-              .map((type) => type.toJson())
-              .toList(),
+          'possibleOutputTypes':
+              _possibleOutputTypes.map((type) => type.toJson()).toList(),
         'params': params.map((p) => p.toMap()).toList(),
       };
 
@@ -454,8 +453,7 @@ class BlockTypeDefinition {
           .toList(),
       icon: Icons.extension,
       color: Colors.grey,
-      params:
-          (map['params'] as List?)
+      params: (map['params'] as List?)
               ?.map(
                 (p) => BlockParamDefinition.fromMap(
                   Map<String, dynamic>.from(p as Map),

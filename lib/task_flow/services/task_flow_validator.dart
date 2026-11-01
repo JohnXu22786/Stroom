@@ -90,8 +90,8 @@ Future<void> validateTaskFlow(
         if (selected == null || selected.model.modelId.trim().isEmpty) {
           fail(
             block.params['modelSelectionRequired'] == true ||
-                  block.params.containsKey('modelIndex')
-              ? '旧版模型选择需要确认，请在「${def.label}」设置中重新选择模型'
+                    block.params.containsKey('modelIndex')
+                ? '旧版模型选择需要确认，请在「${def.label}」设置中重新选择模型'
                 : '模型未选择、已删除或供应商配置不可用，请在「${def.label}」设置中重新选择模型并检查供应商地址和密钥',
           );
         }
@@ -114,19 +114,19 @@ Future<void> validateTaskFlow(
         final modelAvailable = modelId != null && modelId.isNotEmpty
             ? available.any((item) => item.model.modelId == modelId)
             : defaultId != null && defaultId.isNotEmpty
-            ? available.any(
-                (item) =>
-                    item.model.modelId == defaultId &&
-                    (providerName == null ||
-                        providerName.isEmpty ||
-                        item.config.providerName == providerName),
-              )
+                ? available.any(
+                    (item) =>
+                        item.model.modelId == defaultId &&
+                        (providerName == null ||
+                            providerName.isEmpty ||
+                            item.config.providerName == providerName),
+                  )
                 : displayName != null && displayName.isNotEmpty
-            ? available.any(
-                (item) =>
-                        '${item.model.name.isEmpty ? item.model.modelId : item.model.name} | ${item.config.providerName}' ==
-                    displayName,
-              )
+                    ? available.any(
+                        (item) =>
+                            '${item.model.name.isEmpty ? item.model.modelId : item.model.name} | ${item.config.providerName}' ==
+                            displayName,
+                      )
                     : true; // An unbound assistant uses the current chat model.
         if (!modelAvailable) {
           fail('助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型');
@@ -226,12 +226,10 @@ Future<void> validateTaskFlow(
           mimeType: mimeType,
           headerBytes: header,
         );
-        checkLargeImage =
-            error == null &&
+        checkLargeImage = error == null &&
             actualType == IOType.image &&
             length > maxAttachmentBytes;
-        checkTextEncoding =
-            error == null &&
+        checkTextEncoding = error == null &&
             actualType == IOType.file &&
             initialChatEndpointType != 'anthropic' &&
             flowChatIsTextFileName(inputName);
