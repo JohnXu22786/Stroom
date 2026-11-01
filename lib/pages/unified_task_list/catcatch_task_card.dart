@@ -527,8 +527,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         ? selectableMedia
         : selectableMedia.where((media) => !isSegment(media)).toList();
     // Keep a nested resource viewport so the task action remains reachable.
-    final viewportHeight =
-        Scrollable.maybeOf(context)?.position.viewportDimension;
+    final scrollPosition = Scrollable.maybeOf(context)?.position;
+    final viewportHeight = scrollPosition?.hasViewportDimension == true
+        ? scrollPosition!.viewportDimension
+        : null;
     final resourceHeight =
         viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
             ? viewportHeight * (2 / 3)
