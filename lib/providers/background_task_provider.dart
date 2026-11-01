@@ -588,15 +588,303 @@ bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
 ) {
+  final textForCredentialDetection =
+      _legacyOcrRemoveNaturalDocumentationContinuation(text, credentialValues);
   if (OcrDiagnosticSnapshot.containsCredential(
-    text,
+    textForCredentialDetection,
     excludedValues: credentialValues.where(
       (value) => !value.trimRight().endsWith('...'),
     ),
   )) {
     return true;
   }
-  return _legacyOcrTextContainsMaskedCredential(text, credentialValues);
+  return _legacyOcrTextContainsMaskedCredential(
+    textForCredentialDetection,
+    credentialValues,
+  );
+}
+
+String _legacyOcrRemoveNaturalDocumentationContinuation(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final credentialValue = RegExp(
+          r'^(?:Bearer|Basic)\s+(.+)$',
+          caseSensitive: false,
+        ).firstMatch(value.trim())?.group(1) ??
+        value.trim();
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
+    if (ellipsis == null ||
+        credentialValue.substring(ellipsis.end).isNotEmpty) {
+      continue;
+    }
+    final prefix = credentialValue
+        .substring(0, ellipsis.start)
+        .trim()
+        .split(RegExp(r'\s+'))
+        .last;
+    if (prefix.toLowerCase() != 'documentation') continue;
+    final prefixPattern = prefix.split('').map(RegExp.escape).join(r'\s*');
+    final echoPattern = RegExp(
+      '(^|[^a-zA-Z0-9])($prefixPattern)(\\s+)'
+      r'([a-zA-Z][a-zA-Z]{0,127})(?=$|[^a-zA-Z0-9_])',
+      caseSensitive: false,
+    );
+    sanitized = sanitized.replaceAllMapped(echoPattern, (match) {
+      final suffix = match.group(4)!;
+      if (!_legacyOcrIsNaturalReadDocumentationContinuation(
+        sanitized,
+        match,
+        prefix,
+        suffix,
+      )) {
+        return match.group(0)!;
+      }
+      return match.group(1)!;
+    });
+  }
+  return sanitized;
+}
+
+// The masked prefix itself is an ordinary noun in this prompt context, so
+// preserve only recognized continuations instead of arbitrary key-shaped text.
+const _legacyOcrSafeReadDocumentationContinuations = {
+  'carefully',
+  'thoroughly',
+  'closely',
+  'fully',
+  'completely',
+  'verbatim',
+  'quickly',
+  'accurately',
+  'clearly',
+  'correctly',
+  'precisely',
+  'concisely',
+  'briefly',
+  'literally',
+  'faithfully',
+  'exactly',
+  'now',
+};
+const _legacyOcrSafeReadDocumentationIntensifiers = {
+  'very',
+  'really',
+  'quite',
+};
+
+bool _legacyOcrIsNaturalReadDocumentationContinuation(
+  String text,
+  Match match,
+  String prefix,
+  String suffix,
+) {
+  final beforeEcho = text.substring(0, match.start + match.group(1)!.length);
+  final followingText = text.substring(match.end).trimLeft();
+  final hasFollowingNaturalContinuation =
+      _legacyOcrSafeReadDocumentationContinuations.any(
+    (continuation) => RegExp(
+      '^${RegExp.escape(continuation)}\\b',
+      caseSensitive: false,
+    ).hasMatch(followingText),
+  );
+  final isSafeContinuation =
+      _legacyOcrSafeReadDocumentationContinuations.contains(suffix) ||
+          (_legacyOcrSafeReadDocumentationIntensifiers.contains(suffix) &&
+              hasFollowingNaturalContinuation);
+  return prefix.toLowerCase() == 'documentation' &&
+      suffix == suffix.toLowerCase() &&
+      isSafeContinuation &&
+      RegExp(
+        r'\b(?:please\s+)?read\s+(?:the\s+)?$',
+        caseSensitive: false,
+      ).hasMatch(beforeEcho);
+}
+
+bool _legacyOcrHasNaturalMaskedWordEcho(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  for (final value in credentialValues) {
+    final credentialValue = RegExp(
+          r'^(?:Bearer|Basic)\s+(.+)$',
+          caseSensitive: false,
+        ).firstMatch(value.trim())?.group(1) ??
+        value.trim();
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
+    if (ellipsis == null ||
+        credentialValue.substring(ellipsis.end).isNotEmpty) {
+      continue;
+    }
+    final prefix = credentialValue
+        .substring(0, ellipsis.start)
+        .trim()
+        .split(RegExp(r'\s+'))
+        .last
+        .toLowerCase();
+    if (prefix.isEmpty || prefix.length > 4) continue;
+    for (final match
+        in RegExp(r'[\p{L}\p{M}]+', unicode: true).allMatches(text)) {
+      final word = match.group(0)!.toLowerCase();
+      if (word.startsWith(prefix) &&
+          word.length > prefix.length &&
+          _legacyOcrHasNaturalWordContinuation(
+            prefix,
+            word.substring(prefix.length),
+          )) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool _legacyOcrHasExactCredentialEcho(
+  String text,
+  Iterable<String> credentialValues,
+) =>
+    credentialValues.any((value) {
+      final pattern = _legacyOcrExactCredentialEchoPattern(value);
+      final candidate = _legacyOcrExactCredentialCandidate(value);
+      if (pattern == null || candidate == null) return false;
+      return pattern.allMatches(text).any(
+            (match) => _legacyOcrShouldRedactExactCredentialOccurrence(
+              text,
+              match,
+              candidate,
+            ),
+          );
+    });
+
+String? _legacyOcrExactCredentialCandidate(String value) {
+  final candidate = RegExp(
+        r'^(?:Bearer|Basic)\s+(.+)$',
+        caseSensitive: false,
+      ).firstMatch(value.trim())?.group(1) ??
+      value.trim();
+  if (candidate.isEmpty ||
+      candidate.contains('…') ||
+      candidate.trimRight().endsWith('...')) {
+    return null;
+  }
+  final compactCandidate = candidate.replaceAll(RegExp(r'\s+'), '');
+  return compactCandidate.isEmpty ? null : compactCandidate;
+}
+
+bool _legacyOcrShouldRedactExactCredentialOccurrence(
+  String text,
+  Match match,
+  String candidate,
+) {
+  final surroundingText = text.replaceRange(match.start, match.end, '');
+  if (surroundingText
+      .replaceAll(RegExp(r'[\s\p{P}]', unicode: true), '')
+      .isEmpty) {
+    return true;
+  }
+  final before = text.substring(0, match.start).trimRight();
+  final after = text.substring(match.end).trimLeft();
+  final explicitUseContext = RegExp(
+        r'\b(?:use|send|provide|enter|supply|pass|set)$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(
+        r'^(?:for (?:the )?request|to (?:process|read|recognize|extract)|as (?:the )?(?:key|token|credential|secret|password))\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  if (explicitUseContext) return true;
+  final hasMixedCase = RegExp(r'[a-z]').hasMatch(candidate) &&
+      RegExp(r'[A-Z]').hasMatch(candidate);
+  return RegExp(r'[-_0-9]').hasMatch(candidate) ||
+      hasMixedCase ||
+      _legacyOcrHasHighAlphabeticEntropy(
+        candidate,
+        minimumLength: 8,
+        minimumEntropy: 3.3,
+        maximumVowelRatio: 0.45,
+      );
+}
+
+RegExp? _legacyOcrExactCredentialEchoPattern(String value) {
+  final candidate = _legacyOcrExactCredentialCandidate(value);
+  if (candidate == null) return null;
+  final exactEchoPattern = candidate.runes
+      .map((rune) => RegExp.escape(String.fromCharCode(rune)))
+      .join(r'\s*');
+  return RegExp(
+    r'(^|[^\p{L}\p{M}\p{N}_])('
+    '$exactEchoPattern'
+    r')(?=$|[^\p{L}\p{M}\p{N}_])',
+    unicode: true,
+  );
+}
+
+String _legacyOcrRedactExactCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final pattern = _legacyOcrExactCredentialEchoPattern(value);
+    final candidate = _legacyOcrExactCredentialCandidate(value);
+    if (pattern == null || candidate == null) continue;
+    sanitized = sanitized.replaceAllMapped(pattern, (match) {
+      if (!_legacyOcrShouldRedactExactCredentialOccurrence(
+        sanitized,
+        match,
+        candidate,
+      )) {
+        return match.group(0)!;
+      }
+      return '${match.group(1)}[redacted]';
+    });
+  }
+  return sanitized;
+}
+
+bool _legacyOcrIsOnlyRedactedCredentialSpan(String text) => RegExp(
+      r'^\s*\[redacted\][\s\p{P}]*$',
+      unicode: true,
+    ).hasMatch(text);
+
+bool _legacyOcrIsSafeSanitizedDescriptionContinuation(String text) {
+  if (_legacyOcrIsOnlyRedactedCredentialSpan(text)) return true;
+  final echo = RegExp(
+    r'^\s*(?:documentation\s+)?\[redacted\][.!?]\s*(.*)$',
+    caseSensitive: false,
+    dotAll: true,
+  ).firstMatch(text);
+  if (echo == null) return false;
+  final continuation = echo.group(1)!.trim();
+  if (continuation.isEmpty) return true;
+  final sentences = continuation
+      .split(RegExp(r'(?<=[.!?])\s+'))
+      .where((sentence) => sentence.trim().isNotEmpty);
+  return sentences.every((sentence) {
+    final hasCoordinatedOrAdditionalClause = RegExp(
+      r'\b(?:and|but|or|then|while|because|although)\b|[,;:]',
+      caseSensitive: false,
+    ).hasMatch(sentence);
+    final isSafeNaturalDescription = !hasCoordinatedOrAdditionalClause &&
+        !sentence.contains('[redacted]') &&
+        RegExp(
+          r'^\s*(?:it|the image|the scan|the note)\s+(?:also\s+)?'
+          r'(?:shows?|contains?|mentions?|says?|includes?)\s+'
+          r'(?:(?:a|an|the|some|several|many|two|three)\s+)?'
+          r'[\p{L}\p{M}\p{N}_-]+'
+          r'(?:\s+[\p{L}\p{M}\p{N}_-]+){0,2}[.!?]?\s*$',
+          caseSensitive: false,
+          unicode: true,
+          dotAll: true,
+        ).hasMatch(sentence);
+    return _legacyOcrHasSafeRedactedInstruction(
+          sentence,
+          allowDescriptionContext: false,
+        ) ||
+        isSafeNaturalDescription;
+  });
 }
 
 bool _legacyOcrHasAscendingAlphabetRun(String value) {
@@ -1033,6 +1321,20 @@ bool _legacyOcrHasKeyboardSequence(String value) {
           return true;
         }
       }
+    }
+  }
+  for (final sequence in const [
+    'qazwsx',
+    'wsxedc',
+    'edcrfv',
+    'rfvtgb',
+    'tgbzhn',
+    'yhnujm',
+    'ujmikolp',
+  ]) {
+    if (normalized.contains(sequence) ||
+        normalized.contains(sequence.split('').reversed.join())) {
+      return true;
     }
   }
   return false;
@@ -1964,6 +2266,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
   String text, {
   bool allowBareAction = false,
   bool allowReceiptUse = false,
+  bool allowDescriptionContext = true,
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
@@ -1987,16 +2290,24 @@ bool _legacyOcrHasSafeRedactedInstruction(
         dotAll: true,
       ).hasMatch(text) ||
       !RegExp(r'\bfor (?:the )?request\b', caseSensitive: false).hasMatch(text);
-  final safeScanContext = RegExp(
-    r'^\s*the\s+scan\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
-    caseSensitive: false,
-    dotAll: true,
-  ).hasMatch(text);
-  final safeImageContext = RegExp(
-    r'^\s*the\s+image\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
-    caseSensitive: false,
-    dotAll: true,
-  ).hasMatch(text);
+  final safeScanContext = allowDescriptionContext &&
+      RegExp(
+        r'^\s*the\s+scan\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
+        caseSensitive: false,
+        dotAll: true,
+      ).hasMatch(text);
+  final safeImageContext = allowDescriptionContext &&
+      RegExp(
+        r'^\s*the\s+image\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
+        caseSensitive: false,
+        dotAll: true,
+      ).hasMatch(text);
+  final safeNoteContext = allowDescriptionContext &&
+      RegExp(
+        r'^\s*the\s+note\s+(?:mentions|says|contains|shows|includes)\b.*\[redacted\]',
+        caseSensitive: false,
+        dotAll: true,
+      ).hasMatch(text);
   final safeKeepLead = RegExp(
     r'^\s*(?:please\s+)?keep\b.*\[redacted\]',
     caseSensitive: false,
@@ -2011,6 +2322,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeImageContext ||
+      safeNoteContext ||
       safeKeepLead;
 }
 
@@ -2058,12 +2370,77 @@ bool _legacyOcrShouldPreserveBareRedactedAction(String sourceText) {
       ).hasMatch(sourceText);
 }
 
+String _legacyOcrRedactWhitespaceSplitMaskedCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  if (_legacyOcrIsOrdinaryTerminalReadCarefullyPrompt(text, credentialValues) ||
+      RegExp(
+        r'^\s*(?:please\s+)?read\s+(?:the\s+)?documentation\s+carefully[.!?]?\s*$',
+        caseSensitive: false,
+      ).hasMatch(text)) {
+    return text;
+  }
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final credentialValue = RegExp(
+          r'^(?:Bearer|Basic)\s+(.+)$',
+          caseSensitive: false,
+        ).firstMatch(value.trim())?.group(1) ??
+        value.trim();
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
+    if (ellipsis == null ||
+        credentialValue.substring(ellipsis.end).isNotEmpty) {
+      continue;
+    }
+    final prefix = credentialValue
+        .substring(0, ellipsis.start)
+        .trim()
+        .split(RegExp(r'\s+'))
+        .last;
+    if (prefix.toLowerCase() != 'documentation') continue;
+    final prefixPattern = prefix.split('').map(RegExp.escape).join(r'\s*');
+    final whitespaceSplitEcho = RegExp(
+      '(^|[^a-zA-Z0-9])($prefixPattern)(\\s+)'
+      r'([a-zA-Z0-9][a-zA-Z0-9_./+~-]*|[-_./+~][a-zA-Z0-9][a-zA-Z0-9_./+~-]*)'
+      r'(?=$|[^a-zA-Z0-9_])',
+      caseSensitive: false,
+    );
+    sanitized = sanitized.replaceAllMapped(whitespaceSplitEcho, (match) {
+      final rawSuffix = match.group(4)!;
+      final suffix = rawSuffix.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
+      if (suffix.isEmpty) return match.group(0)!;
+      if (_legacyOcrHasNaturalAlphaContinuation(suffix.toLowerCase()) ||
+          _legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+          _legacyOcrIsNaturalReadDocumentationContinuation(
+            sanitized,
+            match,
+            prefix,
+            suffix,
+          )) {
+        return match.group(0)!;
+      }
+      final compactEcho =
+          '${match.group(2)}$suffix'.replaceAll(RegExp(r'\s+'), '');
+      if (!_legacyOcrTextContainsMaskedCredential(compactEcho, [value])) {
+        return match.group(0)!;
+      }
+      final trailingPunctuation = rawSuffix.substring(suffix.length);
+      return '${match.group(1)}[redacted]$trailingPunctuation';
+    });
+  }
+  return sanitized;
+}
+
 String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final body = rawRequest?['body'];
   if (body is! Map || body['messages'] is! List) return null;
   final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
   final sourceTextParts = <String>[];
+  final sourceTextMessageIndices = <int>[];
+  var sourceMessageIndex = 0;
   for (final message in body['messages'] as List) {
+    final messageIndex = sourceMessageIndex++;
     if (message is! Map ||
         message['role'] != 'user' ||
         message['content'] is! List) {
@@ -2072,9 +2449,16 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
         sourceTextParts.add(part['text'] as String);
+        sourceTextMessageIndices.add(messageIndex);
       }
     }
   }
+  final sourceTextLength = sourceTextParts.fold<int>(
+        0,
+        (total, text) => total + text.length,
+      ) +
+      (sourceTextParts.isEmpty ? 0 : sourceTextParts.length - 1);
+  if (sourceTextLength > 10000) return null;
   final hasEmbeddedNul = sourceTextParts.any((text) => text.contains('\u0000'));
   final hasCredentialInOnePart = sourceTextParts.any(
     (text) => _legacyOcrTextContainsCredential(
@@ -2097,32 +2481,68 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
 
   final textParts = <String>[];
   final textPartsHadCredential = <bool>[];
-  for (final sourceText in sourceTextParts) {
+  final textPartsCanPreserveDescriptionContext = <bool>[];
+  final textPartsContinueDescriptionContext = <bool>[];
+  final textPartsHadWhitespaceSplitRedaction = <bool>[];
+  var continuingDescriptionContext = false;
+  for (var sourcePartIndex = 0;
+      sourcePartIndex < sourceTextParts.length;
+      sourcePartIndex++) {
+    final sourceText = sourceTextParts[sourcePartIndex];
     final credentialCheckText = sourceText.replaceAll('\u0000', '');
-    final hadCredential = _legacyOcrTextContainsCredential(
-      credentialCheckText,
-      credentialValues,
-    );
+    final continuesDescriptionContext = sourcePartIndex > 0 &&
+        sourceTextMessageIndices[sourcePartIndex] ==
+            sourceTextMessageIndices[sourcePartIndex - 1] &&
+        continuingDescriptionContext;
+    final opensDescriptionContext = RegExp(
+      r'^\s*the (?:image|scan|note) (?:mentions|says|contains|shows|includes)\s*:?[\s]*$',
+      caseSensitive: false,
+    ).hasMatch(credentialCheckText);
     final redactionSourceText = _legacyOcrNormalizeNulsWithinMaskedPrefixes(
       sourceText,
       credentialValues,
     );
+    final whitespaceRedactedText =
+        _legacyOcrRedactWhitespaceSplitMaskedCredentialEchoes(
+      redactionSourceText,
+      credentialValues,
+    );
+    final hadWhitespaceSplitRedaction =
+        whitespaceRedactedText != redactionSourceText;
+    final canPreserveDescriptionContext = sourceTextParts.length == 1 ||
+        continuesDescriptionContext ||
+        hadWhitespaceSplitRedaction ||
+        RegExp(
+          r'^\s*the (?:image|scan) (?:mentions|says|contains|shows|includes)\b',
+          caseSensitive: false,
+        ).hasMatch(credentialCheckText) ||
+        _legacyOcrHasNaturalMaskedWordEcho(
+          credentialCheckText,
+          credentialValues,
+        ) ||
+        _legacyOcrHasExactCredentialEcho(
+          credentialCheckText,
+          credentialValues,
+        );
+    final hadCredential = _legacyOcrTextContainsCredential(
+            credentialCheckText, credentialValues) ||
+        whitespaceRedactedText != redactionSourceText ||
+        _legacyOcrHasExactCredentialEcho(
+          credentialCheckText,
+          credentialValues,
+        );
     final redactedText = hadCredential
-        ? _legacyOcrRedactMaskedCredentialEchoes(
-            redactionSourceText,
+        ? _legacyOcrRedactExactCredentialEchoes(
+            _legacyOcrRedactMaskedCredentialEchoes(
+              whitespaceRedactedText,
+              credentialValues,
+            ),
             credentialValues,
           )
         : sourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
-    final containsUnmaskedExactCredential = credentialValues.any((value) {
-      final candidate = value.trim();
-      if (candidate.isEmpty ||
-          candidate.contains('…') ||
-          candidate.trimRight().endsWith('...')) {
-        return false;
-      }
-      return nullFreeRedactedText.contains(candidate);
-    });
+    final containsUnmaskedExactCredential = _legacyOcrHasExactCredentialEcho(
+        nullFreeRedactedText, credentialValues);
     if (sourceText.contains('\u0000') &&
         hadCredential &&
         (containsUnmaskedExactCredential ||
@@ -2137,12 +2557,30 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     final text = redactedText.replaceAll('\u0000', ' ');
     textParts.add(text);
     textPartsHadCredential.add(hadCredential);
+    textPartsCanPreserveDescriptionContext.add(canPreserveDescriptionContext);
+    textPartsContinueDescriptionContext.add(continuesDescriptionContext);
+    textPartsHadWhitespaceSplitRedaction.add(hadWhitespaceSplitRedaction);
+    continuingDescriptionContext = opensDescriptionContext;
   }
   if (textParts.isEmpty) return null;
   final redactedMarkedInstruction = _legacyOcrRedactNaturalWordCredentialEchoes(
     textParts.join('\u0000'),
     credentialValues,
   );
+  final fullySanitizedInstruction =
+      redactedMarkedInstruction.replaceAll('\u0000', '\n');
+  // Treat the replacement marker as neutral and validate credential evidence
+  // against all remaining text before preserving any safe description context.
+  final credentialEvidenceWithoutRedactionMarkers =
+      fullySanitizedInstruction.replaceAll('[redacted]', ' ');
+  final hasResidualCredentialEvidence = _legacyOcrTextContainsCredential(
+        credentialEvidenceWithoutRedactionMarkers,
+        credentialValues,
+      ) ||
+      _legacyOcrHasExactCredentialEcho(
+        credentialEvidenceWithoutRedactionMarkers,
+        credentialValues,
+      );
   final naturalSecretPluralRanges = RegExp(
     r'\bsecret\u0000*s\b',
     caseSensitive: false,
@@ -2167,6 +2605,12 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final safeTextParts = redactedMarkedInstruction.split('\u0000').where((text) {
     final partIndex = textPartIndex++;
     final hadCredential = textPartsHadCredential[partIndex];
+    final canPreserveDescriptionContext =
+        textPartsCanPreserveDescriptionContext[partIndex];
+    final continuesDescriptionContext =
+        textPartsContinueDescriptionContext[partIndex];
+    final hadWhitespaceSplitRedaction =
+        textPartsHadWhitespaceSplitRedaction[partIndex];
     final sourceText = sourceTextParts[partIndex];
     final start = textOffset;
     final end = start + text.length;
@@ -2183,15 +2627,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           '${textWithoutNaturalPlural.substring(localEnd)}';
     }
     final preservesNaturalPlural = partNaturalPluralRanges.isNotEmpty;
-    final containsUnmaskedExactCredential = credentialValues.any((value) {
-      final candidate = value.trim();
-      if (candidate.isEmpty ||
-          candidate.contains('…') ||
-          candidate.trimRight().endsWith('...')) {
-        return false;
-      }
-      return text.contains(candidate);
-    });
+    final containsUnmaskedExactCredential =
+        _legacyOcrHasExactCredentialEcho(text, credentialValues);
     if (containsUnmaskedExactCredential ||
         _legacyOcrTextContainsCredential(
           textWithoutNaturalPlural,
@@ -2201,16 +2638,27 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
     if (preservesNaturalPlural) return true;
     if (!hadCredential) return true;
+    if (continuesDescriptionContext &&
+        _legacyOcrHasSafeRedactedInstruction(fullySanitizedInstruction) &&
+        !hasResidualCredentialEvidence &&
+        _legacyOcrIsSafeSanitizedDescriptionContinuation(text)) {
+      return true;
+    }
     return text.contains('[redacted]') &&
         _legacyOcrHasSafeRedactedInstruction(
           text,
-          allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
-            sourceText,
-          ),
+          allowBareAction:
+              _legacyOcrShouldPreserveBareRedactedAction(sourceText) ||
+                  (hadWhitespaceSplitRedaction &&
+                      RegExp(
+                        r'^\s*please\s+read\s+(?:the\s+)?documentation\b',
+                        caseSensitive: false,
+                      ).hasMatch(sourceText)),
           allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
             sourceText,
             credentialValues,
           ),
+          allowDescriptionContext: canPreserveDescriptionContext,
         );
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
