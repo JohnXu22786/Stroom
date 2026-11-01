@@ -1933,10 +1933,10 @@ packages:
     dependency: "direct main"
     description:
       name: visual_math
-      sha256: "4d35417e62654a8a92052754f0fbe57e79db4e54b664324beca13b4ef684b9ca"
+      sha256: "68e3d021133d0a6a05cd3a9fc142b5ffb53f965fe4c590bf8a81c88a1409b851"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0"
+    version: "0.1.1"
   vm_service:
     dependency: transitive
     description:
