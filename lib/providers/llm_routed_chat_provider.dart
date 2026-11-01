@@ -69,6 +69,37 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
   };
 }
 
+/// Resolves the protocol used by a routed account/model pair.
+///
+/// Non-chat callers that use the same Gateway route can share the chat
+/// adapter's model and account protocol precedence without guessing from the
+/// connector type.
+String llmRoutedChatProtocolForAccountModel({
+  required AiGatewayAccount account,
+  required String upstreamModelId,
+  required String endpointType,
+  String? apiProtocol,
+  String? apiProtocolOverride,
+}) {
+  if (apiProtocolOverride?.isNotEmpty == true) return apiProtocolOverride!;
+  final accountModel = account.models
+      .where((model) => model.upstreamModelId == upstreamModelId)
+      .firstOrNull;
+  final modelConfig = accountModel?.config;
+  final modelOverride =
+      modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
+  if (modelOverride is String && modelOverride.isNotEmpty) {
+    return apiProtocolFromLegacyEndpointType(modelOverride);
+  }
+  final accountProtocol = account.endpointConfig['apiProtocol'] ??
+      account.endpointConfig['chatProtocol'] ??
+      account.endpointConfig['endpointType'];
+  if (accountProtocol is String && accountProtocol.isNotEmpty) {
+    return apiProtocolFromLegacyEndpointType(accountProtocol);
+  }
+  return apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
+}
+
 /// ChatAdapter provider that keeps the application's existing chat protocol
 /// while selecting an eligible account from the model's stable M1 group.
 class LlmRoutedChatProvider extends BaseChatProvider {
@@ -522,25 +553,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   String _protocolFor(AiGatewayAccount account, String upstreamModelId) {
-    if (apiProtocolOverride != null && apiProtocolOverride!.isNotEmpty) {
-      return apiProtocolOverride!;
-    }
-    final accountModel = account.models
-        .where((model) => model.upstreamModelId == upstreamModelId)
-        .firstOrNull;
-    final modelConfig = accountModel?.config;
-    final modelOverride =
-        modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
-    if (modelOverride is String && modelOverride.isNotEmpty) {
-      return apiProtocolFromLegacyEndpointType(modelOverride);
-    }
-    final accountProtocol = account.endpointConfig['apiProtocol'] ??
-        account.endpointConfig['chatProtocol'] ??
-        account.endpointConfig['endpointType'];
-    if (accountProtocol is String && accountProtocol.isNotEmpty) {
-      return apiProtocolFromLegacyEndpointType(accountProtocol);
-    }
-    return apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
+    return llmRoutedChatProtocolForAccountModel(
+      account: account,
+      upstreamModelId: upstreamModelId,
+      endpointType: endpointType,
+      apiProtocol: apiProtocol,
+      apiProtocolOverride: apiProtocolOverride,
+    );
   }
 
   String? _nativeFormatFor(String protocolId) => switch (protocolId) {
