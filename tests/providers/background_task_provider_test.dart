@@ -15700,7 +15700,14 @@ void main() {
         final contextPersisted = jsonEncode(contextEchoTask.toMap());
 
         expect(contextInstruction, contains('[redacted]'));
+        expect(contextInstruction, contains('this workflow.'));
         expect(contextInstruction, isNot(contains(echoedCredential)));
+        final persistedContextRetryData = (jsonDecode(contextPersisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          persistedContextRetryData['instructionContent'],
+          contains('this workflow.'),
+        );
         expect(contextPersisted, isNot(contains(echoedCredential)));
 
         final capitalizedTask = taskFor(

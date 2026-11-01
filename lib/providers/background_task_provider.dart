@@ -1419,9 +1419,6 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
             caseSensitive: false,
           ).hasMatch('${suffix.trim()} ${after.trim()}'.trim());
   if (naturalAuthenticationDocumentationPrompt) return true;
-  if (_legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
-    return false;
-  }
   final afterFirstWord = RegExp(r'^([a-zA-Z][a-zA-Z_-]*)\b')
       .firstMatch(after)
       ?.group(1)
@@ -1526,6 +1523,20 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
     'workflow',
     'workflows',
   };
+  final naturalDocumentationSuffixChunks = suffix
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .map((chunk) => chunk.replaceAll(RegExp(r'^[^a-z0-9]+|[^a-z0-9]+$'), ''))
+      .where((chunk) => chunk.isNotEmpty)
+      .toList();
+  final isNaturalDocumentationSuffix =
+      naturalDocumentationSuffixChunks.isNotEmpty &&
+          naturalDocumentationSuffixChunks.every(
+            (chunk) =>
+                naturalDocumentationNouns.contains(chunk) ||
+                naturalDocumentationAdverbs.contains(chunk),
+          );
   final documentationSuffix = suffix.trim().isEmpty
       ? afterFirstWord ?? ''
       : suffix.trim().toLowerCase();
@@ -1554,6 +1565,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
                 caseSensitive: false,
               ).hasMatch(after));
   return terminalNaturalActionContinuation ||
+      (isNaturalDocumentationSuffix && naturalActionLead) ||
       naturalActionAdverbContinuation ||
       naturalDocumentationInstructionNoun ||
       (naturalNumberedDocumentationReference && naturalActionLead) ||
@@ -1571,10 +1583,21 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
 ) {
   var sanitized = text;
   for (final value in credentialValues) {
-    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
-    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
-    final prefix =
-        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    final credentialValue = RegExp(
+          r'^(?:Bearer|Basic)\s+(.+)$',
+          caseSensitive: false,
+        ).firstMatch(value.trim())?.group(1) ??
+        value.trim();
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
+    if (ellipsis == null ||
+        credentialValue.substring(ellipsis.end).isNotEmpty) {
+      continue;
+    }
+    final prefix = credentialValue
+        .substring(0, ellipsis.start)
+        .trim()
+        .split(RegExp(r'\s+'))
+        .last;
     if (prefix.toLowerCase() != 'documentation') continue;
     const naturalAdverbs = {
       'carefully',
@@ -2194,6 +2217,17 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'total',
         'further',
       };
+      final allNaturalChunks = chunks.every((chunk) {
+        final normalizedChunk = chunk.toLowerCase();
+        return naturalAdverbs.contains(normalizedChunk) ||
+            naturalNouns.contains(normalizedChunk) ||
+            naturalContinuationWords.contains(normalizedChunk) ||
+            naturalActionWords.contains(normalizedChunk) ||
+            naturalObjectWords.contains(normalizedChunk);
+      });
+      if (allNaturalChunks) {
+        return match.group(0)!;
+      }
       final terminalChunk = chunks.last.toLowerCase();
       final terminalChunkIsNatural = naturalAdverbs.contains(terminalChunk) ||
           naturalNouns.contains(terminalChunk) ||
@@ -3342,11 +3376,6 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final textParts = <String>[];
   final textPartsHadCredential = <bool>[];
   for (final sourceText in sourceTextParts) {
-    final credentialCheckText = sourceText.replaceAll('\u0000', '');
-    final hadCredentialBeforeRedaction = _legacyOcrTextContainsCredential(
-      credentialCheckText,
-      credentialValues,
-    );
     final redactionSourceText = _legacyOcrNormalizeNulsWithinMaskedPrefixes(
       sourceText,
       credentialValues,
@@ -3387,8 +3416,12 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           ),
         )
         .join('\n');
-    final hadCredential =
-        hadCredentialBeforeRedaction || redactedText != redactionSourceText;
+    // The broad detector can flag natural words that happen to share a
+    // visible prefix with a masked header (for example, "read carefully").
+    // Only treat this text part as credential-bearing when a sanitizer has
+    // actually changed it; exact-key checks below still reject an unredacted
+    // known credential.
+    final hadCredential = redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
     final containsUnmaskedExactCredential = credentialValues.any((value) {
       final candidate = value.trim();
@@ -3476,7 +3509,10 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
         }
         if (preservesNaturalPlural) return true;
         if (!hadCredential) return true;
-        return text.contains('[redacted]') &&
+        // Preserve all remaining prose once the sanitizer has replaced the
+        // credential span. Requiring a recognized prompt shape here can drop
+        // unrelated safe words that surround the redaction marker.
+        return text.contains('[redacted]') ||
             _legacyOcrHasSafeRedactedInstruction(
               text,
               allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
@@ -3508,7 +3544,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     return compactInstruction
         .contains(candidate.replaceAll(RegExp(r'\s+'), '').toLowerCase());
   });
-  if (instruction.length > 10000 ||
+  if (RegExp(r'^\s*\[redacted\][.!?]?\s*$').hasMatch(instruction) ||
+      instruction.length > 10000 ||
       RegExp(
         r'(?:data:image/|base64,)',
         caseSensitive: false,
@@ -3526,7 +3563,12 @@ String _legacyOcrRedactMaskedCredentialEchoes(
   final hasSentenceBoundary = RegExp(r'[.!?]\s+\S').hasMatch(text);
   var sanitized = text;
   for (final value in credentialValues) {
-    final compactCredential = value.trim().replaceAll(RegExp(r'\s+'), '');
+    final credentialValue = RegExp(
+          r'^(?:Bearer|Basic)\s+(.+)$',
+          caseSensitive: false,
+        ).firstMatch(value.trim())?.group(1) ??
+        value.trim();
+    final compactCredential = credentialValue.replaceAll(RegExp(r'\s+'), '');
     if (!value.contains('…') &&
         !value.trimRight().endsWith('...') &&
         compactCredential.length >= 8) {
@@ -3540,10 +3582,16 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             : match.group(0)!;
       });
     }
-    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
-    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
-    final prefix =
-        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
+    if (ellipsis == null ||
+        credentialValue.substring(ellipsis.end).isNotEmpty) {
+      continue;
+    }
+    final prefix = credentialValue
+        .substring(0, ellipsis.start)
+        .trim()
+        .split(RegExp(r'\s+'))
+        .last;
     if (prefix.isEmpty) continue;
     final allowEmbeddedPrefix = _legacyOcrCanMatchOpenMaskPrefixWithinToken(
       prefix,
