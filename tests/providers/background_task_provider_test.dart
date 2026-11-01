@@ -15181,9 +15181,16 @@ void main() {
         ).instructionContent!;
         final nonDocumentationPrefixLineBreakPersisted =
             jsonEncode(nonDocumentationPrefixLineBreakTask.toMap());
+        final nonDocumentationPrefixLineBreakRetryData = (jsonDecode(
+          nonDocumentationPrefixLineBreakPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           nonDocumentationPrefixLineBreakInstruction,
           'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationPrefixLineBreakRetryData['instructionContent'],
+          nonDocumentationPrefixLineBreakInstruction,
         );
         expect(
           nonDocumentationPrefixLineBreakPersisted,
@@ -15201,9 +15208,16 @@ void main() {
         ).instructionContent!;
         final nonDocumentationMultiLinePrefixPersisted =
             jsonEncode(nonDocumentationMultiLinePrefixTask.toMap());
+        final nonDocumentationMultiLinePrefixRetryData = (jsonDecode(
+          nonDocumentationMultiLinePrefixPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           nonDocumentationMultiLinePrefixInstruction,
           'Use [redacted] to authenticate',
+        );
+        expect(
+          nonDocumentationMultiLinePrefixRetryData['instructionContent'],
+          nonDocumentationMultiLinePrefixInstruction,
         );
         expect(
           nonDocumentationMultiLinePrefixPersisted,
@@ -15513,9 +15527,16 @@ void main() {
         ).instructionContent!;
         final trailingCredentialPersisted =
             jsonEncode(trailingCredentialTask.toMap());
+        final trailingCredentialPersistedRetryData = (jsonDecode(
+          trailingCredentialPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           trailingCredentialInstruction,
-          'Please read the [redacted].',
+          'Please read the documentation carefully [redacted].',
+        );
+        expect(
+          trailingCredentialPersistedRetryData['instructionContent'],
+          trailingCredentialInstruction,
         );
         expect(trailingCredentialPersisted, isNot(contains('foobarxyz')));
 
@@ -15647,10 +15668,17 @@ void main() {
             punctuationTask.retryData!,
           ).instructionContent!;
           final punctuationPersisted = jsonEncode(punctuationTask.toMap());
+          final punctuationPersistedRetryData = (jsonDecode(
+            punctuationPersisted,
+          ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
           expect(
             punctuationInstruction,
-            'Please read the [redacted].',
+            'Please read the [redacted] carefully.',
+          );
+          expect(
+            punctuationPersistedRetryData['instructionContent'],
+            punctuationInstruction,
           );
           expect(punctuationPersisted, isNot(contains(credentialEcho)));
         }
@@ -15721,7 +15749,14 @@ void main() {
 
         expect(
           capitalizedInstruction,
-          'Please read the [redacted].',
+          'Please read the [redacted] carefully.',
+        );
+        final capitalizedPersistedRetryData = (jsonDecode(
+          capitalizedPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          capitalizedPersistedRetryData['instructionContent'],
+          capitalizedInstruction,
         );
         expect(capitalizedPersisted, isNot(contains(echoedCredential)));
       },
@@ -16252,11 +16287,17 @@ void main() {
           },
         });
 
+        final migratedInstruction =
+            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent;
+        final persisted = jsonEncode(task.toMap());
+        final persistedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(migratedInstruction, 'Read the receipt total carefully');
         expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          persistedRetryData['instructionContent'],
           'Read the receipt total carefully',
         );
-        expect(jsonEncode(task.toMap()), isNot(contains('private-value')));
+        expect(persisted, isNot(contains('private-value')));
       },
     );
 

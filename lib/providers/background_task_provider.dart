@@ -3376,6 +3376,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   final textParts = <String>[];
   final textPartsHadCredential = <bool>[];
   for (final sourceText in sourceTextParts) {
+    final credentialCheckText = sourceText.replaceAll('\u0000', '');
+    final hadCredentialBeforeRedaction = _legacyOcrTextContainsCredential(
+      credentialCheckText,
+      credentialValues,
+    );
     final redactionSourceText = _legacyOcrNormalizeNulsWithinMaskedPrefixes(
       sourceText,
       credentialValues,
@@ -3416,12 +3421,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           ),
         )
         .join('\n');
-    // The broad detector can flag natural words that happen to share a
-    // visible prefix with a masked header (for example, "read carefully").
-    // Only treat this text part as credential-bearing when a sanitizer has
-    // actually changed it; exact-key checks below still reject an unredacted
-    // known credential.
-    final hadCredential = redactedText != redactionSourceText;
+    final hadCredential =
+        hadCredentialBeforeRedaction || redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
     final containsUnmaskedExactCredential = credentialValues.any((value) {
       final candidate = value.trim();
