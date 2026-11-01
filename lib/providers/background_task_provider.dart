@@ -1317,14 +1317,17 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
     r'(?:s|es|ed|ing|er|est|ly|able|ary|aries|ation|ization|istic|based)$',
     caseSensitive: false,
   ).hasMatch(suffix);
+  final terminalSentenceEnd = after.isEmpty ||
+      RegExp(r'^[.!?]+(?:\s|$)').hasMatch(after) ||
+      RegExp(r'[.!?]+$').hasMatch(match.group(0)!);
   final terminalNaturalActionContinuation = const {
         'carefully',
         'thoroughly',
         'closely',
         'fully',
         'completely',
-      }.contains(suffix.toLowerCase()) &&
-      (after.isEmpty || RegExp(r'^[.!?]+$').hasMatch(after)) &&
+      }.contains(suffix.trim().toLowerCase()) &&
+      terminalSentenceEnd &&
       naturalActionLead;
   return terminalNaturalActionContinuation ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
@@ -2363,8 +2366,9 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       prefix,
       text: sanitized,
     );
-    final suffixPattern =
-        allowEmbeddedPrefix ? r'(?:\S+|(?=$|[^a-zA-Z0-9]))' : r'\S+';
+    final suffixPattern = allowEmbeddedPrefix
+        ? r'(?:\s+[a-zA-Z0-9_-]{2,}|\S+|(?=$|[^a-zA-Z0-9]))'
+        : r'\S+';
     final extendedPrefix = RegExp(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
