@@ -668,8 +668,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     final limit = _maxWordsLimit;
     final textLen = _textController.text.length;
     final isOverLimit = limit > 0 && textLen > limit;
+    final cs = Theme.of(context).colorScheme;
 
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -677,82 +679,64 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           children: [
             Row(
               children: [
-                const Text(
-                  '录音标题',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
+                _sectionIcon(Icons.drive_file_rename_outline, cs),
+                const SizedBox(width: 10),
+                const Text('录音标题',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 if (widget.originalTitle != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        height: 24,
-                        child: Checkbox(
-                          value: _useOriginalTitle,
-                          onChanged: (v) {
-                            setState(() {
-                              _useOriginalTitle = v ?? true;
-                              if (_useOriginalTitle) {
-                                _titleController.text = widget.originalTitle!;
-                              } else {
-                                _titleController.clear();
-                              }
-                            });
-                          },
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _useOriginalTitle = !_useOriginalTitle;
-                            if (_useOriginalTitle) {
-                              _titleController.text = widget.originalTitle!;
-                            } else {
-                              _titleController.clear();
-                            }
-                          });
-                        },
-                        child: Text(
-                          '使用原标题',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ),
-                    ],
+                  FilterChip(
+                    label: const Text('使用原标题'),
+                    selected: _useOriginalTitle,
+                    showCheckmark: false,
+                    avatar: Icon(
+                      _useOriginalTitle ? Icons.check : Icons.title,
+                      size: 16,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (selected) {
+                      setState(() {
+                        _useOriginalTitle = selected;
+                        if (selected) {
+                          _titleController.text = widget.originalTitle!;
+                        } else {
+                          _titleController.clear();
+                        }
+                      });
+                    },
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(
+              decoration: _formFieldDecoration(
                 hintText: '保存的音频文件名（可选）',
-                border: OutlineInputBorder(),
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
-            const Divider(height: 24),
-            const Text(
-              '转换文本',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1, color: cs.outlineVariant),
             ),
-            const SizedBox(height: 8),
+            Row(
+              children: [
+                _sectionIcon(Icons.subject_rounded, cs),
+                const SizedBox(width: 10),
+                const Text('转换文本',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text('语音内容',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _textController,
               focusNode: _focusNode,
               maxLines: 5,
               minLines: 3,
-              decoration: InputDecoration(
+              decoration: _formFieldDecoration(
                 hintText: '请输入要转换为语音的文本...',
-                border: const OutlineInputBorder(),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -794,11 +778,24 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                   )
                 else
                   const Spacer(),
-                Text(
-                  limit > 0 ? '$textLen/$limit' : textLen.toString(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isOverLimit ? Colors.red : Colors.grey,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isOverLimit
+                        ? cs.errorContainer
+                        : cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    limit > 0 ? '$textLen/$limit' : textLen.toString(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isOverLimit
+                          ? cs.onErrorContainer
+                          : cs.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -806,6 +803,44 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _sectionIcon(IconData icon, ColorScheme cs) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Icon(icon, size: 18, color: cs.onPrimaryContainer),
+    );
+  }
+
+  InputDecoration _formFieldDecoration({
+    required String hintText,
+    Widget? suffixIcon,
+    BoxConstraints? suffixIconConstraints,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.7)),
+    );
+    return InputDecoration(
+      hintText: hintText,
+      filled: true,
+      fillColor: cs.surfaceContainerLow.withValues(alpha: 0.55),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: BorderSide(color: cs.primary, width: 1.5),
+      ),
+      suffixIcon: suffixIcon,
+      suffixIconConstraints: suffixIconConstraints,
     );
   }
 
@@ -818,16 +853,32 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
 
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '合成配置',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            Row(
+              children: [
+                _sectionIcon(Icons.tune_rounded, Theme.of(context).colorScheme),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('合成配置',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
+                      SizedBox(height: 2),
+                      Text('调整音色与声音表现',
+                          style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // 音色选择（有条件）
             if (model.voices.isNotEmpty) ...[
@@ -955,10 +1006,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               ? _selectedVoice
               : model.voices.first.id,
           key: ValueKey('voice_$_selectedVoice'),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
+          decoration: _formFieldDecoration(
             hintText: '选择音色',
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           items: model.voices.map((v) {
             return DropdownMenuItem<String>(
@@ -1079,11 +1128,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           controller: _instructionController,
           maxLines: 3,
           minLines: 2,
-          decoration: const InputDecoration(
+          decoration: _formFieldDecoration(
             hintText: '例如: Speak in a cheerful and excited tone',
-            border: OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
         ),
         const SizedBox(height: 4),
@@ -1124,12 +1170,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 Expanded(
                   child: TextField(
                     controller: ctrl,
-                    decoration: InputDecoration(
+                    decoration: _formFieldDecoration(
                       hintText: '默认: ${param.defaultValue}',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
                     ),
                   ),
                 ),
