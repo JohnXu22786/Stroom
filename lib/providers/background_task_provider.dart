@@ -2576,7 +2576,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
-  final naturalSecretPluralPrompt = isNaturalSecretPlural &&
+  final naturalSecretPluralKeepPrompt = isNaturalSecretPlural &&
       RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(
@@ -2584,6 +2584,17 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
             unicode: true,
             caseSensitive: false,
           ).hasMatch(after));
+  final naturalSecretPluralReadPrompt = isNaturalSecretPlural &&
+      RegExp(
+        r'\b(?:please\s+)?read(?:\s+(?:the|this|that|these|those|a|an))?$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(
+        r'^(?:in|from) (?:the|this|that|these|those|a|an) (?:image|picture|photo|photograph|scan|document|receipt|page)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  final naturalSecretPluralPrompt =
+      naturalSecretPluralKeepPrompt || naturalSecretPluralReadPrompt;
   final naturalDefinitionQuestion = isNaturalWordContinuation &&
       RegExp(r'\bwhat does$', caseSensitive: false).hasMatch(before) &&
       RegExp(r'^mean\b', caseSensitive: false).hasMatch(after);

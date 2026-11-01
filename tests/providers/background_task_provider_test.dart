@@ -1332,6 +1332,45 @@ void main() {
     );
 
     test(
+      'legacy Authorization masks preserve ordinary secrets reading instructions',
+      () {
+        const instruction = 'Read the secrets in this image.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-read-secrets-natural-prompt',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'error': 'request failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('secret…')));
+      },
+    );
+
+    test(
       'legacy Authorization value matching a natural plural is redacted',
       () {
         final task = BackgroundTask.fromMap({
