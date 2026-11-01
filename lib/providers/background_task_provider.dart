@@ -598,7 +598,15 @@ bool _legacyOcrTextContainsCredential(
     }
     final whitespaceFreeCandidate =
         candidate.replaceAll(RegExp(r'\s+'), '').toLowerCase();
-    return whitespaceFreeText.contains(whitespaceFreeCandidate);
+    if (whitespaceFreeCandidate.length >= 8) {
+      return whitespaceFreeText.contains(whitespaceFreeCandidate);
+    }
+    final spacedCandidate =
+        whitespaceFreeCandidate.split('').map(RegExp.escape).join(r'\s*');
+    return RegExp(
+      r'(?<![a-z0-9])' '$spacedCandidate' r'(?![a-z0-9])',
+      caseSensitive: false,
+    ).hasMatch(text);
   });
   if (hasWhitespaceSplitExactCredential) return true;
 
@@ -1543,7 +1551,7 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
   final normalizedDocumentationSuffix =
       documentationSuffix.replaceAll(RegExp(r'[^a-z0-9]'), '');
   final naturalNumberedDocumentationReference = RegExp(
-    r'^(?:chapter|section|page|step|part|id)[0-9]{1,18}$',
+    r'^(?:chapter|section|page|step|part|id)[0-9]{1,18}(?:carefully|thoroughly|closely|fully|completely|verbatim)?$',
   ).hasMatch(normalizedDocumentationSuffix);
   final naturalDocumentationYear = RegExp(r'^\d{4}$').hasMatch(suffix.trim()) &&
       naturalActionLead &&
@@ -2311,10 +2319,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         final detectedLineBrokenMaskedEcho =
             match.group(2)!.contains(RegExp(r'[\r\n]')) &&
                 RegExp(r'^[A-Z0-9]{6,}$').hasMatch(suffix) &&
-                _legacyOcrTextContainsMaskedCredential(
-                  '$prefix\n$suffix',
-                  [value],
-                );
+                prefix.toLowerCase() == 'documentation';
         final hasMarkerCredentialShape = RegExp(r'[0-9_]').hasMatch(suffix) &&
             suffix.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').length >= 8 &&
             alphabeticSuffix.length >= 2;
@@ -2568,6 +2573,10 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
       suffix.replaceAll(RegExp(r'[\r\n]+[ \t\u00a0]*'), '').toLowerCase();
   final naturalArticleObject = RegExp(
         r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\b',
+        caseSensitive: false,
+      ).hasMatch(followingText) &&
+      !RegExp(
+        r'\b(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)\b',
         caseSensitive: false,
       ).hasMatch(followingText) &&
       !RegExp(
@@ -3362,25 +3371,16 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
   );
   final joinedCredentialCheckText =
       sourceTextParts.join().replaceAll('\u0000', '');
-  if (hasEmbeddedNul &&
+  final hasCredentialReconnectedAcrossParts = hasEmbeddedNul &&
       !hasCredentialInOnePart &&
       _legacyOcrTextContainsCredential(
         joinedCredentialCheckText,
         credentialValues,
-      )) {
-    // Removing a NUL within or between parts can reconnect a credential that
-    // no individual part exposes. Fail closed before display normalization.
-    return null;
-  }
+      );
 
   final textParts = <String>[];
   final textPartsHadCredential = <bool>[];
   for (final sourceText in sourceTextParts) {
-    final credentialCheckText = sourceText.replaceAll('\u0000', '');
-    final hadCredentialBeforeRedaction = _legacyOcrTextContainsCredential(
-      credentialCheckText,
-      credentialValues,
-    );
     final redactionSourceText = _legacyOcrNormalizeNulsWithinMaskedPrefixes(
       sourceText,
       credentialValues,
@@ -3421,8 +3421,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           ),
         )
         .join('\n');
-    final hadCredential =
-        hadCredentialBeforeRedaction || redactedText != redactionSourceText;
+    final hadCredential = redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
     final containsUnmaskedExactCredential = credentialValues.any((value) {
       final candidate = value.trim();
@@ -3537,21 +3536,26 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       instruction.replaceAll(RegExp(r'\s+'), '').toLowerCase();
   final containsKnownCredential = credentialValues.any((value) {
     final candidate = value.trim();
+    final compactCandidate = candidate.replaceAll(RegExp(r'\s+'), '');
     if (candidate.isEmpty ||
+        compactCandidate.length < 8 ||
         candidate.contains('…') ||
         candidate.trimRight().endsWith('...')) {
       return false;
     }
-    return compactInstruction
-        .contains(candidate.replaceAll(RegExp(r'\s+'), '').toLowerCase());
+    return compactInstruction.contains(compactCandidate.toLowerCase());
   });
+  final containsUnredactedMaskedCredential =
+      hasCredentialReconnectedAcrossParts &&
+          _legacyOcrTextContainsCredential(instruction, credentialValues);
   if (RegExp(r'^\s*\[redacted\][.!?]?\s*$').hasMatch(instruction) ||
       instruction.length > 10000 ||
       RegExp(
         r'(?:data:image/|base64,)',
         caseSensitive: false,
       ).hasMatch(instruction) ||
-      containsKnownCredential) {
+      containsKnownCredential ||
+      containsUnredactedMaskedCredential) {
     return null;
   }
   return instruction;
@@ -3570,6 +3574,49 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         ).firstMatch(value.trim())?.group(1) ??
         value.trim();
     final compactCredential = credentialValue.replaceAll(RegExp(r'\s+'), '');
+    if (compactCredential.isNotEmpty && compactCredential.length < 8) {
+      final hasLetters =
+          RegExp(r'[a-z]', caseSensitive: false).hasMatch(compactCredential);
+      final hasDigits = RegExp(r'\d').hasMatch(compactCredential);
+      if (compactCredential.length >= 3) {
+        if (hasLetters && hasDigits) {
+          final exactShortCredential = RegExp(
+            r'(?<![a-zA-Z0-9])'
+            '${RegExp.escape(compactCredential)}'
+            r'(?![a-zA-Z0-9])',
+          );
+          sanitized = sanitized.replaceAll(exactShortCredential, '[redacted]');
+        }
+      }
+      final spacedCredential =
+          compactCredential.split('').map(RegExp.escape).join(r'\s*');
+      if (hasLetters && hasDigits) {
+        sanitized = sanitized.replaceAll(
+          RegExp(spacedCredential, caseSensitive: false),
+          '[redacted]',
+        );
+      }
+      final credentialLabel = RegExp(
+        r'(\b(?:authorization|auth|api[\s_-]*key|credential|token|secret|password|(?:receipt\s+|access\s+|verification\s+)?code)\s*(?::|=|\bis\b)\s*(?:(?:Bearer|Basic)\s+)?)'
+        '$spacedCredential'
+        r'(?![a-zA-Z0-9])',
+        caseSensitive: false,
+      );
+      if (credentialLabel.hasMatch(sanitized)) {
+        sanitized = sanitized.replaceAllMapped(credentialLabel, (match) {
+          return '${match.group(1)}[redacted]';
+        });
+      }
+      final echoedRequestValue = RegExp(
+        r'\b((?:use|provide|pass|set|enter|supply|send)\s+(?:(?:Bearer|Basic)\s+)?)'
+        '$spacedCredential'
+        r'(?=\s+(?:for\s+(?:the\s+)?request\b|to\s+(?:authenticate|authorize|access|process|send|call|invoke|make|submit)\b|as\s+(?:(?:the|a|an)\s+)?(?:authorization|auth|api[\s_-]*key|credentials?|tokens?|secrets?|passwords?|access\s+tokens?|bearer\s+tokens?)\b))',
+        caseSensitive: false,
+      );
+      sanitized = sanitized.replaceAllMapped(echoedRequestValue, (match) {
+        return '${match.group(1)}[redacted]';
+      });
+    }
     if (!value.contains('…') &&
         !value.trimRight().endsWith('...') &&
         compactCredential.length >= 8) {
@@ -3577,11 +3624,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
         compactCredential.split('').map(RegExp.escape).join(r'\s*'),
         caseSensitive: false,
       );
-      sanitized = sanitized.replaceAllMapped(spacedExactCredential, (match) {
-        return RegExp(r'\s').hasMatch(match.group(0)!)
-            ? '[redacted]'
-            : match.group(0)!;
-      });
+      sanitized = sanitized.replaceAll(spacedExactCredential, '[redacted]');
     }
     final ellipsis = RegExp(r'\.\.\.|…').firstMatch(credentialValue);
     if (ellipsis == null ||
