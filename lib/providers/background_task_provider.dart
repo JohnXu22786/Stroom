@@ -604,7 +604,7 @@ bool _legacyOcrTextContainsCredential(
 
   final naturalDocumentationReference = text.replaceAll(
     RegExp(
-      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:chapter|section|page|step|part|id|c\s*h\s*a\s*p\s*t\s*e\s*r|s\s*e\s*c\s*t\s*i\s*o\s*n|p\s*a\s*g\s*e|s\s*t\s*e\s*p|p\s*a\s*r\s*t|i\s*d)[_-]?\s*\d{1,18}\b',
+      r'\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:the\s+)?documentation\s+(?:chapter|section|page|step|part|id|c\s*h\s*a\s*p\s*t\s*e\s*r|s\s*e\s*c\s*t\s*i\s*o\s*n|p\s*a\s*g\s*e|s\s*t\s*e\s*p|p\s*a\s*r\s*t|i\s*d)[_-]?\s*(?:\s*\d){1,18}\b',
       caseSensitive: false,
     ),
     '',
@@ -1824,7 +1824,17 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         final normalizedChunk = chunk.toLowerCase();
         if (!foundCredential &&
             credentialSuffix.isEmpty &&
-            (normalizedChunk == 'id' || normalizedChunk == 'no')) {
+            const {
+              'id',
+              'no',
+              'chapter',
+              'section',
+              'page',
+              'step',
+              'part',
+              'release',
+              'version',
+            }.contains(normalizedChunk)) {
           expectsDocumentIdentifierNumber = true;
           documentIdentifierDigitCount = 0;
           continue;
@@ -1840,7 +1850,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         expectsDocumentIdentifierNumber = false;
         final normalizedNaturalChunk =
             chunk.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        final isNaturalPageCount =
+            RegExp(r'^\d{1,4}-pages?$', caseSensitive: false).hasMatch(chunk);
         final isNaturalChunk = naturalAdverbs.contains(chunk.toLowerCase()) ||
+            isNaturalPageCount ||
             naturalNouns.contains(chunk.toLowerCase()) ||
             naturalContinuationWords.contains(chunk.toLowerCase()) ||
             RegExp(
@@ -2640,7 +2653,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify|authenticate)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
