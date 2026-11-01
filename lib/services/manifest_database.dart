@@ -833,7 +833,7 @@ class ManifestDatabase {
           } catch (error, stackTrace) {
             records
               ..clear()
-              ..addAll(previousRecords);
+              ..addAll(previousRecords.cast<Map<String, dynamic>>());
             for (final path in insertedFolders) {
               folders.remove(path);
             }
