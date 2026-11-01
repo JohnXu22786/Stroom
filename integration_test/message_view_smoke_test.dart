@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -12,7 +13,7 @@ void main() {
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       final probeEvents = <Map<String, dynamic>>[];
       final probeCommands = ValueNotifier<Map<String, dynamic>?>(null);
-      print('DSH native smoke: macOS minimal document probe mounting');
+      debugPrint('DSH native smoke: macOS minimal document probe mounting');
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: MessageWebHost(
@@ -34,7 +35,7 @@ void main() {
         reason:
             'A minimal local document must load before testing the DSH bundle',
       );
-      print('DSH native smoke: macOS minimal document probe passed');
+      debugPrint('DSH native smoke: macOS minimal document probe passed');
       await tester.pumpWidget(const SizedBox());
       probeCommands.dispose();
     }
@@ -83,10 +84,10 @@ void main() {
           as List<dynamic>;
     }
 
-    print('DSH native smoke: mounting DSH document');
+    debugPrint('DSH native smoke: mounting DSH document');
     await tester.pumpWidget(
         render('**native smoke**\n\n```dart\nfinal value = 1;\n```'));
-    print('DSH native smoke: DSH document mounted; waiting for ready bridge');
+    debugPrint('DSH native smoke: DSH document mounted; waiting for ready bridge');
     await waitFor(() => events.any((e) => e['type'] == 'ready'),
         'The bundled document must initialize its real WebView bridge');
     debugPrint('DSH native smoke: document ready');

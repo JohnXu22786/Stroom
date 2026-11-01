@@ -62,6 +62,7 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
+          set -o pipefail
           mkdir -p test-reports
           # A desktop Device closes its log reader when its first app exits.
           # Use a fresh Flutter invocation for each integration entrypoint.

@@ -149,16 +149,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_2
-          script: |
-            bash -c '
-            set +e
-            timeout --signal=TERM --kill-after=15s 8m flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/android-message-smoke.log"
-            result=${PIPESTATUS[0]}
-            if [ "$result" -ne 0 ]; then
-              adb -s emulator-5554 logcat -d -t 500 > "$RUNNER_TEMP/android-message-logcat.log"
-            fi
-            exit "$result"
-            '
+          script: >-
+            bash -c 'set +e; timeout --signal=TERM --kill-after=15s 8m flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/android-message-smoke.log"; result=${PIPESTATUS[0]}; if [ "$result" -ne 0 ]; then adb -s emulator-5554 logcat -d -t 500 > "$RUNNER_TEMP/android-message-logcat.log"; fi; exit "$result"'
       - name: Summarize Android smoke failure
         if: failure()
         shell: bash
@@ -282,7 +274,9 @@ jobs:
 
   message-platform-ios:
     name: Message view iOS simulator build and smoke test
-    runs-on: macos-15
+    # Flutter's iOS log-reader fix is tested with the Xcode 26 SDK required by
+    # the current video_player_avfoundation release.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
