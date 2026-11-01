@@ -13,12 +13,11 @@ class ThemeDisplaySettingsPage extends ConsumerStatefulWidget {
 
 class _ThemeDisplaySettingsPageState
     extends ConsumerState<ThemeDisplaySettingsPage> {
+  // Keep every language row in this order when adding locales: first its name
+  // in the currently selected display language, then its native/self-name in
+  // parentheses, and finally its locale ID in a separate badge.
   static const _languages = [
-    _LanguageOption(
-      displayName: '中文',
-      nativeName: '简体中文',
-      id: 'zh-cn',
-    ),
+    _LanguageOption(displayName: '简体中文', nativeName: '简体中文', id: 'zh-cn'),
   ];
 
   final _languageSearchController = TextEditingController();

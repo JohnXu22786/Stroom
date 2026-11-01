@@ -14,9 +14,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          themeProvider.overrideWith((ref) => ThemeNotifier()),
-        ],
+        overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
         child: MaterialApp(
           home: Scaffold(
             body: Column(
@@ -40,7 +38,7 @@ void main() {
     expect(find.text('深色模式'), findsOneWidget);
     expect(find.text('跟随系统'), findsOneWidget);
     expect(find.text('语言'), findsOneWidget);
-    expect(find.text('中文（简体中文）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('zh-cn'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
@@ -55,15 +53,15 @@ void main() {
     final searchField = find.byKey(const Key('language-search-field'));
     await tester.enterText(searchField, '简体');
     await tester.pumpAndSettle();
-    expect(find.text('中文（简体中文）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
 
     await tester.enterText(searchField, 'ZH-CN');
     await tester.pumpAndSettle();
-    expect(find.text('中文（简体中文）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
 
     await tester.enterText(searchField, 'english');
     await tester.pumpAndSettle();
-    expect(find.text('中文（简体中文）'), findsNothing);
+    expect(find.text('简体中文（简体中文）'), findsNothing);
     expect(find.text('没有匹配的语言'), findsOneWidget);
   });
 
@@ -101,7 +99,7 @@ void main() {
     expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byTooltip('Back'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
-    expect(find.text('中文（简体中文）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('zh-cn'), findsOneWidget);
   });
 }

@@ -55,109 +55,131 @@ extension _SettingsPageAboutExt on _SettingsPageState {
   }
 
   Widget _buildAboutMenu(ThemeData theme, UpdateState updateState) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          children: [
-            // Web端不提供更新功能
-            if (!kIsWeb) ...[
-              _buildListTile(
-                leading: updateState.isChecking
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.update, color: Colors.blue),
-                title: '检查更新',
-                subtitle: updateState.updateAvailable
-                    ? '发现新版本 ${updateState.latestVersion}'
-                    : null,
-                trailing: updateState.updateAvailable
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text(
-                          '新版本',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      )
-                    : const Icon(Icons.chevron_right),
-                onTap: updateState.isChecking ? () {} : () => _checkForUpdate(),
-              ),
-              const Divider(height: 1),
-              _buildListTile(
-                leading: Icon(
-                  Icons.science,
-                  color: updateState.acceptPreRelease
-                      ? Colors.orange
-                      : Colors.grey,
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              children: [
+                // Web端不提供更新功能
+                if (!kIsWeb) ...[
+                  _buildListTile(
+                    leading: updateState.isChecking
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.update, color: Colors.blue),
+                    title: '检查更新',
+                    subtitle: updateState.updateAvailable
+                        ? '发现新版本 ${updateState.latestVersion}'
+                        : null,
+                    trailing: updateState.updateAvailable
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              '新版本',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.chevron_right),
+                    onTap: updateState.isChecking
+                        ? () {}
+                        : () => _checkForUpdate(),
+                  ),
+                  const Divider(height: 1),
+                  _buildListTile(
+                    leading: Icon(
+                      Icons.science,
+                      color: updateState.acceptPreRelease
+                          ? Colors.orange
+                          : Colors.grey,
+                    ),
+                    title: '接收预览版',
+                    subtitle: '开启后可检查预览版更新',
+                    trailing: Switch(
+                      value: updateState.acceptPreRelease,
+                      onChanged: (value) {
+                        ref
+                            .read(updateProvider.notifier)
+                            .setAcceptPreRelease(value);
+                      },
+                      activeThumbColor: Colors.orange,
+                    ),
+                    onTap: () {},
+                  ),
+                  const Divider(height: 1),
+                ],
+                _buildListTile(
+                  leading: const Icon(Icons.link, color: Colors.blueGrey),
+                  title: '项目主页',
+                  subtitle: 'https://github.com/JohnXu22786/Stroom',
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () =>
+                      _openUrl('https://github.com/JohnXu22786/Stroom'),
                 ),
-                title: '接收预览版',
-                subtitle: '开启后可检查预览版更新',
-                trailing: Switch(
-                  value: updateState.acceptPreRelease,
-                  onChanged: (value) {
-                    ref
-                        .read(updateProvider.notifier)
-                        .setAcceptPreRelease(value);
-                  },
-                  activeThumbColor: Colors.orange,
+                const Divider(height: 1),
+                _buildListTile(
+                  leading: const Icon(
+                    Icons.bug_report,
+                    color: Colors.deepOrange,
+                  ),
+                  title: '问题反馈',
+                  subtitle: 'GitHub Issues',
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () =>
+                      _openUrl('https://github.com/JohnXu22786/Stroom/issues'),
                 ),
-                onTap: () {},
-              ),
-              const Divider(height: 1),
-            ],
-            _buildListTile(
-              leading: const Icon(Icons.link, color: Colors.blueGrey),
-              title: '项目主页',
-              subtitle: 'https://github.com/JohnXu22786/Stroom',
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
+              ],
             ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.bug_report, color: Colors.deepOrange),
-              title: '问题反馈',
-              subtitle: 'GitHub Issues',
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () =>
-                  _openUrl('https://github.com/JohnXu22786/Stroom/issues'),
-            ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.privacy_tip, color: Colors.indigo),
-              title: '隐私政策',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showPrivacyDialog(),
-            ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.code, color: Colors.teal),
-              title: '开源许可',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showLicenseDialog(),
-            ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.description, color: Colors.brown),
-              title: '开源协议',
-              subtitle: 'GNU Affero General Public License v3.0',
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => _openUrl(
-                'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              children: [
+                _buildListTile(
+                  leading: const Icon(Icons.privacy_tip, color: Colors.indigo),
+                  title: '隐私政策',
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showPrivacyDialog(),
+                ),
+                const Divider(height: 1),
+                _buildListTile(
+                  leading: const Icon(Icons.description, color: Colors.brown),
+                  title: '开源协议',
+                  subtitle: 'GNU Affero General Public License v3.0',
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => _openUrl(
+                    'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',
+                  ),
+                ),
+                const Divider(height: 1),
+                _buildListTile(
+                  leading: const Icon(Icons.code, color: Colors.teal),
+                  title: '开源许可',
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showLicenseDialog(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

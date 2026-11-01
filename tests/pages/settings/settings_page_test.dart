@@ -495,4 +495,63 @@ void main() {
       expect(find.text('版本信息'), findsNothing);
     });
   });
+
+  testWidgets('About links use separate general and legal cards in order', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 6000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(_buildSettingsTestApp());
+    await tester.pumpAndSettle();
+
+    final home = find.text('项目主页');
+    final feedback = find.text('问题反馈');
+    final privacy = find.text('隐私政策');
+    final agreement = find.text('开源协议');
+    final licenses = find.text('开源许可');
+    final homeCard = find.ancestor(of: home, matching: find.byType(Card)).first;
+    final feedbackCard = find
+        .ancestor(
+          of: feedback,
+          matching: find.byType(Card),
+        )
+        .first;
+    final privacyCard = find
+        .ancestor(
+          of: privacy,
+          matching: find.byType(Card),
+        )
+        .first;
+
+    expect(identical(tester.widget(homeCard), tester.widget(feedbackCard)),
+        isTrue);
+    expect(identical(tester.widget(homeCard), tester.widget(privacyCard)),
+        isFalse);
+    for (final legalRow in [agreement, licenses]) {
+      final legalCard = find
+          .ancestor(
+            of: legalRow,
+            matching: find.byType(Card),
+          )
+          .first;
+      expect(identical(tester.widget(privacyCard), tester.widget(legalCard)),
+          isTrue);
+    }
+
+    final legalLabels = find
+        .descendant(of: privacyCard, matching: find.byType(Text))
+        .evaluate()
+        .map((element) => (element.widget as Text).data)
+        .whereType<String>()
+        .toList();
+    expect(legalLabels.indexOf('隐私政策'), lessThan(legalLabels.indexOf('开源协议')));
+    expect(legalLabels.indexOf('开源协议'), lessThan(legalLabels.indexOf('开源许可')));
+  });
 }
