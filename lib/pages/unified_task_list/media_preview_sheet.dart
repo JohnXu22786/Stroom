@@ -7,7 +7,47 @@ import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
+import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
+
+String previewExtensionForResource(MediaResource resource) {
+  final ext = resource.ext.toLowerCase().replaceFirst(RegExp(r'^\.'), '');
+  const supported = {
+    'mp4',
+    'webm',
+    'ogg',
+    'mov',
+    'mkv',
+    'ogv',
+    'mp3',
+    'wav',
+    'm4a',
+    'aac',
+    'wma',
+    'opus',
+    'weba',
+  };
+  if (supported.contains(ext)) return ext;
+  const mimeExtensions = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/ogg': 'ogg',
+    'video/x-theora+ogg': 'ogv',
+    'video/quicktime': 'mov',
+    'video/x-matroska': 'mkv',
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aac': 'aac',
+    'audio/x-ms-wma': 'wma',
+    'audio/opus': 'opus',
+    'audio/webm': 'weba',
+  };
+  final mime = (resource.mimeType ?? '').split(';').first.trim().toLowerCase();
+  return mimeExtensions[mime] ?? ext;
+}
 
 /// 显示媒体预览弹窗
 Future<void> showMediaPreview(
@@ -21,10 +61,8 @@ Future<void> showMediaPreview(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => MediaPreviewSheet(
-      resource: resource,
-      taskTitle: taskTitle,
-    ),
+    builder: (ctx) =>
+        MediaPreviewSheet(resource: resource, taskTitle: taskTitle),
   );
 }
 
@@ -58,11 +96,39 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   Future<void> _initPreview() async {
     try {
-      final ext = widget.resource.ext.toLowerCase();
-      final isVideoFormat =
-          ['mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'].contains(ext);
-      final isAudioFormat =
-          ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus'].contains(ext);
+      final resource = widget.resource;
+      if (resource.isPlaylist && resource.isM3U8) {
+        final headers = <String, String>{
+          'User-Agent': DefaultRules.defaultHeaders['User-Agent']!,
+          if (resource.initiator != null) 'Referer': resource.initiator!,
+        };
+        await _initializeVideoPreview(
+          VideoPlayerController.networkUrl(
+            Uri.parse(resource.url),
+            httpHeaders: headers,
+          ),
+        );
+        return;
+      }
+
+      final ext = previewExtensionForResource(resource);
+      final isVideoFormat = [
+        'mp4',
+        'webm',
+        'ogg',
+        'mov',
+        'mkv',
+        'ogv',
+      ].contains(ext);
+      final isAudioFormat = [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'wma',
+        'opus',
+        'weba',
+      ].contains(ext);
 
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {
@@ -75,8 +141,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       _isAudioFormat = isAudioFormat;
 
       final tempDir = await getTemporaryDirectory();
-      final safeName =
-          widget.resource.name.replaceAll(RegExp(r'[^\w\-.]'), '_');
+      final safeName = widget.resource.name.replaceAll(
+        RegExp(r'[^\w\-.]'),
+        '_',
+      );
       _tempFile = File(p.join(tempDir.path, 'preview_$safeName.$ext'));
 
       await _downloadToFile(widget.resource.url, _tempFile!);
@@ -118,6 +186,25 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     }
   }
 
+  Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
+    _videoPlayerController = controller;
+    await controller.initialize();
+    if (!mounted) return;
+    _chewieController = ChewieController(
+      videoPlayerController: controller,
+      autoPlay: true,
+      looping: false,
+      showControls: true,
+      materialProgressColors: ChewieProgressColors(
+        playedColor: Colors.red,
+        handleColor: Colors.red,
+        backgroundColor: Colors.grey,
+        bufferedColor: Colors.white24,
+      ),
+    );
+    setState(() => _loading = false);
+  }
+
   Future<void> _downloadToFile(String urlString, File file) async {
     final client = HttpClient();
     try {
@@ -133,10 +220,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
       final response = await request.close();
       if (response.statusCode != 200) {
-        throw HttpException(
-          'HTTP ${response.statusCode}',
-          uri: uri,
-        );
+        throw HttpException('HTTP ${response.statusCode}', uri: uri);
       }
 
       await response.pipe(file.openWrite());
@@ -187,9 +271,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
             ),
           ),
           const Divider(height: 1),
-          Flexible(
-            child: _buildPreviewContent(context),
-          ),
+          Flexible(child: _buildPreviewContent(context)),
         ],
       ),
     );
@@ -235,10 +317,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
-            Text(
-              '音频文件',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('音频文件', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               '${widget.resource.name}.${widget.resource.ext}',

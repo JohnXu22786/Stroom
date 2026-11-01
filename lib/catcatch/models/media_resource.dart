@@ -62,7 +62,7 @@ class MediaResource {
   // ---------------------------------------------------------------------------
 
   /// 是否 HLS 播放列表
-  bool get isM3U8 => ext == 'm3u8' || ext == 'm3u';
+  bool get isM3U8 => ext.toLowerCase() == 'm3u8' || ext.toLowerCase() == 'm3u';
 
   /// 是否 DASH 播放列表
   bool get isMPD => ext == 'mpd';
@@ -79,7 +79,7 @@ class MediaResource {
         'flv',
         'ev1',
         'mpeg',
-        'mpg'
+        'mpg',
       ].contains(ext);
 
   /// 是否音频格式
@@ -91,6 +91,20 @@ class MediaResource {
 
   /// 是否 TS 分段
   bool get isTS => ext == 'ts';
+
+  /// Whether this resource was parsed from an HLS playlist.
+  bool get isPlaylistSegment {
+    if (isPlaylist && isM3U8) return false;
+
+    final initiatorPath = Uri.tryParse(initiator ?? '')?.path.toLowerCase();
+    return initiatorPath != null &&
+        (initiatorPath.endsWith('.m3u8') || initiatorPath.endsWith('.m3u'));
+  }
+
+  /// HLS manifests can be streamed directly; parsed fragments need their
+  /// playlist initialization context and are not standalone previews.
+  bool get canPreview =>
+      (isPlaylist && isM3U8) || (isPlayable && !isPlaylistSegment);
 
   // ---------------------------------------------------------------------------
   // 序列化
