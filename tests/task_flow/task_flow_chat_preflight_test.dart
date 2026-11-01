@@ -50,6 +50,31 @@ void main() {
             params: {'assistantId': 'assistant'})
       ]);
 
+  test('Follow downstream CatCatch preflights Anthropic media limits',
+      () async {
+    final flow = TaskFlowDefinition(name: 'CatCatch chat', blocks: [
+      TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'outputPolicy': 'followDownstream'},
+      ),
+      TaskFlowBlock(
+        typeKey: BlockType.chat,
+        params: {'assistantId': 'assistant'},
+      ),
+    ]);
+    await expectLater(
+      validateTaskFlow(
+        flow,
+        [const FlowRunInput(text: 'https://example.com/media')],
+        providers: anthropic,
+        assistants: [boundAssistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.blockIndex, 'chat block', 1)
+          .having((e) => e.message, 'unsupported CatCatch output', contains('视频'))),
+    );
+  });
+
   test('Anthropic rejects a later DOCX batch input before submission',
       () async {
     final pdf = await File('${directory.path}/notes.pdf')

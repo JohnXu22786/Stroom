@@ -112,8 +112,10 @@ class BlockChainEditor extends StatelessWidget {
                               _showAddBlockSheet(context, insertIndex: index),
                       onInsertAfter: onInsertBlock == null
                           ? null
-                          : () => _showAddBlockSheet(context,
-                              insertIndex: index + 1),
+                          : () => _showAddBlockSheet(
+                              context,
+                              insertIndex: index + 1,
+                            ),
                     ),
                   ],
                 );
@@ -321,8 +323,9 @@ class BlockChainEditor extends StatelessWidget {
   Widget _buildInsertControl(BuildContext context, int index) {
     final compatible = _insertionCandidates(index).isNotEmpty;
     return Tooltip(
-      message:
-          compatible ? '在步骤 ${index + 1} 前插入功能块' : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
+      message: compatible
+          ? '在步骤 ${index + 1} 前插入功能块'
+          : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
       child: TextButton.icon(
         key: ValueKey('insert-block-$index'),
         onPressed: compatible
@@ -335,16 +338,23 @@ class BlockChainEditor extends StatelessWidget {
   }
 
   List<BlockTypeDefinition> _insertionCandidates(int index) {
+    final previousBlock = index == 0 ? null : blocks[index - 1];
     final previous =
-        index == 0 ? inputType : blocks[index - 1].getDefinition()?.outputType;
+        previousBlock?.getDefinition()?.outputType ??
+        (index == 0 ? inputType : null);
     final next = index == blocks.length
         ? null
         : blocks[index].getDefinition()?.inputType;
     if (previous == null || (index < blocks.length && next == null)) {
       return const [];
     }
-    return BlockTypeDefinition.getReplacementCandidates(
-        prevOutput: previous, nextInput: next);
+    final previousTypes = previousBlock?.followsDownstreamOutput == true
+        ? previousBlock!.outputTypesForNext(null)
+        : [previous];
+    return BlockTypeDefinition.getReplacementCandidatesForOutputs(
+      prevOutputs: previousTypes,
+      nextInput: next,
+    );
   }
 
   void _showAddBlockSheet(BuildContext context, {int? insertIndex}) {
@@ -389,9 +399,8 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 insertIndex == null ? '选择功能块' : '插入功能块',
-                style: Theme.of(
-                  scrollCtx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(scrollCtx).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
@@ -420,8 +429,13 @@ class BlockChainEditor extends StatelessWidget {
                         .map(
                           (type) => Padding(
                             padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildBlockTypeOption(type, cs, ctx, null,
-                                insertIndex: insertIndex),
+                            child: _buildBlockTypeOption(
+                              type,
+                              cs,
+                              ctx,
+                              null,
+                              insertIndex: insertIndex,
+                            ),
                           ),
                         )
                         .toList(),
@@ -441,14 +455,18 @@ class BlockChainEditor extends StatelessWidget {
   void _showReplaceBlockSheet(BuildContext context, int index) {
     final cs = Theme.of(context).colorScheme;
     final block = blocks[index];
-    final prevOutput = index == 0
-        ? inputType
-        : (blocks[index - 1].getDefinition()?.outputType ?? IOType.any);
+    final previousBlock = index == 0 ? null : blocks[index - 1];
+    final prevOutput =
+        previousBlock?.getDefinition()?.outputType ??
+        (index == 0 ? inputType : IOType.any);
     final nextInput = index == blocks.length - 1
         ? null
         : (blocks[index + 1].getDefinition()?.inputType ?? IOType.any);
-    final candidates = BlockTypeDefinition.getReplacementCandidates(
-      prevOutput: prevOutput,
+    final previousTypes = previousBlock?.followsDownstreamOutput == true
+        ? previousBlock!.outputTypesForNext(null)
+        : [prevOutput];
+    final candidates = BlockTypeDefinition.getReplacementCandidatesForOutputs(
+      prevOutputs: previousTypes,
       nextInput: nextInput,
       exclude: block.typeKey,
     );
@@ -483,9 +501,8 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 '替换功能块',
-                style: Theme.of(
-                  scrollCtx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(scrollCtx).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(

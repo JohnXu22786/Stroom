@@ -63,17 +63,21 @@ class TaskFlowChainEditor {
 
   List<BlockTypeDefinition> insertionCandidates(int index) {
     if (index < 0 || index > _blocks.length) return const [];
-    final previous = index == 0
-        ? _inputType
-        : _blocks[index - 1].getDefinition()?.outputType;
+    final previousBlock = index == 0 ? null : _blocks[index - 1];
+    final previous =
+        previousBlock?.getDefinition()?.outputType ??
+        (index == 0 ? _inputType : null);
     final next = index == _blocks.length
         ? null
         : _blocks[index].getDefinition()?.inputType;
     if (previous == null || (index < _blocks.length && next == null)) {
       return const [];
     }
-    return BlockTypeDefinition.getReplacementCandidates(
-      prevOutput: previous,
+    final previousTypes = previousBlock?.followsDownstreamOutput == true
+        ? previousBlock!.outputTypesForNext(null)
+        : [previous];
+    return BlockTypeDefinition.getReplacementCandidatesForOutputs(
+      prevOutputs: previousTypes,
       nextInput: next,
     );
   }
@@ -81,7 +85,7 @@ class TaskFlowChainEditor {
   bool insert(int index, BlockType type) {
     if (index < 0 || index > _blocks.length) return false;
     _remember();
-    final block = TaskFlowBlock(typeKey: type);
+    final block = _blockForPosition(index, type);
     _blocks = [..._blocks]..insert(index, block);
     _selectedBlockId = block.id;
     _validate();
@@ -131,7 +135,7 @@ class TaskFlowChainEditor {
     if (!_contains(index) || _blocks[index].typeKey == type) return false;
     _remember();
     final previous = _blocks[index];
-    final replacement = TaskFlowBlock(typeKey: type);
+    final replacement = _blockForPosition(index + 1, type);
     _blocks = [..._blocks]..[index] = replacement;
     if (_selectedBlockId == previous.id) {
       _selectedBlockId = replacement.id;
@@ -145,7 +149,8 @@ class TaskFlowChainEditor {
     if (index < 0 || _valuesEqual(_blocks[index].params, params)) return false;
     _remember();
     final block = _blocks[index];
-    _blocks = [..._blocks]..[index] = TaskFlowBlock(
+    _blocks = [..._blocks]
+      ..[index] = TaskFlowBlock(
         id: block.id,
         typeKey: block.typeKey,
         params: _copyValue(params) as Map<String, dynamic>,
@@ -192,11 +197,26 @@ class TaskFlowChainEditor {
     return true;
   }
 
+  TaskFlowBlock _blockForPosition(int index, BlockType type) {
+    if (type != BlockType.catcatch || index >= _blocks.length) {
+      return TaskFlowBlock(typeKey: type);
+    }
+    final nextInput = _blocks[index].getDefinition()?.inputType;
+    if (nextInput == IOType.audio || nextInput == IOType.video) {
+      return TaskFlowBlock(
+        typeKey: type,
+        params: {'outputPolicy': 'followDownstream'},
+      );
+    }
+    return TaskFlowBlock(typeKey: type);
+  }
+
   bool _contains(int index) => index >= 0 && index < _blocks.length;
 
   void _remember() {
-    _history
-        .add(_ChainSnapshot(copyBlocks(_blocks), _inputType, _selectedBlockId));
+    _history.add(
+      _ChainSnapshot(copyBlocks(_blocks), _inputType, _selectedBlockId),
+    );
   }
 
   void _validate() {
@@ -204,7 +224,9 @@ class TaskFlowChainEditor {
   }
 
   static List<TaskFlowChainIssue> validateConnections(
-      List<TaskFlowBlock> blocks, IOType inputType) {
+    List<TaskFlowBlock> blocks,
+    IOType inputType,
+  ) {
     final issues = <TaskFlowChainIssue>[];
     IOType? previous = inputType;
     for (var index = 0; index < blocks.length; index++) {
@@ -212,17 +234,27 @@ class TaskFlowChainEditor {
       final definition = block.getDefinition();
       if (definition == null) {
         issues.add(TaskFlowChainIssue(block.id, index, '功能块已不受支持，请替换或删除此步骤'));
-      } else if (previous != null && !definition.acceptsInput(previous)) {
-        issues.add(TaskFlowChainIssue(
+      } else if (previous != null &&
+          !(index > 0 && blocks[index - 1].followsDownstreamOutput
+              ? blocks[index - 1]
+                    .outputTypesForNext(null)
+                    .any(definition.acceptsInput)
+              : definition.acceptsInput(previous))) {
+        issues.add(
+          TaskFlowChainIssue(
             block.id,
             index,
-            block.typeKey == BlockType.chat && previous == IOType.any
+            index > 0 && blocks[index - 1].followsDownstreamOutput
+                ? '下游需要${definition.inputType.label}，下载资源可输出音频或视频；请修改下游步骤或输出策略'
+                : block.typeKey == BlockType.chat && previous == IOType.any
                 ? '${index == 0 ? '初始输入' : '上一步输出'}为任意类型，'
                     '「${definition.label}」需要明确的文本、链接、图片、音频、视频或文件类型。'
                     '请修改输入类型、移动或替换功能块，或撤销更改'
                 : '${index == 0 ? '初始输入' : '上一步输出'}为${previous.label}，'
                     '「${definition.label}」需要${definition.inputType.label}。'
-                    '请修改输入类型、移动或替换功能块，或撤销更改'));
+                      '请修改输入类型、移动或替换功能块，或撤销更改',
+          ),
+        );
       }
       previous = definition?.outputType;
     }
@@ -254,7 +286,8 @@ class TaskFlowChainEditor {
   static dynamic _copyValue(dynamic value) {
     if (value is Map) {
       return value.map<String, dynamic>(
-          (key, entry) => MapEntry(key as String, _copyValue(entry)));
+        (key, entry) => MapEntry(key as String, _copyValue(entry)),
+      );
     }
     if (value is List) return value.map(_copyValue).toList();
     return value;
@@ -264,7 +297,8 @@ class TaskFlowChainEditor {
     if (a is Map && b is Map) {
       return a.length == b.length &&
           a.keys.every(
-              (key) => b.containsKey(key) && _valuesEqual(a[key], b[key]));
+            (key) => b.containsKey(key) && _valuesEqual(a[key], b[key]),
+          );
     }
     if (a is List && b is List) {
       return a.length == b.length &&

@@ -43,20 +43,73 @@ class TaskFlowBlock {
   /// Get the [BlockTypeDefinition] for this block's type.
   BlockTypeDefinition? getDefinition() {
     final definition = BlockTypeDefinition.findBlockType(typeKey);
-    if (definition == null ||
-        typeKey != BlockType.catcatch ||
-        params['audioOutput'] != true) {
+    if (definition == null || typeKey != BlockType.catcatch) {
       return definition;
     }
+    final outputTypes = outputTypesForNext(null);
+    final outputType = outputTypes.length == 1
+        ? outputTypes.single
+        : IOType.any;
     return BlockTypeDefinition(
       typeKey: definition.typeKey,
       label: definition.label,
       inputType: definition.inputType,
-      outputType: IOType.audio,
+      outputType: outputType,
       icon: definition.icon,
       color: definition.color,
       params: definition.params,
     );
+  }
+
+  /// Possible CatCatch media types after applying its saved policy and an
+  /// optional immediate downstream input constraint.
+  List<IOType> outputTypesForNext(IOType? nextInputType) {
+    if (typeKey != BlockType.catcatch) {
+      final output = getDefinition()?.outputType;
+      return output == null ? const [] : [output];
+    }
+    final policy = switch (params['outputPolicy']) {
+      'audio' => CatCatchOutputPolicy.audio,
+      'followDownstream' => CatCatchOutputPolicy.followDownstream,
+      'video' => CatCatchOutputPolicy.video,
+      _ =>
+        params['audioOutput'] == true
+            ? CatCatchOutputPolicy.audio
+            : CatCatchOutputPolicy.video,
+    };
+    switch (policy) {
+      case CatCatchOutputPolicy.video:
+        return const [IOType.video];
+      case CatCatchOutputPolicy.audio:
+        return const [IOType.audio];
+      case CatCatchOutputPolicy.followDownstream:
+        const mediaTypes = [IOType.video, IOType.audio];
+        if (nextInputType == null || nextInputType == IOType.any) {
+          return mediaTypes;
+        }
+        return mediaTypes
+            .where((type) => type.isCompatibleWith(nextInputType))
+            .toList(growable: false);
+    }
+  }
+
+  bool get followsDownstreamOutput =>
+      typeKey == BlockType.catcatch &&
+      params['outputPolicy'] == 'followDownstream';
+
+  String get outputTypeLabel => followsDownstreamOutput
+      ? '按下游决定'
+      : (getDefinition()?.outputType.label ?? '未知');
+
+  String get catCatchResourceSelectionPolicy {
+    if (typeKey != BlockType.catcatch) return 'manual';
+    return switch (params['resourceSelectionPolicy']) {
+      'manual' => 'manual',
+      'automatic' => 'automatic',
+      'automaticWithPrompt' => 'automaticWithPrompt',
+      _ =>
+        params['automaticResourceSelection'] == true ? 'automatic' : 'manual',
+    };
   }
 
   /// Create a copy with overridden params. Other params from the definition
@@ -64,15 +117,20 @@ class TaskFlowBlock {
   TaskFlowBlock copyWithParams(Map<String, dynamic> newParams) {
     final merged = Map<String, dynamic>.from(params);
     merged.addAll(newParams);
+    if (newParams.containsKey('audioOutput') &&
+        !newParams.containsKey('outputPolicy')) {
+      merged.remove('outputPolicy');
+    }
+    if (newParams.containsKey('automaticResourceSelection') &&
+        !newParams.containsKey('resourceSelectionPolicy')) {
+      merged.remove('resourceSelectionPolicy');
+    }
     return TaskFlowBlock(id: id, typeKey: typeKey, params: merged);
   }
 
   /// Create a copy with a specific param changed.
-  TaskFlowBlock copyWithParam(String key, dynamic value) {
-    final merged = Map<String, dynamic>.from(params);
-    merged[key] = value;
-    return TaskFlowBlock(id: id, typeKey: typeKey, params: merged);
-  }
+  TaskFlowBlock copyWithParam(String key, dynamic value) =>
+      copyWithParams({key: value});
 
   // ========================================================================
   // Serialization
@@ -191,8 +249,7 @@ class TaskFlowDefinition {
     IOType? inputType,
     List<TaskFlowBlock>? blocks,
     DateTime? updatedAt,
-  }) =>
-      TaskFlowDefinition(
+  }) => TaskFlowDefinition(
         id: id,
         name: name ?? this.name,
         description: description ?? this.description,
@@ -224,7 +281,8 @@ class TaskFlowDefinition {
         inputType: map['inputType'] != null
             ? IOType.fromJson(map['inputType'] as String)
             : IOType.text,
-        blocks: (map['blocks'] as List?)
+        blocks:
+            (map['blocks'] as List?)
                 ?.map(
                   (b) => TaskFlowBlock.fromMap(
                     Map<String, dynamic>.from(b as Map),

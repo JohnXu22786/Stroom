@@ -42,10 +42,10 @@ void main() {
 
   test('manual selection and confirmation is the explicit safe default', () {
     final policy = BlockTypeDefinition.catcatch.params
-        .singleWhere((p) => p.key == 'automaticResourceSelection');
-    expect(policy.defaultValue, false);
+        .singleWhere((p) => p.key == 'resourceSelectionPolicy');
+    expect(policy.defaultValue, 'manual');
     expect(policy.hintText, contains('手动'));
-    expect(policy.hintText, contains('链接'));
+    expect(policy.hintText, contains('询问'));
   });
 
   test('automatic resource choice is deterministic and avoids split tracks',
@@ -59,6 +59,19 @@ void main() {
     expect(selectAutomaticCatCatchResource([audio, playlist]), playlist);
     expect(selectAutomaticCatCatchResource([audio]), audio);
     expect(selectAutomaticCatCatchResource([split]), isNull);
+  });
+
+  test('safe candidates filter by media kind and preserve same-kind choices', () {
+    expect(
+      catCatchSafeResourceCandidates(
+          [audio, split, videoZ, videoA], desiredType: IOType.video),
+      [videoA, videoZ],
+    );
+    expect(
+      catCatchSafeResourceCandidates(
+          [audio, split, videoZ, videoA], desiredType: IOType.audio),
+      [audio],
+    );
   });
 
   test('declared audio output connects to ASR and survives serialization',
@@ -253,6 +266,149 @@ void main() {
     expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
     expect(selected, videoA);
     verify(() => notifier.confirmAndContinue(taskId)).called(1);
+  });
+
+  test('automatic with prompt waits for a user choice when candidates are ambiguous',
+      () async {
+    final notifier = _Notifier();
+    final executions = TaskFlowExecutionNotifier();
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+        blockTypeKey: 'catcatch',
+        blockLabel: '下载',
+        subTaskId: 'pending',
+        subTaskType: 'catcatch',
+        status: TaskStatus.waiting);
+    executions.addSubTask(execId, subTask);
+    late String taskId;
+    var reads = 0;
+    var promptWaits = 0;
+    when(() => notifier.addTask(any(), any(),
+        taskId: any(named: 'taskId'),
+        deferSingleResourceSelection: true)).thenAnswer((invocation) {
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
+    when(() => notifier.state).thenAnswer((_) {
+      reads++;
+      final chosen = reads > 2;
+      return [
+        catcatch.CatCatchTask(
+          id: taskId,
+          url: 'https://x',
+          expectedDurationSec: 0,
+          createdAt: DateTime(2026),
+          status: reads > 5
+              ? catcatch.TaskStatus.completed
+              : catcatch.TaskStatus.running,
+          detectedMedia: const [videoZ, videoA],
+          selectedMedia: chosen ? videoA : null,
+          steps: chosen
+              ? []
+              : [
+                  const catcatch.StepStatus(
+                      type: catcatch.StepType.userSelecting, running: true)
+                ],
+          downloadedFilePath: reads > 5
+              ? p.absolute('tests/fixtures/catcatch/video_only.mp4')
+              : null,
+        )
+      ];
+    });
+    when(() => notifier.removeTask(any())).thenReturn(null);
+    when(() => notifier.selectMedia(any(), any())).thenReturn(null);
+    final result = await executeCatCatchBlock(
+      def: BlockTypeDefinition.catcatch,
+      block: TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+      ),
+      input: 'https://x',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      catcatchNotifier: notifier,
+      onManualWait: (_) => promptWaits++,
+      stallTimeout: const Duration(milliseconds: 1),
+      pollInterval: const Duration(milliseconds: 2),
+    );
+    expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
+    expect(promptWaits, 1);
+    verifyNever(() => notifier.selectMedia(any(), any()));
+  });
+
+  test('automatic with prompt lets the user inspect unclassified resources',
+      () async {
+    const unclassified = MediaResource(
+      url: 'https://x/resource.bin',
+      name: 'resource',
+      ext: 'bin',
+    );
+    final notifier = _Notifier();
+    final executions = TaskFlowExecutionNotifier();
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+      blockTypeKey: 'catcatch',
+      blockLabel: '下载',
+      subTaskId: 'pending',
+      subTaskType: 'catcatch',
+      status: TaskStatus.waiting,
+    );
+    executions.addSubTask(execId, subTask);
+    late String taskId;
+    var reads = 0;
+    var promptWaits = 0;
+    when(() => notifier.addTask(any(), any(),
+        taskId: any(named: 'taskId'),
+        deferSingleResourceSelection: true)).thenAnswer((invocation) {
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
+    when(() => notifier.state).thenAnswer((_) {
+      reads++;
+      final chosen = reads > 2;
+      return [
+        catcatch.CatCatchTask(
+          id: taskId,
+          url: 'https://x',
+          expectedDurationSec: 0,
+          createdAt: DateTime(2026),
+          status: reads > 5
+              ? catcatch.TaskStatus.completed
+              : catcatch.TaskStatus.running,
+          detectedMedia: const [unclassified],
+          selectedMedia: chosen ? videoA : null,
+          steps: chosen
+              ? []
+              : [
+                  const catcatch.StepStatus(
+                      type: catcatch.StepType.userSelecting, running: true)
+                ],
+          downloadedFilePath: reads > 5
+              ? p.absolute('tests/fixtures/catcatch/video_only.mp4')
+              : null,
+        )
+      ];
+    });
+    when(() => notifier.removeTask(any())).thenReturn(null);
+    when(() => notifier.selectMedia(any(), any())).thenReturn(null);
+    final result = await executeCatCatchBlock(
+      def: BlockTypeDefinition.catcatch,
+      block: TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+      ),
+      input: 'https://x',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      catcatchNotifier: notifier,
+      onManualWait: (_) => promptWaits++,
+      pollInterval: const Duration(milliseconds: 2),
+    );
+    expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
+    expect(promptWaits, 1);
+    verifyNever(() => notifier.selectMedia(any(), any()));
   });
 
   test('downloaded audio fails before a declared-video consumer starts',

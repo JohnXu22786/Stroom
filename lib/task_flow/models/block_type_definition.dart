@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'io_type.dart';
 
 // ============================================================================
@@ -6,6 +7,8 @@ import 'io_type.dart';
 // ============================================================================
 
 enum BlockType { catcatch, audioSeparation, asr, ocr, tts, chat, custom }
+
+enum CatCatchOutputPolicy { video, audio, followDownstream }
 
 BlockType parseBlockType(String name) {
   return BlockType.values.firstWhere(
@@ -216,19 +219,16 @@ class BlockTypeDefinition {
     color: Color(0xFF9C27B0),
     params: [
       BlockParamDefinition(
-        key: 'automaticResourceSelection',
-        label: '自动选择资源并确认转换',
-        type: BlockParamType.boolean,
-        defaultValue: false,
-        hintText:
-            '关闭时多个资源需手动选择，特殊格式需确认转换；开启时只选择声明的输出类型：视频优先完整文件，其次播放列表；音频只选音频资源。同类按链接排序，分离轨道需手动选择。',
+        key: 'resourceSelectionPolicy',
+        label: '资源选择方式',
+        defaultValue: 'manual',
+        hintText: '手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。',
       ),
       BlockParamDefinition(
-        key: 'audioOutput',
-        label: '输出音频',
-        type: BlockParamType.boolean,
-        defaultValue: false,
-        hintText: '关闭时下载视频并传递视频附件；开启时只选择音频资源，可连接语音识别或助手对话。实际下载类型不匹配时停止任务流。',
+        key: 'outputPolicy',
+        label: '输出类型',
+        defaultValue: 'video',
+        hintText: '视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。',
       ),
       BlockParamDefinition(
         key: 'videoFolder',
@@ -363,10 +363,26 @@ class BlockTypeDefinition {
     IOType? nextInput,
     BlockType? exclude,
   }) {
+    return getReplacementCandidatesForOutputs(
+      prevOutputs: [prevOutput],
+      nextInput: nextInput,
+      exclude: exclude,
+    );
+  }
+
+  static List<BlockTypeDefinition> getReplacementCandidatesForOutputs({
+    required List<IOType> prevOutputs,
+    IOType? nextInput,
+    BlockType? exclude,
+  }) {
     return all.where((b) {
       if (b.typeKey == exclude) return false;
-      if (!b.acceptsInput(prevOutput)) return false;
-      if (nextInput != null && !b.outputType.isCompatibleWith(nextInput)) {
+      if (!prevOutputs.any(b.acceptsInput)) return false;
+      final possibleOutputs = b.typeKey == BlockType.catcatch
+          ? const [IOType.video, IOType.audio]
+          : [b.outputType];
+      if (nextInput != null &&
+          !possibleOutputs.any((output) => output.isCompatibleWith(nextInput))) {
         return false;
       }
       return true;
@@ -416,7 +432,8 @@ class BlockTypeDefinition {
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
       icon: Icons.extension,
       color: Colors.grey,
-      params: (map['params'] as List?)
+      params:
+          (map['params'] as List?)
               ?.map(
                 (p) => BlockParamDefinition.fromMap(
                   Map<String, dynamic>.from(p as Map),

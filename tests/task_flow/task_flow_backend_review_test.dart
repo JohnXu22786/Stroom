@@ -82,9 +82,12 @@ class _ManualDownloads extends CatCatchNotifier {
         expectedDurationSec: expectedDurationSec,
         createdAt: DateTime(2026),
         detectedMedia: [
-          const MediaResource(
-              url: 'https://x/one.mp4', name: 'one', ext: 'mp4'),
-          if (!url.endsWith('/single'))
+          url.endsWith('/unclassified')
+              ? const MediaResource(
+                  url: 'https://x/one.bin', name: 'one', ext: 'bin')
+              : const MediaResource(
+                  url: 'https://x/one.mp4', name: 'one', ext: 'mp4'),
+          if (!url.endsWith('/single') && !url.endsWith('/unclassified'))
             const MediaResource(
                 url: 'https://x/two.mp4', name: 'two', ext: 'mp4'),
         ],
@@ -92,11 +95,17 @@ class _ManualDownloads extends CatCatchNotifier {
             ? const MediaResource(
                 url: 'https://x/one.mp4', name: 'one', ext: 'mp4')
             : null,
-        metadata: confirming ? {'pendingConfirm': 'special_format'} : {},
+        metadata: {
+          if (confirming) 'pendingConfirm': 'special_format',
+          if (deferSingleResourceSelection)
+            'deferSingleResourceSelection': 'true',
+        },
         steps: [
           catcatch.StepStatus.running(confirming
               ? catcatch.StepType.converting
-              : (url.endsWith('/first') || url.endsWith('/single'))
+              : (url.endsWith('/first') ||
+                      url.endsWith('/single') ||
+                      url.endsWith('/unclassified'))
                   ? catcatch.StepType.userSelecting
                   : catcatch.StepType.fetching),
         ],
@@ -955,6 +964,50 @@ void main() {
     expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
     expect(heldAtSelection, [true]);
     expect(downloads.selected, [firstTaskId]);
+  });
+
+  test('deferred single unclassified resource can be selected', () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.catcatch,
+          params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+        ),
+      ],
+    );
+    late _ManualDownloads downloads;
+    final container = make(
+      scheduler: TaskFlowScheduler(coreCount: 4),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/unclassified')],
+    )).single;
+    final taskId = downloads.idsByUrl['https://example.com/unclassified']!;
+    await _waitFor(() => !scheduler.holds(id), 'deferred resource picker');
+
+    var heldDuringSelection = false;
+    downloads.onSelect = (_) => heldDuringSelection = scheduler.holds(id);
+    const media = MediaResource(
+      url: 'https://x/one.bin', name: 'one', ext: 'bin');
+    expect(
+      await service.performManualCatCatchAction(
+        taskId,
+        true,
+        (notifier) => notifier.selectMedia(taskId, media),
+      ),
+      isTrue,
+    );
+    expect(heldDuringSelection, isTrue);
+    expect(downloads.selected, [taskId]);
+    await service.cancelExecution(id);
   });
 
   test('special-format confirmation also yields and reacquires its slot',

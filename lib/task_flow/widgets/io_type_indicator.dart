@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models/io_type.dart';
 
 /// Displays an [IOType] with an icon and label in a chip-like container.
@@ -8,8 +9,14 @@ import '../models/io_type.dart';
 class IOTypeIndicator extends StatelessWidget {
   final IOType type;
   final bool isInput;
+  final String? labelOverride;
 
-  const IOTypeIndicator({super.key, required this.type, this.isInput = true});
+  const IOTypeIndicator({
+    super.key,
+    required this.type,
+    this.isInput = true,
+    this.labelOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +35,9 @@ class IOTypeIndicator extends StatelessWidget {
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
-            isInput ? '输入: ${type.label}' : '输出: ${type.label}',
+            isInput
+                ? '输入: ${type.label}'
+                : '输出: ${labelOverride ?? type.label}',
             style: TextStyle(
               fontSize: 10,
               color: color,

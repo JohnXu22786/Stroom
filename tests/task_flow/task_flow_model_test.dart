@@ -114,6 +114,36 @@ void main() {
   });
 
   group('TaskFlowBlock', () {
+    test('CatCatch follow-downstream policy keeps compatible media kinds', () {
+      final follow = TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'outputPolicy': 'followDownstream'},
+      );
+
+      expect(follow.outputTypesForNext(IOType.audio), [IOType.audio]);
+      expect(follow.outputTypesForNext(IOType.video), [IOType.video]);
+      expect(follow.outputTypesForNext(IOType.any), [IOType.video, IOType.audio]);
+      expect(follow.outputTypesForNext(null), [IOType.video, IOType.audio]);
+      expect(follow.outputTypesForNext(IOType.text), isEmpty);
+    });
+
+    test('legacy CatCatch audioOutput still overrides the new output policy', () {
+      final legacyAudio = TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'audioOutput': true},
+      );
+      final restored = TaskFlowBlock.fromMap(legacyAudio.toMap());
+      expect(restored.outputTypesForNext(IOType.audio), [IOType.audio]);
+      expect(restored.outputTypesForNext(IOType.video), [IOType.audio]);
+      expect(restored.getDefinition()?.outputType, IOType.audio);
+
+      final changed = TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'outputPolicy': 'video'},
+      ).copyWithParam('audioOutput', true);
+      expect(changed.outputTypesForNext(null), [IOType.audio]);
+    });
+
     test('creates block instance with correct type and default params', () {
       final definition = BlockTypeDefinition.asr;
       final block = TaskFlowBlock(typeKey: BlockType.asr);

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/assistant.dart';
 import '../../models/built_in_prompts.dart';
 import '../../models/tts_models.dart';
@@ -17,7 +18,7 @@ import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_temporary_output.dart';
-import '../models/io_type.dart';
+import 'catcatch_policy_menu.dart';
 
 /// Which gallery's folders a block's save-folder param lists.
 ///
@@ -66,11 +67,11 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
       // viewInsets for isScrollControlled sheets).
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
       child: _BlockEditorDialog(
-          block: block, allowTemporaryOutput: allowTemporaryOutput),
+        block: block,
+        allowTemporaryOutput: allowTemporaryOutput,
+      ),
     ),
   );
 }
@@ -79,8 +80,10 @@ class _BlockEditorDialog extends ConsumerStatefulWidget {
   final TaskFlowBlock block;
   final bool allowTemporaryOutput;
 
-  const _BlockEditorDialog(
-      {required this.block, required this.allowTemporaryOutput});
+  const _BlockEditorDialog({
+    required this.block,
+    required this.allowTemporaryOutput,
+  });
 
   @override
   ConsumerState<_BlockEditorDialog> createState() => _BlockEditorDialogState();
@@ -103,6 +106,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         if (p.type == BlockParamType.string ||
             p.type == BlockParamType.secret ||
             p.type == BlockParamType.number) {
+          if (p.key == 'outputPolicy' ||
+              p.key == 'resourceSelectionPolicy') {
+            continue;
+          }
           _controllers[p.key] = TextEditingController(
             text: _params[p.key]?.toString() ?? '',
           );
@@ -119,10 +126,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     super.dispose();
   }
 
-  List<ProviderModel> _modelsOf(String configType) => flattenProviderModels(
-        ref.read(providerEntriesProvider),
-        configType,
-      );
+  List<ProviderModel> _modelsOf(String configType) =>
+      flattenProviderModels(ref.read(providerEntriesProvider), configType);
 
   ModelConfig? _selectedTtsModel() => resolveProviderModel(
         ref.read(providerEntriesProvider),
@@ -167,11 +172,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       );
     }
 
-    final outputType =
-        def.typeKey == BlockType.catcatch && _params['audioOutput'] == true
-            ? IOType.audio
-            : def.outputType;
-    final temporaryOutput = widget.allowTemporaryOutput &&
+    final outputType = widget.block.copyWithParams(_params).outputTypeLabel;
+    final temporaryOutput =
+        widget.allowTemporaryOutput &&
         isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
@@ -181,8 +184,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     final availableHeight =
         screenHeight - MediaQuery.viewInsetsOf(context).bottom;
     final initialChildSize = math.min(0.75, 520 / availableHeight);
-    final minFraction =
-        math.min(math.max(0.4, 90 / availableHeight), initialChildSize);
+    final minFraction = math.min(
+      math.max(0.4, 90 / availableHeight),
+      initialChildSize,
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: initialChildSize,
@@ -231,7 +236,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         ),
                       ),
                       Text(
-                        '输入: ${def.inputType.label}  →  输出: ${outputType.label}',
+                        '输入: ${def.inputType.label}  →  输出: $outputType',
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant,
@@ -272,10 +277,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         Expanded(
                           child: Text(
                             '发送给助手的用户消息 = 上一步的输出',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.primary,
-                            ),
+                            style: TextStyle(fontSize: 12, color: cs.primary),
                           ),
                         ),
                       ],
@@ -309,9 +311,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   )
                 else
                   ...def.params
-                      .where((param) =>
+                      .where(
+                        (param) =>
                           !temporaryOutput ||
-                          param.type != BlockParamType.filePath)
+                            param.type != BlockParamType.filePath,
+                      )
                       .map((param) => _buildParamField(param, cs)),
                 const SizedBox(height: 8),
                 // Actions live INSIDE the scrollable list so the sheet can
@@ -333,8 +337,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         final model = _selectedTtsModel();
                         if (model != null &&
                             model.voices.isNotEmpty &&
-                            !model.voices
-                                .any((v) => v.id == _params['voice'])) {
+                            !model.voices.any(
+                              (v) => v.id == _params['voice'],
+                            )) {
                           _params['voice'] = '';
                         }
                         final updated = TaskFlowBlock(
@@ -393,10 +398,33 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     dynamic value,
     ColorScheme cs,
   ) {
+    if (widget.block.typeKey == BlockType.catcatch &&
+        (param.key == 'outputPolicy' ||
+            param.key == 'resourceSelectionPolicy')) {
+      final isOutput = param.key == 'outputPolicy';
+      final selected = _params.containsKey(param.key)
+          ? _params[param.key].toString()
+          : (isOutput
+              ? (_params['audioOutput'] == true ? 'audio' : 'video')
+              : (_params['automaticResourceSelection'] == true
+                    ? 'automatic'
+                    : 'manual'));
+      return CatCatchPolicyMenu(
+        outputPolicy: isOutput,
+        value: selected,
+        onSelected: (choice) => setState(() {
+          _params[param.key] = choice;
+          _params.remove(
+            isOutput ? 'audioOutput' : 'automaticResourceSelection',
+          );
+        }),
+      );
+    }
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -426,8 +454,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           param.configType,
           value,
         );
-        final selectedIndex =
-            selected == null ? null : models.indexOf(selected);
+        final selectedIndex = selected == null
+            ? null
+            : models.indexOf(selected);
         final customParams =
             selected?.model.customParams ?? const <CustomParam>[];
         return Column(
@@ -472,10 +501,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     _selectModel(models[v]);
                     final voice = _params['voice'];
                     if (voice != null &&
-                        !models[v]
-                            .model
-                            .voices
-                            .any((entry) => entry.id == voice)) {
+                        !models[v].model.voices.any(
+                          (entry) => entry.id == voice,
+                        )) {
                       _params['voice'] = '';
                     }
                   });
@@ -585,10 +613,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           _params['modelRef'],
         );
         final currentOption = voiceOptions
-            .where((o) =>
+            .where(
+              (o) =>
                 o.id == current &&
                 selected != null &&
-                ttsModels[o.modelIndex] == selected)
+                  ttsModels[o.modelIndex] == selected,
+            )
             .firstOrNull;
         return DropdownButtonFormField<String>(
           value: currentOption != null
@@ -739,11 +769,14 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final h = totalSec ~/ 3600;
         final m = (totalSec % 3600) ~/ 60;
         final s = totalSec % 60;
-        final hCtrl = _controllers['${param.key}_h'] ??
+        final hCtrl =
+            _controllers['${param.key}_h'] ??
             TextEditingController(text: h == 0 ? '' : '$h');
-        final mCtrl = _controllers['${param.key}_m'] ??
+        final mCtrl =
+            _controllers['${param.key}_m'] ??
             TextEditingController(text: m == 0 ? '' : '$m');
-        final sCtrl = _controllers['${param.key}_s'] ??
+        final sCtrl =
+            _controllers['${param.key}_s'] ??
             TextEditingController(text: s == 0 ? '' : '$s');
         _controllers['${param.key}_h'] = hCtrl;
         _controllers['${param.key}_m'] = mCtrl;
@@ -759,11 +792,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
 
         InputDecoration dec() => InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             );
         return Row(
           children: [
@@ -803,7 +836,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -907,10 +941,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
   /// user-defined assistants are allowed on blocks (built-in prompt ids
   /// are legacy configs and resolve to null → 助手不存在).
   /// Returns null when the id is empty or no longer resolvable.
-  (String, String)? _assistantDisplay(
-    String id,
-    List<Assistant> assistants,
-  ) {
+  (String, String)? _assistantDisplay(String id, List<Assistant> assistants) {
     if (id.isEmpty) return null;
     if (id.startsWith(kBuiltInPromptIdPrefix)) return null;
     final a = assistants.where((a) => a.id == id).firstOrNull;
@@ -976,10 +1007,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 child: Center(
                   child: Text(
                     '还没有自定义助手，可在"聊天 → 助手"中创建',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ),
               )

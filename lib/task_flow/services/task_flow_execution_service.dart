@@ -199,7 +199,8 @@ class TaskFlowExecutionService {
       return null;
     }
     final awaitingSelection = task.selectedMedia == null &&
-        task.detectedMedia.length > 1 &&
+        (task.detectedMedia.length > 1 ||
+            task.metadata['deferSingleResourceSelection'] == 'true') &&
         task.steps.any((step) =>
             step.type == catcatch.StepType.userSelecting &&
             step.running &&

@@ -10,8 +10,10 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
+import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
+import 'package:stroom/task_flow/widgets/catcatch_policy_menu.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -72,41 +74,54 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('CatCatch header follows edited audio output both ways',
+  testWidgets('CatCatch output policy PopupMenuButton edits the selected type',
       (tester) async {
     TaskFlowBlock? saved;
     await pumpPanel(
       tester,
       block: TaskFlowBlock(
         typeKey: BlockType.catcatch,
-        params: {'audioOutput': true},
+        params: {
+          'audioOutput': true,
+          'automaticResourceSelection': true,
+        },
       ),
       onSaved: (block) => saved = block,
     );
 
-    final outputSwitch = find.byType(SwitchListTile).at(1);
-    expect(outputSwitch, findsOneWidget);
+    final policyButton = find.byKey(const ValueKey('catcatch-output-policy'));
+    expect(policyButton, findsOneWidget);
+    expect(
+      tester.widget<CatCatchPolicyMenu>(policyButton).value,
+      'audio',
+    );
+    expect(
+      tester.widget<CatCatchPolicyMenu>(
+        find.byKey(const ValueKey('catcatch-resource-selection-policy')),
+      ).value,
+      'automatic',
+    );
     expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
 
-    await tester.tap(outputSwitch);
+    await tester.tap(policyButton);
+    await tester.pumpAndSettle();
+    expect(find.text('跟随下游'), findsOneWidget);
+    await tester.tap(find.text('视频').last);
     await tester.pumpAndSettle();
     expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
 
-    await tester.tap(outputSwitch);
+    await tester.tap(policyButton);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
-
-    await tester.tap(outputSwitch);
+    await tester.tap(find.text('跟随下游').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+    expect(find.text('输入: 文本  →  输出: 按下游决定'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('确认'), 150,
         scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
-    expect(saved?.params['audioOutput'], false);
-    expect(saved?.getDefinition()?.outputType,
-        BlockTypeDefinition.catcatch.outputType);
+    expect(saved?.params['outputPolicy'], 'followDownstream');
+    expect(saved?.getDefinition()?.outputType, IOType.any);
   });
 
   ProviderEntriesState _ttsEntries() {

@@ -38,10 +38,10 @@ void registerCatCatchPr708PolicyTests() {
 
   test('manual selection and confirmation is the explicit safe default', () {
     final policy = BlockTypeDefinition.catcatch.params
-        .singleWhere((p) => p.key == 'automaticResourceSelection');
-    expect(policy.defaultValue, false);
+        .singleWhere((p) => p.key == 'resourceSelectionPolicy');
+    expect(policy.defaultValue, 'manual');
     expect(policy.hintText, contains('手动'));
-    expect(policy.hintText, contains('链接'));
+    expect(policy.hintText, contains('询问'));
   });
 
   test('automatic resource choice is deterministic and avoids split tracks',
