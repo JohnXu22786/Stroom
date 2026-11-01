@@ -42,6 +42,7 @@ Future<String> _runCompletedUntypedMedia(String path,
   late String taskId;
   when(() => notifier.addTask(any(), any(),
       taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
       deferSingleResourceSelection: true)).thenAnswer((invocation) {
     taskId = invocation.namedArguments[#taskId] as String;
     return taskId;
@@ -915,6 +916,7 @@ void main() {
       late String taskId;
       when(() => notifier.addTask(any(), any(),
           taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
           deferSingleResourceSelection: true)).thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -979,6 +981,7 @@ void main() {
     var stateReads = 0;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -1055,6 +1058,7 @@ void main() {
       MediaResource? selected;
       when(() => notifier.addTask(any(), any(),
           taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
           deferSingleResourceSelection: true)).thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -1124,6 +1128,7 @@ void main() {
     late String taskId;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -1193,6 +1198,7 @@ void main() {
     late String taskId;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

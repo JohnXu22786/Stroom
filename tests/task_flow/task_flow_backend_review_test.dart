@@ -70,6 +70,7 @@ class _ManualDownloads extends CatCatchNotifier {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     final id = taskId!;
     idsByUrl[url] = id;
@@ -96,6 +97,7 @@ class _ManualDownloads extends CatCatchNotifier {
                 url: 'https://x/one.mp4', name: 'one', ext: 'mp4')
             : null,
         metadata: {
+          if (flowManagedSelection) catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
           if (confirming) 'pendingConfirm': 'special_format',
           if (deferSingleResourceSelection)
             'deferSingleResourceSelection': 'true',

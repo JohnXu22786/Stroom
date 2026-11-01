@@ -43,6 +43,8 @@ Future<String> executeCatCatchBlock({
   @visibleForTesting void Function()? onFallbackRegistration,
   IOType? nextInputType,
   void Function(String taskId)? onManualWait,
+  void Function(String taskId, List<MediaResource> candidates)?
+      onManualWaitWithCandidates,
   void Function(IOType type)? onOutputType,
   void Function(FlowPayload payload)? onOutputPayload,
 }) async {
@@ -103,6 +105,7 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       executionId: execId,
       blockId: block.id,
+      flowManagedSelection: automaticWithPrompt,
       deferSingleResourceSelection: automatic,
     );
   } else {
@@ -112,6 +115,7 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       videoFolder: videoFolder,
       audioFolder: audioFolder,
+      flowManagedSelection: automaticWithPrompt,
       deferSingleResourceSelection: automatic,
     );
   }
@@ -200,7 +204,27 @@ Future<String> executeCatCatchBlock({
       );
       if (candidates.length != 1 &&
           task.status == catcatch.TaskStatus.running) {
-        if (!promptOpen) onManualWait?.call(taskId);
+        if (!promptOpen) {
+          final promptCandidates = catCatchPromptResourceCandidates(
+            task.detectedMedia,
+            desiredType: desiredType,
+          );
+          if (promptCandidates.isEmpty) {
+            catcatchNotifier.removeTask(taskId);
+            execNotifier.updateSubTaskStatus(
+              execId,
+              flowSubTask.id,
+              TaskStatus.failed,
+            );
+            throw BlockExecutionException(
+              '没有与下游输入类型兼容的媒体资源可供选择',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          onManualWaitWithCandidates?.call(taskId, promptCandidates);
+          onManualWait?.call(taskId);
+        }
         promptOpen = true;
       }
     }
@@ -488,6 +512,41 @@ List<MediaResource> catCatchSafeResourceCandidates(
           .where((media) => catCatchIsSharedContainerExtension(media.ext))
           .toList();
   candidates.sort(_compareCatCatchCandidates);
+  return candidates;
+}
+
+/// Resources shown by automatic-with-prompt after applying the downstream
+/// type. Split tracks remain available when their own track matches the type.
+@visibleForTesting
+List<MediaResource> catCatchPromptResourceCandidates(
+  List<MediaResource> resources, {
+  IOType? desiredType,
+}) {
+  bool matchesResolvedType(MediaResource media) {
+    if (desiredType == null) return true;
+    final hint = catCatchResourceKindHint(media);
+    if (hint == null) {
+      return catCatchIsSharedContainerExtension(media.ext) ||
+          (desiredType == IOType.video && media.isPlaylist);
+    }
+    return desiredType == IOType.audio
+        ? hint == CatCatchMediaKind.audio
+        : hint == CatCatchMediaKind.video;
+  }
+
+  final candidates = catCatchSafeResourceCandidates(
+    resources,
+    desiredType: desiredType,
+  ).where(matchesResolvedType).toList();
+  final included = candidates.map((media) => media.url).toSet();
+  for (final media in resources) {
+    if (included.contains(media.url)) continue;
+    final matches = matchesResolvedType(media);
+    if (matches) {
+      candidates.add(media);
+      included.add(media.url);
+    }
+  }
   return candidates;
 }
 

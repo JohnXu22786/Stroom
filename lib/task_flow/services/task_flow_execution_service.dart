@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
@@ -232,9 +233,24 @@ class TaskFlowExecutionService {
   /// Called by flow-managed CatCatch cards before an action starts engine work.
   /// Only one tap per task may wait in the scheduler queue at a time.
   Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+      void Function(CatCatchNotifier) action,
+      {String? selectedMediaUrl}) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
-    if (execution == null || !_manualCatCatchActions.add(taskId)) return false;
+    if (execution == null || _manualCatCatchActions.contains(taskId)) return false;
+    if (selecting) {
+      final task = _ref
+          .read(catcatchTasksProvider)
+          .where((task) => task.id == taskId)
+          .firstOrNull;
+      final encoded = task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
+      if (encoded != null) {
+        final candidates = (jsonDecode(encoded) as List).cast<String>();
+        if (selectedMediaUrl == null || !candidates.contains(selectedMediaUrl)) {
+          return false;
+        }
+      }
+    }
+    if (!_manualCatCatchActions.add(taskId)) return false;
     final id = execution.id;
     var acquired = false;
     try {
@@ -1276,6 +1292,9 @@ class TaskFlowExecutionService {
           durationSecOverride: inputDurationSec,
           nextInputType: nextInputType,
           onManualWait: (taskId) => _releaseManualCatCatchSlot(execId, taskId),
+          onManualWaitWithCandidates: (taskId, candidates) {
+            catcatchNotifier.setFlowSelectionCandidates(taskId, candidates);
+          },
           onOutputType: (type) => actualType = type,
           onOutputPayload: (payload) => outputPayload = payload,
         );

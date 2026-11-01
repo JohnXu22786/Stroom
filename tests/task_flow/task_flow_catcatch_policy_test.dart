@@ -28,6 +28,16 @@ void main() {
 
   const audio =
       MediaResource(url: 'https://x/a.mp3', name: 'audio', ext: 'mp3');
+  const audioB =
+      MediaResource(url: 'https://x/b.wav', name: 'audio-b', ext: 'wav');
+  const unknownMedia =
+      MediaResource(url: 'https://x/unknown.bin', name: 'unknown', ext: 'bin');
+  const videoContainer = MediaResource(
+    url: 'https://x/video.webm',
+    name: 'video-container',
+    ext: 'webm',
+    mimeType: 'video/webm',
+  );
   const split = MediaResource(
       url: 'https://x/s.mp4',
       name: 'split',
@@ -145,7 +155,7 @@ void main() {
       executions.addSubTask(execId, subTask);
       late String taskId;
       var reads = 0;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -219,6 +229,7 @@ void main() {
     MediaResource? selected;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -268,7 +279,7 @@ void main() {
     verify(() => notifier.confirmAndContinue(taskId)).called(1);
   });
 
-  test('automatic with prompt waits for a user choice when candidates are ambiguous',
+  test('automatic with prompt only offers candidates compatible with downstream type',
       () async {
     final notifier = _Notifier();
     final executions = TaskFlowExecutionNotifier();
@@ -283,8 +294,10 @@ void main() {
     late String taskId;
     var reads = 0;
     var promptWaits = 0;
+    List<MediaResource>? promptedCandidates;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -301,8 +314,8 @@ void main() {
           status: reads > 5
               ? catcatch.TaskStatus.completed
               : catcatch.TaskStatus.running,
-          detectedMedia: const [videoZ, videoA],
-          selectedMedia: chosen ? videoA : null,
+          detectedMedia: const [audio, audioB, videoA, unknownMedia, videoContainer],
+          selectedMedia: chosen ? audioB : null,
           steps: chosen
               ? []
               : [
@@ -310,7 +323,7 @@ void main() {
                       type: catcatch.StepType.userSelecting, running: true)
                 ],
           downloadedFilePath: reads > 5
-              ? p.absolute('tests/fixtures/catcatch/video_only.mp4')
+              ? p.absolute('tests/fixtures/catcatch/audio_only.mp3')
               : null,
         )
       ];
@@ -321,20 +334,41 @@ void main() {
       def: BlockTypeDefinition.catcatch,
       block: TaskFlowBlock(
         typeKey: BlockType.catcatch,
-        params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+        params: {
+          'resourceSelectionPolicy': 'automaticWithPrompt',
+          'outputPolicy': 'followDownstream',
+        },
       ),
       input: 'https://x',
       execId: execId,
       execNotifier: executions,
       flowSubTask: subTask,
       catcatchNotifier: notifier,
+      nextInputType: IOType.audio,
       onManualWait: (_) => promptWaits++,
+      onManualWaitWithCandidates: (_, candidates) {
+        promptedCandidates = candidates;
+      },
       stallTimeout: const Duration(milliseconds: 1),
       pollInterval: const Duration(milliseconds: 2),
     );
-    expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
+    expect(result, p.absolute('tests/fixtures/catcatch/audio_only.mp3'));
     expect(promptWaits, 1);
+    expect(promptedCandidates, [audio, audioB]);
+    expect(promptedCandidates, isNot(contains(videoA)));
+    expect(promptedCandidates, isNot(contains(unknownMedia)));
+    expect(promptedCandidates, isNot(contains(videoContainer)));
     verifyNever(() => notifier.selectMedia(any(), any()));
+  });
+
+  test('video prompt keeps compatible HLS playlist candidates', () {
+    expect(
+      catCatchPromptResourceCandidates(
+        [videoA, playlist],
+        desiredType: IOType.video,
+      ),
+      [videoA, playlist],
+    );
   });
 
   test('automatic with prompt lets the user inspect unclassified resources',
@@ -360,6 +394,7 @@ void main() {
     var promptWaits = 0;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -396,13 +431,17 @@ void main() {
       def: BlockTypeDefinition.catcatch,
       block: TaskFlowBlock(
         typeKey: BlockType.catcatch,
-        params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+        params: {
+          'resourceSelectionPolicy': 'automaticWithPrompt',
+          'outputPolicy': 'followDownstream',
+        },
       ),
       input: 'https://x',
       execId: execId,
       execNotifier: executions,
       flowSubTask: subTask,
       catcatchNotifier: notifier,
+      nextInputType: IOType.any,
       onManualWait: (_) => promptWaits++,
       pollInterval: const Duration(milliseconds: 2),
     );
@@ -424,7 +463,7 @@ void main() {
         status: TaskStatus.waiting);
     executions.addSubTask(execId, subTask);
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId'), flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
