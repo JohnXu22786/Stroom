@@ -212,6 +212,88 @@ void main() {
     }
   });
 
+  test('xAI and Meta API-key model groups preflight through Responses',
+      () async {
+    for (final connectorType in ['xai', 'meta']) {
+      final account = LlmAccount(
+        id: '$connectorType-api-key',
+        connectorType: connectorType,
+        authType: 'api_key',
+        displayName: connectorType,
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: '$connectorType-local',
+            upstreamModelId: '$connectorType-upstream',
+            displayName: '$connectorType upstream',
+            capabilities: const {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: '$connectorType-task-flow-group',
+        displayName: '$connectorType group',
+        members: [
+          LlmModelGroupMember(
+            accountId: account.id,
+            localModelId: '$connectorType-local',
+            upstreamModelId: '$connectorType-upstream',
+          ),
+        ],
+      );
+      final subscriptionAccount = LlmAccount(
+        id: '$connectorType-subscription',
+        connectorType: connectorType,
+        authType: 'oauth',
+        displayName: '$connectorType subscription',
+        status: LlmAccountStatus.ready,
+        models: account.models,
+      );
+      expect(
+        buildLlmModelGroupProviderConfigs(
+          accounts: [subscriptionAccount],
+          groups: [
+            LlmModelGroup(
+              id: '$connectorType-subscription-group',
+              displayName: '$connectorType subscription group',
+              members: [
+                LlmModelGroupMember(
+                  accountId: subscriptionAccount.id,
+                  localModelId: '$connectorType-local',
+                  upstreamModelId: '$connectorType-upstream',
+                ),
+              ],
+            ),
+          ],
+        ),
+        isEmpty,
+        reason: 'the subscription credential cannot use the public API path',
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ]);
+      final assistant = Assistant(
+        id: 'assistant',
+        name: '$connectorType assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    }
+  });
+
   test('Anthropic rejects a later DOCX batch input before submission',
       () async {
     final pdf = await File('${directory.path}/notes.pdf')

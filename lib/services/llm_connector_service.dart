@@ -70,6 +70,33 @@ class LlmConnectorDefinition {
 /// The aliases intentionally include the three Kimi identifiers registered by
 /// the source. There is no Gemini CLI authenticator in that snapshot.
 abstract final class LlmConnectorRegistry {
+  static bool isConversationalModel(
+    String modelId,
+    Map<String, dynamic> metadata,
+  ) {
+    final task = [
+      metadata['taskType'],
+      metadata['task_type'],
+      metadata['modelType'],
+      metadata['type'],
+    ].whereType<String>().join(' ').toLowerCase();
+    final methods = metadata['supportedGenerationMethods'];
+    final methodsExcludeChat = methods is Iterable &&
+        !methods.contains('generateContent') &&
+        !methods.contains('streamGenerateContent');
+    return metadata['chat'] != false &&
+        !RegExp(
+          r'embed|rerank|re-rank|ranking|classification|image[- ]generation',
+        ).hasMatch(task) &&
+        !methodsExcludeChat &&
+        isConversationalModelId(modelId);
+  }
+
+  static bool isConversationalModelId(String modelId) => !RegExp(
+        r'(^|[._:/-])(embed(?:ding)?|rerank(?:er)?|re-rank|whisper|tts|transcrib|imagen|dall-e)([._:/-]|$)|(^|[._:/-])grok(?:[._:/-][a-z0-9]+)*[._:/-]image([._:/-]|$)',
+        caseSensitive: false,
+      ).hasMatch(modelId);
+
   static const List<LlmConnectorDefinition> all = [
     LlmConnectorDefinition(
       id: 'codex',
@@ -270,6 +297,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
+        'xai' || 'meta' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -302,7 +330,11 @@ abstract final class LlmConnectorRegistry {
     if (connector == null || !connector.authTypes.contains(authType)) {
       return false;
     }
-    return canonicalId(connectorType) != 'codex' || authType == 'oauth';
+    return switch (canonicalId(connectorType)) {
+      'codex' => authType == 'oauth',
+      'xai' || 'meta' => authType == 'api_key',
+      _ => true,
+    };
   }
 }
 
@@ -2085,21 +2117,8 @@ class LlmAccountConnectorService {
         : 'https://$location-aiplatform.googleapis.com';
   }
 
-  static bool _isChatModel(String modelId, Map<String, dynamic> metadata) {
-    final task = [
-      metadata['taskType'],
-      metadata['task_type'],
-      metadata['modelType'],
-      metadata['type'],
-    ].whereType<String>().join(' ').toLowerCase();
-    if (RegExp(r'embed|rerank|re-rank|ranking|classification').hasMatch(task)) {
-      return false;
-    }
-    return !RegExp(
-      r'(^|[._:/-])(embed(?:ding)?|rerank(?:er)?|re-rank|whisper|tts|transcrib|imagen|dall-e)([._:/-]|$)',
-      caseSensitive: false,
-    ).hasMatch(modelId);
-  }
+  static bool _isChatModel(String modelId, Map<String, dynamic> metadata) =>
+      LlmConnectorRegistry.isConversationalModel(modelId, metadata);
 
   static bool _catalogImpliesToolSupport(String connectorType, String modelId) {
     if (connectorType == 'openai-api') {

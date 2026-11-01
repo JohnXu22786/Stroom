@@ -30,6 +30,46 @@ void main() {
       );
     });
 
+    test('xAI and Meta API keys default to their native Responses contract',
+        () {
+      for (final connector in ['xai', 'meta']) {
+        expect(
+          builtinDefaultApiProtocolForConnector(connector),
+          'openai.responses',
+          reason: connector,
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            builtinDefaultApiProtocolForConnector(connector),
+            connectorType: connector,
+          ),
+          {'openai.responses'},
+          reason: connector,
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: null,
+            supplierProtocol: null,
+            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+          ),
+          'openai.responses',
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'openai.responses',
+            supplierProtocol: 'openai.responses',
+          ),
+          'openai.responses',
+          reason: 'model protocol overrides remain upstream configuration',
+        );
+        expect(
+          resolveConnectorProtocol('openai.responses', connector),
+          'openai.responses',
+          reason: 'auth identity does not choose the protocol',
+        );
+      }
+    });
+
     test('migrates legacy provider and model endpoint types on read', () {
       final provider = ProviderConfigItem.fromMap({
         'endpointType': 'anthropic',

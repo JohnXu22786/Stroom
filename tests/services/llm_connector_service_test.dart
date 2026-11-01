@@ -54,6 +54,8 @@ void main() {
         'claude',
         'gemini',
         'aistudio',
+        'xai',
+        'meta',
         'moonshot',
         'glm',
         'deepseek',
@@ -122,6 +124,30 @@ void main() {
         ),
         isTrue,
       );
+      for (final connector in ['xai', 'meta']) {
+        expect(
+          LlmConnectorRegistry.chatAdapterEndpointType(connector),
+          'openai',
+          reason: '$connector API keys share the OpenAI ChatAdapter boundary',
+        );
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            connector,
+            'api_key',
+          ),
+          isTrue,
+          reason: connector,
+        );
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            connector,
+            'oauth',
+          ),
+          isFalse,
+          reason:
+              'subscription credentials must not enter the public API route',
+        );
+      }
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('aistudio'),
         'google.gemini.generate_content',
@@ -2798,6 +2824,45 @@ void main() {
       }
     });
 
+    test('uses public xAI and Meta API-key Responses requests', () {
+      for (final connector in ['xai', 'meta']) {
+        final account = _account('$connector-api-key', connector);
+        final nonStreaming = builder.build(
+          account: account,
+          credential: '$connector-secret',
+          modelId: '$connector-chat-model',
+          body: {
+            'model': '$connector-chat-model',
+            'input': [],
+            'stream': false,
+          },
+          nativeFormat: 'responses',
+        );
+        final streaming = builder.build(
+          account: account,
+          credential: '$connector-secret',
+          modelId: '$connector-chat-model',
+          body: {'model': '$connector-chat-model', 'input': []},
+          stream: true,
+          nativeFormat: 'responses',
+        );
+        final expectedBase = connector == 'xai'
+            ? 'https://api.x.ai/v1'
+            : 'https://api.meta.ai/v1';
+
+        expect(nonStreaming.uri, Uri.parse('$expectedBase/responses'));
+        expect(streaming.uri, Uri.parse('$expectedBase/responses'));
+        expect(nonStreaming.method, 'POST');
+        expect(
+            nonStreaming.headers['Authorization'], 'Bearer $connector-secret');
+        expect(streaming.headers['Authorization'], 'Bearer $connector-secret');
+        expect((nonStreaming.body as Map)['model'], '$connector-chat-model');
+        expect((nonStreaming.body as Map)['stream'], isFalse);
+        expect((streaming.body as Map)['model'], '$connector-chat-model');
+        expect((streaming.body as Map)['stream'], isTrue);
+      }
+    });
+
     test('sets native body stream flags for body-controlled protocols', () {
       final cases = <(LlmAccount, String?, String?)>[
         (
@@ -3533,6 +3598,86 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('sends and decodes public xAI and Meta Responses requests', () async {
+      for (final connectorType in ['xai', 'meta']) {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            if ((options.data as Map)['stream'] == true) {
+              return ResponseBody.fromString(
+                'data: {"type":"response.output_text.delta","delta":"stream reply"}\n\n'
+                'data: {"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":5,"total_tokens":12}}}\n\n',
+                200,
+                headers: const {
+                  'content-type': ['text/event-stream'],
+                },
+              );
+            }
+            return ResponseBody.fromString(
+              jsonEncode({
+                'output_text': 'nonstream reply',
+                'usage': {
+                  'input_tokens': 3,
+                  'output_tokens': 2,
+                  'total_tokens': 5,
+                },
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final credentials = _MemoryCredentials();
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: credentials,
+        );
+        final account = await accounts.saveAccount(
+          _account('http-$connectorType', connectorType),
+          secret: '$connectorType-http-key',
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+        final nonStreaming = await client.request(
+          account: account,
+          modelId: '$connectorType-upstream',
+          body: {'model': '$connectorType-upstream', 'input': []},
+          nativeFormat: 'responses',
+        );
+
+        final expectedBase = connectorType == 'xai'
+            ? 'https://api.x.ai/v1'
+            : 'https://api.meta.ai/v1';
+        expect(captured?.uri, Uri.parse('$expectedBase/responses'));
+        expect(captured?.headers['Authorization'],
+            'Bearer $connectorType-http-key');
+        expect((captured?.data as Map)['model'], '$connectorType-upstream');
+        expect((nonStreaming.body as Map)['output_text'], 'nonstream reply');
+        expect(nonStreaming.observation.requestUsage.value, 5);
+
+        final streaming = await client.request(
+          account: account,
+          modelId: '$connectorType-upstream',
+          body: {'model': '$connectorType-upstream', 'input': []},
+          stream: true,
+          nativeFormat: 'responses',
+        );
+        expect(captured?.uri, Uri.parse('$expectedBase/responses'));
+        expect(captured?.headers['Authorization'],
+            'Bearer $connectorType-http-key');
+        expect((captured?.data as Map)['stream'], isTrue);
+        final delivered = await (streaming.body as Stream<List<int>>).toList();
+        final observation = await streaming.completedObservation;
+        expect(utf8.decode(delivered.expand((chunk) => chunk).toList()),
+            contains('stream reply'));
+        expect(observation?.requestUsage.value, 12);
+      }
+    });
+
     test('preserves AWS credential resolution error classification', () async {
       var requestsSent = 0;
       final credentials = _MemoryCredentials();

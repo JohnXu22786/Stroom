@@ -1075,6 +1075,10 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
           .where((item) => item.upstreamModelId == member.upstreamModelId)
           .firstOrNull;
       if (model == null ||
+          !LlmConnectorRegistry.isConversationalModel(
+            model.upstreamModelId,
+            model.capabilities,
+          ) ||
           !_hasRequiredModelCapabilities(
             model.capabilities,
             requiredCapabilities,
@@ -1109,6 +1113,10 @@ bool _hasRequiredModelCapabilities(
     final explicitlyDisabled =
         capabilities.containsKey(capability) && !explicitlyEnabled;
     final methods = capabilities['supportedGenerationMethods'];
+    final chatMethodsExplicitlyUnsupported = capability == 'chat' &&
+        methods is Iterable &&
+        !methods.contains('generateContent') &&
+        !methods.contains('streamGenerateContent');
     final inputModalities = capabilities['inputModalities'];
     final methodSupported = methods is Iterable &&
         switch (capability) {
@@ -1149,6 +1157,7 @@ bool _hasRequiredModelCapabilities(
             : capability == 'streaming' &&
                 !methods.contains('streamGenerateContent'));
     if (explicitlyDisabled ||
+        chatMethodsExplicitlyUnsupported ||
         geminiMethodListOverridesProtocol ||
         !explicitlyEnabled &&
             !methodSupported &&
