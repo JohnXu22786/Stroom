@@ -139,7 +139,7 @@ void main() {
       ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
     ]);
     final assistant = Assistant(
-      id: 'codex-assistant',
+      id: 'assistant',
       name: 'Codex assistant',
       prompt: 'Help',
       defaultModelId: config.models.single.modelId,

@@ -47,6 +47,69 @@ void main() {
   });
 
   test(
+    'filters Codex API-key groups while retaining OpenAI API-key groups',
+    () {
+      final codexApiKey = LlmAccount(
+        id: 'codex-api-key',
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Legacy Codex API key',
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT-5 Codex',
+          ),
+        ],
+      );
+      final openAiApiKey = LlmAccount(
+        id: 'openai-api-key',
+        connectorType: 'openai-api',
+        authType: 'api_key',
+        displayName: 'OpenAI API key',
+        models: const [
+          LlmUpstreamModel(
+            id: 'openai-model',
+            upstreamModelId: 'gpt-4.1',
+            displayName: 'GPT-4.1',
+          ),
+        ],
+      );
+
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [codexApiKey, openAiApiKey],
+        groups: [
+          LlmModelGroup(
+            id: 'codex-api-key-group',
+            displayName: 'Legacy Codex',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'codex-api-key',
+                localModelId: 'codex-model',
+                upstreamModelId: 'gpt-5-codex',
+              ),
+            ],
+          ),
+          LlmModelGroup(
+            id: 'openai-api-key-group',
+            displayName: 'OpenAI API',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'openai-api-key',
+                localModelId: 'openai-model',
+                upstreamModelId: 'gpt-4.1',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(configs.map((config) => config.id), ['openai-api-key-group']);
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+    },
+  );
+
+  test(
       'model-group selector preserves configured protocols independently of connector',
       () {
     final account = LlmAccount(

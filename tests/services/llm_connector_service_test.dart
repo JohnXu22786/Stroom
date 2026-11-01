@@ -104,6 +104,24 @@ void main() {
         reason: 'OpenAI API-key Chat Completions remains separate',
       );
       expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported('codex', 'oauth'),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'codex',
+          'api_key',
+        ),
+        isFalse,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'openai-api',
+          'api_key',
+        ),
+        isTrue,
+      );
+      expect(
         LlmConnectorRegistry.chatAdapterEndpointType('aistudio'),
         'google.gemini.generate_content',
       );
