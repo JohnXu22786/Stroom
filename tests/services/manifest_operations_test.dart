@@ -2059,6 +2059,8 @@ void main() {
         folder: 'image_folder_delete_failure',
       );
       await operations.addFolder(record.folder);
+      const emptyDescendant = 'image_folder_delete_failure/empty';
+      await operations.addFolder(emptyDescendant);
       await operations.writeFile(
         record.storagePath,
         Uint8List.fromList(fileBytes),
@@ -2093,6 +2095,18 @@ void main() {
           reason: 'a failed deletion must leave the cached record available',
         );
         expect(
+          await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.imageRecords,
+          ),
+          unorderedEquals([record.folder, emptyDescendant]),
+          reason: 'a failed deletion must preserve explicit folder rows',
+        );
+        expect(
+          await operations.getAllFolders(),
+          unorderedEquals([record.folder, emptyDescendant]),
+          reason: 'a failed deletion must preserve explicit folders in cache',
+        );
+        expect(
           await operations.readFile(record.storagePath),
           equals(fileBytes),
           reason: 'a failed deletion must leave the primary file available',
@@ -2113,6 +2127,18 @@ void main() {
           reason: 'retry must remove the persisted record');
       expect(await operations.loadRecords(), isEmpty,
           reason: 'retry must remove the record from cache');
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        isEmpty,
+        reason: 'retry must remove the persisted parent and descendant folders',
+      );
+      expect(
+        await operations.getAllFolders(),
+        isEmpty,
+        reason: 'retry must remove parent and descendant folders from cache',
+      );
       expect(await operations.readFile(record.storagePath), isNull,
           reason: 'successful retry must remove the primary file');
       expect(await operations.readFile('${record.hash}_thumb.png'), isNull,
