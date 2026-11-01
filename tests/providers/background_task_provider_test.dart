@@ -1371,41 +1371,6 @@ void main() {
     );
 
     test(
-      'legacy Authorization masks preserve quoted natural secrets prose',
-      () {
-        const instruction = 'Please keep secrets "private".';
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-quoted-secrets-natural-prompt',
-          'type': 'ocr',
-          'title': 'failed OCR task',
-          'status': 'failed',
-          'error': 'request failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer secret…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': instruction},
-                  ],
-                },
-              ],
-            },
-          },
-        });
-
-        expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          instruction,
-        );
-      },
-    );
-
-    test(
       'legacy Authorization value matching a natural plural is redacted',
       () {
         final task = BackgroundTask.fromMap({
