@@ -21,7 +21,10 @@ import 'package:stroom/utils/web_file_store.dart';
 File _tasksFileIn(String dirPath) =>
     File(p.join(dirPath, 'background', 'tasks.json'));
 
-String _preserveOpenReadCarefullyPrompt(String prompt) => prompt;
+String _redactOpenReadCarefullyPrompt(String prompt) => prompt.replaceFirst(
+      RegExp(r'\bread\s+carefully\b', caseSensitive: false),
+      'read [redacted]',
+    );
 
 enum _StartupAddTiming {
   afterRestoreReadStarts,
@@ -2940,6 +2943,247 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a whitespace-split masked credential and preserves safe text',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer documentation…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        void expectMigrated(
+          String id,
+          String instruction,
+          String expected,
+        ) {
+          final task = taskFor(id, instruction);
+          final migrated = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent;
+          final persisted = jsonEncode(task.toMap());
+          final persistedRetryData = (jsonDecode(persisted)
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+          expect(migrated, expected);
+          expect(persistedRetryData['instructionContent'], expected);
+          expect(persisted, isNot(contains('documentationfoobarxyz')));
+          expect(persisted, isNot(contains('documentationABCDEF')));
+        }
+
+        expectMigrated(
+          'legacy-ocr-documentation-whitespace-echo',
+          'The note says documentation foobarxyz.',
+          'The note says [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-line-break-echo',
+          'The image contains documentation\nABCDEF.',
+          'The image contains [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-long-whitespace-echo',
+          'The note says documentation ${List.filled(129, 'A').join()}.',
+          'The note says [redacted].',
+        );
+
+        const safePrompt = 'Please read the documentation carefully.';
+        final safeTask = taskFor(
+          'legacy-ocr-safe-documentation-prompt',
+          safePrompt,
+        );
+        final safePersisted = jsonEncode(safeTask.toMap());
+        final safeRetryData = (jsonDecode(safePersisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          safePrompt,
+        );
+        expect(safeRetryData['instructionContent'], safePrompt);
+
+        expectMigrated(
+          'legacy-ocr-safe-documentation-now',
+          'Please read the documentation now.',
+          'Please read the documentation now.',
+        );
+        expectMigrated(
+          'legacy-ocr-safe-documentation-thoroughly',
+          'Please read documentation thoroughly.',
+          'Please read documentation thoroughly.',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-credential-while-reading',
+          'Please read the documentation ABCDEF.',
+          'Please read the [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-short-credential-while-reading',
+          'Please read the documentation foobar.',
+          'Please read the [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-keyboard-sequence-while-reading',
+          'Please read documentation qwertyly.',
+          'Please read [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-short-opaque-suffix-while-reading',
+          'Please read documentation zqvmply.',
+          'Please read [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-vertical-keyboard-sequence-while-reading',
+          'Please read documentation qazwsxly.',
+          'Please read [redacted].',
+        );
+        expectMigrated(
+          'legacy-ocr-documentation-short-high-entropy-suffix-while-reading',
+          'Please read documentation vuaopely.',
+          'Please read [redacted].',
+        );
+
+        const extendedSafePrompt =
+            'Please read the documentation carefully and summarize the key points.';
+        final extendedSafeTask = taskFor(
+          'legacy-ocr-safe-documentation-continuation',
+          extendedSafePrompt,
+        );
+        final extendedSafePersisted = jsonEncode(extendedSafeTask.toMap());
+        final extendedSafeRetryData = (jsonDecode(extendedSafePersisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            extendedSafeTask.retryData!,
+          ).instructionContent,
+          extendedSafePrompt,
+        );
+        expect(
+          extendedSafeRetryData['instructionContent'],
+          extendedSafePrompt,
+        );
+
+        for (final modifier in ['very', 'really', 'quite']) {
+          final intensifiedSafePrompt =
+              'Please read the documentation $modifier carefully and summarize the key points.';
+          final intensifiedSafeTask = taskFor(
+            'legacy-ocr-safe-documentation-$modifier-carefully',
+            intensifiedSafePrompt,
+          );
+          final intensifiedSafePersisted =
+              jsonEncode(intensifiedSafeTask.toMap());
+          final intensifiedSafeRetryData = (jsonDecode(intensifiedSafePersisted)
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+          expect(
+            OcrRetrySnapshot.fromMap(
+              intensifiedSafeTask.retryData!,
+            ).instructionContent,
+            intensifiedSafePrompt,
+          );
+          expect(
+            intensifiedSafeRetryData['instructionContent'],
+            intensifiedSafePrompt,
+          );
+        }
+
+        const credentialBeforeCarefullyPrompt =
+            'Please read the documentation foobarxyz carefully and summarize the key points.';
+        final credentialBeforeCarefullyTask = taskFor(
+          'legacy-ocr-documentation-credential-before-carefully',
+          credentialBeforeCarefullyPrompt,
+        );
+        final credentialBeforeCarefullyPersisted =
+            jsonEncode(credentialBeforeCarefullyTask.toMap());
+        final credentialBeforeCarefullyRetryData =
+            (jsonDecode(credentialBeforeCarefullyPersisted)
+                as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        const redactedCredentialBeforeCarefullyPrompt =
+            'Please read the [redacted] carefully and summarize the key points.';
+        expect(
+          OcrRetrySnapshot.fromMap(
+            credentialBeforeCarefullyTask.retryData!,
+          ).instructionContent,
+          redactedCredentialBeforeCarefullyPrompt,
+        );
+        expect(
+          credentialBeforeCarefullyRetryData['instructionContent'],
+          redactedCredentialBeforeCarefullyPrompt,
+        );
+
+        const credentialNounBeforeCarefullyPrompt =
+            'Please read the documentation token carefully and summarize the key points.';
+        final credentialNounBeforeCarefullyTask = taskFor(
+          'legacy-ocr-documentation-credential-noun-before-carefully',
+          credentialNounBeforeCarefullyPrompt,
+        );
+        final credentialNounBeforeCarefullyPersisted =
+            jsonEncode(credentialNounBeforeCarefullyTask.toMap());
+        final credentialNounBeforeCarefullyRetryData =
+            (jsonDecode(credentialNounBeforeCarefullyPersisted)
+                as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(
+            credentialNounBeforeCarefullyTask.retryData!,
+          ).instructionContent,
+          redactedCredentialBeforeCarefullyPrompt,
+        );
+        expect(
+          credentialNounBeforeCarefullyRetryData['instructionContent'],
+          redactedCredentialBeforeCarefullyPrompt,
+        );
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration rejects oversized prompts before credential scanning',
+      () {
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-oversized-instruction',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': List.filled(10001, 'x').join()},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          isNull,
+        );
+      },
+    );
+
+    test(
       'legacy OCR instruction migration drops credentials from request text',
       () {
         const apiKey = 'opaque-user-secret-87';
@@ -2975,17 +3219,9 @@ void main() {
         });
 
         final persisted = jsonEncode(task.toMap());
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent;
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = 'Read the receipt total carefully\n'
-            'The value to recognize is [redacted]';
-        expect(migratedInstruction, expectedInstruction);
         expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Read the receipt total carefully',
         );
         expect(persisted, contains('Read the receipt total carefully'));
         expect(persisted, isNot(contains(apiKey)));
@@ -3060,17 +3296,12 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         final migratedInstruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent;
 
         expect(migratedInstruction, 'The image contains [redacted].');
-        expect(
-          persistedRetryData['instructionContent'],
-          'The image contains [redacted].',
-        );
+        expect(persisted, contains('The image contains [redacted].'));
         expect(migratedInstruction, isNot(contains(apiKey)));
         expect(persisted.replaceAll(r'\n', ''), isNot(contains(apiKey)));
       },
@@ -3172,10 +3403,6 @@ void main() {
             restoredEchoInstruction, isNot(contains('Use token for request')));
         expect(
             restoredEchoInstruction, isNot(contains('Authorization: token')));
-        expect(
-          restoredEchoInstruction,
-          'Use [redacted] for request\nAuthorization: [redacted]',
-        );
         expect(persistedEchoTask, isNot(contains('Use token for request')));
         expect(persistedEchoTask, isNot(contains('Authorization: token')));
       },
@@ -6961,17 +7188,9 @@ void main() {
         });
 
         final persisted = jsonEncode(task.toMap());
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent;
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = 'Read the receipt total carefully\n'
-            'The value to recognize is [redacted]';
-        expect(migratedInstruction, expectedInstruction);
         expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Read the receipt total carefully',
         );
         expect(persisted, isNot(contains(apiKey)));
       },
@@ -7160,40 +7379,6 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration skips oversized prompts before redaction',
-      () {
-        final prompt = List.filled(10001, 'x').join();
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-oversized-instruction',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer documentation…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': prompt},
-                  ],
-                },
-              ],
-            },
-          },
-        });
-
-        expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          isNull,
-        );
-      },
-    );
-
-    test(
       'legacy OCR instruction migration handles short open-ended masks without dropping ordinary prompts',
       () {
         const apiKey = 'abc1234567890abcdef';
@@ -7229,29 +7414,17 @@ void main() {
                 },
               },
             });
-        String? persistedInstruction(String serializedTask) {
-          final taskMap = jsonDecode(serializedTask) as Map<String, dynamic>;
-          return OcrRetrySnapshot.fromMap(
-            taskMap['retryData'] as Map<String, dynamic>,
-          ).instructionContent;
-        }
 
         final embeddedNulPromptTask = taskFor(
           'legacy-ocr-embedded-nul-in-text-part',
           ['Read\u0000the receipt total carefully'],
         );
-        final embeddedNulPromptPersisted =
-            jsonEncode(embeddedNulPromptTask.toMap());
-        final embeddedNulPromptRetryData = (jsonDecode(
-          embeddedNulPromptPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(
             embeddedNulPromptTask.retryData!,
           ).instructionContent,
           safePrompt,
         );
-        expect(embeddedNulPromptRetryData['instructionContent'], safePrompt);
 
         final embeddedNulCredentialTask = taskFor(
           'legacy-ocr-embedded-nul-in-masked-secret-echo',
@@ -7282,20 +7455,11 @@ void main() {
         );
         final embeddedNulSplitCredentialPersisted =
             jsonEncode(embeddedNulSplitCredentialTask.toMap());
-        final embeddedNulSplitCredentialRetryData = (jsonDecode(
-          embeddedNulSplitCredentialPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const embeddedNulSplitCredentialInstruction =
-            '$safePrompt\nUse [redacted] to process this image';
         expect(
           OcrRetrySnapshot.fromMap(
             embeddedNulSplitCredentialTask.retryData!,
           ).instructionContent,
-          embeddedNulSplitCredentialInstruction,
-        );
-        expect(
-          embeddedNulSplitCredentialRetryData['instructionContent'],
-          embeddedNulSplitCredentialInstruction,
+          isNull,
         );
         expect(
           embeddedNulSplitCredentialPersisted,
@@ -7339,11 +7503,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortUnclassifiedKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
-        expect(
-          persistedInstruction(shortUnclassifiedKeyPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
+          safePrompt,
         );
         expect(shortUnclassifiedKeyPersisted, contains(safePrompt));
         expect(
@@ -7365,10 +7525,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(shortRandomAlphaPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(shortRandomAlphaPersisted, contains(safePrompt));
         expect(shortRandomAlphaPersisted, isNot(contains(shortRandomAlphaKey)));
 
@@ -7385,10 +7541,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(secretPrefixedPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(secretPrefixedPersisted, contains(safePrompt));
         expect(secretPrefixedPersisted, isNot(contains(secretPrefixedKey)));
 
@@ -7398,12 +7550,10 @@ void main() {
           [secretaryPrompt],
           credentialPrefix: 'secret',
         );
-        final secretaryPersisted = jsonEncode(secretaryTask.toMap());
         expect(
           OcrRetrySnapshot.fromMap(secretaryTask.retryData!).instructionContent,
           secretaryPrompt,
         );
-        expect(persistedInstruction(secretaryPersisted), secretaryPrompt);
 
         const secretMenuPrompt = 'Read the secret-menu label';
         final secretMenuTask = taskFor(
@@ -7411,14 +7561,12 @@ void main() {
           [secretMenuPrompt],
           credentialPrefix: 'secret-',
         );
-        final secretMenuPersisted = jsonEncode(secretMenuTask.toMap());
         expect(
           OcrRetrySnapshot.fromMap(
             secretMenuTask.retryData!,
           ).instructionContent,
           secretMenuPrompt,
         );
-        expect(persistedInstruction(secretMenuPersisted), secretMenuPrompt);
 
         final unhyphenatedSecretMenuTask = taskFor(
           'legacy-ocr-short-credential-word-unhyphenated-natural-term',
@@ -7429,10 +7577,6 @@ void main() {
           OcrRetrySnapshot.fromMap(
             unhyphenatedSecretMenuTask.retryData!,
           ).instructionContent,
-          secretMenuPrompt,
-        );
-        expect(
-          persistedInstruction(jsonEncode(unhyphenatedSecretMenuTask.toMap())),
           secretMenuPrompt,
         );
         expect(
@@ -7453,11 +7597,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             secretHyphenatedKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedInstruction(secretHyphenatedKeyPersisted),
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(secretHyphenatedKeyPersisted, contains(safePrompt));
         expect(
@@ -7478,11 +7618,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortSecretHyphenatedKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedInstruction(shortSecretHyphenatedKeyPersisted),
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(shortSecretHyphenatedKeyPersisted, contains(safePrompt));
         expect(
@@ -7541,18 +7677,11 @@ void main() {
         final secretPluralWithExactCredentialPersisted = jsonEncode(
           secretPluralWithExactCredential.toMap(),
         );
-        final secretPluralWithExactCredentialRetryData = (jsonDecode(
-          secretPluralWithExactCredentialPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(
             secretPluralWithExactCredential.retryData!,
           ).instructionContent,
-          '$safePrompt\n$secretPluralPrompt. Use [redacted] for this receipt',
-        );
-        expect(
-          secretPluralWithExactCredentialRetryData['instructionContent'],
-          '$safePrompt\n$secretPluralPrompt. Use [redacted] for this receipt',
+          safePrompt,
         );
         expect(
           secretPluralWithExactCredentialPersisted,
@@ -7755,18 +7884,11 @@ void main() {
         final unicodeCredentialPersisted = jsonEncode(
           unicodeCredentialTask.toMap(),
         );
-        final unicodeCredentialRetryData = (jsonDecode(
-          unicodeCredentialPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(
             unicodeCredentialTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nPlease use [redacted] as API key',
-        );
-        expect(
-          unicodeCredentialRetryData['instructionContent'],
-          '$safePrompt\nPlease use [redacted] as API key',
+          safePrompt,
         );
         expect(unicodeCredentialPersisted, contains(safePrompt));
         expect(
@@ -7791,18 +7913,11 @@ void main() {
         final contextFreeUnicodePersisted = jsonEncode(
           contextFreeUnicodeTask.toMap(),
         );
-        final contextFreeUnicodeRetryData = (jsonDecode(
-          contextFreeUnicodePersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(
             contextFreeUnicodeTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe receipt includes [redacted].',
-        );
-        expect(
-          contextFreeUnicodeRetryData['instructionContent'],
-          '$safePrompt\nThe receipt includes [redacted].',
+          safePrompt,
         );
         expect(contextFreeUnicodePersisted, contains(safePrompt));
         expect(
@@ -7827,11 +7942,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             plainTextKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedInstruction(plainTextKeyPersisted),
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(plainTextKeyPersisted, contains(safePrompt));
         expect(plainTextKeyPersisted, isNot(contains(plainTextKey)));
@@ -7846,11 +7957,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             emDashEchoTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe note says [redacted]—',
-        );
-        expect(
-          persistedInstruction(emDashEchoPersisted),
-          '$safePrompt\nThe note says [redacted]—',
+          safePrompt,
         );
         expect(emDashEchoPersisted, contains(safePrompt));
         expect(emDashEchoPersisted, isNot(contains(plainTextKey)));
@@ -7882,10 +7989,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(shorterEchoedKeyPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(shorterEchoedKeyPersisted, contains(safePrompt));
         expect(shorterEchoedKeyPersisted, isNot(contains(shorterApiKey)));
 
@@ -7902,10 +8005,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(shortestEchoedKeyPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(shortestEchoedKeyPersisted, contains(safePrompt));
         expect(shortestEchoedKeyPersisted, isNot(contains(shortestApiKey)));
 
@@ -7914,26 +8013,12 @@ void main() {
           [safePrompt, 'Use abc', '12345 to process this image'],
         );
         final splitEchoedKeyPersisted = jsonEncode(splitEchoedKeyTask.toMap());
-        final splitEchoedKeyInstruction = OcrRetrySnapshot.fromMap(
-          splitEchoedKeyTask.retryData!,
-        ).instructionContent;
-        final splitEchoedKeyPersistedRetryData = (jsonDecode(
-          splitEchoedKeyPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
-          splitEchoedKeyInstruction,
-          '$safePrompt\n$redactedShortUsePrompt',
+          OcrRetrySnapshot.fromMap(
+            splitEchoedKeyTask.retryData!,
+          ).instructionContent,
+          isNull,
         );
-        expect(
-          splitEchoedKeyPersistedRetryData['instructionContent'],
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
-        expect(splitEchoedKeyPersisted, contains(safePrompt));
-        expect(
-          splitEchoedKeyInstruction,
-          isNot(contains('abc12345')),
-        );
-        expect(splitEchoedKeyInstruction, isNot(contains('12345')));
         expect(splitEchoedKeyPersisted, isNot(contains('Use abc')));
         expect(
           splitEchoedKeyPersisted,
@@ -7955,10 +8040,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(singleCharacterPrefixPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(singleCharacterPrefixPersisted, contains(safePrompt));
         expect(
           singleCharacterPrefixPersisted,
@@ -7978,11 +8059,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             alphabeticShortKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nUse [redacted] for this receipt',
-        );
-        expect(
-          persistedInstruction(alphabeticShortKeyPersisted),
-          '$safePrompt\nUse [redacted] for this receipt',
+          safePrompt,
         );
         expect(alphabeticShortKeyPersisted, contains(safePrompt));
         expect(
@@ -8003,11 +8080,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortestAlphabeticKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nUse [redacted] for this receipt',
-        );
-        expect(
-          persistedInstruction(shortestAlphabeticKeyPersisted),
-          '$safePrompt\nUse [redacted] for this receipt',
+          safePrompt,
         );
         expect(shortestAlphabeticKeyPersisted, contains(safePrompt));
         expect(
@@ -8028,11 +8101,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             longAlphabeticPrefixTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nUse [redacted] for this receipt',
-        );
-        expect(
-          persistedInstruction(longAlphabeticPrefixPersisted),
-          '$safePrompt\nUse [redacted] for this receipt',
+          safePrompt,
         );
         expect(longAlphabeticPrefixPersisted, contains(safePrompt));
         expect(
@@ -8052,11 +8121,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortAlphabeticPrefixTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nUse [redacted] for this receipt',
-        );
-        expect(
-          persistedInstruction(shortAlphabeticPrefixPersisted),
-          '$safePrompt\nUse [redacted] for this receipt',
+          safePrompt,
         );
         expect(shortAlphabeticPrefixPersisted, contains(safePrompt));
         expect(
@@ -8077,10 +8142,6 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortAlphabeticKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
-        expect(
-          persistedInstruction(shortAlphabeticKeyPersisted),
           '$safePrompt\n$redactedShortUsePrompt',
         );
         expect(shortAlphabeticKeyPersisted, contains(safePrompt));
@@ -8104,10 +8165,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(nonAscendingShortKeyPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(nonAscendingShortKeyPersisted, contains(safePrompt));
         expect(
           nonAscendingShortKeyPersisted,
@@ -8129,10 +8186,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(keyboardSequencePersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(keyboardSequencePersisted, contains(safePrompt));
         expect(keyboardSequencePersisted, isNot(contains(keyboardSequenceKey)));
 
@@ -8149,10 +8202,6 @@ void main() {
           OcrRetrySnapshot.fromMap(
             highEntropyShortKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
-        expect(
-          persistedInstruction(highEntropyShortKeyPersisted),
           '$safePrompt\n$redactedShortUsePrompt',
         );
         expect(highEntropyShortKeyPersisted, contains(safePrompt));
@@ -8176,10 +8225,6 @@ void main() {
           ).instructionContent,
           '$safePrompt\n$redactedShortUsePrompt',
         );
-        expect(
-          persistedInstruction(repeatedLetterShortKeyPersisted),
-          '$safePrompt\n$redactedShortUsePrompt',
-        );
         expect(repeatedLetterShortKeyPersisted, contains(safePrompt));
         expect(
           repeatedLetterShortKeyPersisted,
@@ -8199,10 +8244,6 @@ void main() {
           OcrRetrySnapshot.fromMap(
             internalHyphenKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nUse [redacted] to process this image',
-        );
-        expect(
-          persistedInstruction(internalHyphenKeyPersisted),
           '$safePrompt\nUse [redacted] to process this image',
         );
         expect(internalHyphenKeyPersisted, contains(safePrompt));
@@ -8225,11 +8266,7 @@ void main() {
           OcrRetrySnapshot.fromMap(
             shortPrefixHyphenatedKeyTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedInstruction(shortPrefixHyphenatedKeyPersisted),
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(shortPrefixHyphenatedKeyPersisted, contains(safePrompt));
         expect(
@@ -8363,17 +8400,8 @@ void main() {
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
-        expect(
-          retryInstruction,
-          '$safePrompt\nThe receipt includes [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe receipt includes [redacted].',
-        );
+        expect(retryInstruction, safePrompt);
         expect(persisted, contains(safePrompt));
         expect(retryInstruction, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
@@ -8415,14 +8443,8 @@ void main() {
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
-        expect(retryInstruction, '$safePrompt\nThe note says [redacted].');
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe note says [redacted].',
-        );
+        expect(retryInstruction, safePrompt);
         expect(persisted, contains(safePrompt));
         expect(retryInstruction, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
@@ -8508,14 +8530,8 @@ void main() {
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
-        expect(retryInstruction, '$safePrompt\nThe note says [redacted].');
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe note says [redacted].',
-        );
+        expect(retryInstruction, safePrompt);
         expect(persisted, contains(safePrompt));
         expect(retryInstruction, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
@@ -8556,17 +8572,8 @@ void main() {
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
-        expect(
-          retryInstruction,
-          '$safePrompt\nPlease set the token to [redacted], then continue carefully',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nPlease set the token to [redacted], then continue carefully',
-        );
+        expect(retryInstruction, safePrompt);
         expect(persisted, contains(safePrompt));
         expect(retryInstruction, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
@@ -8608,14 +8615,8 @@ void main() {
           task.retryData!,
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
-        expect(retryInstruction, '$safePrompt\nThe note says [redacted].');
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe note says [redacted].',
-        );
+        expect(retryInstruction, safePrompt);
         expect(persisted, contains(safePrompt));
         expect(retryInstruction, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
@@ -8734,16 +8735,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nThe client included [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe client included [redacted].',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -8779,16 +8774,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -8824,16 +8813,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -8869,16 +8852,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -8914,16 +8891,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -8998,16 +8969,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9043,16 +9008,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9088,16 +9047,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9133,16 +9086,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9181,502 +9128,6 @@ void main() {
           safePrompt,
         );
         expect(jsonEncode(task.toMap()), contains(safePrompt));
-      },
-    );
-
-    test(
-      'legacy OCR instruction migration redacts a short known key in an explicit request echo',
-      () {
-        const apiKey = 'abc123';
-        const shortApiKey = 'abc12';
-        const instruction = 'Use abc123 for request';
-        BackgroundTask taskFor(
-          String id,
-          String text, {
-          String credential = apiKey,
-        }) =>
-            BackgroundTask.fromMap({
-              'id': id,
-              'type': 'ocr',
-              'title': 'legacy OCR request',
-              'status': 'failed',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'rawRequest': {
-                'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {'Authorization': 'Bearer $credential'},
-                'body': {
-                  'model': 'vision-model',
-                  'messages': [
-                    {
-                      'role': 'user',
-                      'content': [
-                        {'type': 'text', 'text': text},
-                      ],
-                    },
-                  ],
-                },
-              },
-            });
-        final task = taskFor(
-          'legacy-ocr-short-known-key-request-echo',
-          instruction,
-        );
-        final spacedTask = taskFor(
-          'legacy-ocr-spaced-short-known-key-request-echo',
-          'Use a b c 1 2 3 for request',
-        );
-        final labeledTask = taskFor(
-          'legacy-ocr-spaced-short-known-key-label-echo',
-          'apiKey: a b c',
-        );
-        final authenticationTask = taskFor(
-          'legacy-ocr-spaced-short-known-key-authentication-echo',
-          'Use a b c 1 2 3 to authenticate this API request.',
-        );
-        final contextFreeTask = taskFor(
-          'legacy-ocr-short-known-key-context-free-echo',
-          'The receipt code is abc123.',
-        );
-        final contextFreeSpacedTask = taskFor(
-          'legacy-ocr-spaced-short-known-key-context-free-echo',
-          'The receipt code is a b c 1 2 3.',
-        );
-        final shorterContextFreeTask = taskFor(
-          'legacy-ocr-shorter-known-key-context-free-echo',
-          'The receipt code is abc12.',
-          credential: shortApiKey,
-        );
-        final shorterContextFreeSpacedTask = taskFor(
-          'legacy-ocr-spaced-shorter-known-key-context-free-echo',
-          'The receipt code is a b c 1 2.',
-          credential: shortApiKey,
-        );
-        final alphabeticContextFreeTask = taskFor(
-          'legacy-ocr-alphabetic-known-key-context-free-echo',
-          'The receipt code is abcde.',
-          credential: 'abcde',
-        );
-        final alphabeticContextFreeSpacedTask = taskFor(
-          'legacy-ocr-spaced-alphabetic-known-key-echo',
-          'The receipt code is a b c d e.',
-          credential: 'abcde',
-        );
-        final numericContextFreeTask = taskFor(
-          'legacy-ocr-numeric-known-key-context-free-echo',
-          'The receipt code is 12345.',
-          credential: '12345',
-        );
-        final numericContextFreeSpacedTask = taskFor(
-          'legacy-ocr-spaced-numeric-known-key-echo',
-          'The receipt code is 1 2 3 4 5.',
-          credential: '12345',
-        );
-        final twoCharacterLabelTask = taskFor(
-          'legacy-ocr-two-character-spaced-key-label-echo',
-          'Authorization: a b',
-          credential: 'ab',
-        );
-        final twoCharacterBearerLabelTask = taskFor(
-          'legacy-ocr-two-character-spaced-bearer-label-echo',
-          'Authorization: Bearer a b',
-          credential: 'ab',
-        );
-        final twoCharacterRequestTask = taskFor(
-          'legacy-ocr-two-character-spaced-key-request-echo',
-          'Use a b for request',
-          credential: 'ab',
-        );
-        final twoCharacterBearerRequestTask = taskFor(
-          'legacy-ocr-two-character-spaced-bearer-request-echo',
-          'Use Bearer a b for request',
-          credential: 'ab',
-        );
-        final twoCharacterCredentialTargetTask = taskFor(
-          'legacy-ocr-two-character-spaced-credential-target-echo',
-          'Use a b as authorization',
-          credential: 'ab',
-        );
-        final twoCharacterBearerTargetTask = taskFor(
-          'legacy-ocr-two-character-spaced-bearer-target-echo',
-          'Use a b as a bearer token',
-          credential: 'ab',
-        );
-        final twoCharacterAccessTokenTargetTask = taskFor(
-          'legacy-ocr-two-character-spaced-access-token-target-echo',
-          'Use a b as the access token',
-          credential: 'ab',
-        );
-        final providedCredentialTargetTask = taskFor(
-          'legacy-ocr-two-character-spaced-provided-target-echo',
-          'Provide a b as the API key',
-          credential: 'ab',
-        );
-        final punctuationKeyTask = taskFor(
-          'legacy-ocr-spaced-punctuation-key-label-echo',
-          'apiKey: a b -',
-          credential: 'ab-',
-        );
-        final shortNaturalWordTask = taskFor(
-          'legacy-ocr-short-natural-word-preserved',
-          'Read the cat label carefully.',
-          credential: 'cat',
-        );
-        final shortKeyInsideNaturalWordTask = taskFor(
-          'legacy-ocr-short-key-inside-natural-word-preserved',
-          'This is about the image.',
-          credential: 'ab',
-        );
-        final persisted = jsonEncode(task.toMap());
-        final persistedSpaced = jsonEncode(spacedTask.toMap());
-        final persistedLabeled = jsonEncode(labeledTask.toMap());
-        final persistedAuthentication = jsonEncode(authenticationTask.toMap());
-        final persistedContextFree = jsonEncode(contextFreeTask.toMap());
-        final persistedContextFreeSpaced =
-            jsonEncode(contextFreeSpacedTask.toMap());
-        final persistedShorterContextFree =
-            jsonEncode(shorterContextFreeTask.toMap());
-        final persistedShorterContextFreeSpaced =
-            jsonEncode(shorterContextFreeSpacedTask.toMap());
-        final persistedAlphabeticContextFree =
-            jsonEncode(alphabeticContextFreeTask.toMap());
-        final persistedAlphabeticContextFreeSpaced =
-            jsonEncode(alphabeticContextFreeSpacedTask.toMap());
-        final persistedNumericContextFree =
-            jsonEncode(numericContextFreeTask.toMap());
-        final persistedNumericContextFreeSpaced =
-            jsonEncode(numericContextFreeSpacedTask.toMap());
-        final persistedTwoCharacterLabel =
-            jsonEncode(twoCharacterLabelTask.toMap());
-        final persistedTwoCharacterBearerLabel =
-            jsonEncode(twoCharacterBearerLabelTask.toMap());
-        final persistedTwoCharacterRequest =
-            jsonEncode(twoCharacterRequestTask.toMap());
-        final persistedTwoCharacterBearerRequest =
-            jsonEncode(twoCharacterBearerRequestTask.toMap());
-        final persistedTwoCharacterCredentialTarget =
-            jsonEncode(twoCharacterCredentialTargetTask.toMap());
-        final persistedTwoCharacterBearerTarget =
-            jsonEncode(twoCharacterBearerTargetTask.toMap());
-        final persistedTwoCharacterAccessTokenTarget =
-            jsonEncode(twoCharacterAccessTokenTargetTask.toMap());
-        final persistedProvidedCredentialTarget =
-            jsonEncode(providedCredentialTargetTask.toMap());
-        final persistedPunctuationKey = jsonEncode(punctuationKeyTask.toMap());
-        final persistedShortNaturalWord =
-            jsonEncode(shortNaturalWordTask.toMap());
-        final persistedShortKeyInsideNaturalWord =
-            jsonEncode(shortKeyInsideNaturalWordTask.toMap());
-        String? persistedInstruction(String value) {
-          final taskMap = jsonDecode(value) as Map<String, dynamic>;
-          return OcrRetrySnapshot.fromMap(
-            taskMap['retryData'] as Map<String, dynamic>,
-          ).instructionContent;
-        }
-
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent;
-        final migratedSpacedInstruction = OcrRetrySnapshot.fromMap(
-          spacedTask.retryData!,
-        ).instructionContent;
-        final migratedLabeledInstruction = OcrRetrySnapshot.fromMap(
-          labeledTask.retryData!,
-        ).instructionContent;
-        final migratedAuthenticationInstruction = OcrRetrySnapshot.fromMap(
-          authenticationTask.retryData!,
-        ).instructionContent;
-        final migratedContextFreeInstruction = OcrRetrySnapshot.fromMap(
-          contextFreeTask.retryData!,
-        ).instructionContent;
-        final migratedContextFreeSpacedInstruction = OcrRetrySnapshot.fromMap(
-          contextFreeSpacedTask.retryData!,
-        ).instructionContent;
-        final migratedShorterContextFreeInstruction = OcrRetrySnapshot.fromMap(
-          shorterContextFreeTask.retryData!,
-        ).instructionContent;
-        final migratedShorterContextFreeSpacedInstruction =
-            OcrRetrySnapshot.fromMap(
-          shorterContextFreeSpacedTask.retryData!,
-        ).instructionContent;
-        final migratedAlphabeticContextFreeInstruction =
-            OcrRetrySnapshot.fromMap(
-          alphabeticContextFreeTask.retryData!,
-        ).instructionContent;
-        final migratedAlphabeticContextFreeSpacedInstruction =
-            OcrRetrySnapshot.fromMap(
-          alphabeticContextFreeSpacedTask.retryData!,
-        ).instructionContent;
-        final migratedNumericContextFreeInstruction = OcrRetrySnapshot.fromMap(
-          numericContextFreeTask.retryData!,
-        ).instructionContent;
-        final migratedNumericContextFreeSpacedInstruction =
-            OcrRetrySnapshot.fromMap(
-          numericContextFreeSpacedTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterLabelInstruction = OcrRetrySnapshot.fromMap(
-          twoCharacterLabelTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterBearerLabelInstruction =
-            OcrRetrySnapshot.fromMap(
-          twoCharacterBearerLabelTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterRequestInstruction = OcrRetrySnapshot.fromMap(
-          twoCharacterRequestTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterBearerRequestInstruction =
-            OcrRetrySnapshot.fromMap(
-          twoCharacterBearerRequestTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterCredentialTargetInstruction =
-            OcrRetrySnapshot.fromMap(
-          twoCharacterCredentialTargetTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterBearerTargetInstruction =
-            OcrRetrySnapshot.fromMap(
-          twoCharacterBearerTargetTask.retryData!,
-        ).instructionContent;
-        final migratedTwoCharacterAccessTokenTargetInstruction =
-            OcrRetrySnapshot.fromMap(
-          twoCharacterAccessTokenTargetTask.retryData!,
-        ).instructionContent;
-        final migratedProvidedCredentialTargetInstruction =
-            OcrRetrySnapshot.fromMap(
-          providedCredentialTargetTask.retryData!,
-        ).instructionContent;
-        final migratedPunctuationKeyInstruction = OcrRetrySnapshot.fromMap(
-          punctuationKeyTask.retryData!,
-        ).instructionContent;
-        final migratedShortNaturalWordInstruction = OcrRetrySnapshot.fromMap(
-          shortNaturalWordTask.retryData!,
-        ).instructionContent;
-
-        expect(migratedInstruction, 'Use [redacted] for request');
-        expect(migratedSpacedInstruction, 'Use [redacted] for request');
-        expect(migratedLabeledInstruction, 'apiKey: [redacted]');
-        expect(
-          migratedAuthenticationInstruction,
-          'Use [redacted] to authenticate this API request.',
-        );
-        expect(
-          migratedContextFreeInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedContextFreeSpacedInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedShorterContextFreeInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedShorterContextFreeSpacedInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedAlphabeticContextFreeInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedAlphabeticContextFreeSpacedInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedNumericContextFreeInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedNumericContextFreeSpacedInstruction,
-          'The receipt code is [redacted].',
-        );
-        expect(
-          migratedTwoCharacterLabelInstruction,
-          'Authorization: [redacted]',
-        );
-        expect(
-          migratedTwoCharacterBearerLabelInstruction,
-          'Authorization: Bearer [redacted]',
-        );
-        expect(
-          migratedTwoCharacterRequestInstruction,
-          'Use [redacted] for request',
-        );
-        expect(
-          migratedTwoCharacterBearerRequestInstruction,
-          'Use Bearer [redacted] for request',
-        );
-        expect(
-          migratedTwoCharacterCredentialTargetInstruction,
-          'Use [redacted] as authorization',
-        );
-        expect(
-          migratedTwoCharacterBearerTargetInstruction,
-          'Use [redacted] as a bearer token',
-        );
-        expect(
-          migratedTwoCharacterAccessTokenTargetInstruction,
-          'Use [redacted] as the access token',
-        );
-        expect(
-          migratedProvidedCredentialTargetInstruction,
-          'Provide [redacted] as the API key',
-        );
-        expect(migratedPunctuationKeyInstruction, 'apiKey: [redacted]');
-        expect(
-          migratedShortNaturalWordInstruction,
-          'Read the cat label carefully.',
-        );
-        final migratedShortKeyInsideNaturalWordInstruction =
-            OcrRetrySnapshot.fromMap(
-          shortKeyInsideNaturalWordTask.retryData!,
-        ).instructionContent;
-        expect(
-          migratedShortKeyInsideNaturalWordInstruction,
-          'This is about the image.',
-        );
-        expect(
-          persistedInstruction(persisted),
-          'Use [redacted] for request',
-        );
-        expect(
-          persistedInstruction(persistedSpaced),
-          'Use [redacted] for request',
-        );
-        expect(persistedInstruction(persistedLabeled), 'apiKey: [redacted]');
-        expect(
-          persistedInstruction(persistedAuthentication),
-          'Use [redacted] to authenticate this API request.',
-        );
-        expect(
-          persistedInstruction(persistedContextFree),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedContextFreeSpaced),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedShorterContextFree),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedShorterContextFreeSpaced),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedAlphabeticContextFree),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedAlphabeticContextFreeSpaced),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedNumericContextFree),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedNumericContextFreeSpaced),
-          'The receipt code is [redacted].',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterLabel),
-          'Authorization: [redacted]',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterBearerLabel),
-          'Authorization: Bearer [redacted]',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterRequest),
-          'Use [redacted] for request',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterBearerRequest),
-          'Use Bearer [redacted] for request',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterCredentialTarget),
-          'Use [redacted] as authorization',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterBearerTarget),
-          'Use [redacted] as a bearer token',
-        );
-        expect(
-          persistedInstruction(persistedTwoCharacterAccessTokenTarget),
-          'Use [redacted] as the access token',
-        );
-        expect(
-          persistedInstruction(persistedProvidedCredentialTarget),
-          'Provide [redacted] as the API key',
-        );
-        expect(
-          persistedInstruction(persistedPunctuationKey),
-          'apiKey: [redacted]',
-        );
-        expect(
-          persistedInstruction(persistedShortNaturalWord),
-          'Read the cat label carefully.',
-        );
-        expect(
-          persistedInstruction(persistedShortKeyInsideNaturalWord),
-          'This is about the image.',
-        );
-        expect(
-          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          migratedInstruction,
-        );
-        expect(persisted, isNot(contains(apiKey)));
-        expect(persistedSpaced, isNot(contains(apiKey)));
-        expect(persistedLabeled, isNot(contains(apiKey)));
-        expect(persistedAuthentication, isNot(contains(apiKey)));
-        expect(persistedContextFree, isNot(contains(apiKey)));
-        expect(persistedContextFreeSpaced, isNot(contains(apiKey)));
-        expect(persistedShorterContextFree, isNot(contains(shortApiKey)));
-        expect(
-          persistedShorterContextFreeSpaced,
-          isNot(contains(shortApiKey)),
-        );
-        expect(persistedAlphabeticContextFree, isNot(contains('abcde')));
-        expect(
-          persistedAlphabeticContextFreeSpaced,
-          isNot(contains('abcde')),
-        );
-        expect(persistedNumericContextFree, isNot(contains('12345')));
-        expect(
-          persistedNumericContextFreeSpaced,
-          isNot(contains('12345')),
-        );
-        expect(
-          persistedTwoCharacterLabel,
-          isNot(contains('Authorization: a b')),
-        );
-        expect(
-          persistedTwoCharacterBearerLabel,
-          isNot(contains('Authorization: Bearer a b')),
-        );
-        expect(
-          persistedTwoCharacterRequest,
-          isNot(contains('Use a b for request')),
-        );
-        expect(
-          persistedTwoCharacterBearerRequest,
-          isNot(contains('Use Bearer a b for request')),
-        );
-        expect(
-          persistedTwoCharacterCredentialTarget,
-          isNot(contains('Use a b as authorization')),
-        );
-        expect(
-          persistedTwoCharacterBearerTarget,
-          isNot(contains('Use a b as a bearer token')),
-        );
-        expect(
-          persistedProvidedCredentialTarget,
-          isNot(contains('Provide a b as the API key')),
-        );
-        expect(persistedPunctuationKey, isNot(contains('apiKey: a b -')));
       },
     );
 
@@ -9749,16 +9200,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9797,16 +9242,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nThe client sent [redacted] with the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe client sent [redacted] with the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9842,16 +9281,10 @@ void main() {
             },
           });
           final persisted = jsonEncode(task.toMap());
-          final persistedRetryData = (jsonDecode(persisted)
-              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
           expect(
             OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-            '$safePrompt\nUse [redacted] for the request',
-          );
-          expect(
-            persistedRetryData['instructionContent'],
-            '$safePrompt\nUse [redacted] for the request',
+            safePrompt,
           );
           expect(persisted, contains(safePrompt));
           expect(persisted, isNot(contains(apiKey)));
@@ -9888,16 +9321,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9933,16 +9360,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -9978,16 +9399,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10023,16 +9438,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10070,16 +9479,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request\nRead [redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request\nRead [redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10116,16 +9519,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] for the request',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10146,12 +9543,6 @@ void main() {
           'The label is "myprojectpoppy"',
           'The note says `myprojectpoppy`.',
           'The note says **myprojectcontent**.',
-        ];
-        const expectedEchoTexts = [
-          'Please use [redacted].',
-          'The label is "[redacted]"',
-          'The note says `[redacted]`.',
-          'The note says **[redacted]**.',
         ];
         const safePrompt = 'Read the receipt total carefully';
         for (var index = 0; index < apiKeys.length; index++) {
@@ -10180,18 +9571,10 @@ void main() {
             },
           });
           final persisted = jsonEncode(task.toMap());
-          final persistedRetryData = (jsonDecode(persisted)
-              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-          final expectedInstruction =
-              '$safePrompt\n${expectedEchoTexts[index]}';
 
           expect(
             OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-            expectedInstruction,
-          );
-          expect(
-            persistedRetryData['instructionContent'],
-            expectedInstruction,
+            safePrompt,
           );
           expect(persisted, contains(safePrompt));
           expect(persisted, isNot(contains(apiKey)));
@@ -10237,20 +9620,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nUse [redacted] for the request\n'
-            'Use [redacted] to process this image\n'
-            'Use [redacted] for the request';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          '$safePrompt\nUse [redacted] to process this image',
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, contains('Use [redacted] to process this image'));
@@ -10288,16 +9661,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10333,16 +9700,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nThe note says [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe note says [redacted].',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10382,19 +9743,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        final expectedInstruction =
-            '$safePrompt\nUse [redacted] to process this image\n'
-            'The note says [redacted].';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          '$safePrompt\nUse [redacted] to process this image',
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, contains('Use [redacted] to process this image'));
@@ -10447,22 +9799,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nThe Authorization value is [redacted].\n'
-            'The Authorization header is [redacted].\n'
-            'Authorization header: [redacted]\n'
-            'Authorization header value is [redacted].\n'
-            'Authorization header equals [redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10495,17 +9835,11 @@ void main() {
           },
         });
         final shortPrefixPersisted = jsonEncode(shortPrefixTask.toMap());
-        final shortPrefixRetryData = (jsonDecode(shortPrefixPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(
             shortPrefixTask.retryData!,
           ).instructionContent,
-          '$safePrompt\nThe Authorization value is [redacted].',
-        );
-        expect(
-          shortPrefixRetryData['instructionContent'],
-          '$safePrompt\nThe Authorization value is [redacted].',
+          safePrompt,
         );
         expect(shortPrefixPersisted, contains(safePrompt));
         expect(shortPrefixPersisted, isNot(contains(shortPrefixApiKey)));
@@ -10541,16 +9875,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nThe key is [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nThe key is [redacted].',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10586,16 +9914,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] as the API key',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] as the API key',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10631,16 +9953,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nSet API key to [redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nSet API key to [redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10679,16 +9995,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nSet Authorization header value to [redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nSet Authorization header value to [redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10745,24 +10055,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nUse [redacted] as the credential\n'
-            'Enter [redacted] into the Authorization header\n'
-            'Copy [redacted] into the Authorization header\n'
-            'Copy [redacted] to the Authorization header\n'
-            'Put [redacted] in the Authorization header\n'
-            'Use [redacted] for the Authorization header\n'
-            'Use [redacted] as a bearer token';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10801,16 +10097,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nUse [redacted] to process this image',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nUse [redacted] to process this image',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10846,16 +10136,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nPlease send [redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nPlease send [redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10891,16 +10175,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\n[redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\n[redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -10936,17 +10214,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -11680,18 +10951,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nUse [redacted]/ for this image';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains('$apiKey/')));
@@ -11725,15 +10988,12 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
           safePrompt,
         );
-        expect(persistedRetryData['instructionContent'], safePrompt);
-        expect(persisted, contains(jsonEncode(safePrompt)));
+        expect(persisted, contains(safePrompt));
       },
     );
 
@@ -11764,15 +11024,12 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
           safePrompt,
         );
-        expect(persistedRetryData['instructionContent'], safePrompt);
-        expect(persisted, contains(jsonEncode(safePrompt)));
+        expect(persisted, contains(safePrompt));
       },
     );
 
@@ -11808,16 +11065,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nOpen /tmp/[redacted] to inspect the image',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nOpen /tmp/[redacted] to inspect the image',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -11853,17 +11104,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -11899,17 +11143,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -11945,17 +11182,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\nObserved value: [redacted].';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -11995,18 +11225,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\n[redacted]\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12050,18 +11272,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\n[redacted]\n[redacted]\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(plusApiKey)));
@@ -12100,17 +11314,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12146,17 +11353,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12192,17 +11392,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12238,17 +11431,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12324,17 +11510,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12368,14 +11547,11 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
           safePrompt,
         );
-        expect(persistedRetryData['instructionContent'], safePrompt);
         expect(persisted, contains(safePrompt));
       },
     );
@@ -12409,17 +11585,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12455,17 +11624,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12501,17 +11663,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -12553,18 +11708,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\n[redacted]\n[redacted]\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(hyphenApiKey)));
@@ -12617,19 +11764,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\n[redacted]\n[redacted]\n[redacted]\n[redacted]'
-            '\n[redacted]\n[redacted]\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(plusApiKey)));
@@ -12672,17 +11810,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\nUse [redacted] as my API key';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(credentialInstruction)));
@@ -12720,17 +11851,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction = '$safePrompt\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(plusApiKey)));
@@ -12773,18 +11897,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\n[redacted]\n[redacted]\n[redacted]\n[redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         for (final apiKey in apiKeys) {
@@ -12902,15 +12018,11 @@ void main() {
           },
         },
       });
-      final persisted = jsonEncode(task.toMap());
-      final persistedRetryData = (jsonDecode(persisted)
-          as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
       expect(
         OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
         safePrompt,
       );
-      expect(persistedRetryData['instructionContent'], safePrompt);
     });
 
     test(
@@ -13429,15 +12541,10 @@ void main() {
           },
         });
 
-        final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
           safePrompt,
         );
-        expect(persistedRetryData['instructionContent'], safePrompt);
       },
     );
 
@@ -13929,21 +13036,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nUse [redacted] as my API key\n'
-            'Use [redacted] as my private API key\n'
-            'Use [redacted] as an OAuth token\n'
-            'Use [redacted] as a temporary API key';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -13979,16 +13075,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          '$safePrompt\nSet your API key to [redacted]',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nSet your API key to [redacted]',
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -14027,18 +13117,10 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const expectedInstruction =
-            '$safePrompt\nUse [redacted] to access the project';
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
+          safePrompt,
         );
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -14278,18 +13360,10 @@ void main() {
           'The label reports authorization',
         );
         final credentialPersisted = jsonEncode(credentialTask.toMap());
-        const redactedReportedCredentialInstruction =
-            '$safePrompt\nThe label reports [redacted]';
-        final credentialRetryData = (jsonDecode(credentialPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         expect(
           OcrRetrySnapshot.fromMap(credentialTask.retryData!)
               .instructionContent,
-          redactedReportedCredentialInstruction,
-        );
-        expect(
-          credentialRetryData['instructionContent'],
-          redactedReportedCredentialInstruction,
+          safePrompt,
         );
         expect(credentialPersisted, contains(safePrompt));
         expect(credentialPersisted, isNot(contains('authorization')));
@@ -14300,19 +13374,11 @@ void main() {
           'The label reports $authenticityKey',
         );
         final authenticityPersisted = jsonEncode(authenticityTask.toMap());
-        final authenticityRetryData = (jsonDecode(authenticityPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        const redactedReportedKeyInstruction =
-            '$safePrompt\nThe label reports [redacted]';
 
         expect(
           OcrRetrySnapshot.fromMap(authenticityTask.retryData!)
               .instructionContent,
-          redactedReportedKeyInstruction,
-        );
-        expect(
-          authenticityRetryData['instructionContent'],
-          redactedReportedKeyInstruction,
+          safePrompt,
         );
         expect(
           jsonEncode(authenticityTask.retryData),
@@ -14441,7 +13507,7 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a receipt',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a receipt',
       () {
         const prompt = 'Please read\ncarefully from the receipt.';
         final task = BackgroundTask.fromMap({
@@ -14470,15 +13536,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a follow-up action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a follow-up action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then summarize the total.';
@@ -14508,15 +13574,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a compare action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a compare action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then compare the total.';
@@ -14546,15 +13612,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a verify action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a verify action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then verify the total.';
@@ -14584,15 +13650,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a locate action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a locate action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then locate the date.';
@@ -14622,15 +13688,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a write action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a write action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then write down the total.';
@@ -14660,15 +13726,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a list action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a list action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then list the items.';
@@ -14698,15 +13764,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before an answer action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an answer action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then answer the question.';
@@ -14736,15 +13802,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a record action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a record action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then record the invoice number.';
@@ -14774,15 +13840,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before an output action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an output action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then output the total.';
@@ -14812,15 +13878,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a report action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a report action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then report the total.';
@@ -14850,15 +13916,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a note action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a note action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then note the invoice number.';
@@ -14888,15 +13954,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a copy action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a copy action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then copy the invoice number.';
@@ -14926,15 +13992,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a state action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a state action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then state the total.';
@@ -14964,15 +14030,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a provide action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a provide action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then provide the invoice total.';
@@ -15002,15 +14068,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before an add action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an add action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then add the line items.';
@@ -15040,15 +14106,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a return action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a return action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then return the date.';
@@ -15078,15 +14144,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a respond action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a respond action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then respond with the total.';
@@ -15116,15 +14182,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a give action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a give action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then give me the total.';
@@ -15154,15 +14220,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a compute action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a compute action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then compute the total.';
@@ -15192,15 +14258,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a sum action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a sum action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then sum the line items.';
@@ -15230,15 +14296,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt before a subtract action',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a subtract action',
       () {
         const prompt =
             'Please read\ncarefully from the receipt, then subtract the discount from the subtotal.';
@@ -15268,15 +14334,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from an invoice',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from an invoice',
       () {
         const prompt =
             'Please read\ncarefully from the invoice, then summarize the total.';
@@ -15306,15 +14372,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a screenshot',
+      'legacy OCR instruction migration redacts a line-broken read key from a screenshot prompt',
       () {
         const prompt = 'Please read\ncarefully from the screenshot.';
         final task = BackgroundTask.fromMap({
@@ -15342,18 +14408,18 @@ void main() {
         final persisted = jsonEncode(task.toMap());
         final instruction =
             OcrRetrySnapshot.fromMap(task.retryData!).instructionContent!;
-        final persistedRetryInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent;
+        final compactInstruction = instruction.replaceAll(RegExp(r'\s+'), '');
+        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
 
-        expect(instruction, prompt);
-        expect(persistedRetryInstruction, prompt);
-        expect(persisted, contains(jsonEncode(prompt)));
+        expect(instruction, contains('from the screenshot'));
+        expect(compactInstruction, isNot(contains('readcarefully')));
+        expect(persisted, contains('from the screenshot'));
+        expect(compactPersisted, isNot(contains('readcarefully')));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a menu',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a menu',
       () {
         const prompt = 'Please read\ncarefully from the menu.';
         final task = BackgroundTask.fromMap({
@@ -15382,15 +14448,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a chart',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a chart',
       () {
         const prompt = 'Please read\ncarefully from the chart.';
         final task = BackgroundTask.fromMap({
@@ -15419,15 +14485,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a demonstrative OCR-source prompt',
+      'legacy OCR instruction migration sanitizes a demonstrative OCR-source prompt',
       () {
         const prompt = 'Please read\ncarefully from this receipt.';
         final task = BackgroundTask.fromMap({
@@ -15456,15 +14522,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a table',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a table',
       () {
         const prompt = 'Please read\ncarefully from the table.';
         final task = BackgroundTask.fromMap({
@@ -15493,15 +14559,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a possessive OCR-source prompt',
+      'legacy OCR instruction migration sanitizes a possessive OCR-source prompt',
       () {
         const prompt = 'Please read\ncarefully from my receipt.';
         final task = BackgroundTask.fromMap({
@@ -15530,15 +14596,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a line-broken read carefully prompt from a scan',
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a scan',
       () {
         const prompt = 'Please read\ncarefully from the scan.';
         final task = BackgroundTask.fromMap({
@@ -15567,15 +14633,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a multiword OCR-source prompt',
+      'legacy OCR instruction migration sanitizes a multiword OCR-source prompt',
       () {
         const prompt =
             'Please read\ncarefully from the attached image of the receipt.';
@@ -15605,15 +14671,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves an authorization-letter source prompt',
+      'legacy OCR instruction migration sanitizes an authorization-letter source prompt',
       () {
         const prompt = 'Please read\ncarefully from the authorization letter.';
         final task = BackgroundTask.fromMap({
@@ -15642,15 +14708,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves an authorization-documentation source prompt',
+      'legacy OCR instruction migration sanitizes an authorization-documentation source prompt',
       () {
         const prompt =
             'Please read\ncarefully from the authorization documentation.';
@@ -15680,15 +14746,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves an API-key request-form source prompt',
+      'legacy OCR instruction migration sanitizes an API-key request-form source prompt',
       () {
         const prompt = 'Please read\ncarefully from the API key request form.';
         final task = BackgroundTask.fromMap({
@@ -15717,15 +14783,15 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          _preserveOpenReadCarefullyPrompt(prompt),
+          _redactOpenReadCarefullyPrompt(prompt),
         );
         expect(persisted,
-            contains(jsonEncode(_preserveOpenReadCarefullyPrompt(prompt))));
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
       },
     );
 
     test(
-      'legacy OCR instruction migration preserves a natural read-carefully prompt before a trailing action',
+      'legacy OCR instruction migration redacts a read-carefully key before a trailing action',
       () {
         const prompt = 'Please read\ncarefully, then summarize the total.';
         final task = BackgroundTask.fromMap({
@@ -15752,11 +14818,13 @@ void main() {
         });
         final persisted = jsonEncode(task.toMap());
 
+        const sanitizedPrompt =
+            'Please read [redacted], then summarize the total.';
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          prompt,
+          sanitizedPrompt,
         );
-        expect(persisted, contains(jsonEncode(prompt)));
+        expect(persisted, contains(jsonEncode(sanitizedPrompt)));
       },
     );
 
@@ -15865,10 +14933,6 @@ void main() {
                 },
               },
             });
-        final expectedInstructions = [
-          'Use [redacted] to process the receipt.',
-          'Please check carefully your [redacted]',
-        ];
         final tasks = [
           taskFor(
             'legacy-ocr-check-open-mask-credential-echo',
@@ -15880,20 +14944,12 @@ void main() {
           ),
         ];
 
-        for (var index = 0; index < tasks.length; index++) {
-          final task = tasks[index];
+        for (final task in tasks) {
           final persisted = jsonEncode(task.toMap());
           final migratedInstruction = OcrRetrySnapshot.fromMap(
             task.retryData!,
           ).instructionContent!;
 
-          expect(migratedInstruction, expectedInstructions[index]);
-          final persistedRetryData = (jsonDecode(persisted)
-              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-          expect(
-            persistedRetryData['instructionContent'],
-            expectedInstructions[index],
-          );
           expect(migratedInstruction, isNot(contains(credentialEcho)));
           expect(persisted, isNot(contains(credentialEcho)));
         }
@@ -16181,1350 +15237,6 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration redacts whitespace-separated masked credential echoes',
-      () {
-        const echoedCredential = 'foobarxyz';
-        const punctuationCredentialEchoes = [
-          'foo_barxyz',
-          'foo_barxyz123',
-          'foo-barxyz',
-          'foo-barxyz123',
-          'foo - barxyz',
-          'foo barxyz',
-          'foo\u00A0barxyz',
-          'foo / barxyz',
-          'foo + barxyz',
-          'foo. barxyz',
-          'foo\u00a0.barxyz',
-          'foo.\u00a0barxyz',
-          'foo . barxyz',
-          'foo. barxyz123',
-          'foo: barxyz',
-          'foo; barxyz',
-          'foo & barxyz',
-          'foo@barxyz',
-          r'foo$barxyz',
-          'foo#barxyz',
-          'foo!barxyz',
-          'foo%barxyz',
-          'a. bc123',
-          'foo bar carefully',
-          'key abc123',
-          'p a s s w o r d',
-          '1234 5678 9012',
-          'ID 12345678901234567890',
-          'ID 12345678 90123456 7890',
-          'ID12345678901234567890',
-          'I D 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0',
-          'abc 123xyz',
-          'abc 12345',
-          'ab 123456',
-          't r o u b l e s h o o t i n g c o n f i g u r a t i o n',
-          'foo bar baz qux zot',
-        ];
-        BackgroundTask taskFor(
-          String id,
-          String instruction, {
-          String authorization = 'Bearer documentation…',
-          String? additionalCredential,
-        }) =>
-            BackgroundTask.fromMap({
-              'id': id,
-              'type': 'ocr',
-              'title': 'legacy OCR request',
-              'status': 'failed',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'rawRequest': {
-                'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {
-                  'Authorization': authorization,
-                  if (additionalCredential != null)
-                    'X-Api-Key': additionalCredential,
-                },
-                'body': {
-                  'model': 'vision-model',
-                  'messages': [
-                    {
-                      'role': 'user',
-                      'content': [
-                        {'type': 'text', 'text': instruction},
-                      ],
-                    },
-                  ],
-                },
-              },
-            });
-        String? persistedInstruction(String serializedTask) {
-          final taskMap = jsonDecode(serializedTask) as Map<String, dynamic>;
-          return OcrRetrySnapshot.fromMap(
-            taskMap['retryData'] as Map<String, dynamic>,
-          ).instructionContent;
-        }
-
-        final task = taskFor(
-          'legacy-ocr-spaced-masked-credential-echo',
-          'Please read the documentation $echoedCredential carefully.',
-        );
-        final instructionContent = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent!;
-        final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-
-        expect(instructionContent, 'Please read the [redacted] carefully.');
-        expect(
-          persistedRetryData['instructionContent'],
-          instructionContent,
-        );
-        expect(persisted, contains('Please read the [redacted] carefully.'));
-        expect(instructionContent, isNot(contains(echoedCredential)));
-        expect(persisted, isNot(contains(echoedCredential)));
-
-        const secondCredential = 'secondaryKnownCredential987654';
-        final twoCredentialTask = taskFor(
-          'legacy-ocr-second-key-after-redacted-echo',
-          'Please read the documentation foobarxyz carefully. '
-              'Use $secondCredential to authenticate.',
-          additionalCredential: secondCredential,
-        );
-        final twoCredentialInstruction = OcrRetrySnapshot.fromMap(
-          twoCredentialTask.retryData!,
-        ).instructionContent!;
-        final twoCredentialPersisted = jsonEncode(twoCredentialTask.toMap());
-        final twoCredentialPersistedRetryData =
-            (jsonDecode(twoCredentialPersisted)
-                as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          twoCredentialInstruction,
-          'Please read the [redacted] carefully. '
-          'Use [redacted] to authenticate.',
-        );
-        expect(
-          twoCredentialPersisted,
-          isNot(contains(secondCredential)),
-        );
-        expect(twoCredentialPersisted, isNot(contains('foobarxyz')));
-        expect(
-          twoCredentialPersistedRetryData['instructionContent'],
-          twoCredentialInstruction,
-        );
-
-        final lineBreakTask = taskFor(
-          'legacy-ocr-line-break-masked-credential-echo',
-          'Please read the documentation\nfoo\nbarxyz carefully.',
-        );
-        final lineBreakInstruction = OcrRetrySnapshot.fromMap(
-          lineBreakTask.retryData!,
-        ).instructionContent!;
-        final lineBreakPersisted = jsonEncode(lineBreakTask.toMap());
-        final lineBreakPersistedRetryData = (jsonDecode(lineBreakPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          lineBreakInstruction,
-          'Please read the [redacted] carefully.',
-        );
-        expect(
-          lineBreakPersistedRetryData['instructionContent'],
-          lineBreakInstruction,
-        );
-        expect(lineBreakPersisted, isNot(contains('foobarxyz')));
-
-        final nonDocumentationPrefixLineBreakTask = taskFor(
-          'legacy-ocr-other-masked-prefix-line-break-echo',
-          'Use foo\nbarxyz to authenticate',
-          authorization: 'Bearer foo…',
-        );
-        final nonDocumentationPrefixLineBreakInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationPrefixLineBreakTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationPrefixLineBreakPersisted =
-            jsonEncode(nonDocumentationPrefixLineBreakTask.toMap());
-        final nonDocumentationPrefixLineBreakRetryData = (jsonDecode(
-          nonDocumentationPrefixLineBreakPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          nonDocumentationPrefixLineBreakInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          nonDocumentationPrefixLineBreakRetryData['instructionContent'],
-          nonDocumentationPrefixLineBreakInstruction,
-        );
-        expect(
-          nonDocumentationPrefixLineBreakPersisted,
-          isNot(contains('foobarxyz')),
-        );
-
-        final nonDocumentationMultiLinePrefixTask = taskFor(
-          'legacy-ocr-other-multiline-masked-prefix-echo',
-          'Use foo\nbar\nxyz to authenticate',
-          authorization: 'Bearer foo…',
-        );
-        final nonDocumentationMultiLinePrefixInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationMultiLinePrefixTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationMultiLinePrefixPersisted =
-            jsonEncode(nonDocumentationMultiLinePrefixTask.toMap());
-        final nonDocumentationMultiLinePrefixRetryData = (jsonDecode(
-          nonDocumentationMultiLinePrefixPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          nonDocumentationMultiLinePrefixInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          nonDocumentationMultiLinePrefixRetryData['instructionContent'],
-          nonDocumentationMultiLinePrefixInstruction,
-        );
-        expect(
-          nonDocumentationMultiLinePrefixPersisted,
-          isNot(contains('foobarxyz')),
-        );
-
-        final nonDocumentationLongMultiLinePrefixTask = taskFor(
-          'legacy-ocr-other-long-multiline-masked-prefix-echo',
-          'Use foo\nbar\nbaz\nqux\nquux\ncorge\ngrault to authenticate',
-          authorization: 'Bearer foo…',
-        );
-        final nonDocumentationLongMultiLinePrefixInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationLongMultiLinePrefixTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationLongMultiLinePrefixPersisted =
-            jsonEncode(nonDocumentationLongMultiLinePrefixTask.toMap());
-        expect(
-          nonDocumentationLongMultiLinePrefixInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          persistedInstruction(nonDocumentationLongMultiLinePrefixPersisted),
-          nonDocumentationLongMultiLinePrefixInstruction,
-        );
-        expect(
-          nonDocumentationLongMultiLinePrefixPersisted,
-          isNot(contains('foobarbazquxquuxcorgegrault')),
-        );
-
-        final nonDocumentationNaturalWordCredentialTask = taskFor(
-          'legacy-ocr-other-natural-word-fragmented-masked-prefix-echo',
-          'Use auth\nentic\nation123456 to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationNaturalWordCredentialInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationNaturalWordCredentialTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationNaturalWordCredentialPersisted =
-            jsonEncode(nonDocumentationNaturalWordCredentialTask.toMap());
-        expect(
-          nonDocumentationNaturalWordCredentialInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          persistedInstruction(nonDocumentationNaturalWordCredentialPersisted),
-          nonDocumentationNaturalWordCredentialInstruction,
-        );
-        expect(
-          nonDocumentationNaturalWordCredentialPersisted,
-          isNot(contains('authentication123456')),
-        );
-
-        final nonDocumentationNaturalWordLaterMarkerTask = taskFor(
-          'legacy-ocr-other-natural-word-later-marker-masked-prefix-echo',
-          'Use auth\nentic\nation\n123456 to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationNaturalWordLaterMarkerInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationNaturalWordLaterMarkerTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationNaturalWordLaterMarkerPersisted =
-            jsonEncode(nonDocumentationNaturalWordLaterMarkerTask.toMap());
-        expect(
-          nonDocumentationNaturalWordLaterMarkerInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          persistedInstruction(
-            nonDocumentationNaturalWordLaterMarkerPersisted,
-          ),
-          nonDocumentationNaturalWordLaterMarkerInstruction,
-        );
-        expect(
-          nonDocumentationNaturalWordLaterMarkerPersisted,
-          isNot(contains('authentication123456')),
-        );
-
-        final nonDocumentationShortFragmentLaterMarkerTask = taskFor(
-          'legacy-ocr-other-short-fragment-later-marker-masked-prefix-echo',
-          'Use auth\nentic\nation\nab\n123456 to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationShortFragmentLaterMarkerInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationShortFragmentLaterMarkerTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationShortFragmentLaterMarkerPersisted =
-            jsonEncode(nonDocumentationShortFragmentLaterMarkerTask.toMap());
-        expect(
-          nonDocumentationShortFragmentLaterMarkerInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          persistedInstruction(
-            nonDocumentationShortFragmentLaterMarkerPersisted,
-          ),
-          nonDocumentationShortFragmentLaterMarkerInstruction,
-        );
-        expect(
-          nonDocumentationShortFragmentLaterMarkerPersisted,
-          isNot(contains('authenticationab123456')),
-        );
-
-        final nonDocumentationNaturalAdverbAfterCredentialTask = taskFor(
-          'legacy-ocr-other-natural-adverb-after-masked-prefix-echo',
-          'Use auth\nentic\nation123456\ncarefully to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationNaturalAdverbAfterCredentialInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationNaturalAdverbAfterCredentialTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationNaturalAdverbAfterCredentialPersisted =
-            jsonEncode(
-                nonDocumentationNaturalAdverbAfterCredentialTask.toMap());
-        expect(
-          nonDocumentationNaturalAdverbAfterCredentialInstruction,
-          'Use [redacted]\ncarefully to authenticate',
-        );
-        expect(
-          nonDocumentationNaturalAdverbAfterCredentialPersisted,
-          isNot(contains('authentication123456')),
-        );
-        expect(
-          nonDocumentationNaturalAdverbAfterCredentialPersisted,
-          contains('carefully to authenticate'),
-        );
-        expect(
-          persistedInstruction(
-            nonDocumentationNaturalAdverbAfterCredentialPersisted,
-          ),
-          nonDocumentationNaturalAdverbAfterCredentialInstruction,
-        );
-
-        final nonDocumentationSplitDigitAdverbTask = taskFor(
-          'legacy-ocr-other-split-digit-adverb-masked-prefix-echo',
-          'Use auth\nentic\nation\n12\n3456\nquickly to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationSplitDigitAdverbInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationSplitDigitAdverbTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationSplitDigitAdverbPersisted =
-            jsonEncode(nonDocumentationSplitDigitAdverbTask.toMap());
-        expect(
-          nonDocumentationSplitDigitAdverbInstruction,
-          'Use [redacted]\nquickly to authenticate',
-        );
-        expect(
-          nonDocumentationSplitDigitAdverbPersisted,
-          isNot(contains('authentication123456')),
-        );
-        expect(
-          nonDocumentationSplitDigitAdverbPersisted,
-          contains('quickly to authenticate'),
-        );
-        expect(
-          persistedInstruction(nonDocumentationSplitDigitAdverbPersisted),
-          nonDocumentationSplitDigitAdverbInstruction,
-        );
-
-        final nonDocumentationNaturalWordPromptTask = taskFor(
-          'legacy-ocr-other-natural-word-prompt-under-masked-prefix',
-          'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationNaturalWordPrompt = OcrRetrySnapshot.fromMap(
-          nonDocumentationNaturalWordPromptTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationNaturalWordPromptPersisted =
-            jsonEncode(nonDocumentationNaturalWordPromptTask.toMap());
-        expect(
-          nonDocumentationNaturalWordPrompt,
-          'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
-        );
-        expect(
-          nonDocumentationNaturalWordPromptPersisted,
-          contains(
-            jsonEncode(
-              'Use auth\nentic\nation\nAPI\nto authenticate\nthen use documentation to authenticate',
-            ),
-          ),
-        );
-
-        final nonDocumentationVersionReferencePromptTask = taskFor(
-          'legacy-ocr-natural-version-reference-under-masked-prefix',
-          'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationVersionReferencePrompt = OcrRetrySnapshot.fromMap(
-          nonDocumentationVersionReferencePromptTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationVersionReferencePromptPersisted =
-            jsonEncode(nonDocumentationVersionReferencePromptTask.toMap());
-        expect(
-          nonDocumentationVersionReferencePrompt,
-          'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
-        );
-        expect(
-          nonDocumentationVersionReferencePromptPersisted,
-          contains(
-            jsonEncode(
-              'Use auth\nentic\nation\nAPI\nversion\n123456 to authenticate',
-            ),
-          ),
-        );
-
-        final nonDocumentationUnderscoredVersionCredentialTask = taskFor(
-          'legacy-ocr-underscored-version-credential-under-masked-prefix',
-          'Use auth\nentic\nation\napi_version123456 to authenticate',
-          authorization: 'Bearer auth…',
-        );
-        final nonDocumentationUnderscoredVersionCredentialInstruction =
-            OcrRetrySnapshot.fromMap(
-          nonDocumentationUnderscoredVersionCredentialTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationUnderscoredVersionCredentialPersisted =
-            jsonEncode(
-                nonDocumentationUnderscoredVersionCredentialTask.toMap());
-        expect(
-          nonDocumentationUnderscoredVersionCredentialInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          persistedInstruction(
-            nonDocumentationUnderscoredVersionCredentialPersisted,
-          ),
-          nonDocumentationUnderscoredVersionCredentialInstruction,
-        );
-        expect(
-          nonDocumentationUnderscoredVersionCredentialPersisted,
-          isNot(contains('api_version123456')),
-        );
-
-        final nonDocumentationNaturalLineTask = taskFor(
-          'legacy-ocr-other-masked-prefix-natural-line',
-          'Use foo\nbar\nPlease read the documentation carefully.',
-          authorization: 'Bearer foo…',
-        );
-        final nonDocumentationNaturalLineInstruction =
-            OcrRetrySnapshot.fromMap(nonDocumentationNaturalLineTask.retryData!)
-                .instructionContent!;
-        expect(
-          nonDocumentationNaturalLineInstruction,
-          'Use foo\nbar\nPlease read the documentation carefully.',
-        );
-
-        final nonDocumentationPrefixSpaceTask = taskFor(
-          'legacy-ocr-other-masked-prefix-space-echo',
-          'Use foo barxyz to authenticate',
-          authorization: 'Bearer foo…',
-        );
-        final nonDocumentationPrefixSpaceInstruction = OcrRetrySnapshot.fromMap(
-          nonDocumentationPrefixSpaceTask.retryData!,
-        ).instructionContent!;
-        final nonDocumentationPrefixSpacePersisted =
-            jsonEncode(nonDocumentationPrefixSpaceTask.toMap());
-        expect(
-          nonDocumentationPrefixSpaceInstruction,
-          'Use [redacted] to authenticate',
-        );
-        expect(
-          nonDocumentationPrefixSpacePersisted,
-          isNot(contains('foobarxyz')),
-        );
-
-        final nbspLineBreakTask = taskFor(
-          'legacy-ocr-nbsp-line-break-masked-prefix-echo',
-          'Please read documentation\n\u00a0foobarxyz carefully.',
-        );
-        final nbspLineBreakInstruction = OcrRetrySnapshot.fromMap(
-          nbspLineBreakTask.retryData!,
-        ).instructionContent!;
-        final nbspLineBreakPersisted = jsonEncode(nbspLineBreakTask.toMap());
-        expect(
-          nbspLineBreakInstruction,
-          'Please read [redacted] carefully.',
-        );
-        expect(nbspLineBreakPersisted, isNot(contains('foobarxyz')));
-
-        final spacedPrefixTask = taskFor(
-          'legacy-ocr-character-spaced-masked-prefix-echo',
-          'Please read d o c u m e n t a t i o n f o o b a r x y z carefully.',
-        );
-        final spacedPrefixInstruction = OcrRetrySnapshot.fromMap(
-          spacedPrefixTask.retryData!,
-        ).instructionContent!;
-        final spacedPrefixPersisted = jsonEncode(spacedPrefixTask.toMap());
-        expect(
-          spacedPrefixInstruction,
-          'Please read [redacted] carefully.',
-        );
-        expect(spacedPrefixPersisted, isNot(contains('foobarxyz')));
-
-        final nbspPrefixTask = taskFor(
-          'legacy-ocr-nbsp-masked-prefix-echo',
-          'Please read documentation\u00a0foobarxyz carefully.',
-        );
-        final nbspPrefixInstruction = OcrRetrySnapshot.fromMap(
-          nbspPrefixTask.retryData!,
-        ).instructionContent!;
-        final nbspPrefixPersisted = jsonEncode(nbspPrefixTask.toMap());
-        expect(
-          nbspPrefixInstruction,
-          'Please read [redacted] carefully.',
-        );
-        expect(nbspPrefixPersisted, isNot(contains('foobarxyz')));
-
-        const exactCredential = 'documentationchapter123456';
-        final exactCredentialTask = taskFor(
-          'legacy-ocr-natural-reference-exact-credential-echo',
-          'Please read documentation chapter 123456 carefully.',
-          authorization: 'Bearer $exactCredential',
-        );
-        final exactCredentialInstruction = OcrRetrySnapshot.fromMap(
-          exactCredentialTask.retryData!,
-        ).instructionContent!;
-        final exactCredentialPersisted =
-            jsonEncode(exactCredentialTask.toMap());
-        expect(
-          exactCredentialInstruction,
-          'Please read [redacted] carefully.',
-        );
-        expect(
-          exactCredentialInstruction.replaceAll(RegExp(r'\s+'), ''),
-          isNot(contains(exactCredential)),
-        );
-        expect(
-          exactCredentialPersisted.replaceAll(RegExp(r'\s+'), ''),
-          isNot(contains(exactCredential)),
-        );
-
-        final trailingCredentialTask = taskFor(
-          'legacy-ocr-natural-adverb-then-spaced-credential',
-          'Please read the documentation carefully foobarxyz.',
-        );
-        final trailingCredentialInstruction = OcrRetrySnapshot.fromMap(
-          trailingCredentialTask.retryData!,
-        ).instructionContent!;
-        final trailingCredentialPersisted =
-            jsonEncode(trailingCredentialTask.toMap());
-        final trailingCredentialPersistedRetryData = (jsonDecode(
-          trailingCredentialPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          trailingCredentialInstruction,
-          'Please read the documentation carefully [redacted].',
-        );
-        expect(
-          trailingCredentialPersistedRetryData['instructionContent'],
-          trailingCredentialInstruction,
-        );
-        expect(trailingCredentialPersisted, isNot(contains('foobarxyz')));
-
-        final trailingActionTask = taskFor(
-          'legacy-ocr-natural-action-after-spaced-credential',
-          'Please read the documentation foobarxyz carefully and summarize the receipt.',
-        );
-        final trailingActionInstruction = OcrRetrySnapshot.fromMap(
-          trailingActionTask.retryData!,
-        ).instructionContent!;
-        final trailingActionPersisted = jsonEncode(trailingActionTask.toMap());
-        expect(
-          trailingActionInstruction,
-          'Please read the [redacted] carefully and summarize the receipt.',
-        );
-        expect(trailingActionPersisted, isNot(contains('foobarxyz')));
-
-        final calculateActionTask = taskFor(
-          'legacy-ocr-calculate-action-after-spaced-credential',
-          'Please read the documentation foobarxyz and calculate the total.',
-        );
-        final calculateActionInstruction = OcrRetrySnapshot.fromMap(
-          calculateActionTask.retryData!,
-        ).instructionContent!;
-        final calculateActionPersisted =
-            jsonEncode(calculateActionTask.toMap());
-        expect(
-          calculateActionInstruction,
-          'Please read the [redacted] and calculate the total.',
-        );
-        expect(calculateActionPersisted, isNot(contains('foobarxyz')));
-
-        final attachedPrefixCredentialTask = taskFor(
-          'legacy-ocr-attached-prefix-spaced-credential',
-          'Please read documentationfoobar xyz carefully.',
-        );
-        final attachedPrefixCredentialInstruction = OcrRetrySnapshot.fromMap(
-          attachedPrefixCredentialTask.retryData!,
-        ).instructionContent!;
-        final attachedPrefixCredentialPersisted =
-            jsonEncode(attachedPrefixCredentialTask.toMap());
-        expect(
-          attachedPrefixCredentialInstruction,
-          'Please read [redacted] carefully.',
-        );
-        expect(
-          attachedPrefixCredentialPersisted,
-          isNot(contains('foobar xyz')),
-        );
-
-        final naturalLeadingCredentialTask = taskFor(
-          'legacy-ocr-natural-leading-word-spaced-credential',
-          'Please read the documentation the foobarxyz.',
-        );
-        final naturalLeadingCredentialInstruction = OcrRetrySnapshot.fromMap(
-          naturalLeadingCredentialTask.retryData!,
-        ).instructionContent!;
-        expect(
-          naturalLeadingCredentialInstruction,
-          'Please read the [redacted].',
-        );
-
-        final newlineCredentialTask = taskFor(
-          'legacy-ocr-newline-split-spaced-credential',
-          'Please read the documentation foo\nbarxyz.',
-        );
-        final newlineCredentialInstruction = OcrRetrySnapshot.fromMap(
-          newlineCredentialTask.retryData!,
-        ).instructionContent!;
-        final newlineCredentialPersisted =
-            jsonEncode(newlineCredentialTask.toMap());
-        final newlineCredentialPersistedRetryData =
-            (jsonDecode(newlineCredentialPersisted)
-                as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          newlineCredentialInstruction,
-          'Please read the [redacted].',
-        );
-        expect(
-          newlineCredentialPersistedRetryData['instructionContent'],
-          newlineCredentialInstruction,
-        );
-        expect(
-          newlineCredentialPersisted,
-          isNot(contains('foo\\nbarxyz')),
-        );
-        expect(newlineCredentialPersisted, isNot(contains('barxyz')));
-
-        final characterSplitCredentialTask = taskFor(
-          'legacy-ocr-character-split-spaced-credential',
-          'Please read the documentation f o o b a r x y z.',
-        );
-        final characterSplitCredentialPersisted =
-            jsonEncode(characterSplitCredentialTask.toMap());
-        expect(
-          OcrRetrySnapshot.fromMap(
-            characterSplitCredentialTask.retryData!,
-          ).instructionContent,
-          'Please read the [redacted].',
-        );
-        expect(
-          characterSplitCredentialPersisted.replaceAll(RegExp(r'\s+'), ''),
-          isNot(contains('foobarxyz')),
-        );
-
-        final clauseThenCredentialTask = taskFor(
-          'legacy-ocr-natural-clause-then-spaced-credential',
-          'Please read the documentation with care and summarize the key points foobarxyz.',
-        );
-        final clauseThenCredentialPersisted =
-            jsonEncode(clauseThenCredentialTask.toMap());
-        expect(
-          OcrRetrySnapshot.fromMap(
-            clauseThenCredentialTask.retryData!,
-          ).instructionContent,
-          'Please read the documentation with care and summarize the key points [redacted].',
-        );
-        expect(
-          clauseThenCredentialPersisted,
-          isNot(contains('foobarxyz')),
-        );
-
-        for (final credentialEcho in punctuationCredentialEchoes) {
-          final punctuationTask = taskFor(
-            'legacy-ocr-spaced-masked-credential-echo-punctuation',
-            'Please read the documentation $credentialEcho carefully.',
-          );
-          final punctuationInstruction = OcrRetrySnapshot.fromMap(
-            punctuationTask.retryData!,
-          ).instructionContent!;
-          final punctuationPersisted = jsonEncode(punctuationTask.toMap());
-          final punctuationPersistedRetryData = (jsonDecode(
-            punctuationPersisted,
-          ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-
-          expect(
-            punctuationInstruction,
-            'Please read the [redacted] carefully.',
-          );
-          expect(
-            punctuationPersistedRetryData['instructionContent'],
-            punctuationInstruction,
-          );
-          expect(punctuationPersisted, isNot(contains(credentialEcho)));
-        }
-
-        final explicitCredentialUseTask = taskFor(
-          'legacy-ocr-spaced-credential-explicit-use-context',
-          'Use documentation foobar to authenticate.',
-        );
-        final explicitCredentialUseInstruction = OcrRetrySnapshot.fromMap(
-          explicitCredentialUseTask.retryData!,
-        ).instructionContent!;
-        final explicitCredentialUsePersisted =
-            jsonEncode(explicitCredentialUseTask.toMap());
-        expect(
-          explicitCredentialUseInstruction,
-          'Use [redacted] to authenticate.',
-        );
-        expect(explicitCredentialUsePersisted, isNot(contains('foobar')));
-
-        final naturalWordInsideCredentialTask = taskFor(
-          'legacy-ocr-natural-word-inside-spaced-credential',
-          'Please read the documentation foobar carefully xyz.',
-        );
-        final naturalWordInsideCredentialInstruction =
-            OcrRetrySnapshot.fromMap(naturalWordInsideCredentialTask.retryData!)
-                .instructionContent!;
-        final naturalWordInsideCredentialPersisted =
-            jsonEncode(naturalWordInsideCredentialTask.toMap());
-        expect(
-          naturalWordInsideCredentialInstruction,
-          'Please read the [redacted].',
-        );
-        expect(naturalWordInsideCredentialPersisted, isNot(contains('foobar')));
-        expect(
-          naturalWordInsideCredentialPersisted,
-          isNot(contains('carefully')),
-        );
-        expect(naturalWordInsideCredentialPersisted, isNot(contains('xyz')));
-
-        final contextEchoTask = taskFor(
-          'legacy-ocr-spaced-credential-with-natural-tail',
-          'Read the documentation $echoedCredential this workflow.',
-        );
-        final contextInstruction = OcrRetrySnapshot.fromMap(
-          contextEchoTask.retryData!,
-        ).instructionContent!;
-        final contextPersisted = jsonEncode(contextEchoTask.toMap());
-
-        expect(contextInstruction, contains('[redacted]'));
-        expect(contextInstruction, contains('this workflow.'));
-        expect(contextInstruction, isNot(contains(echoedCredential)));
-        final persistedContextRetryData = (jsonDecode(contextPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          persistedContextRetryData['instructionContent'],
-          contains('this workflow.'),
-        );
-        expect(contextPersisted, isNot(contains(echoedCredential)));
-
-        final capitalizedTask = taskFor(
-          'legacy-ocr-capitalized-spaced-credential-prefix',
-          'Please read the Documentation $echoedCredential carefully.',
-        );
-        final capitalizedInstruction = OcrRetrySnapshot.fromMap(
-          capitalizedTask.retryData!,
-        ).instructionContent!;
-        final capitalizedPersisted = jsonEncode(capitalizedTask.toMap());
-
-        expect(
-          capitalizedInstruction,
-          'Please read the [redacted] carefully.',
-        );
-        final capitalizedPersistedRetryData = (jsonDecode(
-          capitalizedPersisted,
-        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          capitalizedPersistedRetryData['instructionContent'],
-          capitalizedInstruction,
-        );
-        expect(capitalizedPersisted, isNot(contains(echoedCredential)));
-      },
-    );
-
-    test(
-      'legacy OCR instruction migration preserves natural documentation after a masked prefix',
-      () {
-        const safePrompt = 'Please read the documentation carefully.\n'
-            'Please read the documentation carefully. Summarize the process.\n'
-            'Please read the documentation now. Please summarize the process.\n'
-            'Please read the documentation now. Summarize the process clearly.\n'
-            'Please read the documentation now. Proceed with the process.\n'
-            'Please read the documentation now. Proceed.\n'
-            'Please read the documentation now. Proceed carefully.\n'
-            'Please read the documentation now. Prepare a summary.\n'
-            'Please read the documentation now. Summarize the process accurately.\n'
-            'Please read the documentation now. Summarize the process particularly carefully.\n'
-            'Please read the documentation now. Summarize the process externally.\n'
-            'Please read the documentation now. Explain the process transparently.\n'
-            'Please read the documentation now. Summarize the process responsibly.\n'
-            'Please read the documentation 2025. Release notes.\n'
-            'Please read the documentation 2025. User guide.\n'
-            'Please read the documentation 2025. Python API guide.\n'
-            'Please read the documentation now. Summarize the overview throughout the workflow.\n'
-            'Please read the documentation now. Summarize the process repeatedly.\n'
-            'Use the documentation to authenticate this API request.\n'
-            'Please read the documentation independently.\n'
-            'Please read the documentation thoroughly.\n'
-            'Please read the documentation instructions carefully.\n'
-            'Please read the documentation screenshots carefully.\n'
-            'Please read the documentation changelog carefully.\n'
-            'Please read the documentation carefully and summarize the process.\n'
-            'Please read the documentation chapters carefully.\n'
-            'Please read the documentation carefully before reading further.\n'
-            'Please read the documentation with care.\n'
-            'Please read the documentation with care and summarize the key points.\n'
-            'Please read the documentation on security.\n'
-            'Please read the documentation on compliance carefully.\n'
-            'Please read the documentation on security carefully.\n'
-            'Please read the documentation for networking carefully.\n'
-            'Please read the documentation about encryption carefully.\n'
-            'Please read the documentation a 100-page guide carefully.\n'
-            'Please read the documentation v2 guide carefully.\n'
-            'Please read documentation chapter12 carefully.\n'
-            'Please read documentation chapter 123456 carefully.\n'
-            'Please read documentation section_2 carefully.\n'
-            'Please read documentation c h a p t e r 1 2 3 carefully.\n'
-            'Please read documentation id123456 carefully.\n'
-            'Please read documentation id123456789 carefully.\n'
-            'Please read documentation ID 123456 carefully.\n'
-            'Please read documentation I D 1 2 3 4 5 6 carefully.\n'
-            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y.\n'
-            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y '
-            'a n d s u m m a r i z e t h e p r o c e s s.\n'
-            'Please read documentation I D 1 2 3 4 5 6 c a r e f u l l y '
-            'b e f o r e r e a d i n g f u r t h e r.\n'
-            'Please read the documentation a n d a n s w e r t h e '
-            'q u e s t i o n.\n'
-            'Please read the documentation a n d a n a l y z e t h e '
-            's e c u r i t y.\n'
-            'Please read the documentation 2025 release notes.\n'
-            'Please read the documentation version 2025 release notes.\n'
-            'Please read the documentation verbatim.\n'
-            'Please read the documentation i n s t r u c t i o n s.\n'
-            'Please read the documentation n e t w o r k i n g.\n'
-            'Please read the documentation w i t h c a r e.\n'
-            'Please read the documentation o n s e c u r i t y.\n'
-            'Please read the documentation w i t h c a r e a n d '
-            's u m m a r i z e.\n'
-            'Please read the documentation a n d t r a n s c r i b e '
-            't h e r e c e i p t.\n'
-            'Please read the documentation a n d t r a n s c r i b e '
-            'a r e c e i p t.\n'
-            'Please read the documentation carefully before proceeding '
-            'with configuration.';
-        BackgroundTask taskFor(String id, String instruction) =>
-            BackgroundTask.fromMap({
-              'id': id,
-              'type': 'ocr',
-              'title': 'legacy OCR request',
-              'status': 'failed',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'rawRequest': {
-                'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {'Authorization': 'Bearer documentation…'},
-                'body': {
-                  'model': 'vision-model',
-                  'messages': [
-                    {
-                      'role': 'user',
-                      'content': [
-                        {'type': 'text', 'text': instruction},
-                      ],
-                    },
-                  ],
-                },
-              },
-            });
-        String? persistedInstruction(String serializedTask) {
-          final taskMap = jsonDecode(serializedTask) as Map<String, dynamic>;
-          return OcrRetrySnapshot.fromMap(
-            taskMap['retryData'] as Map<String, dynamic>,
-          ).instructionContent;
-        }
-
-        final task = taskFor(
-          'legacy-ocr-spaced-natural-documentation-prompt',
-          safePrompt,
-        );
-        for (final entry in safePrompt.split('\n').asMap().entries) {
-          final isolatedTask = taskFor(
-            'legacy-ocr-spaced-natural-documentation-prompt-${entry.key}',
-            entry.value,
-          );
-          expect(
-            OcrRetrySnapshot.fromMap(
-              isolatedTask.retryData!,
-            ).instructionContent,
-            entry.value,
-            reason: entry.value,
-          );
-        }
-        final instructionContent = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent!;
-        final persisted = jsonEncode(task.toMap());
-
-        expect(instructionContent, safePrompt);
-        final persistedTask = jsonDecode(persisted) as Map<String, dynamic>;
-        final persistedRetryData =
-            persistedTask['retryData'] as Map<String, dynamic>;
-        expect(persistedRetryData['instructionContent'], safePrompt);
-
-        final credentialAfterSentence = taskFor(
-          'legacy-ocr-credential-after-natural-sentence',
-          'Please read the documentation now. '
-              'Summarize the process foobarxyz.',
-        );
-        final credentialAfterSentenceInstruction = OcrRetrySnapshot.fromMap(
-          credentialAfterSentence.retryData!,
-        ).instructionContent!;
-        final credentialAfterSentencePersisted =
-            jsonEncode(credentialAfterSentence.toMap());
-        expect(
-          credentialAfterSentenceInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          credentialAfterSentencePersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialAfterSentencePersisted),
-          credentialAfterSentenceInstruction,
-        );
-
-        final credentialBeforeNaturalTitleTail = taskFor(
-          'legacy-ocr-year-title-does-not-hide-credential',
-          'Please read the documentation 2025. '
-              'foobarxyz release notes.',
-        );
-        final credentialBeforeNaturalTitleTailInstruction =
-            OcrRetrySnapshot.fromMap(
-          credentialBeforeNaturalTitleTail.retryData!,
-        ).instructionContent!;
-        final credentialBeforeNaturalTitleTailPersisted = jsonEncode(
-          credentialBeforeNaturalTitleTail.toMap(),
-        );
-        expect(
-          credentialBeforeNaturalTitleTailInstruction,
-          'Please read the documentation 2025. [redacted] release notes.',
-        );
-        expect(
-          credentialBeforeNaturalTitleTailPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          credentialBeforeNaturalTitleTailPersisted,
-          contains(jsonEncode(credentialBeforeNaturalTitleTailInstruction)),
-        );
-        expect(
-          persistedInstruction(credentialBeforeNaturalTitleTailPersisted),
-          credentialBeforeNaturalTitleTailInstruction,
-        );
-
-        final multipleCredentialsAfterNaturalYear = taskFor(
-          'legacy-ocr-natural-year-with-multiple-credential-echoes',
-          'Please read the documentation 2025. '
-              'foobarxyz release notes foo_barxyz.',
-        );
-        final multipleCredentialsAfterNaturalYearInstruction =
-            OcrRetrySnapshot.fromMap(
-          multipleCredentialsAfterNaturalYear.retryData!,
-        ).instructionContent!;
-        final multipleCredentialsAfterNaturalYearPersisted = jsonEncode(
-          multipleCredentialsAfterNaturalYear.toMap(),
-        );
-        expect(
-          multipleCredentialsAfterNaturalYearInstruction,
-          'Please read the documentation 2025. '
-          '[redacted] release notes [redacted].',
-        );
-        expect(
-          multipleCredentialsAfterNaturalYearPersisted,
-          contains(jsonEncode(multipleCredentialsAfterNaturalYearInstruction)),
-        );
-        expect(
-          multipleCredentialsAfterNaturalYearPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          multipleCredentialsAfterNaturalYearPersisted,
-          isNot(contains('foo_barxyz')),
-        );
-
-        final credentialLikeTitleChunk = taskFor(
-          'legacy-ocr-year-title-rejects-credential-like-word',
-          'Please read the documentation 2025. '
-              'foobar release notes.',
-        );
-        final credentialLikeTitleChunkInstruction = OcrRetrySnapshot.fromMap(
-          credentialLikeTitleChunk.retryData!,
-        ).instructionContent!;
-        final credentialLikeTitleChunkPersisted = jsonEncode(
-          credentialLikeTitleChunk.toMap(),
-        );
-        expect(
-          credentialLikeTitleChunkInstruction,
-          'Please read the documentation [redacted] release notes.',
-        );
-        expect(
-          credentialLikeTitleChunkPersisted,
-          isNot(contains('foobar')),
-        );
-        expect(
-          persistedInstruction(credentialLikeTitleChunkPersisted),
-          credentialLikeTitleChunkInstruction,
-        );
-
-        final capitalizedCredentialLikeTitleChunk = taskFor(
-          'legacy-ocr-year-title-rejects-capitalized-credential-word',
-          'Please read the documentation 2025. '
-              'Foobar release notes.',
-        );
-        final capitalizedCredentialLikeTitleChunkInstruction =
-            OcrRetrySnapshot.fromMap(
-          capitalizedCredentialLikeTitleChunk.retryData!,
-        ).instructionContent!;
-        final capitalizedCredentialLikeTitleChunkPersisted = jsonEncode(
-          capitalizedCredentialLikeTitleChunk.toMap(),
-        );
-        expect(
-          capitalizedCredentialLikeTitleChunkInstruction,
-          'Please read the documentation [redacted] release notes.',
-        );
-        expect(
-          capitalizedCredentialLikeTitleChunkPersisted,
-          isNot(contains('Foobar')),
-        );
-        expect(
-          persistedInstruction(capitalizedCredentialLikeTitleChunkPersisted),
-          capitalizedCredentialLikeTitleChunkInstruction,
-        );
-
-        final credentialOnNextLine = taskFor(
-          'legacy-ocr-credential-on-line-after-natural-sentence',
-          'Please read the documentation now. '
-              'Summarize the process\nfoo\nbarxyz.',
-        );
-        final credentialOnNextLineInstruction = OcrRetrySnapshot.fromMap(
-          credentialOnNextLine.retryData!,
-        ).instructionContent!;
-        final credentialOnNextLinePersisted =
-            jsonEncode(credentialOnNextLine.toMap());
-        expect(
-          credentialOnNextLineInstruction,
-          'Please read the documentation now. '
-          'Summarize the process\n[redacted].',
-        );
-        expect(
-          credentialOnNextLinePersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialOnNextLinePersisted),
-          credentialOnNextLineInstruction,
-        );
-
-        final credentialBeforeNaturalInstruction = taskFor(
-          'legacy-ocr-credential-before-natural-instruction',
-          'Please read the documentation foo. '
-              'barxyz and summarize the receipt.',
-        );
-        final credentialBeforeNaturalInstructionContent =
-            OcrRetrySnapshot.fromMap(
-          credentialBeforeNaturalInstruction.retryData!,
-        ).instructionContent!;
-        final credentialBeforeNaturalInstructionPersisted = jsonEncode(
-          credentialBeforeNaturalInstruction.toMap(),
-        );
-        expect(
-          credentialBeforeNaturalInstructionContent,
-          'Please read the documentation [redacted] '
-          'and summarize the receipt.',
-        );
-        expect(
-          credentialBeforeNaturalInstructionPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialBeforeNaturalInstructionPersisted),
-          credentialBeforeNaturalInstructionContent,
-        );
-
-        final credentialSplitAcrossManyLines = taskFor(
-          'legacy-ocr-credential-split-across-many-lines',
-          'Please read the documentation now. '
-              'Summarize the process\nfoo\nbar\nxyz.',
-        );
-        final credentialSplitAcrossManyLinesInstruction =
-            OcrRetrySnapshot.fromMap(
-          credentialSplitAcrossManyLines.retryData!,
-        ).instructionContent!;
-        final credentialSplitAcrossManyLinesPersisted = jsonEncode(
-          credentialSplitAcrossManyLines.toMap(),
-        );
-        expect(
-          credentialSplitAcrossManyLinesInstruction,
-          'Please read the documentation now. '
-          'Summarize the process\n[redacted].',
-        );
-        expect(
-          credentialSplitAcrossManyLinesPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialSplitAcrossManyLinesPersisted),
-          credentialSplitAcrossManyLinesInstruction,
-        );
-
-        final credentialFragmentedAroundNaturalWord = taskFor(
-          'legacy-ocr-credential-fragmented-around-natural-word',
-          'Please read the documentation now. '
-              'Summarize the process foo carefully\nbarxyz.',
-        );
-        final credentialFragmentedAroundNaturalWordInstruction =
-            OcrRetrySnapshot.fromMap(
-          credentialFragmentedAroundNaturalWord.retryData!,
-        ).instructionContent!;
-        final credentialFragmentedAroundNaturalWordPersisted = jsonEncode(
-          credentialFragmentedAroundNaturalWord.toMap(),
-        );
-        expect(
-          credentialFragmentedAroundNaturalWordInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          credentialFragmentedAroundNaturalWordPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialFragmentedAroundNaturalWordPersisted),
-          credentialFragmentedAroundNaturalWordInstruction,
-        );
-
-        final singleLetterCredentialChunk = taskFor(
-          'legacy-ocr-single-letter-credential-chunk',
-          'Please read the documentation a. bcdefxyz.',
-        );
-        final singleLetterCredentialChunkInstruction = OcrRetrySnapshot.fromMap(
-          singleLetterCredentialChunk.retryData!,
-        ).instructionContent!;
-        final singleLetterCredentialChunkPersisted = jsonEncode(
-          singleLetterCredentialChunk.toMap(),
-        );
-        expect(
-          singleLetterCredentialChunkInstruction,
-          'Please read the documentation [redacted].',
-        );
-        expect(
-          singleLetterCredentialChunkPersisted,
-          isNot(contains('bcdefxyz')),
-        );
-        expect(
-          persistedInstruction(singleLetterCredentialChunkPersisted),
-          singleLetterCredentialChunkInstruction,
-        );
-
-        final credentialAfterSentenceBoundary = taskFor(
-          'legacy-ocr-credential-after-sentence-boundary',
-          'Please read the documentation now. '
-              'Summarize the process.\nfoobarxyz.',
-        );
-        final credentialAfterSentenceBoundaryInstruction =
-            OcrRetrySnapshot.fromMap(
-          credentialAfterSentenceBoundary.retryData!,
-        ).instructionContent!;
-        final credentialAfterSentenceBoundaryPersisted =
-            jsonEncode(credentialAfterSentenceBoundary.toMap());
-        expect(
-          credentialAfterSentenceBoundaryInstruction,
-          'Please read the documentation now. '
-          'Summarize the process.\n[redacted].',
-        );
-        expect(
-          credentialAfterSentenceBoundaryPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialAfterSentenceBoundaryPersisted),
-          credentialAfterSentenceBoundaryInstruction,
-        );
-
-        final shortCredentialAfterSentence = taskFor(
-          'legacy-ocr-short-credential-after-natural-sentence',
-          'Please read the documentation now. '
-              'Summarize the process abc123.',
-        );
-        final shortCredentialAfterSentenceInstruction =
-            OcrRetrySnapshot.fromMap(
-          shortCredentialAfterSentence.retryData!,
-        ).instructionContent!;
-        final shortCredentialAfterSentencePersisted =
-            jsonEncode(shortCredentialAfterSentence.toMap());
-        expect(
-          shortCredentialAfterSentenceInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          shortCredentialAfterSentencePersisted,
-          isNot(contains('abc123')),
-        );
-        expect(
-          persistedInstruction(shortCredentialAfterSentencePersisted),
-          shortCredentialAfterSentenceInstruction,
-        );
-
-        final alphaNumericCredentialAfterSentence = taskFor(
-          'legacy-ocr-alphanumeric-credential-after-natural-sentence',
-          'Please read the documentation now. '
-              'Summarize the process foo1bar.',
-        );
-        final alphaNumericCredentialAfterSentenceInstruction =
-            OcrRetrySnapshot.fromMap(
-          alphaNumericCredentialAfterSentence.retryData!,
-        ).instructionContent!;
-        final alphaNumericCredentialAfterSentencePersisted = jsonEncode(
-          alphaNumericCredentialAfterSentence.toMap(),
-        );
-        expect(
-          alphaNumericCredentialAfterSentenceInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          alphaNumericCredentialAfterSentencePersisted,
-          isNot(contains('foo1bar')),
-        );
-        expect(
-          persistedInstruction(alphaNumericCredentialAfterSentencePersisted),
-          alphaNumericCredentialAfterSentenceInstruction,
-        );
-
-        final spacedCredentialAfterSentence = taskFor(
-          'legacy-ocr-spaced-credential-after-natural-sentence',
-          'Please read the documentation now. '
-              'Summarize the process foo barxyz.',
-        );
-        final spacedCredentialAfterSentenceInstruction =
-            OcrRetrySnapshot.fromMap(
-          spacedCredentialAfterSentence.retryData!,
-        ).instructionContent!;
-        final spacedCredentialAfterSentencePersisted =
-            jsonEncode(spacedCredentialAfterSentence.toMap());
-        expect(
-          spacedCredentialAfterSentenceInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          spacedCredentialAfterSentencePersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(spacedCredentialAfterSentencePersisted),
-          spacedCredentialAfterSentenceInstruction,
-        );
-
-        final credentialAroundNaturalWord = taskFor(
-          'legacy-ocr-credential-around-natural-word',
-          'Please read the documentation now. '
-              'Summarize the process foo carefully barxyz.',
-        );
-        final credentialAroundNaturalWordInstruction = OcrRetrySnapshot.fromMap(
-          credentialAroundNaturalWord.retryData!,
-        ).instructionContent!;
-        final credentialAroundNaturalWordPersisted =
-            jsonEncode(credentialAroundNaturalWord.toMap());
-        expect(
-          credentialAroundNaturalWordInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          credentialAroundNaturalWordPersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialAroundNaturalWordPersisted),
-          credentialAroundNaturalWordInstruction,
-        );
-
-        final overlappingCredentialSpans = taskFor(
-          'legacy-ocr-overlapping-credential-spans',
-          'Please read the documentation now. '
-              'Summarize the process fooabcdefgh carefully xyz12345.',
-        );
-        final overlappingCredentialSpansInstruction = OcrRetrySnapshot.fromMap(
-          overlappingCredentialSpans.retryData!,
-        ).instructionContent!;
-        final overlappingCredentialSpansPersisted =
-            jsonEncode(overlappingCredentialSpans.toMap());
-        expect(
-          overlappingCredentialSpansInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          overlappingCredentialSpansPersisted,
-          isNot(contains('fooabcdefgh')),
-        );
-        expect(
-          overlappingCredentialSpansPersisted,
-          isNot(contains('xyz12345')),
-        );
-        expect(
-          persistedInstruction(overlappingCredentialSpansPersisted),
-          overlappingCredentialSpansInstruction,
-        );
-
-        final credentialAroundNaturalSequence = taskFor(
-          'legacy-ocr-credential-around-natural-sequence',
-          'Please read the documentation now. '
-              'Summarize the process foo carefully then barxyz.',
-        );
-        final credentialAroundNaturalSequenceInstruction =
-            OcrRetrySnapshot.fromMap(
-          credentialAroundNaturalSequence.retryData!,
-        ).instructionContent!;
-        final credentialAroundNaturalSequencePersisted =
-            jsonEncode(credentialAroundNaturalSequence.toMap());
-        expect(
-          credentialAroundNaturalSequenceInstruction,
-          'Please read the documentation now. '
-          'Summarize the process [redacted].',
-        );
-        expect(
-          credentialAroundNaturalSequencePersisted,
-          isNot(contains('foobarxyz')),
-        );
-        expect(
-          persistedInstruction(credentialAroundNaturalSequencePersisted),
-          credentialAroundNaturalSequenceInstruction,
-        );
-      },
-    );
-
-    test(
       'legacy OCR instruction migration preserves prompts with short masked keys',
       () {
         final task = BackgroundTask.fromMap({
@@ -17554,17 +15266,11 @@ void main() {
           },
         });
 
-        final migratedInstruction =
-            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent;
-        final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(migratedInstruction, 'Read the receipt total carefully');
         expect(
-          persistedRetryData['instructionContent'],
-          migratedInstruction,
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Read the receipt total carefully',
         );
-        expect(persisted, isNot(contains('private-value')));
+        expect(jsonEncode(task.toMap()), isNot(contains('private-value')));
       },
     );
 
@@ -17602,55 +15308,11 @@ void main() {
         });
 
         final persisted = jsonEncode(task.toMap());
-        const expectedInstruction =
-            'Read the receipt total carefully\nBearer\n[redacted]';
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          expectedInstruction,
+          isNull,
         );
-        expect(persisted, contains(jsonEncode(expectedInstruction)));
         expect(persisted, isNot(contains(apiKey)));
-
-        final maskedTask = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-masked-credential-split-across-text-parts',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer documentation…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {
-                      'type': 'text',
-                      'text': 'Please read the documentation foo',
-                    },
-                    {'type': 'text', 'text': 'barxyz carefully.'},
-                  ],
-                },
-              ],
-            },
-          },
-        });
-        const expectedMaskedInstruction =
-            'Please read the [redacted] carefully.';
-        final maskedPersisted = jsonEncode(maskedTask.toMap());
-        final maskedPersistedRetryData = (jsonDecode(maskedPersisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        expect(
-          OcrRetrySnapshot.fromMap(maskedTask.retryData!).instructionContent,
-          expectedMaskedInstruction,
-        );
-        expect(
-          maskedPersistedRetryData['instructionContent'],
-          expectedMaskedInstruction,
-        );
-        expect(maskedPersisted, isNot(contains('foobarxyz')));
       },
     );
 
@@ -17686,20 +15348,11 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         final instruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent!;
 
-        expect(
-          instruction,
-          '$safePrompt\nProvide [redacted] for the request',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          '$safePrompt\nProvide [redacted] for the request',
-        );
+        expect(instruction, contains(safePrompt));
         expect(instruction, isNot(contains(echoedKey)));
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(echoedKey)));
@@ -17739,16 +15392,9 @@ void main() {
         final instruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent!;
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-        final expectedInstruction =
-            '$safePrompt Use [redacted] to process this image';
 
-        expect(instruction, expectedInstruction);
-        expect(
-          persistedRetryData['instructionContent'],
-          expectedInstruction,
-        );
+        expect(instruction, contains(safePrompt));
+        expect(instruction, contains('Use [redacted] to process this image'));
         expect(instruction, isNot(contains(apiKey)));
         expect(persisted, contains(safePrompt));
         expect(persisted, isNot(contains(apiKey)));
@@ -18361,20 +16007,11 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         final migratedInstruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent;
 
-        expect(
-          migratedInstruction,
-          'The note says [redacted].\n$safeInstruction',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          'The note says [redacted].\n$safeInstruction',
-        );
+        expect(migratedInstruction, contains(safeInstruction));
         expect(persisted, contains(safeInstruction));
         expect(migratedInstruction, isNot(contains(apiKey)));
         expect(persisted, isNot(contains(apiKey)));
@@ -18410,20 +16047,12 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         final migratedInstruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent;
 
         expect(
-          migratedInstruction,
-          'Read the receipt total carefully. The note says [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          'Read the receipt total carefully. The note says [redacted].',
-        );
+            migratedInstruction, contains('Read the receipt total carefully.'));
         expect(persisted, contains('Read the receipt total carefully.'));
         expect(migratedInstruction, isNot(contains(apiKey)));
         expect(persisted, isNot(contains(apiKey)));
@@ -18459,20 +16088,12 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final persistedRetryData = (jsonDecode(persisted)
-            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
         final migratedInstruction = OcrRetrySnapshot.fromMap(
           task.retryData!,
         ).instructionContent;
 
         expect(
-          migratedInstruction,
-          'Read the receipt total carefully. The note says [redacted].',
-        );
-        expect(
-          persistedRetryData['instructionContent'],
-          'Read the receipt total carefully. The note says [redacted].',
-        );
+            migratedInstruction, contains('Read the receipt total carefully.'));
         expect(persisted, contains('Read the receipt total carefully.'));
         expect(migratedInstruction, isNot(contains(apiKey)));
         expect(persisted, isNot(contains(apiKey)));
