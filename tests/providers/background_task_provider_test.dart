@@ -15010,6 +15010,7 @@ void main() {
           'foo. barxyz',
           'foo: barxyz',
           'foo; barxyz',
+          'foo bar carefully',
           'key abc123',
           'p a s s w o r d',
           '1234 5678 9012',
@@ -15206,6 +15207,7 @@ void main() {
       'legacy OCR instruction migration preserves natural documentation after a masked prefix',
       () {
         const safePrompt = 'Please read the documentation carefully.\n'
+            'Please read the documentation independently.\n'
             'Please read the documentation thoroughly.\n'
             'Please read the documentation instructions carefully.\n'
             'Please read the documentation screenshots carefully.\n'
@@ -15216,6 +15218,7 @@ void main() {
             'Please read the documentation with care.\n'
             'Please read the documentation with care and summarize the key points.\n'
             'Please read the documentation on security.\n'
+            'Please read the documentation on compliance carefully.\n'
             'Please read the documentation on security carefully.\n'
             'Please read the documentation for networking carefully.\n'
             'Please read the documentation v2 guide carefully.\n'

@@ -1449,8 +1449,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'fully',
       'completely',
       'verbatim',
+      'independently',
     };
     const naturalNouns = {
+      'documentation',
       'instructions',
       'guide',
       'guides',
@@ -1474,6 +1476,10 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'examples',
       'changelog',
       'changelogs',
+      'release',
+      'releases',
+      'note',
+      'notes',
       'method',
       'methods',
       'requirement',
@@ -1507,6 +1513,12 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         chunks[chunks.length - 1] = chunks.last.substring(
           0,
           chunks.last.length - trailingPunctuation.length,
+        );
+      }
+      for (var index = 0; index < chunks.length - 1; index++) {
+        chunks[index] = chunks[index].replaceFirst(
+          RegExp(r'[.!?;:)}\]"”’]+$'),
+          '',
         );
       }
       final numericSequence = chunks.join();
@@ -1549,6 +1561,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         'deployment',
         'usage',
         'configuration',
+        'compliance',
         'troubleshooting',
         'networking',
         'privacy',
@@ -1746,6 +1759,22 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       var credentialSuffix = '';
       var foundCredential = false;
       var expectsDocumentIdentifierNumber = false;
+      bool hasCredentialShape(String suffix) {
+        final alphabeticSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+        final hasMarkerCredentialShape = RegExp(r'[0-9_]').hasMatch(suffix) &&
+            suffix.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').length >= 8 &&
+            alphabeticSuffix.length >= 2;
+        return hasMarkerCredentialShape ||
+            _legacyOcrHasCredentialWord(alphabeticSuffix) ||
+            (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
+                _legacyOcrHasHighAlphabeticEntropy(
+                  alphabeticSuffix,
+                  minimumLength: 8,
+                  minimumEntropy: 2.9,
+                  maximumVowelRatio: 0.4,
+                ));
+      }
+
       for (var index = 0; index < chunks.length; index++) {
         final chunk = chunks[index];
         final normalizedChunk = chunk.toLowerCase();
@@ -1781,25 +1810,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           if (adjacentOpaqueKeyTail) foundCredential = true;
           continue;
         }
+        if (!foundCredential && credentialSuffix.isNotEmpty && isNaturalChunk) {
+          if (hasCredentialShape('$credentialSuffix$chunk')) {
+            foundCredential = true;
+          }
+          continue;
+        }
         if (foundCredential) continue;
         credentialSuffix += chunk;
-        final alphabeticSuffix =
-            credentialSuffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
-        final hasMarkerCredentialShape = RegExp(r'[0-9_]')
-                .hasMatch(credentialSuffix) &&
-            credentialSuffix.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').length >=
-                8 &&
-            alphabeticSuffix.length >= 2;
-        final hasCredentialShape = hasMarkerCredentialShape ||
-            _legacyOcrHasCredentialWord(alphabeticSuffix) ||
-            (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
-                _legacyOcrHasHighAlphabeticEntropy(
-                  alphabeticSuffix,
-                  minimumLength: 8,
-                  minimumEntropy: 2.9,
-                  maximumVowelRatio: 0.4,
-                ));
-        if (hasCredentialShape) {
+        if (hasCredentialShape(credentialSuffix)) {
           foundCredential = true;
         }
       }
@@ -2702,10 +2721,15 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       sourceText,
       credentialValues,
     );
-    final redactedText = _legacyOcrRedactMaskedCredentialEchoes(
-      redactionSourceText,
-      credentialValues,
-    );
+    final redactedText = hadCredentialBeforeRedaction
+        ? _legacyOcrRedactMaskedCredentialEchoes(
+            redactionSourceText,
+            credentialValues,
+          )
+        : _legacyOcrRedactSpacedDocumentationCredentialEchoes(
+            redactionSourceText,
+            credentialValues,
+          );
     final hadCredential =
         hadCredentialBeforeRedaction || redactedText != redactionSourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
