@@ -1525,7 +1525,7 @@ void main() {
     );
 
     test(
-      'unsupported OCR retry data without a request keeps only safe fields',
+      'unsupported OCR retry data preserves safe extensions and strips credentials',
       () {
         const apiKey = 'unsupported-retry-api-key-4812';
         final storageRef = 'ocr_retry_cache/${'b' * 64}.bin';
@@ -1575,9 +1575,9 @@ void main() {
         expect(snapshot.images.single.storageRef, storageRef);
         expect(snapshot.instructionContent, 'Read the invoice total carefully');
         expect(retryData.containsKey('apiKey'), isFalse);
-        expect(retryData.containsKey('futureMetadata'), isFalse);
+        expect(retryData['futureMetadata'], 'unknown extension');
         expect(persisted, isNot(contains(apiKey)));
-        expect(persisted, isNot(contains('futureMetadata')));
+        expect(persisted, contains('futureMetadata'));
       },
     );
 
@@ -1877,6 +1877,58 @@ void main() {
 
       expect(task.retryData, retryData);
     });
+
+    test(
+      'safe future OCR retry fields survive task persistence while remaining unsupported',
+      () {
+        final storageRef = 'ocr_retry_cache/${'e' * 64}.bin';
+        final task = BackgroundTask.fromMap({
+          'id': 'future-ocr-retry-extension-survives',
+          'type': 'ocr',
+          'title': 'Failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {'configId': 'saved-config', 'modelId': 'saved-model'},
+            'images': [
+              {
+                'storageRef': storageRef,
+                'format': 'png',
+                'name': 'receipt.png',
+              },
+            ],
+            'instructionContent': 'Read the receipt total',
+            'futureSettings': {
+              'recognitionMode': 'highAccuracy',
+              'includeRegions': true,
+            },
+            'futureAuth': {'auth': 'Bearer future-credential-value'},
+            'futureService': {'x-api-key': 'opaque-x-api-key-value'},
+          },
+        });
+
+        final persisted = jsonEncode(task.toMap());
+        final retryData =
+            jsonDecode(persisted)['retryData'] as Map<String, dynamic>;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+
+        expect(retryData['version'], 99);
+        expect(retryData['futureSettings'], {
+          'recognitionMode': 'highAccuracy',
+          'includeRegions': true,
+        });
+        expect(retryData.containsKey('futureAuth'), isFalse);
+        expect(retryData['futureService'], isEmpty);
+        expect(persisted, isNot(contains('future-credential-value')));
+        expect(persisted, isNot(contains('opaque-x-api-key-value')));
+        expect(snapshot.version, 99);
+        expect(snapshot.hasUnknownFields, isTrue);
+        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
+      },
+    );
 
     test('unsafe unsupported OCR retry data retains unparsed cache ownership',
         () {
