@@ -2439,7 +2439,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
         );
     final hadCredential = _legacyOcrTextContainsCredential(
             credentialCheckText, credentialValues) ||
-        whitespaceRedactedText != redactionSourceText;
+        whitespaceRedactedText != redactionSourceText ||
+        _legacyOcrHasExactCredentialEcho(
+          credentialCheckText,
+          credentialValues,
+        );
     final redactedText = hadCredential
         ? _legacyOcrRedactMaskedCredentialEchoes(
             whitespaceRedactedText,
