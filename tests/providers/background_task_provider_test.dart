@@ -3190,7 +3190,8 @@ void main() {
                   'content': [
                     {
                       'type': 'text',
-                      'text': 'The image contains $exactCredential.',
+                      'text':
+                          'The image contains $exactCredential. Please read the receipt total carefully.',
                     },
                   ],
                 },
@@ -3206,11 +3207,11 @@ void main() {
           OcrRetrySnapshot.fromMap(
             knownCredentialTask.retryData!,
           ).instructionContent,
-          'The image contains [redacted].',
+          'The image contains [redacted]. Please read the receipt total carefully.',
         );
         expect(
           knownCredentialRetryData['instructionContent'],
-          'The image contains [redacted].',
+          'The image contains [redacted]. Please read the receipt total carefully.',
         );
         expect(knownCredentialPersisted, isNot(contains(exactCredential)));
 
@@ -8007,6 +8008,10 @@ void main() {
           embeddedNulSplitCredentialPersisted,
           isNot(contains('secret123456789')),
         );
+        final embeddedNulSplitRetryData = (jsonDecode(
+          embeddedNulSplitCredentialPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>?;
+        expect(embeddedNulSplitRetryData?['instructionContent'], isNull);
 
         final echoedKeyTask = taskFor('legacy-ocr-short-prefix-echoed-key', [
           safePrompt,
@@ -8219,11 +8224,20 @@ void main() {
         final secretPluralWithExactCredentialPersisted = jsonEncode(
           secretPluralWithExactCredential.toMap(),
         );
+        const secretPluralWithRedactedCredential =
+            '$safePrompt\n$secretPluralPrompt. Use [redacted] for this receipt';
         expect(
           OcrRetrySnapshot.fromMap(
             secretPluralWithExactCredential.retryData!,
           ).instructionContent,
-          safePrompt,
+          secretPluralWithRedactedCredential,
+        );
+        final secretPluralWithExactCredentialRetryData = (jsonDecode(
+          secretPluralWithExactCredentialPersisted,
+        ) as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          secretPluralWithExactCredentialRetryData['instructionContent'],
+          secretPluralWithRedactedCredential,
         );
         expect(
           secretPluralWithExactCredentialPersisted,

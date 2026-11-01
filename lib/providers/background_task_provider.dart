@@ -2541,15 +2541,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           )
         : sourceText;
     final nullFreeRedactedText = redactedText.replaceAll('\u0000', '');
-    final containsUnmaskedExactCredential = credentialValues.any((value) {
-      final candidate = value.trim();
-      if (candidate.isEmpty ||
-          candidate.contains('…') ||
-          candidate.trimRight().endsWith('...')) {
-        return false;
-      }
-      return nullFreeRedactedText.contains(candidate);
-    });
+    final containsUnmaskedExactCredential = _legacyOcrHasExactCredentialEcho(
+        nullFreeRedactedText, credentialValues);
     if (sourceText.contains('\u0000') &&
         hadCredential &&
         (containsUnmaskedExactCredential ||
@@ -2584,13 +2577,10 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
         credentialEvidenceWithoutRedactionMarkers,
         credentialValues,
       ) ||
-      credentialValues.any((value) {
-        final candidate = value.trim();
-        return candidate.isNotEmpty &&
-            !candidate.contains('…') &&
-            !candidate.trimRight().endsWith('...') &&
-            credentialEvidenceWithoutRedactionMarkers.contains(candidate);
-      });
+      _legacyOcrHasExactCredentialEcho(
+        credentialEvidenceWithoutRedactionMarkers,
+        credentialValues,
+      );
   final naturalSecretPluralRanges = RegExp(
     r'\bsecret\u0000*s\b',
     caseSensitive: false,
@@ -2637,15 +2627,8 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           '${textWithoutNaturalPlural.substring(localEnd)}';
     }
     final preservesNaturalPlural = partNaturalPluralRanges.isNotEmpty;
-    final containsUnmaskedExactCredential = credentialValues.any((value) {
-      final candidate = value.trim();
-      if (candidate.isEmpty ||
-          candidate.contains('…') ||
-          candidate.trimRight().endsWith('...')) {
-        return false;
-      }
-      return text.contains(candidate);
-    });
+    final containsUnmaskedExactCredential =
+        _legacyOcrHasExactCredentialEcho(text, credentialValues);
     if (containsUnmaskedExactCredential ||
         _legacyOcrTextContainsCredential(
           textWithoutNaturalPlural,
