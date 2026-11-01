@@ -9,6 +9,7 @@ class OcrDiagnosticSnapshot {
 
   static const maxSerializedBytes = 2048;
   static const _maxTextLength = 160;
+  static const _maxCredentialValueLength = 512;
   static const _requestIdHeaders = {
     'x-request-id',
     'request-id',
@@ -81,18 +82,7 @@ class OcrDiagnosticSnapshot {
     if (uri == null) return const [];
 
     final values = <String>{};
-    void addValue(String rawValue) {
-      final value = rawValue.trim();
-      if (value.isEmpty || value.length > 512) return;
-      values.add(value);
-      final token = RegExp(
-        r'^(?:Bearer|Basic)\s+(.+)$',
-        caseSensitive: false,
-      ).firstMatch(value)?.group(1)?.trim();
-      if (token != null && token.isNotEmpty && token.length <= 512) {
-        values.add(token);
-      }
-    }
+    void addValue(String rawValue) => _addCredentialValue(values, rawValue);
 
     if (uri.userInfo.isNotEmpty) {
       for (final component in uri.userInfo.split(':')) {
@@ -134,17 +124,7 @@ class OcrDiagnosticSnapshot {
 
     void collect(dynamic value, {bool credentialField = false}) {
       if (credentialField && value is String) {
-        final credential = value.trim();
-        if (credential.isNotEmpty && credential.length <= 512) {
-          values.add(credential);
-          final token = RegExp(
-            r'^(?:Bearer|Basic)\s+(.+)$',
-            caseSensitive: false,
-          ).firstMatch(credential)?.group(1)?.trim();
-          if (token != null && token.isNotEmpty && token.length <= 512) {
-            values.add(token);
-          }
-        }
+        _addCredentialValue(values, value);
       }
       if (value is Map) {
         for (final entry in value.entries) {
@@ -167,6 +147,23 @@ class OcrDiagnosticSnapshot {
     return values.toList(growable: false);
   }
 
+  static void _addCredentialValue(Set<String> values, String rawValue) {
+    final value = rawValue.trim();
+    if (value.isEmpty) return;
+
+    String bounded(String credential) =>
+        credential.length <= _maxCredentialValueLength
+            ? credential
+            : credential.substring(0, _maxTextLength);
+
+    values.add(bounded(value));
+    final token = RegExp(
+      r'^(?:Bearer|Basic)\s+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(value)?.group(1)?.trim();
+    if (token != null && token.isNotEmpty) values.add(bounded(token));
+  }
+
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
@@ -183,14 +180,7 @@ class OcrDiagnosticSnapshot {
           entry.value is List ? entry.value as List : [entry.value];
       for (final rawValue in rawValues) {
         if (rawValue is! String) continue;
-        final value = rawValue.trim();
-        if (value.isEmpty) continue;
-        values.add(value);
-        final token = RegExp(
-          r'^(?:Bearer|Basic)\s+(.+)$',
-          caseSensitive: false,
-        ).firstMatch(value)?.group(1)?.trim();
-        if (token != null && token.isNotEmpty) values.add(token);
+        _addCredentialValue(values, rawValue);
       }
     }
     return values.toList(growable: false);
@@ -704,6 +694,18 @@ class OcrDiagnosticSnapshot {
           ? value.clamp(0, 1 << 50).toInt()
           : null;
 
+  static bool _matchesCredentialPrefix(
+    String value,
+    Iterable<String> excludedValues,
+  ) {
+    final normalized = value.toLowerCase();
+    return excludedValues.any((secret) {
+      final normalizedSecret = secret.toLowerCase();
+      return normalizedSecret.length > normalized.length &&
+          normalizedSecret.startsWith(normalized);
+    });
+  }
+
   static String? _safeRequestId(
     dynamic value, {
     Iterable<String> excludedValues = const [],
@@ -715,6 +717,7 @@ class OcrDiagnosticSnapshot {
     }
     if (RegExp(r'data:image/', caseSensitive: false).hasMatch(cleaned) ||
         _isShortEncodedImageBody(cleaned) ||
+        _matchesCredentialPrefix(cleaned, excludedValues) ||
         containsCredential(cleaned, excludedValues: excludedValues)) {
       return null;
     }
