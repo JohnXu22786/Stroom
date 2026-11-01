@@ -627,12 +627,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('files_page')), findsOneWidget);
 
-      // Tap "设置" in the rail to go to the Settings page. Its "主题" section
+      // Tap "设置" in the rail to go to the Settings page. Its "常规设置" section
       // header proves the Settings page actually opened (the "设置" label
       // itself would match the rail even if navigation never happened).
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
-      expect(find.text('主题'), findsOneWidget);
+      expect(find.text('常规设置'), findsOneWidget);
     });
 
     testWidgets(
