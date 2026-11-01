@@ -2696,6 +2696,45 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a lowercase line-broken documentation credential echo',
+      () {
+        const apiKey = 'documentationfoobarxyz';
+        const instruction = 'The note says documentation\nfoobarxyz.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-newline-lowercase-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+          'retryData': OcrRetrySnapshot.capture(
+            images: const [],
+            instructionContent: instruction,
+          ).toMap(),
+        });
+        final retryData = jsonEncode(task.retryData);
+        final persisted = jsonEncode(task.toMap());
+
+        expect(retryData, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a line-broken documentation credential echo',
       () {
         const apiKey = 'documentationABCDEF';

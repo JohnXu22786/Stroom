@@ -1221,7 +1221,7 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
   }
   if (text != null &&
       _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(text, prefix)) {
-    return r'(?:[\r\n]+[ \t]*(?=[A-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
+    return r'(?:[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
   }
   return '';
 }
@@ -1232,7 +1232,7 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
 ) =>
     prefix.toLowerCase() == 'documentation' &&
     RegExp(
-      r'\bdocumentation[\r\n]+[ \t]*[A-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
+      r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
     ).hasMatch(text);
 
 const _legacyOcrNaturalCarefulInstructionActions = {
