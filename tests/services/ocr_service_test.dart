@@ -1631,84 +1631,92 @@ void main() {
         expect(service.lastRequestBody?['response_format'], equals('json'));
       });
 
-      test('custom built-in collision cannot replace validated values',
-          () async {
-        final service = OcrService(
-          config: OcrConfig(
-            apiKey: 'key',
-            host: 'https://api.test.com',
-            typeConfig: {
-              'enableMaxTokens': true,
-              'maxTokens': 4096,
-              'enableTemperature': true,
-              'temperature': 0.5,
-              'enableTopP': true,
-              'topP': 0.9,
-            },
-            customParams: [
-              CustomParam(
-                paramName: 'max_tokens',
-                defaultValue: '3.5',
-                type: 'number',
-              ),
-              CustomParam(paramName: 'temperature', defaultValue: '1.5'),
-              CustomParam(paramName: 'top_p', defaultValue: '0.1'),
-              CustomParam(
-                paramName: 'response_format',
-                defaultValue: 'json',
-              ),
-            ],
-          ),
-          dio: _mockDioWithSuccess({
-            'choices': [
-              {
-                'message': {'content': 'test'},
+      test(
+        'custom built-in collision cannot replace validated values',
+        () async {
+          final service = OcrService(
+            config: OcrConfig(
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              typeConfig: {
+                'enableMaxTokens': true,
+                'maxTokens': 4096,
+                'enableTemperature': true,
+                'temperature': 0.5,
+                'enableTopP': true,
+                'topP': 0.9,
               },
-            ],
-          }),
-        );
+              customParams: [
+                CustomParam(
+                  paramName: 'max_tokens',
+                  defaultValue: '3.5',
+                  type: 'number',
+                ),
+                CustomParam(paramName: 'temperature', defaultValue: '1.5'),
+                CustomParam(paramName: 'top_p', defaultValue: '0.1'),
+                CustomParam(
+                  paramName: 'response_format',
+                  defaultValue: 'json',
+                ),
+              ],
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'test'},
+                },
+              ],
+            }),
+          );
 
-        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
-        expect(service.lastRequestBody?['max_tokens'], 4096);
-        expect(service.lastRequestBody?['temperature'], 0.5);
-        expect(service.lastRequestBody?['top_p'], 0.9);
-        expect(service.lastRequestBody?['response_format'], 'json');
-      });
+          expect(service.lastRequestBody?['max_tokens'], 4096);
+          expect(service.lastRequestBody?['temperature'], 0.5);
+          expect(service.lastRequestBody?['top_p'], 0.9);
+          expect(service.lastRequestBody?['response_format'], 'json');
+        },
+      );
 
-      test('custom params cannot enable disabled built-in fields', () async {
-        final service = OcrService(
-          config: OcrConfig(
-            apiKey: 'key',
-            host: 'https://api.test.com',
-            typeConfig: {
-              'enableMaxTokens': false,
-              'enableTemperature': false,
-              'enableTopP': false,
-            },
-            customParams: [
-              CustomParam(paramName: 'max_tokens', defaultValue: '4096'),
-              CustomParam(paramName: 'temperature', defaultValue: '0.5'),
-              CustomParam(paramName: 'top_p', defaultValue: '0.9'),
-              CustomParam(paramName: 'response_format', defaultValue: 'json'),
-            ],
-          ),
-          dio: _mockDioWithSuccess({
-            'choices': [
-              {
-                'message': {'content': 'test'},
+      test(
+        'custom params cannot enable disabled built-in fields',
+        () async {
+          final service = OcrService(
+            config: OcrConfig(
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              typeConfig: {
+                'enableMaxTokens': false,
+                'enableTemperature': false,
+                'enableTopP': false,
               },
-            ],
-          }),
-        );
+              customParams: [
+                CustomParam(paramName: 'max_tokens', defaultValue: '4096'),
+                CustomParam(paramName: 'temperature', defaultValue: '0.5'),
+                CustomParam(paramName: 'top_p', defaultValue: '0.9'),
+                CustomParam(
+                  paramName: 'response_format',
+                  defaultValue: 'json',
+                ),
+              ],
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'test'},
+                },
+              ],
+            }),
+          );
 
-        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
-        expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
-        expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
-        expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
-        expect(service.lastRequestBody?['response_format'], 'json');
-      });
+          expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
+          expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
+          expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
+          expect(service.lastRequestBody?['response_format'], 'json');
+        },
+      );
 
       test(
         'custom params use the first option when default value is empty',
