@@ -324,8 +324,7 @@ void main() {
       );
 
       final storedJson =
-          preferences
-              .values[LlmAccountMigrationService.accountsPreferenceKey]!;
+          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!;
       expect(account.authType, 'setup_token');
       expect(storedJson, isNot(contains(token)));
       expect(await service.readCredential(account.id), token);
@@ -2908,8 +2907,8 @@ void main() {
     test('uses Anthropic Messages with a Setup Token bearer credential', () {
       const setupToken = 'sk-ant-oat01-private-setup-token';
       final request = builder.build(
-        account: _account('claude-setup-request', 'claude',
-            authType: 'setup_token'),
+        account:
+            _account('claude-setup-request', 'claude', authType: 'setup_token'),
         credential: setupToken,
         modelId: 'claude-sonnet-4-6',
         body: const {'model': 'claude-sonnet-4-6', 'messages': []},

@@ -597,17 +597,20 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       if (kIsWeb) throw const AiGatewayOAuthException();
 
       listener = await LlmOAuthLoopback.bind(
-        isGemini ? '/' : isClaude ? '/callback' : '/auth/callback',
+        isGemini
+            ? '/'
+            : isClaude
+                ? '/callback'
+                : '/auth/callback',
         host: isClaude ? 'localhost' : '127.0.0.1',
         port: isClaude ? 54545 : 0,
       );
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
-      final previousBundle =
-          isGemini || isOpenAi || isClaude
-              ? await _existingOAuthBundle(account)
-              : null;
+      final previousBundle = isGemini || isOpenAi || isClaude
+          ? await _existingOAuthBundle(account)
+          : null;
       final previousOpenAiBundle =
           previousBundle?['oauth_contract'] == 'openai-siwc-v1'
               ? previousBundle
@@ -654,10 +657,9 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         tokenBundle = await _tokenClient.exchangeGeminiDeveloperApi(
           attempt: attempt,
           callback: callback,
-          clientSecret:
-              (configuration['clientSecret'] ?? '').trim().isNotEmpty
-                  ? configuration['clientSecret']!.trim()
-                  : previousBundle?['client_secret'] as String? ?? '',
+          clientSecret: (configuration['clientSecret'] ?? '').trim().isNotEmpty
+              ? configuration['clientSecret']!.trim()
+              : previousBundle?['client_secret'] as String? ?? '',
         );
       } else {
         tokenBundle = await _tokenClient.exchangeClaudeCode(

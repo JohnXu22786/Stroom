@@ -1172,8 +1172,7 @@ class LlmAccountConnectorService {
       if (account.connectorType == 'claude' && claudeOrganization is Map) {
         final organizationData = Map<String, dynamic>.from(claudeOrganization);
         final organizationId = _firstString(organizationData, const ['uuid']);
-        final organizationName =
-            _firstString(organizationData, const ['name']);
+        final organizationName = _firstString(organizationData, const ['name']);
         if (organizationId != null) {
           updated['organization_uuid'] = organizationId;
         }
@@ -3473,8 +3472,7 @@ class LlmNativeRequestBuilder {
         path = nativeFormat == 'count_tokens'
             ? '/v1/messages/count_tokens'
             : '/v1/messages';
-        if (account.authType == 'oauth' ||
-            account.authType == 'setup_token') {
+        if (account.authType == 'oauth' || account.authType == 'setup_token') {
           query = 'beta=true';
         }
       case 'antigravity':
