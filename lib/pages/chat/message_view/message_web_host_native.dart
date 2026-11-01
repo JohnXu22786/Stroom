@@ -65,6 +65,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
     final digest = sha256.convert(content).toString();
     final pending = _macDocuments.putIfAbsent(digest, () async {
       final directory = await getTemporaryDirectory();
+      await directory.create(recursive: true);
       final file = File(p.join(directory.path, 'stroom-dsh-$digest.html'));
       if (!await file.exists() || await file.length() != content.length) {
         await file.writeAsBytes(content, flush: true);
@@ -146,14 +147,17 @@ class _MessageWebHostState extends State<MessageWebHost> {
     InAppWebViewController controller,
     Map<String, dynamic> command,
   ) {
-    _pending = _pending.then((_) async {
-      if (!mounted || !identical(controller, _controller)) return;
-      await controller.evaluateJavascript(
-        source: 'window.StroomMessageView?.receive(${jsonEncode(command)});',
-      );
-    }).catchError((Object error) {
-      if (mounted) debugPrint('[MessageWebHost] $error');
-    });
+    _pending = _pending
+        .then((_) async {
+          if (!mounted || !identical(controller, _controller)) return;
+          await controller.evaluateJavascript(
+            source:
+                'window.StroomMessageView?.receive(${jsonEncode(command)});',
+          );
+        })
+        .catchError((Object error) {
+          if (mounted) debugPrint('[MessageWebHost] $error');
+        });
   }
 
   @override
@@ -268,22 +272,20 @@ class _MessageWebHostState extends State<MessageWebHost> {
                     _trustedDocument(data.requestUrl, macDocument);
                 final staleMacView =
                     defaultTargetPlatform == TargetPlatform.macOS &&
-                        (generation != _macLoadGeneration ||
-                            !identical(controller, _controller));
+                    (generation != _macLoadGeneration ||
+                        !identical(controller, _controller));
                 final rejection = !mounted
                     ? 'unmounted'
                     : staleMacView
-                        ? 'stale-webview'
-                        : !trustedFrame
-                            ? 'untrusted-frame:${data.requestUrl}'
-                            : data.args.length != 1 || data.args.first is! Map
-                                ? 'invalid-arguments'
-                                : null;
+                    ? 'stale-webview'
+                    : !trustedFrame
+                    ? 'untrusted-frame:${data.requestUrl}'
+                    : data.args.length != 1 || data.args.first is! Map
+                    ? 'invalid-arguments'
+                    : null;
                 if (rejection != null) {
                   if (kDebugMode) {
-                    debugPrint(
-                      '[MessageWebHost][handler-rejected] $rejection',
-                    );
+                    debugPrint('[MessageWebHost][handler-rejected] $rejection');
                   }
                   return;
                 }
@@ -292,9 +294,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
                     '[MessageWebHost][handler] ${data.args.first['type']}',
                   );
                 }
-                final event = Map<String, dynamic>.from(
-                  data.args.first as Map,
-                );
+                final event = Map<String, dynamic>.from(data.args.first as Map);
                 if (defaultTargetPlatform == TargetPlatform.macOS &&
                     event['type'] == 'ready') {
                   _macDocumentReady = true;
@@ -356,9 +356,7 @@ JSON.stringify({
             final url = action.request.url;
             final trusted = url != null && _trustedDocument(url, macDocument);
             if (kDebugMode) {
-              debugPrint(
-                '[MessageWebHost][navigation] $url trusted=$trusted',
-              );
+              debugPrint('[MessageWebHost][navigation] $url trusted=$trusted');
             }
             return trusted
                 ? NavigationActionPolicy.ALLOW
