@@ -92,7 +92,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
       var macNavigationPending = false;
 
       // WKWebView's loadHTMLString/loadData path does not consistently start a
-      // navigation. Give WebKit read access to this self-contained file only.
+      // navigation. Scope file access to this unique directory containing only
+      // the self-contained document.
       for (var attempt = 0; attempt < 8; attempt++) {
         if (!mounted || !identical(controller, _controller) || _macLoadFailed) {
           return;
@@ -109,7 +110,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
           }
           await controller.loadUrl(
             urlRequest: URLRequest(url: WebUri.uri(documentUri)),
-            allowingReadAccessTo: WebUri.uri(documentUri),
+            allowingReadAccessTo: WebUri.uri(documentDirectory.uri),
           );
           if (_macLoadFailed) break;
           final currentUrl = await controller.getUrl();
