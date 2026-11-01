@@ -484,20 +484,23 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> addRecord(T record, {void Function()? beforeCommit}) async {
     try {
-      _validateRecordStorageName(record);
-      _validateRecordFolderPath(folderOf(record));
-      await loadRecords();
-      beforeCommit?.call();
-      final folders = _folderPathAndAncestors(folderOf(record));
-      await ManifestDatabase.insertRecordWithFolders(
-        recordTable: tableName,
-        record: toMap(record),
-        folderPaths: folders,
-        beforeCommit: beforeCommit,
-      );
-      _cache!.add(record);
-      _folderCache.addAll(folders);
-      _recordMutationRevision++;
+      await ManifestDatabase.withRecordMutationLock(() async {
+        _validateRecordStorageName(record);
+        _validateRecordFolderPath(folderOf(record));
+        await loadRecords();
+        beforeCommit?.call();
+        final folders = _folderPathAndAncestors(folderOf(record));
+        await ManifestDatabase.insertRecordWithFolders(
+          recordTable: tableName,
+          record: toMap(record),
+          folderPaths: folders,
+          beforeCommit: beforeCommit,
+        );
+        _cache!.removeWhere((existing) => existing.id == record.id);
+        _cache!.add(record);
+        _folderCache.addAll(folders);
+        _recordMutationRevision++;
+      });
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
