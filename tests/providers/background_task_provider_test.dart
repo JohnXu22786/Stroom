@@ -14996,6 +14996,114 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts whitespace-separated masked credential echoes',
+      () {
+        const echoedCredential = 'foobarxyz';
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer documentation…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+        final task = taskFor(
+          'legacy-ocr-spaced-masked-credential-echo',
+          'The note says documentation $echoedCredential.',
+        );
+        final instructionContent = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+        final persisted = jsonEncode(task.toMap());
+
+        expect(instructionContent, 'The note says [redacted].');
+        expect(persisted, contains('The note says [redacted].'));
+        expect(instructionContent, isNot(contains(echoedCredential)));
+        expect(persisted, isNot(contains(echoedCredential)));
+
+        final contextEchoTask = taskFor(
+          'legacy-ocr-spaced-credential-with-natural-tail',
+          'Read the documentation $echoedCredential this workflow.',
+        );
+        final contextInstruction = OcrRetrySnapshot.fromMap(
+          contextEchoTask.retryData!,
+        ).instructionContent!;
+        final contextPersisted = jsonEncode(contextEchoTask.toMap());
+
+        expect(contextInstruction, contains('[redacted]'));
+        expect(contextInstruction, isNot(contains(echoedCredential)));
+        expect(contextPersisted, isNot(contains(echoedCredential)));
+
+        final capitalizedTask = taskFor(
+          'legacy-ocr-capitalized-spaced-credential-prefix',
+          'The note says Documentation $echoedCredential.',
+        );
+        final capitalizedInstruction = OcrRetrySnapshot.fromMap(
+          capitalizedTask.retryData!,
+        ).instructionContent!;
+        final capitalizedPersisted = jsonEncode(capitalizedTask.toMap());
+
+        expect(capitalizedInstruction, 'The note says [redacted].');
+        expect(capitalizedPersisted, isNot(contains(echoedCredential)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves natural documentation after a masked prefix',
+      () {
+        const safePrompt = 'The note says documentation matters.\n'
+            'Read the documentation carefully.\n'
+            'Read the documentation supporting this workflow.\n'
+            'The note says documentation explains how the task works.\n'
+            'The note says documentation explains the task.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-spaced-natural-documentation-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': safePrompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final instructionContent = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+        final persisted = jsonEncode(task.toMap());
+
+        expect(instructionContent, safePrompt);
+        expect(persisted, contains(safePrompt));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves prompts with short masked keys',
       () {
         final task = BackgroundTask.fromMap({
