@@ -172,7 +172,7 @@ void main() {
         host: 'https://legacy.example.test/v1',
         key: 'legacy-secret',
         endpointType: 'openai',
-        legacyFields: {'connectorType': 'codex'},
+        legacyFields: {'connectorType': 'codex', 'authType': 'api_key'},
         models: [
           ModelConfig(
             id: 'legacy-model',

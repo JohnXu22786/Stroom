@@ -8,15 +8,13 @@ in platform secure storage after it. Account preferences contain only safe
 connector metadata and opaque credential references. OAuth/account registration
 and Chat/Task Flow model-group availability are separate: see the [connector
 and routing guide](../llm-accounts-and-model-groups.md) for the exact routes
-that can be selected in Chat and Task Flow. In particular, Codex OAuth is
-implemented at the account layer but is not currently a ChatAdapter model-group
-route.
+that can be selected in Chat and Task Flow.
 
 ## Enabled flows
 
 | Connector | Authorization and inference | Lifecycle limits |
 | --- | --- | --- |
-| OpenAI Codex / ChatGPT | Uses OpenAI's published Sign in with ChatGPT flow, loopback callback, dynamic issued client ID, state, nonce, PKCE S256 and the `chatgpt.tokens.use.direct` scope. ID-token signature, issuer, audience, expiry and nonce are verified before saving. The verified token and subject stay in secure storage; reauthorization sends the token as `id_token_hint` and rejects a different subject. Inference uses the public OpenAI Responses API. | Requires an eligible ChatGPT plan and the provider granting the direct-token scope. The app creates a stable `ext_agent_host_id`; OpenAI's issued client ID is retained securely and reused. Refresh and OIDC-discovery revocation use that issued client ID. The Responses bridge is implemented separately, but Codex is not registered in the current ChatAdapter model-group route. [OpenAI SIWC quickstart](https://developers.openai.com/siwc/quickstart), [token sharing](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), [profiles and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions). |
+| OpenAI Codex / ChatGPT | Uses OpenAI's published Sign in with ChatGPT flow, loopback callback, dynamic issued client ID, state, nonce, PKCE S256 and the `chatgpt.tokens.use.direct` scope. ID-token signature, issuer, audience, expiry and nonce are verified before saving. The verified token and subject stay in secure storage; reauthorization sends the token as `id_token_hint` and rejects a different subject. Inference uses the public OpenAI Responses API and can be selected as a Chat/Task Flow model-group member. | Requires an eligible ChatGPT plan and the provider granting the direct-token scope. The app creates a stable `ext_agent_host_id`; OpenAI's issued client ID is retained securely and reused. Refresh and OIDC-discovery revocation use that issued client ID. Codex groups default to the Responses bridge; the OpenAI API-key connector remains a separate account type with its existing Chat Completions default. [OpenAI SIWC quickstart](https://developers.openai.com/siwc/quickstart), [token sharing](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), [profiles and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions). |
 | Gemini Developer API / Google AI Studio | Both account types use Google's OAuth Desktop client with a loopback IP redirect URI containing no path, then call the public Generative Language API `generateContent` endpoint with a bearer token and `x-goog-user-project` attribution. The user supplies the Cloud project ID and OAuth client configuration; the OAuth client secret and token bundle are stored in secure storage. | Requires a developer-owned Cloud project, the Generative Language API, and a configured consent screen and test users. Project usage is attributed and billed under that project. Changing the Desktop client ID requires a new authorization with its matching client secret. Google describes this OAuth setup as a simplified/testing flow. It is distinct from API-key auth, Code Assist and browser sessions. Gemini content uses the existing Gemini protocol bridge. [Gemini API OAuth](https://ai.google.dev/gemini-api/docs/oauth). |
 
 ## Unavailable OAuth routes
@@ -39,8 +37,8 @@ provider name, CLI token shape or a successful browser login.
 ## Chat and Task Flow protocol boundary
 
 The Gateway contains distinct Codex Responses and Gemini `generateContent`
-request adapters. The current Chat/Task Flow model-group route does not select
-Codex OAuth; use the OpenAI API-key connector for Chat Completions instead.
-Gemini accounts use Stroom's Gemini protocol bridge for neutral conversation
-history and supported media. Conversation storage remains neutral and does
-not persist account identifiers.
+request adapters. Codex OAuth model groups use the Responses bridge and the
+Codex account/session identity headers. OpenAI API-key accounts remain separate
+and retain their Chat Completions default. Gemini accounts use Stroom's Gemini
+protocol bridge for neutral conversation history and supported media.
+Conversation storage remains neutral and does not persist account identifiers.

@@ -269,6 +269,7 @@ abstract final class LlmConnectorRegistry {
 
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
+        'codex' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -288,6 +289,15 @@ abstract final class LlmConnectorRegistry {
           'openai',
         _ => null,
       };
+
+  /// Codex's ChatAdapter route is specifically its OAuth Responses contract.
+  /// Legacy/API-key Codex records remain manageable but use the dedicated
+  /// OpenAI API or OpenAI-compatible connector path instead.
+  static bool isChatAdapterAuthTypeSupported(
+    String connectorType,
+    String authType,
+  ) =>
+      canonicalId(connectorType) != 'codex' || authType == 'oauth';
 }
 
 /// Result of a capability observation. Unknown quota is represented by a

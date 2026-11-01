@@ -405,7 +405,11 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
               ? null
               : LlmConnectorRegistry.canonicalId(account.connectorType);
           if (connectorType != null &&
-              !allowedConnectorTypes.contains(connectorType)) {
+              (!allowedConnectorTypes.contains(connectorType) ||
+                  !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+                    connectorType,
+                    account!.authType,
+                  ))) {
             excluded.add(
               LlmRouteDecision(
                 subjectId: member.accountId,
@@ -1056,7 +1060,11 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
       final definition = LlmConnectorRegistry.find(account.connectorType);
       if (definition == null ||
           LlmConnectorRegistry.chatAdapterEndpointType(account.connectorType) ==
-              null) {
+              null ||
+          !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            account.connectorType,
+            account.authType,
+          )) {
         continue;
       }
       final discovered = await _accounts.discoverModels(

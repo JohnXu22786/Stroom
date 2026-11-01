@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../ai_gateway/ai_gateway.dart';
+import '../services/llm_connector_service.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -640,7 +641,11 @@ class _AccountCard extends StatelessWidget {
                 ),
               ),
             Text('最近错误：${recentError ?? '无记录'}'),
-            if (connector?.supportsChatAdapter != true)
+            if (connector?.supportsChatAdapter != true ||
+                !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+                  account.connectorType,
+                  account.authType,
+                ))
               const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Column(
@@ -1213,7 +1218,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
-              if (connector.supportsChatAdapter != true)
+              if (connector.supportsChatAdapter != true ||
+                  !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+                    _connectorType,
+                    _authType,
+                  ))
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text(

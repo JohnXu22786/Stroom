@@ -1623,45 +1623,114 @@ void main() {
     );
   });
 
-  testWidgets(
-    'discloses native connectors that are absent from chat selectors',
-    (tester) async {
-      final credentials = _MemoryCredentialStore();
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: credentials,
-      );
-      await service.saveAccount(
-        LlmAccount(
-          id: 'codex-account',
-          connectorType: 'codex',
-          authType: 'api_key',
-          displayName: 'Codex account',
-          status: LlmAccountStatus.ready,
-          credentialRef: null,
-          models: const [
-            LlmUpstreamModel(
-              id: 'codex-model',
-              upstreamModelId: 'gpt-5-codex',
-              displayName: 'GPT 5 Codex',
-            ),
-          ],
-        ),
-        secret: 'codex-key',
-      );
+  testWidgets('shows Codex OAuth as supported for Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-oauth-account',
+        connectorType: 'codex',
+        authType: 'oauth',
+        displayName: 'Codex OAuth account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT 5 Codex',
+          ),
+        ],
+      ),
+      secret: jsonEncode({'access_token': 'codex-token'}),
+    );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service)),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text('Codex account'), findsOneWidget);
-      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsOneWidget);
-      expect(find.text('该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。'), findsOneWidget);
-    },
-  );
+    expect(find.text('Codex OAuth account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+  });
+
+  testWidgets('discloses native connectors absent from Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-account',
+        connectorType: 'devin',
+        authType: 'session_token',
+        displayName: 'Devin account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-model',
+            upstreamModelId: 'devin-chat',
+            displayName: 'Devin Chat',
+          ),
+        ],
+      ),
+      secret: 'devin-session',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Devin account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsOneWidget);
+    expect(find.text('该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。'), findsOneWidget);
+  });
+
+  testWidgets('keeps Codex API-key accounts out of Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-api-key-account',
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Legacy Codex API-key account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT 5 Codex',
+          ),
+        ],
+      ),
+      secret: 'legacy-codex-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Legacy Codex API-key account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsOneWidget);
+  });
 
   testWidgets('shows measured usage recorded by the routing state store', (
     tester,

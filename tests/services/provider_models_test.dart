@@ -6,11 +6,11 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/provider_models.dart';
 
 void main() {
-  test('only synthesizes selectors for ChatAdapter protocols', () {
+  test('synthesizes a Responses selector for a Codex OAuth model group', () {
     final account = LlmAccount(
       id: 'codex-account',
       connectorType: 'codex',
-      authType: 'api_key',
+      authType: 'oauth',
       displayName: 'Codex account',
       models: const [
         LlmUpstreamModel(
@@ -32,12 +32,82 @@ void main() {
       ],
     );
 
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+
+    expect(config.id, 'codex-group');
+    expect(config.apiProtocol, 'openai.responses');
     expect(
-      buildLlmModelGroupProviderConfigs(accounts: [account], groups: [group]),
-      isEmpty,
+      llmModelGroupMemberReferenceForModelId(config.models.single.modelId),
+      (groupId: 'codex-group', localModelId: 'codex-model'),
     );
-    expect(llmChatEndpointTypeForConnector(account.connectorType), isNull);
+    expect(llmChatEndpointTypeForConnector(account.connectorType), 'openai');
   });
+
+  test(
+    'filters Codex API-key groups while retaining OpenAI API-key groups',
+    () {
+      final codexApiKey = LlmAccount(
+        id: 'codex-api-key',
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Legacy Codex API key',
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT-5 Codex',
+          ),
+        ],
+      );
+      final openAiApiKey = LlmAccount(
+        id: 'openai-api-key',
+        connectorType: 'openai-api',
+        authType: 'api_key',
+        displayName: 'OpenAI API key',
+        models: const [
+          LlmUpstreamModel(
+            id: 'openai-model',
+            upstreamModelId: 'gpt-4.1',
+            displayName: 'GPT-4.1',
+          ),
+        ],
+      );
+
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [codexApiKey, openAiApiKey],
+        groups: [
+          LlmModelGroup(
+            id: 'codex-api-key-group',
+            displayName: 'Legacy Codex',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'codex-api-key',
+                localModelId: 'codex-model',
+                upstreamModelId: 'gpt-5-codex',
+              ),
+            ],
+          ),
+          LlmModelGroup(
+            id: 'openai-api-key-group',
+            displayName: 'OpenAI API',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'openai-api-key',
+                localModelId: 'openai-model',
+                upstreamModelId: 'gpt-4.1',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(configs.map((config) => config.id), ['openai-api-key-group']);
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+    },
+  );
 
   test(
       'model-group selector preserves configured protocols independently of connector',

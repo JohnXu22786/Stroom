@@ -3,10 +3,12 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/llm_model_group_provider.dart'
     show
+        buildLlmModelGroupProviderConfigs,
         kLlmModelGroupConfigField,
         kLlmModelGroupMayUseAnthropicConfigField,
         kLlmModelCapabilitiesConfigField;
@@ -15,6 +17,8 @@ import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
+import 'package:stroom/task_flow/services/block_executors/chat_executor.dart'
+    show flowChatEndpointType;
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 
 void main() {
@@ -96,6 +100,58 @@ void main() {
       ),
       throwsA(isA<TaskFlowValidationException>()
           .having((e) => e.message, 'unsupported audio', contains('音频'))),
+    );
+  });
+
+  test('Codex model group resolves as Responses during Task Flow preflight',
+      () async {
+    final account = LlmAccount(
+      id: 'codex-oauth',
+      connectorType: 'codex',
+      authType: 'oauth',
+      displayName: 'Codex',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'gpt-5-codex-local',
+          upstreamModelId: 'gpt-5-codex',
+          displayName: 'GPT-5 Codex',
+          capabilities: {'streaming': true},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'codex-task-flow-group',
+      displayName: 'Codex group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'codex-oauth',
+          localModelId: 'gpt-5-codex-local',
+          upstreamModelId: 'gpt-5-codex',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+    ]);
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Codex assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
     );
   });
 

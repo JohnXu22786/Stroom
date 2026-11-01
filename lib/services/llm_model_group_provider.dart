@@ -2,6 +2,7 @@ import '../models/llm_account.dart';
 import '../models/tts_models.dart';
 import '../ai_gateway/ai_gateway.dart';
 import 'api_protocol_config.dart';
+import 'llm_connector_service.dart';
 
 /// Namespaced account identity for an OCR provider config that predates
 /// account/model-group routing.
@@ -61,7 +62,11 @@ List<ProviderConfigItem> markUnsupportedLegacyLlmConfigs(
     _markUnsupportedLlmConfigs(
       configs,
       accounts.map(
-        (account) => (id: account.id, connectorType: account.connectorType),
+        (account) => (
+          id: account.id,
+          connectorType: account.connectorType,
+          authType: account.authType,
+        ),
       ),
       providerCatalog: providerCatalog,
     );
@@ -74,14 +79,18 @@ List<ProviderConfigItem> markUnsupportedGatewayLlmConfigs(
     _markUnsupportedLlmConfigs(
       configs,
       accounts.map(
-        (account) => (id: account.id, connectorType: account.connectorType),
+        (account) => (
+          id: account.id,
+          connectorType: account.connectorType,
+          authType: account.authType,
+        ),
       ),
       providerCatalog: providerCatalog,
     );
 
 List<ProviderConfigItem> _markUnsupportedLlmConfigs(
   Iterable<ProviderConfigItem> configs,
-  Iterable<({String id, String connectorType})> accounts, {
+  Iterable<({String id, String connectorType, String authType})> accounts, {
   AiGatewayProviderCatalog? providerCatalog,
 }) {
   final catalog = providerCatalog ?? AiGateway.defaultProviderCatalog;
@@ -89,7 +98,11 @@ List<ProviderConfigItem> _markUnsupportedLlmConfigs(
       .where(
         (account) =>
             catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
-            true,
+                true ||
+            !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+              account.connectorType,
+              account.authType,
+            ),
       )
       .map((account) => account.id)
       .toSet();
@@ -242,6 +255,13 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
   final catalog = providerCatalog ?? AiGateway.defaultProviderCatalog;
   final accountById = {for (final account in accounts) account.id: account};
   final configs = <ProviderConfigItem>[];
+  bool supportsAccount(LlmAccount account) =>
+      catalog.findProvider(account.connectorType)?.supportsChatAdapter ==
+          true &&
+      LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+        account.connectorType,
+        account.authType,
+      );
 
   LlmUpstreamModel? resolveMemberModel(
     LlmAccount account,
@@ -288,8 +308,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       for (final member in orderedMembers) {
         final account = accountById[member.accountId];
         if (account == null) continue;
-        if (catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
-            true) {
+        if (!supportsAccount(account)) {
           continue;
         }
         final model = resolveMemberModel(account, member);
@@ -310,9 +329,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
               legacyLocalModelId == localModelId);
       final supportsVision = members.any((member) {
         final account = accountById[member.accountId];
-        if (account == null ||
-            catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
-                true) {
+        if (account == null || !supportsAccount(account)) {
           return false;
         }
         final model = resolveMemberModel(account, member);
@@ -320,9 +337,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       });
       final supportsStreaming = members.any((member) {
         final account = accountById[member.accountId];
-        if (account == null ||
-            catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
-                true) {
+        if (account == null || !supportsAccount(account)) {
           return false;
         }
         final model = resolveMemberModel(account, member);
@@ -336,11 +351,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
           ? representativeOverride == 'anthropic.messages'
           : members.any((member) {
               final account = accountById[member.accountId];
-              if (account == null ||
-                  catalog
-                          .findProvider(account.connectorType)
-                          ?.supportsChatAdapter !=
-                      true) {
+              if (account == null || !supportsAccount(account)) {
                 return false;
               }
               final sourceModel = resolveMemberModel(account, member);

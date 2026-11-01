@@ -5,6 +5,31 @@ import 'package:stroom/ai_gateway/ai_gateway_protocol_bridges.dart';
 
 void main() {
   group('API protocol configuration', () {
+    test(
+        'Codex defaults to Responses while OpenAI API keys stay Chat Completions',
+        () {
+      expect(
+          builtinDefaultApiProtocolForConnector('codex'), 'openai.responses');
+      expect(
+        builtinDefaultApiProtocolForConnector('openai-api'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.responses',
+          connectorType: 'codex',
+        ),
+        {'openai.responses'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'openai-api',
+        ),
+        {'openai.chat_completions', 'openai.responses'},
+      );
+    });
+
     test('migrates legacy provider and model endpoint types on read', () {
       final provider = ProviderConfigItem.fromMap({
         'endpointType': 'anthropic',
