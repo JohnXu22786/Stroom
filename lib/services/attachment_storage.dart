@@ -1,15 +1,29 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../utils/image_send_compressor.dart' show CompressedImage;
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
+  static const _uuid = Uuid();
+  static DateTime Function() _now = DateTime.now;
+
+  @visibleForTesting
+  static set nowForTesting(DateTime Function() now) => _now = now;
+
+  @visibleForTesting
+  static void resetNowForTesting() => _now = DateTime.now;
+
+  static String _createStorageName(String hash, String extension) {
+    final uniqueId = '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
+    return '${hash}_$uniqueId.$extension';
+  }
 
   static String _extractExtension(String fileName) {
     final dot = fileName.lastIndexOf('.');
@@ -46,8 +60,7 @@ class AttachmentStorage {
     try {
       final ext = _extractExtension(fileName);
       final hash = computeHash(bytes);
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.toString();
-      final storageName = '${hash}_$uniqueId.$ext';
+      final storageName = _createStorageName(hash, ext);
       final storagePath = '$_storageDirName/$storageName';
 
       if (kIsWeb) {
@@ -79,8 +92,7 @@ class AttachmentStorage {
   static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
-    final uniqueId = DateTime.now().millisecondsSinceEpoch.toString();
-    final storageName = '${hash}_$uniqueId.$ext';
+    final storageName = _createStorageName(hash, ext);
     final storagePath = 'temp_edited/$storageName';
 
     if (kIsWeb) {
