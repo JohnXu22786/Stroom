@@ -30,16 +30,16 @@ class FolderPathUtils {
     'LPT9',
   };
 
-  /// Windows 非法字符集（路径分隔符与保留字符）
-  static final RegExp _illegalChars = RegExp(r'[/\\:*?"<>|]');
+  /// Windows 非法字符集（控制字符、路径分隔符与保留字符）
+  static final RegExp _illegalChars = RegExp(r'[\x00-\x1F/\\:*?"<>|]');
 
   /// 公共名称校验：空名 / 超长 / 非法字符 / 尾点 / Windows 保留设备名
   static String? _validateName(String name, String kind, int maxLength) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '$kind不能为空';
     if (trimmed.length > maxLength) return '$kind不能超过$maxLength个字符';
-    if (_illegalChars.hasMatch(trimmed)) {
-      return '$kind不能包含 / \\ : * ? " < > | 字符';
+    if (_illegalChars.hasMatch(name)) {
+      return '$kind不能包含 Windows 非法字符';
     }
     // 尾点：Windows 会静默去掉目录/文件名末尾的点，
     // 导致 foo 与 foo. 在导出时合并成同一个目录（可能互相覆盖）
