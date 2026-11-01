@@ -1279,6 +1279,7 @@ class _FileManagerViewState<T extends FileRecord>
           contentPadding: EdgeInsets.zero,
         ),
       ),
+      PopupMenuDivider(),
       PopupMenuItem(
         value: 'delete',
         child: ListTile(
@@ -1543,6 +1544,7 @@ class _FileManagerViewState<T extends FileRecord>
     if (extraItems.isNotEmpty) {
       items.insertAll(items.length - 1, extraItems);
     }
+    items.insert(items.length - 1, const PopupMenuDivider());
 
     return items;
   }

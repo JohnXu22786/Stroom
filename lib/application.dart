@@ -505,9 +505,16 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
-                  popupMenuTheme: const PopupMenuThemeData(
+                  popupMenuTheme: PopupMenuThemeData(
+                    color: colorScheme.surfaceContainerHigh,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.35,
+                        ),
+                        width: 0.5,
+                      ),
                     ),
                   ),
                   pageTransitionsTheme: PageTransitionsTheme(
@@ -520,9 +527,16 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
-                  popupMenuTheme: const PopupMenuThemeData(
+                  popupMenuTheme: PopupMenuThemeData(
+                    color: darkColorScheme.surfaceContainerHigh,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: darkColorScheme.outlineVariant.withValues(
+                          alpha: 0.35,
+                        ),
+                        width: 0.5,
+                      ),
                     ),
                   ),
                   pageTransitionsTheme: PageTransitionsTheme(

@@ -331,6 +331,7 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
                         itemBuilder: (_) => [
                               const PopupMenuItem(
                                   value: 'duplicate', child: Text('复制规则')),
+                              const PopupMenuDivider(),
                               const PopupMenuItem(
                                   value: 'remove', child: Text('删除规则')),
                             ],
