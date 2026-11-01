@@ -75,7 +75,8 @@ void main() {
       for (final name in reservedNames) {
         expect(FolderPathUtils.validateFolderName(name), isNotNull,
             reason: '$name should be reserved on Windows');
-        expect(FolderPathUtils.validateFolderName(name.toLowerCase()), isNotNull,
+        expect(
+            FolderPathUtils.validateFolderName(name.toLowerCase()), isNotNull,
             reason: '${name.toLowerCase()} should be reserved on Windows');
       }
     });
