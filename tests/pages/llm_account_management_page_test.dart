@@ -13,6 +13,7 @@ import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/services/llm_oauth_token_client.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
@@ -498,6 +499,62 @@ void main() {
     expect(cleanupCalled, isFalse);
     expect((await service.listAccounts()).single.id, 'delete-failure-account');
     expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  test('xAI OAuth account deletion revokes its discovered refresh endpoint',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        if (options.uri.path == '/.well-known/openid-configuration') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'issuer': 'https://auth.x.ai',
+              'revocation_endpoint': 'https://auth.x.ai/oauth2/revoke',
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        }
+        return ResponseBody.fromString('', 200);
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'xai-oauth-revoke',
+        connectorType: 'xai-oauth',
+        authType: 'oauth',
+        displayName: 'xAI OAuth account',
+      ),
+      secret: jsonEncode({
+        'access_token': 'fixture-access-token',
+        'refresh_token': 'fixture-refresh-token',
+      }),
+    );
+    final gateway = _testGateway(service, oauthDio: dio);
+    final account = (await gateway.accountManagement.listAccounts()).single;
+
+    expect(
+      await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+      isTrue,
+    );
+
+    expect(requests, hasLength(2));
+    expect(requests.first.uri.toString(),
+        'https://auth.x.ai/.well-known/openid-configuration');
+    expect(requests.last.uri.toString(), 'https://auth.x.ai/oauth2/revoke');
+    expect(requests.last.data, {
+      'client_id': LlmOAuthTokenClient.xaiClientId,
+      'token': 'fixture-refresh-token',
+      'token_type_hint': 'refresh_token',
+    });
+    expect(await service.getAccount(account.id), isNull);
   });
 
   testWidgets('does not revoke OAuth while local account deletion fails', (

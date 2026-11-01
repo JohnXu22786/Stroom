@@ -773,10 +773,6 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       ).supported) {
         return;
       }
-      if ({'grok-cli', 'xai-oauth'}.contains(account.connectorType)) {
-        // The source contract defines refresh, but no public revocation route.
-        return;
-      }
       final raw = await _accounts.readCredential(account.id);
       if (raw == null) throw const AiGatewayOAuthException();
       final bundle = _decodeOAuthBundle(raw);
@@ -794,11 +790,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       return true;
     }
     if (account.connectorType == 'claude' ||
-        account.connectorType == 'kimi-coding' ||
-        account.connectorType == 'grok-cli' ||
-        account.connectorType == 'xai-oauth') {
-      // These OAuth contracts provide token refresh but no revocation endpoint;
-      // removing the local secure credential is complete.
+        account.connectorType == 'kimi-coding') {
+      // These OAuth contracts provide token refresh but no revocation endpoint.
       await _accountManagement.deleteAccount(account.id);
       return true;
     }
@@ -855,6 +848,31 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         }
         body = {
           'client_id': clientId,
+          'token': refreshToken,
+          'token_type_hint': 'refresh_token',
+        };
+      } else if (account.connectorType == 'grok-cli' ||
+          account.connectorType == 'xai-oauth') {
+        final discovery = await _dio.getUri<Object?>(
+          Uri.parse('https://auth.x.ai/.well-known/openid-configuration'),
+        );
+        final discoveryBody = _decodeOAuthBundle(jsonEncode(discovery.data));
+        if (discoveryBody['issuer'] != 'https://auth.x.ai') {
+          throw const AiGatewayOAuthException();
+        }
+        final endpoint = discoveryBody['revocation_endpoint'];
+        final parsed = endpoint is String ? Uri.tryParse(endpoint) : null;
+        if (parsed == null ||
+            parsed.scheme != 'https' ||
+            parsed.host != 'auth.x.ai' ||
+            parsed.userInfo.isNotEmpty ||
+            parsed.hasQuery ||
+            parsed.hasFragment) {
+          throw const AiGatewayOAuthException();
+        }
+        revocationEndpoint = parsed;
+        body = {
+          'client_id': LlmOAuthTokenClient.xaiClientId,
           'token': refreshToken,
           'token_type_hint': 'refresh_token',
         };
