@@ -30,6 +30,8 @@ void main() {
           'kimi.ai',
           'kimi-coding',
           'xai',
+          'grok-cli',
+          'xai-oauth',
           'devin',
           'meta',
           'gemini',
@@ -74,6 +76,25 @@ void main() {
         LlmConnectorRegistry.find('kimi.ai')?.quotaAvailability,
         LlmQuotaAvailability.unknown,
       );
+      final grokBuild = LlmConnectorRegistry.find('grok-cli')!;
+      final xaiOAuth = LlmConnectorRegistry.find('xai-oauth')!;
+      expect(grokBuild.authTypes, {'oauth'});
+      expect(xaiOAuth.authTypes, {'oauth'});
+      expect(LlmConnectorRegistry.find('xai')!.authTypes, {'api_key'});
+      expect(grokBuild.modelCatalog, contains('grok-4.7'));
+      expect(grokBuild.modelCatalog, isNot(contains('grok-build-0.1')));
+      expect(grokBuild.modelCatalog, isNot(contains('grok-3-mini')));
+      expect(xaiOAuth.modelCatalog, isEmpty);
+      expect(LlmOAuthProviderPolicy.forProvider('grok-cli').supported, isTrue);
+      expect(LlmOAuthProviderPolicy.forProvider('xai-oauth').supported, isTrue);
+      expect(LlmOAuthProviderPolicy.forProvider('xai').supported, isFalse);
+      for (final id in {'grok-cli', 'xai-oauth'}) {
+        expect(LlmConnectorRegistry.chatAdapterEndpointType(id), 'openai');
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(id, 'oauth'),
+          isTrue,
+        );
+      }
     });
 
     test('registers the approved API-key providers with honest auth types', () {
@@ -1055,6 +1076,123 @@ void main() {
         contains('claude-sonnet-4-6'),
       );
       expect(models, isNotEmpty);
+    });
+
+    test('discovers entitled Grok and xAI OAuth models from their own hosts',
+        () async {
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6'},
+                  {'id': 'grok-4-image'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json']
+              },
+            );
+          });
+        final accountService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accountService.saveAccount(
+          _account('catalog-$connectorType', connectorType, authType: 'oauth'),
+          secret: jsonEncode({'access_token': '$connectorType-access'}),
+        );
+
+        final models = await accountService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(
+          captured?.uri.host,
+          connectorType == 'grok-cli' ? 'cli-chat-proxy.grok.com' : 'api.x.ai',
+        );
+        expect(captured?.uri.path, '/v1/models');
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer $connectorType-access',
+        );
+        expect(
+          captured?.headers.containsKey('X-XAI-Token-Auth'),
+          connectorType == 'grok-cli',
+        );
+        expect(
+          models.map((model) => model.upstreamModelId),
+          [connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6'],
+        );
+      }
+    });
+
+    test('refreshes expired xAI OAuth before model discovery', () async {
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            final isTokenRequest = options.uri.host == 'auth.x.ai';
+            return ResponseBody.fromString(
+              jsonEncode(
+                isTokenRequest
+                    ? {
+                        'access_token': 'fresh-$connectorType',
+                        'refresh_token': 'rotated-$connectorType',
+                        'expires_in': 3600,
+                      }
+                    : {
+                        'data': [
+                          {'id': 'grok-4.7'},
+                        ],
+                      },
+              ),
+              200,
+              headers: const {
+                'content-type': ['application/json']
+              },
+            );
+          });
+        final accountService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accountService.saveAccount(
+          _account('expired-$connectorType', connectorType, authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'expired-access',
+            'refresh_token': 'refresh-$connectorType',
+            'token_endpoint': 'https://auth.x.ai/oauth/token',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .subtract(const Duration(minutes: 1))
+                .toIso8601String(),
+          }),
+        );
+
+        final models = await accountService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(requests.map((request) => request.uri.host), [
+          'auth.x.ai',
+          connectorType == 'grok-cli' ? 'cli-chat-proxy.grok.com' : 'api.x.ai',
+        ]);
+        expect(
+          requests.last.headers['Authorization'],
+          'Bearer fresh-$connectorType',
+        );
+        expect(models.single.upstreamModelId, 'grok-4.7');
+      }
     });
 
     test(
@@ -2598,6 +2736,110 @@ void main() {
       },
     );
 
+    test('refreshes each xAI OAuth mode without crossing API-key identity',
+        () async {
+      final captured = <String, RequestOptions>{};
+      Object? responseScope;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured[options.uri.host] = options;
+          final tokenResponse = <String, Object?>{
+            'access_token': 'fresh-${options.data['refresh_token']}',
+            'refresh_token': 'rotated-${options.data['refresh_token']}',
+            'expires_in': 3600,
+          };
+          if (responseScope != null) tokenResponse['scope'] = responseScope;
+          return ResponseBody.fromString(
+            jsonEncode(tokenResponse),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final accountService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        final expectedModeScope =
+            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+        responseScope =
+            'openid profile email offline_access $expectedModeScope';
+        final account = await accountService.saveAccount(
+          _account('refresh-$connectorType', connectorType, authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-access',
+            'refresh_token': 'refresh-$connectorType',
+            'token_endpoint': 'https://auth.x.ai/oauth/token',
+            'identity_sub': 'xai-account',
+            'oauth_contract': 'xai-device-v1',
+            'scope': responseScope,
+          }),
+        );
+
+        expect(await accountService.refreshCredential(account), isTrue);
+        final refreshed = jsonDecode(
+          (await accountService.readCredential(account.id))!,
+        ) as Map;
+        expect(captured['auth.x.ai']?.uri.path, '/oauth/token');
+        expect(captured['auth.x.ai']?.data['client_id'],
+            'b1a00492-073a-47ea-816f-4c329264a828');
+        expect(refreshed['access_token'], 'fresh-refresh-$connectorType');
+        expect(refreshed['refresh_token'], 'rotated-refresh-$connectorType');
+        expect(refreshed['identity_sub'], 'xai-account');
+        expect(refreshed['token_endpoint'], 'https://auth.x.ai/oauth/token');
+        expect(refreshed['scope'], responseScope);
+      }
+
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        final expectedModeScope =
+            connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+        final oppositeModeScope =
+            connectorType == 'grok-cli' ? 'api:access' : 'grok-cli:access';
+        responseScope =
+            'openid profile email offline_access $oppositeModeScope';
+        final account = await accountService.saveAccount(
+          _account('refresh-mismatch-$connectorType', connectorType,
+              authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-access',
+            'refresh_token': 'refresh-mismatch-$connectorType',
+            'token_endpoint': 'https://auth.x.ai/oauth/token',
+            'identity_sub': 'xai-account',
+            'oauth_contract': 'xai-device-v1',
+            'scope': 'openid profile email offline_access $expectedModeScope',
+          }),
+        );
+
+        await expectLater(
+          accountService.refreshCredential(account),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        final unchanged = jsonDecode(
+          (await accountService.readCredential(account.id))!,
+        ) as Map;
+        expect(unchanged['access_token'], 'old-access');
+        expect(unchanged['scope'],
+            'openid profile email offline_access $expectedModeScope');
+      }
+
+      final apiKeyAccount = await accountService.saveAccount(
+        _account('xai-api-key', 'xai'),
+        secret: 'public-api-key',
+      );
+      expect(await accountService.refreshCredential(apiKeyAccount), isFalse);
+      await expectLater(
+        accountService.saveAccount(
+          _account('xai-api-key-as-oauth', 'xai', authType: 'oauth'),
+          secret: jsonEncode({'access_token': 'oauth-token'}),
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
     test(
       'does not refresh CLI-only OAuth credentials without public contracts',
       () async {
@@ -2624,14 +2866,7 @@ void main() {
           'kimi',
           'kimi-ai',
           'kimi.ai',
-          'xai',
         ]) {
-          final endpoint =
-              connector == 'xai' ? 'https://auth.x.ai/oauth/token' : null;
-          final tokenEndpointFields = <String, String>{};
-          if (endpoint != null) {
-            tokenEndpointFields['token_endpoint'] = endpoint;
-          }
           final account = await refreshService.saveAccount(
             _account('refresh-$connector', connector, authType: 'oauth'),
             secret: jsonEncode({
@@ -2643,7 +2878,6 @@ void main() {
               },
               if (connector.startsWith('kimi'))
                 'domain': connector == 'kimi' ? 'kimi.com' : 'kimi.ai',
-              ...tokenEndpointFields,
             }),
           );
 
@@ -3021,9 +3255,16 @@ void main() {
     });
 
     test('uses Responses for Codex, Grok Build, and Meta', () {
-      for (final connector in ['codex', 'xai', 'meta']) {
+      for (final connector in ['codex', 'grok-cli', 'meta']) {
         final request = builder.build(
-          account: _account('$connector-1', connector, authType: 'oauth'),
+          account: _account(
+            '$connector-1',
+            connector,
+            authType: 'oauth',
+            models: connector == 'grok-cli'
+                ? [_upstreamModel('model-1')]
+                : const [],
+          ),
           credential: jsonEncode({
             'access_token': '$connector-access',
             if (connector == 'codex') 'account_id': 'codex-account-1',
@@ -3082,6 +3323,48 @@ void main() {
       }
     });
 
+    test('keeps Grok Build and native xAI OAuth request contracts separate',
+        () {
+      final grok = builder.build(
+        account: _account(
+          'grok-build',
+          'grok-cli',
+          authType: 'oauth',
+          models: [_upstreamModel('grok-4.7')],
+        ),
+        credential: jsonEncode({'access_token': 'grok-build-access'}),
+        modelId: 'grok-4.7',
+        body: const {'model': 'grok-4.7', 'input': []},
+        nativeFormat: 'responses',
+      );
+      final xai = builder.build(
+        account: _account(
+          'xai-oauth',
+          'xai-oauth',
+          authType: 'oauth',
+          models: [_upstreamModel('grok-4.7')],
+        ),
+        credential: jsonEncode({'access_token': 'xai-api-access'}),
+        modelId: 'grok-4.7',
+        body: const {'model': 'grok-4.7', 'input': []},
+        nativeFormat: 'responses',
+      );
+
+      expect(
+          grok.uri, Uri.parse('https://cli-chat-proxy.grok.com/v1/responses'));
+      expect(grok.headers['Authorization'], 'Bearer grok-build-access');
+      expect(grok.headers['X-XAI-Token-Auth'], 'xai-grok-cli');
+      expect(grok.headers['x-grok-client-identifier'], 'grok-shell');
+      expect(
+        (grok.body as Map)['include'],
+        contains('reasoning.encrypted_content'),
+      );
+      expect(xai.uri, Uri.parse('https://api.x.ai/v1/responses'));
+      expect(xai.headers['Authorization'], 'Bearer xai-api-access');
+      expect(xai.headers.containsKey('X-XAI-Token-Auth'), isFalse);
+      expect(xai.headers.containsKey('x-grok-client-identifier'), isFalse);
+    });
+
     test('sets native body stream flags for body-controlled protocols', () {
       final cases = <(LlmAccount, String?, String?)>[
         (
@@ -3100,8 +3383,13 @@ void main() {
           null,
         ),
         (
-          _account('stream-xai', 'xai', authType: 'oauth'),
-          jsonEncode({'access_token': 'xai-token'}),
+          _account(
+            'stream-grok-cli',
+            'grok-cli',
+            authType: 'oauth',
+            models: [_upstreamModel('model-1')],
+          ),
+          jsonEncode({'access_token': 'grok-cli-token'}),
           null,
         ),
         (_account('stream-meta', 'meta'), 'meta-api-key', null),
@@ -3875,6 +4163,65 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('executes both xAI OAuth modes on their own host and auth route',
+        () async {
+      for (final connectorType in ['grok-cli', 'xai-oauth']) {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({'output_text': 'reply'}),
+              200,
+              headers: const {
+                'content-type': ['application/json']
+              },
+            );
+          });
+        final credentials = _MemoryCredentials();
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: credentials,
+        );
+        final account = await accounts.saveAccount(
+          _account(
+            'http-$connectorType',
+            connectorType,
+            authType: 'oauth',
+            models: [
+              _upstreamModel('grok-4.7'),
+            ],
+          ),
+          secret: jsonEncode({'access_token': '$connectorType-access'}),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+
+        await client.request(
+          account: account,
+          modelId: 'grok-4.7',
+          body: const {'model': 'fixture-model', 'input': []},
+          nativeFormat: 'responses',
+        );
+
+        final expectedHost = connectorType == 'grok-cli'
+            ? 'cli-chat-proxy.grok.com'
+            : 'api.x.ai';
+        expect(captured?.uri.host, expectedHost);
+        expect(captured?.uri.path, '/v1/responses');
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer $connectorType-access',
+        );
+        expect(
+          captured?.headers.containsKey('X-XAI-Token-Auth'),
+          connectorType == 'grok-cli',
+        );
+      }
+    });
+
     test('sends and decodes public xAI and Meta Responses requests', () async {
       for (final connectorType in ['xai', 'meta']) {
         RequestOptions? captured;
@@ -6133,12 +6480,20 @@ LlmAccount _account(
   String id,
   String connector, {
   String authType = 'api_key',
+  List<LlmUpstreamModel> models = const [],
 }) =>
     LlmAccount(
       id: id,
       connectorType: connector,
       authType: authType,
       displayName: connector,
+      models: models,
+    );
+
+LlmUpstreamModel _upstreamModel(String modelId) => LlmUpstreamModel(
+      id: 'model-$modelId',
+      upstreamModelId: modelId,
+      displayName: modelId,
     );
 
 Map<String, String> _requestForm(Object? body) {

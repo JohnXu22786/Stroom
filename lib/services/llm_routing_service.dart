@@ -1439,7 +1439,7 @@ class LlmRoutingService {
       }
       final connectorType =
           LlmConnectorRegistry.canonicalId(account.connectorType);
-      if ((connectorType == 'xai' || connectorType == 'meta') &&
+      if (({'xai', 'grok-cli', 'xai-oauth', 'meta'}.contains(connectorType)) &&
           !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
             connectorType,
             account.authType,
@@ -2677,6 +2677,8 @@ bool _supportsModelCapability(
         LlmNativeProtocol.ollamaChat,
         LlmNativeProtocol.kimiChatCompletions,
         LlmNativeProtocol.xaiResponses,
+        LlmNativeProtocol.grokBuildResponses,
+        LlmNativeProtocol.xaiOAuthResponses,
         LlmNativeProtocol.metaResponses,
       }.contains(LlmConnectorRegistry.find(connectorType)?.protocol)) {
     return true;

@@ -311,6 +311,62 @@ void main() {
     },
   );
 
+  test('Grok Build and xAI API OAuth are selectable in Task Flow', () async {
+    for (final connectorType in ['grok-cli', 'xai-oauth']) {
+      final account = LlmAccount(
+        id: '$connectorType-oauth',
+        connectorType: connectorType,
+        authType: 'oauth',
+        displayName: connectorType,
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: '$connectorType-model',
+            upstreamModelId: 'grok-4.7',
+            displayName: connectorType,
+            capabilities: const {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: '$connectorType-group',
+        displayName: connectorType,
+        members: [
+          LlmModelGroupMember(
+            accountId: account.id,
+            localModelId: '$connectorType-model',
+            upstreamModelId: 'grok-4.7',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: connectorType,
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(config.apiProtocol, 'openai.responses');
+      expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    }
+  });
+
   test(
     'Vertex credential model groups preflight as native Gemini chat',
     () async {

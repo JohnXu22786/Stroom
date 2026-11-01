@@ -23,6 +23,13 @@ const String kLlmConnectorReferenceRevision =
 const _claudeOAuthClientId = LlmOAuthAuthorizationAttempt.claudeCodeClientId;
 const _kimiOAuthClientId = LlmOAuthAuthorizationAttempt.kimiCodeClientId;
 const _xaiOAuthClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
+const _grokBuildClientHeaders = <String, String>{
+  'X-XAI-Token-Auth': 'xai-grok-cli',
+  'x-grok-client-version': '1.0.46',
+  'x-grok-client-identifier': 'grok-shell',
+  'x-grok-client-mode': 'headless',
+  'x-authenticateresponse': 'authenticate-response',
+};
 
 const kLlmAntigravityRequestUserAgent = 'antigravity/hub/2.9.1 darwin/arm64';
 
@@ -32,6 +39,8 @@ enum LlmNativeProtocol {
   antigravityGenerateContent,
   kimiChatCompletions,
   xaiResponses,
+  grokBuildResponses,
+  xaiOAuthResponses,
   devinConnectRpc,
   metaResponses,
   geminiGenerateContent,
@@ -159,10 +168,26 @@ abstract final class LlmConnectorRegistry {
     ),
     LlmConnectorDefinition(
       id: 'xai',
-      displayName: 'xAI Grok Build',
+      displayName: 'xAI Grok',
       protocol: LlmNativeProtocol.xaiResponses,
-      authTypes: {'oauth', 'api_key'},
+      authTypes: {'api_key'},
       modelCatalog: kPinnedXaiModels,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'grok-cli',
+      displayName: 'xAI Grok Build',
+      protocol: LlmNativeProtocol.grokBuildResponses,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedGrokBuildModels,
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'xai-oauth',
+      displayName: 'xAI API OAuth',
+      protocol: LlmNativeProtocol.xaiOAuthResponses,
+      authTypes: {'oauth'},
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
@@ -305,7 +330,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
-        'xai' || 'meta' => 'openai',
+        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' => 'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -342,6 +367,7 @@ abstract final class LlmConnectorRegistry {
     return switch (canonicalId(connectorType)) {
       'codex' => authType == 'oauth',
       'xai' || 'meta' => authType == 'api_key',
+      'grok-cli' || 'xai-oauth' => authType == 'oauth',
       _ => true,
     };
   }
@@ -1054,6 +1080,8 @@ class LlmAccountConnectorService {
       'deepseek',
       'minimax',
       'qwen',
+      'grok-cli',
+      'xai-oauth',
       'bedrock',
       'vertex',
       'ollama',
@@ -1061,7 +1089,11 @@ class LlmAccountConnectorService {
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
     }
-    if (account.models.isNotEmpty && (!refreshRemote || !hasRemoteCatalog)) {
+    final accountEntitlementCatalog = account.connectorType == 'grok-cli' ||
+        account.connectorType == 'xai-oauth';
+    if (account.models.isNotEmpty &&
+        (!refreshRemote || !hasRemoteCatalog) &&
+        !accountEntitlementCatalog) {
       return List.unmodifiable(account.models);
     }
     if (hasRemoteCatalog) {
@@ -1072,6 +1104,19 @@ class LlmAccountConnectorService {
         throw const LlmAccountConnectorException();
       }
       final discovered = await _discoverRemoteModels(account);
+      if (account.connectorType == 'grok-cli' ||
+          account.connectorType == 'xai-oauth') {
+        final entitledIds =
+            discovered.map((model) => model.upstreamModelId).toSet();
+        return _mergeModelMappings(
+          discovered,
+          account.models
+              .where(
+                (model) => entitledIds.contains(model.upstreamModelId),
+              )
+              .toList(),
+        );
+      }
       return _mergeModelMappings(discovered, account.models);
     }
     return List.unmodifiable([
@@ -1165,10 +1210,15 @@ class LlmAccountConnectorService {
         'accessToken',
       ]);
       if (accessToken == null) throw const LlmAccountConnectorException();
+      final xaiRefreshScope = account.connectorType == 'grok-cli' ||
+              account.connectorType == 'xai-oauth'
+          ? _validatedXaiRefreshScope(tokenResponse, account.connectorType)
+          : null;
       final freshFields = tokenResponse ?? const <String, dynamic>{};
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(freshFields)
         ..['access_token'] = accessToken;
+      if (xaiRefreshScope != null) updated['scope'] = xaiRefreshScope;
       final claudeAccount = tokenResponse?['account'];
       if (account.connectorType == 'claude' && claudeAccount is Map) {
         final accountData = Map<String, dynamic>.from(claudeAccount);
@@ -1595,7 +1645,7 @@ class LlmAccountConnectorService {
             'X-Msh-Device-Id': deviceId,
           },
         );
-      case 'xai':
+      case 'grok-cli' || 'xai-oauth':
         final endpoint = _firstString(bundle, const [
           'token_endpoint',
           'tokenEndpoint',
@@ -1604,6 +1654,8 @@ class LlmAccountConnectorService {
         if (uri == null ||
             uri.scheme != 'https' ||
             uri.userInfo.isNotEmpty ||
+            uri.hasQuery ||
+            uri.hasFragment ||
             !(uri.host == 'auth.x.ai' || uri.host.endsWith('.auth.x.ai'))) {
           return null;
         }
@@ -1619,6 +1671,33 @@ class LlmAccountConnectorService {
       default:
         return null;
     }
+  }
+
+  static String _validatedXaiRefreshScope(
+    Map<String, dynamic>? tokenResponse,
+    String connectorType,
+  ) {
+    final requiredModeScope = switch (connectorType) {
+      'grok-cli' => 'grok-cli:access',
+      'xai-oauth' => 'api:access',
+      _ => throw const LlmAccountConnectorException(),
+    };
+    final oppositeModeScope = requiredModeScope == 'grok-cli:access'
+        ? 'api:access'
+        : 'grok-cli:access';
+    if (tokenResponse == null || !tokenResponse.containsKey('scope')) {
+      return 'openid profile email offline_access $requiredModeScope';
+    }
+    final scope = tokenResponse['scope'];
+    if (scope is! String || scope.trim().isEmpty) {
+      throw const LlmAccountConnectorException();
+    }
+    final grantedScopes = scope.trim().split(RegExp(r'\s+')).toSet();
+    if (!grantedScopes.contains(requiredModeScope) ||
+        grantedScopes.contains(oppositeModeScope)) {
+      throw const LlmAccountConnectorException();
+    }
+    return scope.trim();
   }
 
   Future<List<LlmUpstreamModel>> _discoverRemoteModels(
@@ -1646,6 +1725,8 @@ class LlmAccountConnectorService {
       'deepseek' => 'https://api.deepseek.com',
       'minimax' => 'https://api.minimax.io/v1',
       'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      'grok-cli' => 'https://cli-chat-proxy.grok.com/v1',
+      'xai-oauth' => 'https://api.x.ai/v1',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       _ => null,
@@ -1671,6 +1752,12 @@ class LlmAccountConnectorService {
     final usesGeminiOAuth = account.authType == 'oauth' &&
         (account.connectorType == 'gemini' ||
             account.connectorType == 'aistudio');
+    final usesXaiOAuth = account.authType == 'oauth' &&
+        (account.connectorType == 'grok-cli' ||
+            account.connectorType == 'xai-oauth');
+    final usesRefreshableOAuth = usesGeminiOAuth || usesXaiOAuth;
+    final usesGrokBuildOAuth =
+        account.authType == 'oauth' && account.connectorType == 'grok-cli';
     final configuredHeaders = account.endpointConfig['headers'];
     if (configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
@@ -1714,26 +1801,28 @@ class LlmAccountConnectorService {
       );
       if (accessToken == null) throw const LlmAccountConnectorException();
       headers['Authorization'] = 'Bearer $accessToken';
-    } else if (usesGeminiOAuth) {
+    } else if (usesRefreshableOAuth) {
       if (secret == null || secret.isEmpty) {
         throw const LlmAccountConnectorException();
       }
       headers['Authorization'] =
           'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
-      headers['x-goog-user-project'] =
-          LlmNativeRequestBuilder._requiredGoogleCloudProjectId(
-        account.endpointConfig,
-      );
+      if (usesGeminiOAuth) {
+        headers['x-goog-user-project'] =
+            LlmNativeRequestBuilder._requiredGoogleCloudProjectId(
+          account.endpointConfig,
+        );
+      }
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
     } else {
       throw const LlmAccountConnectorException();
     }
 
-    var geminiOAuthRefreshed = false;
-    Future<void> refreshGeminiOAuthToken() async {
-      if (!usesGeminiOAuth ||
-          geminiOAuthRefreshed ||
+    var oauthTokenRefreshed = false;
+    Future<void> refreshOAuthToken() async {
+      if (!usesRefreshableOAuth ||
+          oauthTokenRefreshed ||
           !await refreshCredential(account)) {
         throw const LlmAccountConnectorException();
       }
@@ -1745,10 +1834,10 @@ class LlmAccountConnectorService {
       }
       headers['Authorization'] =
           'Bearer ${LlmNativeRequestBuilder._credentialValue(account, refreshedSecret)}';
-      geminiOAuthRefreshed = true;
+      oauthTokenRefreshed = true;
     }
 
-    if (usesGeminiOAuth && secret != null && secret.isNotEmpty) {
+    if (usesRefreshableOAuth && secret != null && secret.isNotEmpty) {
       final credentialBundle = _decodeCredentialBundle(secret);
       final expiryValue =
           credentialBundle['expires_at'] ?? credentialBundle['expired'];
@@ -1764,9 +1853,10 @@ class LlmAccountConnectorService {
           !expiry.isAfter(
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
           )) {
-        await refreshGeminiOAuthToken();
+        await refreshOAuthToken();
       }
     }
+    if (usesGrokBuildOAuth) headers.addAll(_grokBuildClientHeaders);
 
     try {
       final models = <LlmUpstreamModel>[];
@@ -1798,11 +1888,11 @@ class LlmAccountConnectorService {
           );
         } on DioException catch (error) {
           if (error.response?.statusCode != 401 ||
-              !usesGeminiOAuth ||
-              geminiOAuthRefreshed) {
+              !usesRefreshableOAuth ||
+              oauthTokenRefreshed) {
             rethrow;
           }
-          await refreshGeminiOAuthToken();
+          await refreshOAuthToken();
           response = await _dio.getUri<Object?>(
             pageUri,
             options: Options(headers: headers),
@@ -3121,6 +3211,11 @@ class LlmNativeRequestBuilder {
             !kPinnedKimiCodeModels.contains(modelId))) {
       throw const LlmAccountConnectorException();
     }
+    if ((account.connectorType == 'grok-cli' ||
+            account.connectorType == 'xai-oauth') &&
+        !account.models.any((model) => model.upstreamModelId == modelId)) {
+      throw const LlmAccountConnectorException();
+    }
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
@@ -3212,6 +3307,13 @@ class LlmNativeRequestBuilder {
             'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
         headers['X-Client-Id'] = 'tbh:tui';
         break;
+      case 'grok-cli':
+        headers.addAll(_grokBuildClientHeaders);
+        headers['Authorization'] = 'Bearer $secret';
+        break;
+      case 'xai-oauth':
+        headers['Authorization'] = 'Bearer $secret';
+        break;
       case 'antigravity':
         headers['Authorization'] = 'Bearer $secret';
         headers['User-Agent'] = kLlmAntigravityRequestUserAgent;
@@ -3237,24 +3339,34 @@ class LlmNativeRequestBuilder {
       headers['Accept'] = 'text/event-stream';
     }
 
-    final requestBody = account.connectorType == 'bedrock'
-        ? AwsBedrockConverseAdapter.toConverse(body)
-        : account.connectorType == 'antigravity'
-            ? _antigravityPayload(account, credential, modelId, body)
-            : _isVertexImagen(
-                account,
-                modelId,
-                config: config,
-                nativeFormat: nativeFormat,
-              )
-                ? _vertexImagenPayload(body)
-                : _applyBodyStreamOption(
-                    account: account,
+    final requestBody = account.connectorType == 'grok-cli'
+        ? _grokBuildPayload(
+            _applyBodyStreamOption(
+              account: account,
+              config: config,
+              body: body,
+              stream: stream,
+              nativeFormat: nativeFormat,
+            ),
+          )
+        : account.connectorType == 'bedrock'
+            ? AwsBedrockConverseAdapter.toConverse(body)
+            : account.connectorType == 'antigravity'
+                ? _antigravityPayload(account, credential, modelId, body)
+                : _isVertexImagen(
+                    account,
+                    modelId,
                     config: config,
-                    body: body,
-                    stream: stream,
                     nativeFormat: nativeFormat,
-                  );
+                  )
+                    ? _vertexImagenPayload(body)
+                    : _applyBodyStreamOption(
+                        account: account,
+                        config: config,
+                        body: body,
+                        stream: stream,
+                        nativeFormat: nativeFormat,
+                      );
 
     var requestHeaders = headers;
     if (account.connectorType == 'bedrock') {
@@ -3297,6 +3409,19 @@ class LlmNativeRequestBuilder {
     return Map<String, dynamic>.from(body)..['stream'] = stream;
   }
 
+  static Object? _grokBuildPayload(Object? body) {
+    if (body is! Map) throw const LlmAccountConnectorException();
+    final payload = Map<String, dynamic>.from(body);
+    final include = payload['include'] is Iterable
+        ? List<Object?>.from(payload['include'] as Iterable)
+        : <Object?>[];
+    if (!include.contains('reasoning.encrypted_content')) {
+      include.add('reasoning.encrypted_content');
+    }
+    payload['include'] = include;
+    return payload;
+  }
+
   static bool _usesBodyStreamOption(
     LlmAccount account,
     Map<String, dynamic> config,
@@ -3310,6 +3435,8 @@ class LlmNativeRequestBuilder {
         'kimi-ai' ||
         'kimi.ai' ||
         'xai' ||
+        'grok-cli' ||
+        'xai-oauth' ||
         'meta' ||
         'gemini-interactions' ||
         'openai-compatibility' ||
@@ -3543,12 +3670,13 @@ class LlmNativeRequestBuilder {
           _ => '/v1/chat/completions',
         };
       case 'xai':
-        baseUrl = _baseUrl(
-          config,
-          account.authType == 'oauth'
-              ? 'https://cli-chat-proxy.grok.com/v1'
-              : 'https://api.x.ai/v1',
-        );
+        baseUrl = _baseUrl(config, 'https://api.x.ai/v1');
+        path = '/responses';
+      case 'grok-cli':
+        baseUrl = _baseUrl(config, 'https://cli-chat-proxy.grok.com/v1');
+        path = '/responses';
+      case 'xai-oauth':
+        baseUrl = _baseUrl(config, 'https://api.x.ai/v1');
         path = '/responses';
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
@@ -3833,7 +3961,8 @@ class LlmNativeRequestBuilder {
       'antigravity' => host == 'cloudcode-pa.googleapis.com',
       'kimi' || 'kimi-coding' => host == 'api.kimi.com',
       'kimi-ai' || 'kimi.ai' => host == 'api.kimi.ai',
-      'xai' => {'cli-chat-proxy.grok.com', 'api.x.ai'}.contains(host),
+      'xai' || 'xai-oauth' => host == 'api.x.ai',
+      'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
       'meta' => host == 'api.meta.ai',
       'gemini' ||

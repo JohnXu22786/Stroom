@@ -1717,6 +1717,39 @@ void main() {
       }
     });
 
+    test('routes Grok Build and native xAI API OAuth members', () async {
+      for (final (connectorType, modelId) in [
+        ('grok-cli', 'grok-4.7'),
+        ('xai-oauth', 'grok-4.6'),
+      ]) {
+        final accountId = '$connectorType-oauth';
+        final rig = _Rig(
+          now: DateTime.utc(2026, 10, 18, 12),
+          accounts: [
+            _account(
+              accountId,
+              connectorType,
+              authType: 'oauth',
+              upstreamModel: modelId,
+            ),
+          ],
+        );
+
+        final result = await rig.route(
+          (candidate, progress) async => candidate.account.id,
+        );
+
+        expect(result.value, accountId);
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            connectorType,
+            'oauth',
+          ),
+          isTrue,
+        );
+      }
+    });
+
     test(
       'keeps the best eligible tier and applies each same-tier strategy',
       () async {

@@ -468,6 +468,10 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account,
   );
 
+  Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<void> revoke(AiGatewayAccount account);
 
   /// Deletes an OAuth account before attempting provider revocation. Returns

@@ -13,9 +13,89 @@ import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/services/llm_oauth_token_client.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('xAI OAuth model discovery can be retried from account editor', (
+    tester,
+  ) async {
+    var discoveryAttempts = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        discoveryAttempts++;
+        if (discoveryAttempts == 1) {
+          return ResponseBody.fromString(
+              '{"error":"temporarily unavailable"}', 503);
+        }
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'grok-3'}
+            ]
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json']
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+      dio: dio,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'xai-oauth-retry',
+        connectorType: 'xai-oauth',
+        authType: 'oauth',
+        displayName: 'xAI OAuth account',
+      ),
+      secret: jsonEncode({
+        'access_token': 'fixture-access-token',
+        'refresh_token': 'fixture-refresh-token',
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
+        'oauth_contract': 'xai-device-v1',
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号').last);
+    await tester.pumpAndSettle();
+
+    final refreshButton = find.widgetWithText(TextButton, '刷新模型目录');
+    expect(tester.widget<TextButton>(refreshButton).onPressed, isNotNull);
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(find.text('模型目录读取失败，请检查账号认证和连接设置。'), findsOneWidget);
+    expect(discoveryAttempts, 1);
+
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(discoveryAttempts, 2);
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('grok-3'));
+  });
+
   testWidgets('Kimi Code account uses the upstream device authorization flow', (
     tester,
   ) async {
@@ -83,6 +163,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
     expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('Grok Build and xAI OAuth modes are separate addable accounts', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    for (final (connectorId, displayName) in [
+      ('grok-cli', 'xAI Grok Build'),
+      ('xai-oauth', 'xAI API OAuth'),
+    ]) {
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      final connector = gateway.providerCatalog.findProvider(connectorId)!;
+      expect(connector.displayName, displayName);
+      expect(connector.supportedAuthTypes, {'oauth'});
+      final dropdown = find.byType(DropdownButtonFormField<String>).at(0);
+      final button = find.descendant(
+        of: dropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(button).onChanged!(connectorId);
+      await tester.pumpAndSettle();
+      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+      await tester.enterText(
+          find.byType(TextField).at(0), '$connectorId account');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      expect(
+        oauthAuthorization.xaiDeviceAuthorizationAccounts.last.connectorType,
+        connectorId,
+      );
+      expect(find.text('XAI-1234'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(await service.listAccounts(), isEmpty);
+    }
   });
 
   testWidgets('Kimi Code system back cancels device authorization', (
@@ -370,6 +499,62 @@ void main() {
     expect(cleanupCalled, isFalse);
     expect((await service.listAccounts()).single.id, 'delete-failure-account');
     expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  test('xAI OAuth account deletion revokes its discovered refresh endpoint',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        if (options.uri.path == '/.well-known/openid-configuration') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'issuer': 'https://auth.x.ai',
+              'revocation_endpoint': 'https://auth.x.ai/oauth2/revoke',
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        }
+        return ResponseBody.fromString('', 200);
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'xai-oauth-revoke',
+        connectorType: 'xai-oauth',
+        authType: 'oauth',
+        displayName: 'xAI OAuth account',
+      ),
+      secret: jsonEncode({
+        'access_token': 'fixture-access-token',
+        'refresh_token': 'fixture-refresh-token',
+      }),
+    );
+    final gateway = _testGateway(service, oauthDio: dio);
+    final account = (await gateway.accountManagement.listAccounts()).single;
+
+    expect(
+      await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+      isTrue,
+    );
+
+    expect(requests, hasLength(2));
+    expect(requests.first.uri.toString(),
+        'https://auth.x.ai/.well-known/openid-configuration');
+    expect(requests.last.uri.toString(), 'https://auth.x.ai/oauth2/revoke');
+    expect(requests.last.data, {
+      'client_id': LlmOAuthTokenClient.xaiClientId,
+      'token': 'fixture-refresh-token',
+      'token_type_hint': 'refresh_token',
+    });
+    expect(await service.getAccount(account.id), isNull);
   });
 
   testWidgets('does not revoke OAuth while local account deletion fails', (
@@ -2352,6 +2537,7 @@ LlmChatRoutingRuntime _testGateway(
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];
   final deviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
@@ -2375,22 +2561,42 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    xaiDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://x.ai/activate'),
+      userCode: 'XAI-1234',
+    );
+  }
+
+  @override
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
 }
 
 class _PendingOAuthDeviceAuthorization
     implements AiGatewayOAuthDeviceAuthorization {
+  final Uri _verificationUri;
+  final String _userCode;
   final _completion = Completer<AiGatewayAccount>();
   var cancelled = false;
 
+  _PendingOAuthDeviceAuthorization({
+    Uri? verificationUri,
+    String? userCode,
+  })  : _verificationUri =
+            verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
+        _userCode = userCode ?? 'ABCD-EFGH';
+
   @override
-  Uri get verificationUri => Uri.parse('https://www.kimi.com/code/verify');
+  Uri get verificationUri => _verificationUri;
 
   @override
   Uri get verificationUriComplete => verificationUri;
 
   @override
-  String get userCode => 'ABCD-EFGH';
+  String get userCode => _userCode;
 
   @override
   Future<AiGatewayAccount> get completed => _completion.future;

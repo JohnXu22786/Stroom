@@ -171,6 +171,23 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       );
     }
     if (result.account.connectorType != 'kimi-coding') {
+      if (result.account.connectorType == 'grok-cli' ||
+          result.account.connectorType == 'xai-oauth') {
+        final authorization = await gateway.oauthAuthorization
+            .beginXaiDeviceAuthorization(result.account);
+        if (!mounted) {
+          authorization.cancel();
+          return null;
+        }
+        return showDialog<AiGatewayAccount>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _XaiDeviceAuthorizationDialog(
+            authorization: authorization,
+            connectorType: result.account.connectorType,
+          ),
+        );
+      }
       return gateway.oauthAuthorization.authorize(
         result.account,
         configuration: result.oauthConfiguration,
@@ -586,6 +603,85 @@ class _KimiCodeDeviceAuthorizationDialogState
                 );
               },
               child: const Text('打开 Kimi'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+}
+
+class _XaiDeviceAuthorizationDialog extends StatefulWidget {
+  final AiGatewayOAuthDeviceAuthorization authorization;
+  final String connectorType;
+
+  const _XaiDeviceAuthorizationDialog({
+    required this.authorization,
+    required this.connectorType,
+  });
+
+  @override
+  State<_XaiDeviceAuthorizationDialog> createState() =>
+      _XaiDeviceAuthorizationDialogState();
+}
+
+class _XaiDeviceAuthorizationDialogState
+    extends State<_XaiDeviceAuthorizationDialog> {
+  String? _error;
+
+  bool get _isGrokBuild => widget.connectorType == 'grok-cli';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authorization.completed.then(
+      (account) {
+        if (mounted) Navigator.of(context).pop(account);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _error = 'xAI 授权失败，请重新开始登录。');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) widget.authorization.cancel();
+        },
+        child: AlertDialog(
+          title: Text(_isGrokBuild ? '登录 Grok Build' : '登录 xAI API'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('打开 xAI 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+              const SizedBox(height: 12),
+              SelectableText(widget.authorization.userCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                widget.authorization.verificationUriComplete.toString(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await launchUrl(
+                  widget.authorization.verificationUriComplete,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('打开 xAI'),
             ),
             TextButton(
               onPressed: () {
@@ -1507,15 +1603,23 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _models,
                 minLines: 3,
                 maxLines: 7,
-                readOnly: _connectorType == 'kimi-coding',
+                readOnly: _connectorType == 'kimi-coding' ||
+                    _connectorType == 'grok-cli' ||
+                    _connectorType == 'xai-oauth',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
                   helperText: _connectorType == 'kimi-coding'
                       ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                      : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                      : _connectorType == 'grok-cli'
+                          ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                          : _connectorType == 'xai-oauth'
+                              ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                              : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
-                onChanged: _connectorType == 'kimi-coding'
+                onChanged: _connectorType == 'kimi-coding' ||
+                        _connectorType == 'grok-cli' ||
+                        _connectorType == 'xai-oauth'
                     ? null
                     : (_) => setState(() => _draftChanged = true),
               ),
@@ -1524,7 +1628,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 child: TextButton.icon(
                   onPressed: widget.account != null &&
                           !_draftChanged &&
-                          _connectorType != 'kimi-coding'
+                          !{'kimi-coding'}.contains(_connectorType)
                       ? _discoverModels
                       : null,
                   icon: const Icon(Icons.refresh),
