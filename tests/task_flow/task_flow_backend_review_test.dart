@@ -975,7 +975,10 @@ void main() {
       blocks: [
         TaskFlowBlock(
           typeKey: BlockType.catcatch,
-          params: {'resourceSelectionPolicy': 'automaticWithPrompt'},
+          params: {
+            'resourceSelectionPolicy': 'automaticWithPrompt',
+            'outputPolicy': 'followDownstream',
+          },
         ),
       ],
     );
