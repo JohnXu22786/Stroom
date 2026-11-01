@@ -15020,6 +15020,7 @@ void main() {
           'foo#barxyz',
           'foo!barxyz',
           'foo%barxyz',
+          'a. bc123',
           'foo bar carefully',
           'key abc123',
           'p a s s w o r d',
@@ -15332,12 +15333,16 @@ void main() {
             'Please read the documentation now. Summarize the process clearly.\n'
             'Please read the documentation now. Proceed with the process.\n'
             'Please read the documentation now. Proceed.\n'
+            'Please read the documentation now. Proceed carefully.\n'
             'Please read the documentation now. Prepare a summary.\n'
             'Please read the documentation now. Summarize the process accurately.\n'
             'Please read the documentation now. Summarize the process particularly carefully.\n'
             'Please read the documentation now. Summarize the process externally.\n'
+            'Please read the documentation now. Explain the process transparently.\n'
+            'Please read the documentation now. Summarize the process responsibly.\n'
             'Please read the documentation 2025. Release notes.\n'
             'Please read the documentation 2025. User guide.\n'
+            'Please read the documentation 2025. Python API guide.\n'
             'Please read the documentation now. Summarize the overview throughout the workflow.\n'
             'Please read the documentation now. Summarize the process repeatedly.\n'
             'Use the documentation to authenticate this API request.\n'
@@ -15461,6 +15466,68 @@ void main() {
           isNot(contains('foobarxyz')),
         );
 
+        final credentialBeforeNaturalTitleTail = taskFor(
+          'legacy-ocr-year-title-does-not-hide-credential',
+          'Please read the documentation 2025. '
+              'foobarxyz release notes.',
+        );
+        final credentialBeforeNaturalTitleTailInstruction =
+            OcrRetrySnapshot.fromMap(
+          credentialBeforeNaturalTitleTail.retryData!,
+        ).instructionContent!;
+        final credentialBeforeNaturalTitleTailPersisted = jsonEncode(
+          credentialBeforeNaturalTitleTail.toMap(),
+        );
+        expect(
+          credentialBeforeNaturalTitleTailInstruction,
+          'Please read the documentation [redacted] release notes.',
+        );
+        expect(
+          credentialBeforeNaturalTitleTailPersisted,
+          isNot(contains('foobarxyz')),
+        );
+
+        final credentialLikeTitleChunk = taskFor(
+          'legacy-ocr-year-title-rejects-credential-like-word',
+          'Please read the documentation 2025. '
+              'foobar release notes.',
+        );
+        final credentialLikeTitleChunkInstruction = OcrRetrySnapshot.fromMap(
+          credentialLikeTitleChunk.retryData!,
+        ).instructionContent!;
+        final credentialLikeTitleChunkPersisted = jsonEncode(
+          credentialLikeTitleChunk.toMap(),
+        );
+        expect(
+          credentialLikeTitleChunkInstruction,
+          'Please read the documentation [redacted] release notes.',
+        );
+        expect(
+          credentialLikeTitleChunkPersisted,
+          isNot(contains('foobar')),
+        );
+
+        final capitalizedCredentialLikeTitleChunk = taskFor(
+          'legacy-ocr-year-title-rejects-capitalized-credential-word',
+          'Please read the documentation 2025. '
+              'Foobar release notes.',
+        );
+        final capitalizedCredentialLikeTitleChunkInstruction =
+            OcrRetrySnapshot.fromMap(
+          capitalizedCredentialLikeTitleChunk.retryData!,
+        ).instructionContent!;
+        final capitalizedCredentialLikeTitleChunkPersisted = jsonEncode(
+          capitalizedCredentialLikeTitleChunk.toMap(),
+        );
+        expect(
+          capitalizedCredentialLikeTitleChunkInstruction,
+          'Please read the documentation [redacted] release notes.',
+        );
+        expect(
+          capitalizedCredentialLikeTitleChunkPersisted,
+          isNot(contains('Foobar')),
+        );
+
         final credentialOnNextLine = taskFor(
           'legacy-ocr-credential-on-line-after-natural-sentence',
           'Please read the documentation now. '
@@ -15523,6 +15590,25 @@ void main() {
         expect(
           credentialSplitAcrossManyLinesPersisted,
           isNot(contains('foobarxyz')),
+        );
+
+        final singleLetterCredentialChunk = taskFor(
+          'legacy-ocr-single-letter-credential-chunk',
+          'Please read the documentation a. bcdefxyz.',
+        );
+        final singleLetterCredentialChunkInstruction = OcrRetrySnapshot.fromMap(
+          singleLetterCredentialChunk.retryData!,
+        ).instructionContent!;
+        final singleLetterCredentialChunkPersisted = jsonEncode(
+          singleLetterCredentialChunk.toMap(),
+        );
+        expect(
+          singleLetterCredentialChunkInstruction,
+          'Please read the documentation [redacted].',
+        );
+        expect(
+          singleLetterCredentialChunkPersisted,
+          isNot(contains('bcdefxyz')),
         );
 
         final credentialAfterSentenceBoundary = taskFor(

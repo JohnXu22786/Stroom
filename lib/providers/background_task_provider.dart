@@ -1498,6 +1498,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'specifically',
       'particularly',
       'externally',
+      'transparently',
+      'responsibly',
     };
     const naturalNouns = {
       'documentation',
@@ -1543,6 +1545,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       'topic',
       'topics',
       'user',
+      'python',
       'step',
       'steps',
       'workflow',
@@ -1598,6 +1601,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     // appears in explicit credential-use context.
     final dottedCredentialCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
+      r'[ \t]*'
       r'([a-zA-Z0-9_]{1,8})[ \t]*\.[ \t]+([a-zA-Z0-9_]{4,})'
       r'([^\r\n]*(?:[\r\n]+[ \t]*[^\r\n]*)*)'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
@@ -1608,6 +1612,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       final secondChunk = match.group(3)!;
       final sentenceTail = match.group(4)!;
       final joinedCredential = '$firstChunk$secondChunk';
+      int firstChunkOffset() {
+        final source = match.group(0)!;
+        final prefixEnd = RegExp(
+          spacedOpenMaskPrefixPattern,
+          caseSensitive: false,
+        ).firstMatch(source)!.end;
+        return source.indexOf(firstChunk, prefixEnd);
+      }
+
       final firstChunkIsNatural =
           naturalAdverbs.contains(firstChunk.toLowerCase()) ||
               naturalNouns.contains(firstChunk.toLowerCase());
@@ -1627,9 +1640,37 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
               RegExp(r'^[.!?]*\s*$').hasMatch(
                 sentenceTailForClassification,
               );
+      final naturalActionAdverbContinuation =
+          naturalSentenceActions.contains(secondChunk.toLowerCase()) &&
+              RegExp(r'^\s+[a-z]+[.!?]?\s*$', caseSensitive: false)
+                  .hasMatch(sentenceTailForClassification) &&
+              naturalAdverbs.contains(
+                RegExp(r'[a-z]+')
+                    .allMatches(sentenceTailForClassification)
+                    .last
+                    .group(0)!
+                    .toLowerCase(),
+              );
+      final secondChunkIsCredentialShaped = (secondChunk.length >= 6 &&
+              RegExp(r'[0-9_]').hasMatch(secondChunk)) ||
+          _legacyOcrHasHighAlphabeticEntropy(
+            secondChunk,
+            minimumLength: 8,
+            minimumEntropy: 2.5,
+            maximumVowelRatio: 0.45,
+          );
       final naturalYearTitleContinuation = RegExp(r'^\d{4}$')
               .hasMatch(firstChunk) &&
+          !secondChunkIsCredentialShaped &&
           naturalNouns.contains(secondChunk.toLowerCase()) &&
+          ([
+            secondChunk,
+            ...RegExp(r'\b[a-z]+\b', caseSensitive: false)
+                .allMatches(sentenceTailForClassification)
+                .map((match) => match.group(0)!)
+          ]).any(
+            (word) => naturalNouns.contains(word.toLowerCase()),
+          ) &&
           RegExp(r'^\s+[a-z]+(?:\s+[a-z]+)*[.!?]?\s*$', caseSensitive: false)
               .hasMatch(sentenceTailForClassification);
       const naturalTailWords = {
@@ -1751,21 +1792,22 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
           (firstChunkIsNatural &&
               (secondChunkIsNatural ||
                   naturalSentenceContinuation ||
-                  standaloneNaturalAction));
+                  standaloneNaturalAction ||
+                  naturalActionAdverbContinuation));
       if (naturalPromptLeadAfterPeriod && trailingCredentialSpans.isNotEmpty) {
         final safeTail = redactTrailingCredentials();
-        final firstChunkOffset = match.group(0)!.indexOf(firstChunk);
-        final sourceLead = match.group(0)!.substring(0, firstChunkOffset);
+        final sourceLead = match.group(0)!.substring(0, firstChunkOffset());
         return '$sourceLead$firstChunk. $secondChunk$safeTail';
       }
       final isNaturalSentence = (naturalYearTitleContinuation ||
               (firstChunkIsNatural &&
                   (secondChunkIsNatural ||
                       naturalSentenceContinuation ||
-                      standaloneNaturalAction))) &&
+                      standaloneNaturalAction ||
+                      naturalActionAdverbContinuation))) &&
           trailingCredentialSpans.isEmpty;
       final hasCredentialShape = !isNaturalSentence &&
-          ((joinedCredential.length >= 8 &&
+          ((joinedCredential.length >= 6 &&
                   RegExp(r'[0-9_]').hasMatch(joinedCredential)) ||
               _legacyOcrHasCredentialUseContext(
                 sanitized,
@@ -1780,9 +1822,15 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
                 maximumVowelRatio: 0.45,
               ));
       if (!hasCredentialShape) return match.group(0)!;
-      final firstChunkOffset = match.group(0)!.indexOf(firstChunk);
-      final sourceLead = match.group(0)!.substring(0, firstChunkOffset);
-      final safeTail = redactTrailingCredentials();
+      final sourceLead = match.group(0)!.substring(0, firstChunkOffset());
+      var safeTail = redactTrailingCredentials();
+      final soleNaturalAdverb =
+          RegExp(r'^\s+([a-z]+)([.!?]*)\s*$', caseSensitive: false)
+              .firstMatch(safeTail);
+      if (soleNaturalAdverb != null &&
+          naturalAdverbs.contains(soleNaturalAdverb.group(1)!.toLowerCase())) {
+        safeTail = soleNaturalAdverb.group(2)!;
+      }
       return '$sourceLead[redacted]$safeTail';
     });
     final chunkedCandidate = RegExp(
