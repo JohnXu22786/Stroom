@@ -2132,8 +2132,7 @@ void main() {
           recordTable: ManifestTables.imageRecords,
         ),
         isEmpty,
-        reason:
-            'retry must remove the persisted parent and descendant folders',
+        reason: 'retry must remove the persisted parent and descendant folders',
       );
       expect(
         await operations.getAllFolders(),
