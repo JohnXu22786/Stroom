@@ -4,12 +4,17 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose source should be built
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 env:
-  TAG: ${{ github.event.release.tag_name || github.ref_name }}
+  TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -77,6 +82,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -87,6 +94,9 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get --enforce-lockfile
+      - uses: NuGet/setup-nuget@v2
+      - name: Verify NuGet CLI
+        run: nuget help
       - run: flutter build windows --release --dart-define-from-file=build-info.json
       - name: Create Windows installer
         shell: pwsh
@@ -109,6 +119,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -178,6 +190,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -245,6 +259,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -255,7 +271,7 @@ jobs:
           pub-cache: true
       - run: |
           sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libsecret-1-dev
       - run: flutter create --platforms=linux .
       - run: flutter pub get --enforce-lockfile
       - run: flutter build linux --release --dart-define-from-file=build-info.json
@@ -273,6 +289,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -297,6 +315,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
@@ -336,6 +356,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           name: release-build-info
