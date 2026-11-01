@@ -15010,6 +15010,8 @@ void main() {
           'foo / barxyz',
           'foo + barxyz',
           'foo. barxyz',
+          'foo\u00a0.barxyz',
+          'foo.\u00a0barxyz',
           'foo . barxyz',
           'foo. barxyz123',
           'foo: barxyz',
@@ -15071,8 +15073,8 @@ void main() {
         ).instructionContent!;
         final persisted = jsonEncode(task.toMap());
 
-        expect(instructionContent, 'Please read the [redacted].');
-        expect(persisted, contains('Please read the [redacted].'));
+        expect(instructionContent, 'Please read the [redacted] carefully.');
+        expect(persisted, contains('Please read the [redacted] carefully.'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
 
@@ -15090,6 +15092,20 @@ void main() {
         );
         expect(lineBreakPersisted, isNot(contains('foobarxyz')));
 
+        final nbspLineBreakTask = taskFor(
+          'legacy-ocr-nbsp-line-break-masked-prefix-echo',
+          'Please read documentation\n\u00a0foobarxyz carefully.',
+        );
+        final nbspLineBreakInstruction = OcrRetrySnapshot.fromMap(
+          nbspLineBreakTask.retryData!,
+        ).instructionContent!;
+        final nbspLineBreakPersisted = jsonEncode(nbspLineBreakTask.toMap());
+        expect(
+          nbspLineBreakInstruction,
+          'Please read [redacted] carefully.',
+        );
+        expect(nbspLineBreakPersisted, isNot(contains('foobarxyz')));
+
         final spacedPrefixTask = taskFor(
           'legacy-ocr-character-spaced-masked-prefix-echo',
           'Please read d o c u m e n t a t i o n f o o b a r x y z carefully.',
@@ -15103,6 +15119,20 @@ void main() {
           'Please read [redacted] carefully.',
         );
         expect(spacedPrefixPersisted, isNot(contains('foobarxyz')));
+
+        final nbspPrefixTask = taskFor(
+          'legacy-ocr-nbsp-masked-prefix-echo',
+          'Please read documentation\u00a0foobarxyz carefully.',
+        );
+        final nbspPrefixInstruction = OcrRetrySnapshot.fromMap(
+          nbspPrefixTask.retryData!,
+        ).instructionContent!;
+        final nbspPrefixPersisted = jsonEncode(nbspPrefixTask.toMap());
+        expect(
+          nbspPrefixInstruction,
+          'Please read [redacted] carefully.',
+        );
+        expect(nbspPrefixPersisted, isNot(contains('foobarxyz')));
 
         const exactCredential = 'documentationchapter123456';
         final exactCredentialTask = taskFor(
@@ -15651,6 +15681,28 @@ void main() {
         expect(
           shortCredentialAfterSentencePersisted,
           isNot(contains('abc123')),
+        );
+
+        final alphaNumericCredentialAfterSentence = taskFor(
+          'legacy-ocr-alphanumeric-credential-after-natural-sentence',
+          'Please read the documentation now. '
+              'Summarize the process foo1bar.',
+        );
+        final alphaNumericCredentialAfterSentenceInstruction =
+            OcrRetrySnapshot.fromMap(
+          alphaNumericCredentialAfterSentence.retryData!,
+        ).instructionContent!;
+        final alphaNumericCredentialAfterSentencePersisted = jsonEncode(
+          alphaNumericCredentialAfterSentence.toMap(),
+        );
+        expect(
+          alphaNumericCredentialAfterSentenceInstruction,
+          'Please read the documentation now. '
+          'Summarize the process [redacted].',
+        );
+        expect(
+          alphaNumericCredentialAfterSentencePersisted,
+          isNot(contains('foo1bar')),
         );
 
         final spacedCredentialAfterSentence = taskFor(

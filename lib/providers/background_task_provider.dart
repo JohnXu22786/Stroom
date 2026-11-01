@@ -1229,7 +1229,7 @@ bool _legacyOcrHasCredentialUseContextAcrossLineBreak(
 ) {
   final splitPrefix = RegExp(
     '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
-    r'[\r\n]+[ \t]*(\S+)',
+    r'[\r\n]+[ \t\u00a0]*(\S+)',
     caseSensitive: false,
   );
   for (final match in splitPrefix.allMatches(text)) {
@@ -1251,7 +1251,7 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
   if (_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
       (text != null &&
           _legacyOcrHasCredentialUseContextAcrossLineBreak(text, prefix))) {
-    return r'(?:[\r\n]+[ \t]*)?';
+    return r'(?:[\r\n]+[ \t\u00a0]*)?';
   }
   if (text != null) {
     final continuation =
@@ -1268,10 +1268,12 @@ String _legacyOcrDocumentationCredentialWhitespaceContinuation(
   if (prefix.toLowerCase() != 'documentation') return '';
   final separators = <String>[];
   if (RegExp(
-    r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
+    r'\bdocumentation[\r\n]+[ \t\u00a0]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
     caseSensitive: false,
   ).hasMatch(text)) {
-    separators.add(r'[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9]))');
+    separators.add(
+      r'[\r\n]+[ \t\u00a0]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9]))',
+    );
   }
   final spacedContinuation = RegExp(
     r'\bdocumentation[ \t]+([a-zA-Z0-9_-]{8,})(?=$|[^a-zA-Z0-9_-])',
@@ -1569,7 +1571,7 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         prefix.split('').map(RegExp.escape).join(r'\s*');
     const spacedCredentialChunk =
         r'(?:[a-zA-Z0-9_/:;+=~@%$#!&-]|\.(?=[a-zA-Z0-9_/:;+=~@%$#!&-]))+';
-    const spacedCredentialChunkSeparator = r'(?:[ \t]+|[\r\n]+[ \t]*)';
+    const spacedCredentialChunkSeparator = r'\s+';
     const naturalSentenceActions = {
       'analyze',
       'answer',
@@ -1601,8 +1603,8 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     // appears in explicit credential-use context.
     final dottedCredentialCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
-      r'[ \t]*'
-      r'([a-zA-Z0-9_]{1,8})[ \t]*\.[ \t]+([a-zA-Z0-9_]{4,})'
+      r'[ \t\u00a0]*'
+      r'([a-zA-Z0-9_]{1,8})[ \t\u00a0]*\.[ \t\u00a0]+([a-zA-Z0-9_]{4,})'
       r'([^\r\n]*(?:[\r\n]+[ \t]*[^\r\n]*)*)'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
@@ -1711,14 +1713,27 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
       final tailWords =
           RegExp(r'\b[a-zA-Z0-9_]+\b').allMatches(sentenceTail).toList();
       final trailingCredentialSpans = <List<int>>[];
-      bool hasTailCredentialShape(String candidate) =>
-          (candidate.length >= 6 && RegExp(r'[0-9_]').hasMatch(candidate)) ||
-          _legacyOcrHasHighAlphabeticEntropy(
-            candidate,
-            minimumLength: 8,
-            minimumEntropy: 2.9,
-            maximumVowelRatio: 0.35,
-          );
+      bool hasTailCredentialShape(String candidate) {
+        final compact = candidate.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
+        final digits = RegExp(r'\d').allMatches(compact).length;
+        final letters = RegExp(r'[a-zA-Z]').allMatches(compact).length;
+        final naturalIdentifier = RegExp(
+          r'^(?:v\d+(?:\.\d+)*|(?:id|no|chapter|section|page|step|part|version)\d{1,18}|(?:19|20)\d{2})$',
+          caseSensitive: false,
+        ).hasMatch(compact);
+        final hasStrongMarker =
+            (compact.length >= 8 && (digits >= 6 || compact.contains('_'))) ||
+                (compact.length >= 6 && digits >= 1 && letters >= 3);
+        return !naturalIdentifier &&
+            (hasStrongMarker ||
+                _legacyOcrHasHighAlphabeticEntropy(
+                  compact,
+                  minimumLength: 8,
+                  minimumEntropy: 2.9,
+                  maximumVowelRatio: 0.35,
+                ));
+      }
+
       var tailRunStart = -1;
       var tailRunEnd = -1;
       final tailRun = StringBuffer();
@@ -1835,9 +1850,9 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
     });
     final chunkedCandidate = RegExp(
       '(^|[^a-zA-Z0-9])$spacedOpenMaskPrefixPattern'
-      '((?:[ \\t]*$spacedCredentialChunk'
+      '((?:[ \\t\\u00a0]*$spacedCredentialChunk'
       '(?:$spacedCredentialChunkSeparator$spacedCredentialChunk)*'
-      '|[\\r\\n]+[ \\t]*$spacedCredentialChunk'
+      '|[\\r\\n]+[ \\t\\u00a0]*$spacedCredentialChunk'
       '(?:$spacedCredentialChunkSeparator$spacedCredentialChunk)*))'
       r'(?=$|[^a-zA-Z0-9_/:;+=~@%-])',
       caseSensitive: false,
@@ -2455,7 +2470,7 @@ String _legacyOcrOpenMaskPrefixPattern(String prefix) {
   final delimiter = prefix.substring(prefix.length - 1);
   final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
   return '(?:$escapedPrefix|${RegExp.escape(prefixWithoutDelimiter)}'
-      r'[\r\n]+[ \t]*'
+      r'[\r\n]+[ \t\u00a0]*'
       '${RegExp.escape(delimiter)})';
 }
 
