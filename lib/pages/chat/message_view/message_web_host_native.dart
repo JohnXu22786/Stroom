@@ -60,6 +60,14 @@ class _MessageWebHostState extends State<MessageWebHost> {
     }
   }
 
+  void _markMacDocumentReady() {
+    if (_macDocumentReady) return;
+    _macDocumentReady = true;
+    if (!mounted) return;
+    if (_macLoadFailed) setState(() => _macLoadFailed = false);
+    widget.onEvent({'type': 'ready'});
+  }
+
   static Future<File> _prepareMacDocument(String html) async {
     final content = utf8.encode(html);
     final digest = sha256.convert(content).toString();
@@ -82,37 +90,6 @@ class _MessageWebHostState extends State<MessageWebHost> {
         _macDocuments.remove(digest);
       }
       rethrow;
-    }
-  }
-
-  Future<void> _loadMacDocument(
-    InAppWebViewController controller,
-    int generation,
-    File document,
-  ) async {
-    try {
-      if (kDebugMode) {
-        debugPrint(
-          '[MessageWebHost][file-load] generation=$generation bytes=${await document.length()}',
-        );
-      }
-      if (!mounted ||
-          !identical(controller, _controller) ||
-          generation != _macLoadGeneration) {
-        return;
-      }
-      await controller.loadUrl(
-        urlRequest: URLRequest(url: WebUri.uri(document.uri)),
-        // WKWebView requires the read-access URL to be a containing directory.
-        allowingReadAccessTo: WebUri.uri(document.parent.uri),
-      );
-    } catch (error) {
-      if (kDebugMode) debugPrint('[MessageWebHost][load-error] $error');
-      if (mounted &&
-          identical(controller, _controller) &&
-          generation == _macLoadGeneration) {
-        setState(() => _macLoadFailed = true);
-      }
     }
   }
 
@@ -220,7 +197,9 @@ class _MessageWebHostState extends State<MessageWebHost> {
           initialFile: defaultTargetPlatform == TargetPlatform.macOS
               ? null
               : 'assets/vendor/dsh_message_view/index.html',
-          initialUrlRequest: null,
+          initialUrlRequest: macDocument == null
+              ? null
+              : URLRequest(url: WebUri.uri(macDocument.uri)),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             transparentBackground: true,
@@ -228,6 +207,8 @@ class _MessageWebHostState extends State<MessageWebHost> {
             supportZoom: false,
             useShouldOverrideUrlLoading: true,
             javaScriptHandlersForMainFrameOnly: true,
+            allowingReadAccessTo:
+                macDocument == null ? null : WebUri.uri(macDocument.parent.uri),
           ),
           onConsoleMessage: (controller, message) {
             if (kDebugMode) {
@@ -297,20 +278,12 @@ class _MessageWebHostState extends State<MessageWebHost> {
                 final event = Map<String, dynamic>.from(data.args.first as Map);
                 if (defaultTargetPlatform == TargetPlatform.macOS &&
                     event['type'] == 'ready') {
-                  _macDocumentReady = true;
-                  if (_macLoadFailed) {
-                    setState(() => _macLoadFailed = false);
-                  }
+                  _markMacDocumentReady();
+                  return;
                 }
                 widget.onEvent(event);
               },
             );
-            if (generation != null) {
-              final document = macDocument;
-              if (document != null) {
-                unawaited(_loadMacDocument(controller, generation, document));
-              }
-            }
           },
           onLoadStart: (controller, url) {
             if (kDebugMode) debugPrint('[MessageWebHost][load-start] $url');
@@ -341,7 +314,13 @@ JSON.stringify({
               }
             }
             if (defaultTargetPlatform == TargetPlatform.macOS) {
-              if (!rendererReady) {
+              if (!identical(controller, _controller) ||
+                  _macControllerGeneration != _macLoadGeneration) {
+                return;
+              }
+              if (rendererReady) {
+                _markMacDocumentReady();
+              } else {
                 unawaited(
                   _failMacLoadIfUnready(controller, _macLoadGeneration),
                 );
