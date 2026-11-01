@@ -64,18 +64,14 @@ class TaskFlowChainEditor {
   List<BlockTypeDefinition> insertionCandidates(int index) {
     if (index < 0 || index > _blocks.length) return const [];
     final previousBlock = index == 0 ? null : _blocks[index - 1];
-    final previous =
-        previousBlock?.getDefinition()?.outputType ??
-        (index == 0 ? _inputType : null);
+    final previousTypes = previousBlock?.possibleOutputTypes ??
+        (index == 0 ? [_inputType] : const <IOType>[]);
     final next = index == _blocks.length
         ? null
         : _blocks[index].getDefinition()?.inputType;
-    if (previous == null || (index < _blocks.length && next == null)) {
+    if (previousTypes.isEmpty || (index < _blocks.length && next == null)) {
       return const [];
     }
-    final previousTypes = previousBlock?.followsDownstreamOutput == true
-        ? previousBlock!.outputTypesForNext(null)
-        : [previous];
     return BlockTypeDefinition.getReplacementCandidatesForOutputs(
       prevOutputs: previousTypes,
       nextInput: next,
@@ -228,35 +224,41 @@ class TaskFlowChainEditor {
     IOType inputType,
   ) {
     final issues = <TaskFlowChainIssue>[];
-    IOType? previous = inputType;
+    var previousOutputs = <IOType>[inputType];
     for (var index = 0; index < blocks.length; index++) {
       final block = blocks[index];
       final definition = block.getDefinition();
       if (definition == null) {
         issues.add(TaskFlowChainIssue(block.id, index, '功能块已不受支持，请替换或删除此步骤'));
-      } else if (previous != null &&
-          !(index > 0 && blocks[index - 1].followsDownstreamOutput
-              ? blocks[index - 1]
-                    .outputTypesForNext(null)
-                    .any(definition.acceptsInput)
-              : definition.acceptsInput(previous))) {
-        issues.add(
-          TaskFlowChainIssue(
-            block.id,
-            index,
-            index > 0 && blocks[index - 1].followsDownstreamOutput
-                ? '下游需要${definition.inputType.label}，下载资源可输出音频或视频；请修改下游步骤或输出策略'
-                : block.typeKey == BlockType.chat && previous == IOType.any
-                ? '${index == 0 ? '初始输入' : '上一步输出'}为任意类型，'
-                    '「${definition.label}」需要明确的文本、链接、图片、音频、视频或文件类型。'
-                    '请修改输入类型、移动或替换功能块，或撤销更改'
-                : '${index == 0 ? '初始输入' : '上一步输出'}为${previous.label}，'
-                    '「${definition.label}」需要${definition.inputType.label}。'
-                      '请修改输入类型、移动或替换功能块，或撤销更改',
-          ),
-        );
+      } else {
+        final previousBlock = index == 0 ? null : blocks[index - 1];
+        final constrainedOutputs = previousBlock == null
+            ? previousOutputs
+            : previousBlock.outputTypesForNext(definition.inputType);
+        if (constrainedOutputs.isEmpty ||
+            !definition.acceptsAnyOutput(constrainedOutputs)) {
+          final followsDownstream = previousBlock?.followsDownstreamOutput == true;
+          final anyOutput = previousOutputs.length == 1 &&
+              previousOutputs.single == IOType.any;
+          final outputLabel = previousOutputs.map((type) => type.label).join('或');
+          issues.add(
+            TaskFlowChainIssue(
+              block.id,
+              index,
+              followsDownstream
+                  ? '下游需要${definition.inputType.label}，下载资源可输出视频或音频；请修改下游步骤或输出策略'
+                  : block.typeKey == BlockType.chat && anyOutput
+                      ? '${index == 0 ? '初始输入' : '上一步输出'}为任意类型，'
+                          '「${definition.label}」需要明确的文本、链接、图片、音频、视频或文件类型。'
+                          '请修改输入类型、移动或替换功能块，或撤销更改'
+                      : '${index == 0 ? '初始输入' : '上一步输出'}为$outputLabel，'
+                          '「${definition.label}」需要${definition.inputType.label}。'
+                          '请修改输入类型、移动或替换功能块，或撤销更改',
+            ),
+          );
+        }
       }
-      previous = definition?.outputType;
+      previousOutputs = definition?.possibleOutputTypes ?? const [];
     }
     return issues;
   }

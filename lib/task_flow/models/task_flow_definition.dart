@@ -46,27 +46,29 @@ class TaskFlowBlock {
     if (definition == null || typeKey != BlockType.catcatch) {
       return definition;
     }
-    final outputTypes = outputTypesForNext(null);
-    final outputType = outputTypes.length == 1
-        ? outputTypes.single
-        : IOType.any;
+    final outputTypes = possibleOutputTypes;
     return BlockTypeDefinition(
       typeKey: definition.typeKey,
       label: definition.label,
       inputType: definition.inputType,
-      outputType: outputType,
+      // Keep the legacy scalar field concrete. Consumers that need to reason
+      // about all possible outputs must use possibleOutputTypes.
+      outputType: outputTypes.length == 1
+          ? outputTypes.single
+          : definition.outputType,
+      possibleOutputTypes: outputTypes,
       icon: definition.icon,
       color: definition.color,
       params: definition.params,
     );
   }
 
-  /// Possible CatCatch media types after applying its saved policy and an
-  /// optional immediate downstream input constraint.
-  List<IOType> outputTypesForNext(IOType? nextInputType) {
+  /// The concrete kinds this block can produce before downstream filtering.
+  /// Follow downstream is the set {video, audio}, distinct from generic Any.
+  List<IOType> get possibleOutputTypes {
     if (typeKey != BlockType.catcatch) {
-      final output = getDefinition()?.outputType;
-      return output == null ? const [] : [output];
+      final definition = BlockTypeDefinition.findBlockType(typeKey);
+      return definition == null ? const [] : definition.possibleOutputTypes;
     }
     final policy = switch (params['outputPolicy']) {
       'audio' => CatCatchOutputPolicy.audio,
@@ -83,14 +85,23 @@ class TaskFlowBlock {
       case CatCatchOutputPolicy.audio:
         return const [IOType.audio];
       case CatCatchOutputPolicy.followDownstream:
-        const mediaTypes = [IOType.video, IOType.audio];
-        if (nextInputType == null || nextInputType == IOType.any) {
-          return mediaTypes;
-        }
-        return mediaTypes
-            .where((type) => type.isCompatibleWith(nextInputType))
-            .toList(growable: false);
+        return const [IOType.video, IOType.audio];
     }
+  }
+
+  /// Possible outputs after intersecting a Follow downstream policy with the
+  /// immediate consumer's input constraint. A generic Any input leaves the
+  /// concrete union unresolved.
+  List<IOType> outputTypesForNext(IOType? nextInputType) {
+    final possible = possibleOutputTypes;
+    if (!followsDownstreamOutput ||
+        nextInputType == null ||
+        nextInputType == IOType.any) {
+      return possible;
+    }
+    return possible
+        .where((type) => type.isCompatibleWith(nextInputType))
+        .toList(growable: false);
   }
 
   bool get followsDownstreamOutput =>
@@ -98,7 +109,7 @@ class TaskFlowBlock {
       params['outputPolicy'] == 'followDownstream';
 
   String get outputTypeLabel => followsDownstreamOutput
-      ? '按下游决定'
+      ? '视频或音频（按下游筛选）'
       : (getDefinition()?.outputType.label ?? '未知');
 
   String get catCatchResourceSelectionPolicy {

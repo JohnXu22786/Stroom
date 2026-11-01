@@ -1004,6 +1004,7 @@ void main() {
         taskId,
         true,
         (notifier) => notifier.selectMedia(taskId, media),
+        selectedMediaUrl: media.url,
       ),
       isTrue,
     );

@@ -39,10 +39,18 @@ void main() {
           params: {'outputPolicy': 'followDownstream'}),
       TaskFlowBlock(id: 'ocr', typeKey: BlockType.ocr),
     ]);
+    final textOnly = TaskFlowChainEditor(blocks: [
+      TaskFlowBlock(
+          id: 'download',
+          typeKey: BlockType.catcatch,
+          params: {'outputPolicy': 'followDownstream'}),
+      TaskFlowBlock(id: 'tts', typeKey: BlockType.tts),
+    ]);
 
     expect(audio.issues, isEmpty);
     expect(video.issues, isEmpty);
     expect(incompatible.issues, hasLength(1));
+    expect(textOnly.issues, hasLength(1));
     expect(
       TaskFlowChainEditor(
         blocks: [TaskFlowBlock(id: 'asr', typeKey: BlockType.asr)],

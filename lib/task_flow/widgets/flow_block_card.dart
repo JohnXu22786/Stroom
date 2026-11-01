@@ -234,6 +234,7 @@ class FlowBlockCard extends ConsumerWidget {
                       Flexible(
                         child: IOTypeIndicator(
                           type: def.outputType,
+                          possibleTypes: def.possibleOutputTypes,
                           isInput: false,
                           labelOverride: block.outputTypeLabel,
                         ),

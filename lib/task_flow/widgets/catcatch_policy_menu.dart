@@ -16,7 +16,7 @@ class CatCatchPolicyMenu extends StatelessWidget {
   static const _outputOptions = <String, String>{
     'video': '视频',
     'audio': '音频',
-    'followDownstream': '跟随下游',
+    'followDownstream': '视频或音频（按下游筛选）',
   };
   static const _selectionOptions = <String, String>{
     'manual': '手动',

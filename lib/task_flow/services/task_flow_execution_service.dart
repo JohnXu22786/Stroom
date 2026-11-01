@@ -1274,7 +1274,8 @@ class TaskFlowExecutionService {
     }
     switch (def.typeKey) {
       case BlockType.catcatch:
-        var actualType = def.outputType;
+        IOType? actualType =
+            block.outputTypesForNext(nextInputType).singleOrNull;
         FlowPayload? outputPayload;
         final result = await executeCatCatchBlock(
           def: def,
@@ -1298,7 +1299,27 @@ class TaskFlowExecutionService {
           onOutputType: (type) => actualType = type,
           onOutputPayload: (payload) => outputPayload = payload,
         );
-        return outputPayload ?? FlowPayload.fromValue(result, actualType);
+        final payload = outputPayload;
+        if (payload != null) {
+          if (payload.type != IOType.audio && payload.type != IOType.video) {
+            throw BlockExecutionException(
+              '下载任务未产生具体的音频或视频输出',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          return payload;
+        }
+        final resolvedType = actualType;
+        if (resolvedType == null ||
+            (resolvedType != IOType.audio && resolvedType != IOType.video)) {
+          throw BlockExecutionException(
+            '下载任务未能解析为具体的音频或视频输出',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
+        return FlowPayload.fromValue(result, resolvedType);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
             await executeAudioSeparationBlock(

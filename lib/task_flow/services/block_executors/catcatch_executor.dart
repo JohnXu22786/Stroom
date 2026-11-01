@@ -63,10 +63,14 @@ Future<String> executeCatCatchBlock({
   final resolvedOutputType = outputTypes.length == 1
       ? outputTypes.single
       : null;
+  final desiredType = resolvedOutputType;
   final selectionPolicy = block.catCatchResourceSelectionPolicy;
   final automatic = selectionPolicy != 'manual';
   final automaticWithPrompt = selectionPolicy == 'automaticWithPrompt';
-  final desiredType = resolvedOutputType;
+  final filteredManualFollow =
+      !automatic && block.followsDownstreamOutput && desiredType != null;
+  final flowManagedSelection = automaticWithPrompt || filteredManualFollow;
+  final deferSingleResourceSelection = automatic || filteredManualFollow;
   final taskId = const Uuid().v4();
   if (temporaryOutput) {
     if (!await execNotifier.updateSubTaskIdPersisted(
@@ -105,8 +109,8 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       executionId: execId,
       blockId: block.id,
-      flowManagedSelection: automaticWithPrompt,
-      deferSingleResourceSelection: automatic,
+      flowManagedSelection: flowManagedSelection,
+      deferSingleResourceSelection: deferSingleResourceSelection,
     );
   } else {
     catcatchNotifier.addTask(
@@ -115,8 +119,8 @@ Future<String> executeCatCatchBlock({
       taskId: taskId,
       videoFolder: videoFolder,
       audioFolder: audioFolder,
-      flowManagedSelection: automaticWithPrompt,
-      deferSingleResourceSelection: automatic,
+      flowManagedSelection: flowManagedSelection,
+      deferSingleResourceSelection: deferSingleResourceSelection,
     );
   }
 
@@ -131,6 +135,7 @@ Future<String> executeCatCatchBlock({
   bool autoSelected = false;
   bool autoConfirmed = false;
   bool promptOpen = false;
+  bool manualPickerOpen = false;
 
   bool isCurrent() {
     if (!execNotifier.mounted || !isFlowExecutionActive(execNotifier, execId)) {
@@ -195,6 +200,9 @@ Future<String> executeCatCatchBlock({
     // Waiting for an intentional human decision or a user pause is not a stall.
     // Reset the window so resumed engine work receives a full stall allowance.
     if (!awaitingSelection || task.selectedMedia != null) promptOpen = false;
+    if (!awaitingSelection || task.selectedMedia != null) {
+      manualPickerOpen = false;
+    }
     if (automaticWithPrompt &&
         awaitingSelection &&
         task.detectedMedia.isNotEmpty) {
@@ -202,13 +210,13 @@ Future<String> executeCatCatchBlock({
         task.detectedMedia,
         desiredType: desiredType,
       );
-      if (candidates.length != 1 &&
+      final promptCandidates = catCatchPromptResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
+      if ((candidates.length != 1 || promptCandidates.length > 1) &&
           task.status == catcatch.TaskStatus.running) {
         if (!promptOpen) {
-          final promptCandidates = catCatchPromptResourceCandidates(
-            task.detectedMedia,
-            desiredType: desiredType,
-          );
           if (promptCandidates.isEmpty) {
             catcatchNotifier.removeTask(taskId);
             execNotifier.updateSubTaskStatus(
@@ -228,11 +236,38 @@ Future<String> executeCatCatchBlock({
         promptOpen = true;
       }
     }
+    if (filteredManualFollow &&
+        awaitingSelection &&
+        task.status == catcatch.TaskStatus.running) {
+      final promptCandidates = catCatchPromptResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
+      if (promptCandidates.isEmpty) {
+        catcatchNotifier.removeTask(taskId);
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
+        throw BlockExecutionException(
+          '没有与下游输入类型兼容的媒体资源可供选择',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      if (!manualPickerOpen) {
+        onManualWaitWithCandidates?.call(taskId, promptCandidates);
+        onManualWait?.call(taskId);
+        manualPickerOpen = true;
+      }
+    }
     final intentionallyWaiting =
         task.status == catcatch.TaskStatus.paused ||
         promptOpen ||
         (!automatic && (awaitingSelection || awaitingConfirmation));
     if (!automatic &&
+        !filteredManualFollow &&
         task.status == catcatch.TaskStatus.running &&
         ((awaitingSelection && task.detectedMedia.length > 1) ||
             awaitingConfirmation)) {
@@ -376,7 +411,8 @@ Future<String> executeCatCatchBlock({
               task.detectedMedia,
               desiredType: desiredType,
             );
-            if (automaticWithPrompt && candidates.length != 1) {
+            if (automaticWithPrompt &&
+                (promptOpen || candidates.length != 1)) {
               // Keep the existing resource picker active until the user picks.
               continue;
             }
@@ -522,6 +558,11 @@ List<MediaResource> catCatchPromptResourceCandidates(
   List<MediaResource> resources, {
   IOType? desiredType,
 }) {
+  final safeCandidates = catCatchSafeResourceCandidates(
+    resources,
+    desiredType: desiredType,
+  );
+  final safeCandidateUrls = safeCandidates.map((media) => media.url).toSet();
   bool matchesResolvedType(MediaResource media) {
     if (desiredType == null) return true;
     final hint = catCatchResourceKindHint(media);
@@ -529,15 +570,15 @@ List<MediaResource> catCatchPromptResourceCandidates(
       return catCatchIsSharedContainerExtension(media.ext) ||
           (desiredType == IOType.video && media.isPlaylist);
     }
-    return desiredType == IOType.audio
+    final matchesHint = desiredType == IOType.audio
         ? hint == CatCatchMediaKind.audio
         : hint == CatCatchMediaKind.video;
+    return matchesHint ||
+        (safeCandidateUrls.contains(media.url) &&
+            catCatchIsSharedContainerExtension(media.ext));
   }
 
-  final candidates = catCatchSafeResourceCandidates(
-    resources,
-    desiredType: desiredType,
-  ).where(matchesResolvedType).toList();
+  final candidates = safeCandidates.where(matchesResolvedType).toList();
   final included = candidates.map((media) => media.url).toSet();
   for (final media in resources) {
     if (included.contains(media.url)) continue;

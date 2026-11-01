@@ -65,6 +65,18 @@ void main() {
       expect(cc.outputType, IOType.video);
     });
 
+    test('CatCatch output union only feeds audio or video inputs', () {
+      final outputs = BlockTypeDefinition.catcatch.possibleOutputTypes;
+      for (final input in [IOType.audio, IOType.video]) {
+        expect(outputs.any((type) => type.isCompatibleWith(input)), isTrue);
+      }
+      for (final input in [IOType.image, IOType.text, IOType.file]) {
+        expect(outputs.any((type) => type.isCompatibleWith(input)), isFalse);
+      }
+      expect(IOType.any.isCompatibleWith(IOType.image), isTrue);
+      expect(IOType.any.isCompatibleWith(IOType.file), isTrue);
+    });
+
     test('creates TTS block type correctly', () {
       final tts = BlockTypeDefinition.tts;
       expect(tts.typeKey, BlockType.tts);
@@ -114,17 +126,22 @@ void main() {
   });
 
   group('TaskFlowBlock', () {
-    test('CatCatch follow-downstream policy keeps compatible media kinds', () {
+    test('CatCatch follow-downstream policy is a concrete output union', () {
       final follow = TaskFlowBlock(
         typeKey: BlockType.catcatch,
         params: {'outputPolicy': 'followDownstream'},
       );
 
+      expect(follow.possibleOutputTypes, [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(IOType.audio), [IOType.audio]);
       expect(follow.outputTypesForNext(IOType.video), [IOType.video]);
       expect(follow.outputTypesForNext(IOType.any), [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(null), [IOType.video, IOType.audio]);
       expect(follow.outputTypesForNext(IOType.text), isEmpty);
+      expect(follow.getDefinition()?.possibleOutputTypes,
+          [IOType.video, IOType.audio]);
+      expect(follow.getDefinition()?.outputType, IOType.video);
+      expect(follow.getDefinition()?.outputType, isNot(IOType.any));
     });
 
     test('legacy CatCatch audioOutput still overrides the new output policy', () {

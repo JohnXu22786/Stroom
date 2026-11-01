@@ -105,23 +105,24 @@ void main() {
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
-    expect(find.text('跟随下游'), findsOneWidget);
+    expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
     await tester.tap(find.text('视频').last);
     await tester.pumpAndSettle();
     expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('跟随下游').last);
+    await tester.tap(find.text('视频或音频（按下游筛选）').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 按下游决定'), findsOneWidget);
+    expect(find.text('输入: 文本  →  输出: 视频或音频（按下游筛选）'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('确认'), 150,
         scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(saved?.params['outputPolicy'], 'followDownstream');
-    expect(saved?.getDefinition()?.outputType, IOType.any);
+    expect(saved?.possibleOutputTypes, [IOType.video, IOType.audio]);
+    expect(saved?.getDefinition()?.outputType, IOType.video);
   });
 
   ProviderEntriesState _ttsEntries() {

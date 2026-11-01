@@ -54,7 +54,7 @@ Future<void> validateTaskFlow(
   if (flow.blocks.isEmpty) {
     throw TaskFlowValidationException('任务流没有步骤，请先添加功能块', flowId: flow.id);
   }
-  var previousOutput = flow.inputType;
+  var previousOutputs = <IOType>[flow.inputType];
   String? initialChatEndpointType;
   for (var i = 0; i < flow.blocks.length; i++) {
     final block = flow.blocks[i];
@@ -67,15 +67,16 @@ Future<void> validateTaskFlow(
         );
     if (def == null) fail('功能块已不受支持，请替换此步骤');
     final previousBlock = i == 0 ? null : flow.blocks[i - 1];
-    final canUseOutput = previousBlock?.followsDownstreamOutput == true
-        ? previousBlock!.outputTypesForNext(null).any(def.acceptsInput)
-        : def.acceptsInput(previousOutput);
+    final constrainedOutputs = previousBlock == null
+        ? previousOutputs
+        : previousBlock.outputTypesForNext(def.inputType);
+    final canUseOutput = def.acceptsAnyOutput(constrainedOutputs);
     if (!canUseOutput) {
       if (previousBlock?.followsDownstreamOutput == true) {
         fail('下游需要${def.inputType.label}，下载资源可输出音频或视频；请修改下游步骤或输出策略');
       }
       fail(
-        '${i == 0 ? '初始输入' : '上一步输出'}为${previousOutput.label}，'
+        '${i == 0 ? '初始输入' : '上一步输出'}为${previousOutputs.map((type) => type.label).join('或')}，'
         '「${def.label}」需要${def.inputType.label}，请修改输入类型或替换此步骤',
       );
     }
@@ -135,9 +136,9 @@ Future<void> validateTaskFlow(
           providers,
           fallback: fallbackChatEndpointType,
         );
-        final chatInputTypes = previousBlock?.followsDownstreamOutput == true
-            ? previousBlock!.outputTypesForNext(null)
-            : [previousOutput];
+        final chatInputTypes = previousBlock == null
+            ? previousOutputs
+            : previousBlock.outputTypesForNext(def.inputType);
         final unsupported = chatInputTypes
             .map((type) => flowChatInputError(type, endpointType))
             .whereType<String>()
@@ -145,7 +146,7 @@ Future<void> validateTaskFlow(
         // For initial media, defer protocol checks until each input's MIME
         // and path are known so the error points to the exact batch item.
         if (unsupported != null &&
-            (i != 0 || !FlowPayload.isFileType(previousOutput))) {
+            (i != 0 || !FlowPayload.isFileType(flow.inputType))) {
           fail(unsupported);
         }
         if (i == 0) initialChatEndpointType = endpointType;
@@ -177,7 +178,7 @@ Future<void> validateTaskFlow(
         fail('资源选择策略无效，请在「${def.label}」设置中重新选择');
       }
     }
-    previousOutput = def.outputType;
+    previousOutputs = def.possibleOutputTypes;
   }
   if (inputs.isEmpty) {
     throw TaskFlowValidationException(

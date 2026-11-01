@@ -16,7 +16,7 @@ bool hasFileOutput(TaskFlowBlock block) {
   // CatCatch's downloader explicitly rejects Web before producing a local
   // media file, so there is no browser-side output that can be staged.
   if (kIsWeb && block.typeKey == BlockType.catcatch) return false;
-  return block.outputTypesForNext(null).any(FlowPayload.isFileType);
+  return block.possibleOutputTypes.any(FlowPayload.isFileType);
 }
 
 /// Only non-final processing blocks with a file output can be temporary.

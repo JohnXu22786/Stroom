@@ -129,6 +129,7 @@ class BlockTypeDefinition {
   final String label;
   final IOType inputType;
   final IOType outputType;
+  final List<IOType>? _possibleOutputTypes;
   final IconData icon;
   final Color color;
   final List<BlockParamDefinition> params;
@@ -138,10 +139,16 @@ class BlockTypeDefinition {
     required this.label,
     required this.inputType,
     required this.outputType,
+    List<IOType>? possibleOutputTypes,
     required this.icon,
     required this.color,
     this.params = const [],
-  });
+  }) : _possibleOutputTypes = possibleOutputTypes;
+
+  /// Concrete output kinds this definition may produce. The list preserves
+  /// unions without assigning them the special semantics of [IOType.any].
+  List<IOType> get possibleOutputTypes =>
+      _possibleOutputTypes ?? [outputType];
 
   // ========================================================================
   // Built-in block types
@@ -209,12 +216,14 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// CatCatch: text → media (video is the chain-building default).
+  /// CatCatch: text → video or audio. The chosen policy resolves one output
+  /// kind at run time; the union is not [IOType.any].
   static const catcatch = BlockTypeDefinition(
     typeKey: BlockType.catcatch,
     label: '下载网页资源',
     inputType: IOType.text,
     outputType: IOType.video,
+    possibleOutputTypes: [IOType.video, IOType.audio],
     icon: Icons.language,
     color: Color(0xFF9C27B0),
     params: [
@@ -333,6 +342,9 @@ class BlockTypeDefinition {
       ? chatInputTypes.contains(type)
       : type.isCompatibleWith(inputType);
 
+  bool acceptsAnyOutput(Iterable<IOType> outputTypes) =>
+      outputTypes.any(acceptsInput);
+
   /// Find a block type by its key.
   static BlockTypeDefinition? findBlockType(BlockType typeKey) {
     for (final b in all) {
@@ -344,7 +356,12 @@ class BlockTypeDefinition {
   /// Get block types whose input type is compatible with [outputType].
   /// This is used for showing compatible next blocks in the flow builder.
   static List<BlockTypeDefinition> getCompatibleNextBlocks(IOType outputType) {
-    return all.where((b) => b.acceptsInput(outputType)).toList();
+    return getCompatibleNextBlocksForOutputs([outputType]);
+  }
+
+  static List<BlockTypeDefinition> getCompatibleNextBlocksForOutputs(
+      Iterable<IOType> outputTypes) {
+    return all.where((b) => b.acceptsAnyOutput(outputTypes)).toList();
   }
 
   /// Get block types that can REPLACE a block at a chain position without
@@ -378,9 +395,7 @@ class BlockTypeDefinition {
     return all.where((b) {
       if (b.typeKey == exclude) return false;
       if (!prevOutputs.any(b.acceptsInput)) return false;
-      final possibleOutputs = b.typeKey == BlockType.catcatch
-          ? const [IOType.video, IOType.audio]
-          : [b.outputType];
+      final possibleOutputs = b.possibleOutputTypes;
       if (nextInput != null &&
           !possibleOutputs.any((output) => output.isCompatibleWith(nextInput))) {
         return false;
@@ -417,6 +432,10 @@ class BlockTypeDefinition {
         'label': label,
         'inputType': inputType.toJson(),
         'outputType': outputType.toJson(),
+        if (_possibleOutputTypes != null)
+          'possibleOutputTypes': _possibleOutputTypes
+              .map((type) => type.toJson())
+              .toList(),
         'params': params.map((p) => p.toMap()).toList(),
       };
 
@@ -430,6 +449,9 @@ class BlockTypeDefinition {
       label: map['label'] as String? ?? typeKey.name,
       inputType: IOType.fromJson(map['inputType'] as String? ?? 'any'),
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
+      possibleOutputTypes: (map['possibleOutputTypes'] as List?)
+          ?.map((type) => IOType.fromJson(type as String))
+          .toList(),
       icon: Icons.extension,
       color: Colors.grey,
       params:

@@ -10,6 +10,7 @@ import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/utils/provider_models.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
+import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_exception.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
@@ -295,6 +296,8 @@ void main() {
     var reads = 0;
     var promptWaits = 0;
     List<MediaResource>? promptedCandidates;
+    IOType? actualOutputType;
+    FlowPayload? actualOutputPayload;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
         flowManagedSelection: any(named: 'flowManagedSelection'),
@@ -349,6 +352,8 @@ void main() {
       onManualWaitWithCandidates: (_, candidates) {
         promptedCandidates = candidates;
       },
+      onOutputType: (type) => actualOutputType = type,
+      onOutputPayload: (payload) => actualOutputPayload = payload,
       stallTimeout: const Duration(milliseconds: 1),
       pollInterval: const Duration(milliseconds: 2),
     );
@@ -358,6 +363,8 @@ void main() {
     expect(promptedCandidates, isNot(contains(videoA)));
     expect(promptedCandidates, isNot(contains(unknownMedia)));
     expect(promptedCandidates, isNot(contains(videoContainer)));
+    expect(actualOutputType, IOType.audio);
+    expect(actualOutputPayload?.type, IOType.audio);
     verifyNever(() => notifier.selectMedia(any(), any()));
   });
 
@@ -369,6 +376,186 @@ void main() {
       ),
       [videoA, playlist],
     );
+  });
+
+  test('video prompt keeps a shared-container fallback with misleading MIME',
+      () {
+    const misleadingMime = MediaResource(
+      url: 'https://x/video.mp4',
+      name: 'video container',
+      ext: 'mp4',
+      mimeType: 'audio/mp4',
+    );
+    expect(
+      catCatchPromptResourceCandidates(
+        [misleadingMime],
+        desiredType: IOType.video,
+      ),
+      [misleadingMime],
+    );
+  });
+
+  test('automatic with prompt includes compatible split-track choices',
+      () async {
+    const audioSplit = MediaResource(
+      url: 'https://x/audio.m4a',
+      name: 'audio split',
+      ext: 'm4a',
+      groupId: 'split',
+      isLikelySplitTrack: true,
+    );
+    final notifier = _Notifier();
+    final executions = TaskFlowExecutionNotifier();
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+      blockTypeKey: 'catcatch',
+      blockLabel: '下载',
+      subTaskId: 'pending',
+      subTaskType: 'catcatch',
+      status: TaskStatus.waiting,
+    );
+    executions.addSubTask(execId, subTask);
+    late String taskId;
+    var reads = 0;
+    var promptWaits = 0;
+    List<MediaResource>? promptedCandidates;
+    when(() => notifier.addTask(any(), any(),
+        taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
+        deferSingleResourceSelection: true)).thenAnswer((invocation) {
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
+    when(() => notifier.state).thenAnswer((_) {
+      reads++;
+      final chosen = reads > 2;
+      return [
+        catcatch.CatCatchTask(
+          id: taskId,
+          url: 'https://x',
+          expectedDurationSec: 0,
+          createdAt: DateTime(2026),
+          status: reads > 5
+              ? catcatch.TaskStatus.completed
+              : catcatch.TaskStatus.running,
+          detectedMedia: const [audio, audioSplit, videoA],
+          selectedMedia: chosen ? audio : null,
+          steps: chosen
+              ? []
+              : [
+                  const catcatch.StepStatus(
+                      type: catcatch.StepType.userSelecting, running: true)
+                ],
+          downloadedFilePath: reads > 5
+              ? p.absolute('tests/fixtures/catcatch/audio_only.mp3')
+              : null,
+        )
+      ];
+    });
+    when(() => notifier.removeTask(any())).thenReturn(null);
+    when(() => notifier.selectMedia(any(), any())).thenReturn(null);
+
+    await executeCatCatchBlock(
+      def: BlockTypeDefinition.catcatch,
+      block: TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {
+          'resourceSelectionPolicy': 'automaticWithPrompt',
+          'outputPolicy': 'audio',
+        },
+      ),
+      input: 'https://x',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      catcatchNotifier: notifier,
+      onManualWait: (_) => promptWaits++,
+      onManualWaitWithCandidates: (_, candidates) {
+        promptedCandidates = candidates;
+      },
+      pollInterval: const Duration(milliseconds: 2),
+    );
+
+    expect(promptWaits, 1);
+    expect(promptedCandidates, [audio, audioSplit]);
+    verifyNever(() => notifier.selectMedia(any(), any()));
+  });
+
+  test('manual Follow downstream picker filters to the typed next input',
+      () async {
+    final notifier = _Notifier();
+    final executions = TaskFlowExecutionNotifier();
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+      blockTypeKey: 'catcatch',
+      blockLabel: '下载',
+      subTaskId: 'pending',
+      subTaskType: 'catcatch',
+      status: TaskStatus.waiting,
+    );
+    executions.addSubTask(execId, subTask);
+    late String taskId;
+    var reads = 0;
+    var promptWaits = 0;
+    List<MediaResource>? promptedCandidates;
+    when(() => notifier.addTask(any(), any(),
+        taskId: any(named: 'taskId'),
+        flowManagedSelection: true,
+        deferSingleResourceSelection: true)).thenAnswer((invocation) {
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
+    when(() => notifier.state).thenAnswer((_) {
+      reads++;
+      final chosen = reads > 2;
+      return [
+        catcatch.CatCatchTask(
+          id: taskId,
+          url: 'https://x',
+          expectedDurationSec: 0,
+          createdAt: DateTime(2026),
+          status: reads > 5
+              ? catcatch.TaskStatus.completed
+              : catcatch.TaskStatus.running,
+          detectedMedia: const [audio, videoA],
+          selectedMedia: chosen ? audio : null,
+          steps: chosen
+              ? []
+              : [
+                  const catcatch.StepStatus(
+                      type: catcatch.StepType.userSelecting, running: true)
+                ],
+          downloadedFilePath: reads > 5
+              ? p.absolute('tests/fixtures/catcatch/audio_only.mp3')
+              : null,
+        )
+      ];
+    });
+    when(() => notifier.removeTask(any())).thenReturn(null);
+    when(() => notifier.selectMedia(any(), any())).thenReturn(null);
+
+    await executeCatCatchBlock(
+      def: BlockTypeDefinition.catcatch,
+      block: TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'outputPolicy': 'followDownstream'},
+      ),
+      input: 'https://x',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      catcatchNotifier: notifier,
+      nextInputType: IOType.audio,
+      onManualWait: (_) => promptWaits++,
+      onManualWaitWithCandidates: (_, candidates) {
+        promptedCandidates = candidates;
+      },
+      pollInterval: const Duration(milliseconds: 2),
+    );
+
+    expect(promptWaits, 1);
+    expect(promptedCandidates, [audio]);
+    verifyNever(() => notifier.selectMedia(any(), any()));
   });
 
   test('automatic with prompt lets the user inspect unclassified resources',
@@ -392,6 +579,8 @@ void main() {
     late String taskId;
     var reads = 0;
     var promptWaits = 0;
+    IOType? actualOutputType;
+    FlowPayload? actualOutputPayload;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
         flowManagedSelection: any(named: 'flowManagedSelection'),
@@ -443,10 +632,14 @@ void main() {
       catcatchNotifier: notifier,
       nextInputType: IOType.any,
       onManualWait: (_) => promptWaits++,
+      onOutputType: (type) => actualOutputType = type,
+      onOutputPayload: (payload) => actualOutputPayload = payload,
       pollInterval: const Duration(milliseconds: 2),
     );
     expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
     expect(promptWaits, 1);
+    expect(actualOutputType, IOType.video);
+    expect(actualOutputPayload?.type, IOType.video);
     verifyNever(() => notifier.selectMedia(any(), any()));
   });
 

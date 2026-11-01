@@ -339,18 +339,14 @@ class BlockChainEditor extends StatelessWidget {
 
   List<BlockTypeDefinition> _insertionCandidates(int index) {
     final previousBlock = index == 0 ? null : blocks[index - 1];
-    final previous =
-        previousBlock?.getDefinition()?.outputType ??
-        (index == 0 ? inputType : null);
+    final previousTypes = previousBlock?.possibleOutputTypes ??
+        (index == 0 ? [inputType] : const <IOType>[]);
     final next = index == blocks.length
         ? null
         : blocks[index].getDefinition()?.inputType;
-    if (previous == null || (index < blocks.length && next == null)) {
+    if (previousTypes.isEmpty || (index < blocks.length && next == null)) {
       return const [];
     }
-    final previousTypes = previousBlock?.followsDownstreamOutput == true
-        ? previousBlock!.outputTypesForNext(null)
-        : [previous];
     return BlockTypeDefinition.getReplacementCandidatesForOutputs(
       prevOutputs: previousTypes,
       nextInput: next,
@@ -362,9 +358,12 @@ class BlockChainEditor extends StatelessWidget {
 
     final insertionIndex = insertIndex ?? blocks.length;
     final availableTypes = _insertionCandidates(insertionIndex);
-    final previous = insertionIndex == 0
-        ? inputType
-        : blocks[insertionIndex - 1].getDefinition()?.outputType;
+    final previousBlock = insertionIndex == 0
+        ? null
+        : blocks[insertionIndex - 1];
+    final previousLabel = insertionIndex == 0
+        ? inputType.label
+        : previousBlock?.outputTypeLabel ?? '未知';
     final next = insertionIndex == blocks.length
         ? null
         : blocks[insertionIndex].getDefinition()?.inputType;
@@ -404,7 +403,7 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: ${previous?.label ?? '未知'}'
+                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: $previousLabel'
                 '${next == null ? '' : '，下一步需要: ${next.label}'}',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
@@ -456,15 +455,11 @@ class BlockChainEditor extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final block = blocks[index];
     final previousBlock = index == 0 ? null : blocks[index - 1];
-    final prevOutput =
-        previousBlock?.getDefinition()?.outputType ??
-        (index == 0 ? inputType : IOType.any);
+    final previousTypes = previousBlock?.possibleOutputTypes ??
+        (index == 0 ? [inputType] : const [IOType.any]);
     final nextInput = index == blocks.length - 1
         ? null
         : (blocks[index + 1].getDefinition()?.inputType ?? IOType.any);
-    final previousTypes = previousBlock?.followsDownstreamOutput == true
-        ? previousBlock!.outputTypesForNext(null)
-        : [prevOutput];
     final candidates = BlockTypeDefinition.getReplacementCandidatesForOutputs(
       prevOutputs: previousTypes,
       nextInput: nextInput,
@@ -596,7 +591,7 @@ class BlockChainEditor extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${type.inputType.label} → ${type.outputType.label}',
+                      '${type.inputType.label} → ${type.possibleOutputTypes.map((output) => output.label).join('或')}',
                       style: TextStyle(
                         fontSize: 11,
                         color: cs.onSurfaceVariant,
