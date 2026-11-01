@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -51,11 +52,16 @@ void main() {
       final deviceCode = await client.startKimiDeviceAuthorization(
         deviceId: 'stroom-device-1',
       );
+      final pollingStarted = Stopwatch()..start();
       final token = await client.pollKimiDeviceAuthorization(
         deviceCode: deviceCode,
         deviceId: 'stroom-device-1',
       );
 
+      expect(
+        pollingStarted.elapsed,
+        greaterThanOrEqualTo(const Duration(seconds: 5)),
+      );
       expect(requests, hasLength(2));
       expect(requests.first.uri.host, 'auth.kimi.com');
       expect(requests.first.uri.path, '/api/oauth/device_authorization');
@@ -75,6 +81,84 @@ void main() {
       expect(requests.last.toString(), isNot(contains('fixture-access-token')));
     },
   );
+
+  test('Kimi Code cancellation interrupts a pending polling delay', () async {
+    final responseReturned = Completer<void>();
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        responseReturned.complete();
+        return ResponseBody.fromString(
+          jsonEncode({'error': 'authorization_pending'}),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final cancelToken = CancelToken();
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = LlmKimiDeviceCode.fromOAuthResponse(
+      deviceCode: 'fixture-device-code',
+      userCode: 'ABCD-EFGH',
+      verificationUri: Uri.parse('https://www.kimi.com/code/verify'),
+      verificationUriComplete: Uri.parse(
+        'https://www.kimi.com/code/verify?user_code=ABCD-EFGH',
+      ),
+      expiresIn: const Duration(minutes: 1),
+      interval: const Duration(seconds: 5),
+    );
+    final polling = client.pollKimiDeviceAuthorization(
+      deviceCode: deviceCode,
+      deviceId: 'stroom-device-1',
+      cancelToken: cancelToken,
+    );
+
+    await responseReturned.future;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final stopwatch = Stopwatch()..start();
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+  });
+
+  test('Kimi Code cancellation interrupts the initial polling delay', () async {
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        tokenRequests++;
+        return ResponseBody.fromString(
+          jsonEncode({'error': 'authorization_pending'}),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final cancelToken = CancelToken();
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = LlmKimiDeviceCode.fromOAuthResponse(
+      deviceCode: 'fixture-device-code',
+      userCode: 'ABCD-EFGH',
+      verificationUri: Uri.parse('https://www.kimi.com/code/verify'),
+      verificationUriComplete: Uri.parse(
+        'https://www.kimi.com/code/verify?user_code=ABCD-EFGH',
+      ),
+      expiresIn: const Duration(minutes: 1),
+      interval: const Duration(seconds: 5),
+    );
+    final polling = client.pollKimiDeviceAuthorization(
+      deviceCode: deviceCode,
+      deviceId: 'stroom-device-1',
+      cancelToken: cancelToken,
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(tokenRequests, 0);
+  });
 
   group('LlmOAuthAuthorizationAttempt', () {
     test('creates separate ChatGPT registration attempts with PKCE', () {
@@ -169,18 +253,17 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
-        () =>
-            LlmOAuthAuthorizationAttempt.openAiChatGpt(
-              redirectUri: redirect,
-              hostId: 'urn:uuid:host',
-            ).consumeCallback(
-              callback.replace(
-                queryParameters: {
-                  ...callback.queryParameters,
-                  'state': 'wrong-state',
-                },
-              ),
-            ),
+        () => LlmOAuthAuthorizationAttempt.openAiChatGpt(
+          redirectUri: redirect,
+          hostId: 'urn:uuid:host',
+        ).consumeCallback(
+          callback.replace(
+            queryParameters: {
+              ...callback.queryParameters,
+              'state': 'wrong-state',
+            },
+          ),
+        ),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
@@ -481,8 +564,7 @@ void main() {
               jsonEncode({
                 'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
                 'aud': 'registered-openai-client',
-                'exp':
-                    DateTime.now()
+                'exp': DateTime.now()
                         .toUtc()
                         .add(const Duration(minutes: 5))
                         .millisecondsSinceEpoch ~/
@@ -497,15 +579,15 @@ void main() {
           requestedPaths.add(options.uri.path);
           final response = switch (options.uri.path) {
             '/api/accounts/oauth/token' => {
-              'access_token': 'chatgpt-access',
-              'refresh_token': 'chatgpt-refresh',
-              'id_token': '$header.$claims.invalid-signature',
-              'scope': 'openid chatgpt.tokens.use.direct',
-            },
+                'access_token': 'chatgpt-access',
+                'refresh_token': 'chatgpt-refresh',
+                'id_token': '$header.$claims.invalid-signature',
+                'scope': 'openid chatgpt.tokens.use.direct',
+              },
             '/.well-known/openid-configuration' => {
-              'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-              'jwks_uri': 'https://auth.openai.com/jwks',
-            },
+                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+                'jwks_uri': 'https://auth.openai.com/jwks',
+              },
             '/jwks' => {'keys': []},
             _ => throw StateError('Unexpected OAuth endpoint.'),
           };
@@ -561,8 +643,7 @@ void main() {
           'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
           'sub': subject,
           'aud': clientId,
-          'exp':
-              DateTime.now()
+          'exp': DateTime.now()
                   .toUtc()
                   .add(const Duration(minutes: 5))
                   .millisecondsSinceEpoch ~/
@@ -574,14 +655,13 @@ void main() {
           privateKey: generatedKey.cryptoKeyPair.privateKey,
           keyId: 'signing-key',
         );
-        final idToken =
-            (JsonWebSignatureBuilder()
-                  ..jsonContent = claims
-                  ..setProtectedHeader('typ', 'JWT')
-                  ..setProtectedHeader('kid', 'signing-key')
-                  ..addRecipient(privateKey, algorithm: 'RS256'))
-                .build()
-                .toCompactSerialization();
+        final idToken = (JsonWebSignatureBuilder()
+              ..jsonContent = claims
+              ..setProtectedHeader('typ', 'JWT')
+              ..setProtectedHeader('kid', 'signing-key')
+              ..addRecipient(privateKey, algorithm: 'RS256'))
+            .build()
+            .toCompactSerialization();
         final publicKey = JsonWebKey.fromCryptoKeys(
           publicKey: generatedKey.cryptoKeyPair.publicKey,
           keyId: 'signing-key',
@@ -590,18 +670,18 @@ void main() {
           ..httpClientAdapter = _OAuthAdapter((options) async {
             final response = switch (options.uri.path) {
               '/api/accounts/oauth/token' => {
-                'access_token': 'chatgpt-access',
-                'refresh_token': 'chatgpt-refresh',
-                'id_token': idToken,
-                'scope': 'openid chatgpt.tokens.use.direct',
-              },
+                  'access_token': 'chatgpt-access',
+                  'refresh_token': 'chatgpt-refresh',
+                  'id_token': idToken,
+                  'scope': 'openid chatgpt.tokens.use.direct',
+                },
               '/.well-known/openid-configuration' => {
-                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-                'jwks_uri': 'https://auth.openai.com/jwks',
-              },
+                  'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+                  'jwks_uri': 'https://auth.openai.com/jwks',
+                },
               '/jwks' => {
-                'keys': [publicKey.toJson()],
-              },
+                  'keys': [publicKey.toJson()],
+                },
               _ => throw StateError('Unexpected OAuth endpoint.'),
             };
             return ResponseBody.fromString(
@@ -666,12 +746,12 @@ void main() {
         ),
       );
 
-      final bundle = await LlmOAuthTokenClient(dio: dio)
-          .exchangeGeminiDeveloperApi(
-            attempt: attempt,
-            callback: callback,
-            clientSecret: 'desktop-client-secret',
-          );
+      final bundle =
+          await LlmOAuthTokenClient(dio: dio).exchangeGeminiDeveloperApi(
+        attempt: attempt,
+        callback: callback,
+        clientSecret: 'desktop-client-secret',
+      );
 
       expect(captured?.uri.toString(), 'https://oauth2.googleapis.com/token');
       expect(captured?.data.toString(), contains('desktop-client-secret'));
@@ -694,7 +774,8 @@ class _OAuthAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}

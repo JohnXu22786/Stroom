@@ -14,14 +14,13 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-            ),
-          );
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            );
 
   Future<Map<String, dynamic>> exchangeOpenAiChatGpt({
     required LlmOAuthAuthorizationAttempt attempt,
@@ -194,8 +193,7 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _kimiVerificationUri(
+      final complete = _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -236,6 +234,13 @@ class LlmOAuthTokenClient {
       var interval = deviceCode.interval < const Duration(seconds: 5)
           ? const Duration(seconds: 5)
           : deviceCode.interval;
+      final firstPollDelay = deadline.difference(DateTime.now());
+      if (firstPollDelay > Duration.zero) {
+        await _waitForKimiPollingInterval(
+          interval > firstPollDelay ? firstPollDelay : interval,
+          cancelToken,
+        );
+      }
       while (DateTime.now().isBefore(deadline)) {
         if (cancelToken?.isCancelled ?? false) {
           throw cancelToken!.cancelError!;
@@ -260,8 +265,9 @@ class LlmOAuthTokenClient {
           if (error == 'slow_down') interval += const Duration(seconds: 5);
           final remaining = deadline.difference(DateTime.now());
           if (remaining <= Duration.zero) break;
-          await Future<void>.delayed(
+          await _waitForKimiPollingInterval(
             interval > remaining ? remaining : interval,
+            cancelToken,
           );
           continue;
         }
@@ -283,12 +289,28 @@ class LlmOAuthTokenClient {
   }
 
   static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
-    'X-Msh-Platform': 'CLIProxyAPI',
-    'X-Msh-Version': 'stroom',
-    'X-Msh-Device-Name': 'Stroom',
-    'X-Msh-Device-Model': 'Stroom',
-    'X-Msh-Device-Id': deviceId,
-  };
+        'X-Msh-Platform': 'CLIProxyAPI',
+        'X-Msh-Version': 'stroom',
+        'X-Msh-Device-Name': 'Stroom',
+        'X-Msh-Device-Model': 'Stroom',
+        'X-Msh-Device-Id': deviceId,
+      };
+
+  static Future<void> _waitForKimiPollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(interval);
+      return;
+    }
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
+  }
 
   static Uri? _kimiVerificationUri(Object? value) {
     final uri = Uri.tryParse(value is String ? value.trim() : '');
@@ -304,8 +326,8 @@ class LlmOAuthTokenClient {
   static int _seconds(Object? value) => value is num
       ? value.toInt()
       : value is String
-      ? int.tryParse(value) ?? 0
-      : 0;
+          ? int.tryParse(value) ?? 0
+          : 0;
 
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
@@ -377,8 +399,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-        ? int.tryParse(expiresIn)
-        : null;
+            ? int.tryParse(expiresIn)
+            : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,

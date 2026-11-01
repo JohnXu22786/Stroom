@@ -71,11 +71,11 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   @override
   late final AiGatewayOAuthAuthorization oauthAuthorization =
       _oauthAuthorizationOverride ??
-      _LlmGatewayOAuthAuthorization(
-        _accountService,
-        accountManagement as _LlmGatewayAccountManagement,
-        dio: _oauthDio,
-      );
+          _LlmGatewayOAuthAuthorization(
+            _accountService,
+            accountManagement as _LlmGatewayAccountManagement,
+            dio: _oauthDio,
+          );
   @override
   late final AiGatewayProviderCatalog providerCatalog = defaultProviderCatalog;
   @override
@@ -93,14 +93,13 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     LlmConnectorHttpClient? connectorClient,
     Dio? oauthDio,
     AiGatewayOAuthAuthorization? oauthAuthorization,
-  }) : _accountService = accountService,
-       _oauthDio = oauthDio,
-       _oauthAuthorizationOverride = oauthAuthorization,
-       accountManagement = _LlmGatewayAccountManagement(accountService),
-       _routingService = routingService,
-       _connectorClient =
-           connectorClient ??
-           LlmConnectorHttpClient(accountService: accountService);
+  })  : _accountService = accountService,
+        _oauthDio = oauthDio,
+        _oauthAuthorizationOverride = oauthAuthorization,
+        accountManagement = _LlmGatewayAccountManagement(accountService),
+        _routingService = routingService,
+        _connectorClient = connectorClient ??
+            LlmConnectorHttpClient(accountService: accountService);
 
   @override
   Future<AiGatewayRoutingSnapshot> loadRoutingState() async {
@@ -197,8 +196,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required Future<T> Function(
       AiGatewayRouteCandidate candidate,
       AiGatewayRouteProgress progress,
-    )
-    request,
+    ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
@@ -245,8 +243,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required Future<T> Function(
       AiGatewayRouteCandidate candidate,
       AiGatewayRouteProgress progress,
-    )
-    request,
+    ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
@@ -373,8 +370,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required Future<T> Function(
       LlmRouteCandidate candidate,
       LlmRouteProgress progress,
-    )
-    request,
+    ) request,
     required Set<String> requiredCapabilities,
     required Map<String, num> estimatedUsage,
     required Set<String>? supportedConnectorTypes,
@@ -392,8 +388,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     LlmRouteCandidate? lastAttemptedCandidate;
     try {
       var routeGroup = group;
-      final allowedConnectorTypes =
-          supportedConnectorTypes ??
+      final allowedConnectorTypes = supportedConnectorTypes ??
           LlmConnectorRegistry.all
               .where(
                 (connector) =>
@@ -416,8 +411,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
           final connectorType = account == null
               ? null
               : LlmConnectorRegistry.canonicalId(account.connectorType);
-          final candidateIsSupported =
-              account == null ||
+          final candidateIsSupported = account == null ||
               candidateFilter == null ||
               candidateFilter(
                 LlmRouteCandidate(
@@ -455,8 +449,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
           legacyProviderName: group.legacyProviderName,
         );
       }
-      final selectedAccountIsIneligible =
-          selectedAccountId != null &&
+      final selectedAccountIsIneligible = selectedAccountId != null &&
           group.members.any(
             (member) => member.accountId == selectedAccountId,
           ) &&
@@ -567,16 +560,16 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
     this._accountManagement, {
     Dio? dio,
     LlmOAuthTokenClient? tokenClient,
-  }) : _dio = dio ?? _createOAuthDio(),
-       _tokenClient =
-           tokenClient ?? LlmOAuthTokenClient(dio: dio ?? _createOAuthDio());
+  })  : _dio = dio ?? _createOAuthDio(),
+        _tokenClient =
+            tokenClient ?? LlmOAuthTokenClient(dio: dio ?? _createOAuthDio());
 
   static Dio _createOAuthDio() => Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 30),
-    ),
-  );
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
 
   @override
   Future<AiGatewayAccount> authorize(
@@ -590,8 +583,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
     LlmOAuthLoopback? listener;
     try {
       final isOpenAi = account.connectorType == 'codex';
-      final isGemini =
-          account.connectorType == 'gemini' ||
+      final isGemini = account.connectorType == 'gemini' ||
           account.connectorType == 'aistudio';
       final isClaude = account.connectorType == 'claude';
       if (!isOpenAi && !isGemini && !isClaude) {
@@ -609,8 +601,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         isGemini
             ? '/'
             : isClaude
-            ? '/callback'
-            : '/auth/callback',
+                ? '/callback'
+                : '/auth/callback',
         host: isClaude ? 'localhost' : '127.0.0.1',
         port: isClaude ? 54545 : 0,
       );
@@ -622,8 +614,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           : null;
       final previousOpenAiBundle =
           previousBundle?['oauth_contract'] == 'openai-siwc-v1'
-          ? previousBundle
-          : null;
+              ? previousBundle
+              : null;
       late final LlmOAuthAuthorizationAttempt attempt;
       if (isOpenAi) {
         attempt = LlmOAuthAuthorizationAttempt.openAiChatGpt(
@@ -652,8 +644,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         throw const AiGatewayOAuthException();
       }
       final callbackUri = await listener.nextCallback().timeout(
-        const Duration(minutes: 5),
-      );
+            const Duration(minutes: 5),
+          );
       final callback = attempt.consumeCallback(callbackUri);
       late final Map<String, dynamic> tokenBundle;
       if (isOpenAi) {
@@ -894,11 +886,11 @@ class _LlmKimiCodeDeviceAuthorization
     required String deviceId,
     required LlmOAuthTokenClient tokenClient,
     required _LlmGatewayAccountManagement accountManagement,
-  }) : _account = account,
-       _deviceCode = deviceCode,
-       _deviceId = deviceId,
-       _tokenClient = tokenClient,
-       _accountManagement = accountManagement {
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _deviceId = deviceId,
+        _tokenClient = tokenClient,
+        _accountManagement = accountManagement {
     _completed = _complete();
   }
 
@@ -981,8 +973,8 @@ class LlmChatRouteDiagnostic {
     required Iterable<AiGatewayRouteDecision> decisions,
     this.requestSucceeded = false,
     DateTime? recordedAt,
-  }) : decisions = List.unmodifiable(decisions),
-       recordedAt = (recordedAt ?? DateTime.now()).toUtc();
+  })  : decisions = List.unmodifiable(decisions),
+        recordedAt = (recordedAt ?? DateTime.now()).toUtc();
 }
 
 class LlmChatRouteDiagnostics {
@@ -1011,53 +1003,53 @@ class LlmChatRouteDiagnostics {
 }
 
 String llmRouteDecisionLabel(String reason) => switch (reason) {
-  'session_affinity' => '沿用此对话最近成功的账号',
-  'session_affinity_persistence_failed' => '本次账号连续性未能保存',
-  'explicit_account_selection' => '按用户选择的账号路由',
-  'selected_account_outside_group' => '所选账号不属于当前模型组',
-  'conversation_id_invalid' => '对话标识无效，未使用会话亲和',
-  'model_group_missing' => '没有找到此模型的稳定模型组',
-  'model_group_ambiguous' => '此模型同时关联多个模型组',
-  'connector_protocol_incompatible' => '连接器协议不适用于此聊天模型',
-  'connection_unknown' => '连接状态未知',
-  'account_missing' => '账号已删除',
-  'account_id_invalid' => '账号标识无效',
-  'account_unavailable' => '账号已暂停或需要重新认证',
-  'model_mapping_mismatch' => '账号没有映射到所选模型',
-  'model_not_mapped' => '账号中找不到对应的上游模型',
-  'capability_mismatch' => '账号模型不支持此请求所需能力',
-  'fallback_scope' => '回退范围不允许切换到此连接器',
-  'cooldown' => '账号仍在故障冷却期',
-  'concurrency_limit' => '账号或模型组已达到并发上限',
-  'balance_unknown_or_incomparable' => '额度未知或计量单位不可比较',
-  'balance_at_or_below_reserve' => '余额已达到或低于保留线',
-  'usage_unknown' => '使用量未知，无法判断限制',
-  'reserve_balance_unknown' => '剩余额度未知，无法判断保留线',
-  'reserve_unit_unknown_or_incomparable' => '保留线计量单位未知或不可比较',
-  'reserve_total_unknown_or_incomparable' => '额度总量未知或不可比较',
-  'reserve_total_unknown' => '额度总量未知，无法计算保留线',
-  'reserve_usage_estimate_unknown' => '请求用量估算未知，无法判断保留线',
-  'reserve_in_flight_usage_unknown' => '进行中的请求用量未知，无法判断保留线',
-  'reserve_floor_reached' => '剩余额度低于保留线',
-  'usage_ceiling_reached' => '已达到使用上限',
-  'usage_ceiling_total_unknown' => '使用总额未知，无法判断上限',
-  'usage_unit_mismatch' => '使用量计量单位不匹配',
-  'usage_source_mismatch' => '使用量与额度数据来源不匹配',
-  'usage_in_flight_unknown' => '进行中的请求用量未知，无法判断上限',
-  'usage_estimate_unknown' => '请求用量估算未知，无法判断上限',
-  'invalid_window_timezone' => '额度窗口时区配置无效',
-  'reserve_floor' => '剩余额度低于保留线',
-  'usage_ceiling' => '已达到使用上限',
-  'request_authentication' => '上游拒绝了认证',
-  'request_quotaExhausted' => '上游报告额度耗尽',
-  'request_rateLimited' => '上游限流',
-  'request_connection' => '连接上游失败',
-  'request_server' => '上游服务错误',
-  'request_invalidRequest' => '上游拒绝了请求参数',
-  'request_cancelled' => '请求已取消',
-  'request_other' => '上游请求失败',
-  _ => '账号未被选择：$reason',
-};
+      'session_affinity' => '沿用此对话最近成功的账号',
+      'session_affinity_persistence_failed' => '本次账号连续性未能保存',
+      'explicit_account_selection' => '按用户选择的账号路由',
+      'selected_account_outside_group' => '所选账号不属于当前模型组',
+      'conversation_id_invalid' => '对话标识无效，未使用会话亲和',
+      'model_group_missing' => '没有找到此模型的稳定模型组',
+      'model_group_ambiguous' => '此模型同时关联多个模型组',
+      'connector_protocol_incompatible' => '连接器协议不适用于此聊天模型',
+      'connection_unknown' => '连接状态未知',
+      'account_missing' => '账号已删除',
+      'account_id_invalid' => '账号标识无效',
+      'account_unavailable' => '账号已暂停或需要重新认证',
+      'model_mapping_mismatch' => '账号没有映射到所选模型',
+      'model_not_mapped' => '账号中找不到对应的上游模型',
+      'capability_mismatch' => '账号模型不支持此请求所需能力',
+      'fallback_scope' => '回退范围不允许切换到此连接器',
+      'cooldown' => '账号仍在故障冷却期',
+      'concurrency_limit' => '账号或模型组已达到并发上限',
+      'balance_unknown_or_incomparable' => '额度未知或计量单位不可比较',
+      'balance_at_or_below_reserve' => '余额已达到或低于保留线',
+      'usage_unknown' => '使用量未知，无法判断限制',
+      'reserve_balance_unknown' => '剩余额度未知，无法判断保留线',
+      'reserve_unit_unknown_or_incomparable' => '保留线计量单位未知或不可比较',
+      'reserve_total_unknown_or_incomparable' => '额度总量未知或不可比较',
+      'reserve_total_unknown' => '额度总量未知，无法计算保留线',
+      'reserve_usage_estimate_unknown' => '请求用量估算未知，无法判断保留线',
+      'reserve_in_flight_usage_unknown' => '进行中的请求用量未知，无法判断保留线',
+      'reserve_floor_reached' => '剩余额度低于保留线',
+      'usage_ceiling_reached' => '已达到使用上限',
+      'usage_ceiling_total_unknown' => '使用总额未知，无法判断上限',
+      'usage_unit_mismatch' => '使用量计量单位不匹配',
+      'usage_source_mismatch' => '使用量与额度数据来源不匹配',
+      'usage_in_flight_unknown' => '进行中的请求用量未知，无法判断上限',
+      'usage_estimate_unknown' => '请求用量估算未知，无法判断上限',
+      'invalid_window_timezone' => '额度窗口时区配置无效',
+      'reserve_floor' => '剩余额度低于保留线',
+      'usage_ceiling' => '已达到使用上限',
+      'request_authentication' => '上游拒绝了认证',
+      'request_quotaExhausted' => '上游报告额度耗尽',
+      'request_rateLimited' => '上游限流',
+      'request_connection' => '连接上游失败',
+      'request_server' => '上游服务错误',
+      'request_invalidRequest' => '上游拒绝了请求参数',
+      'request_cancelled' => '请求已取消',
+      'request_other' => '上游请求失败',
+      _ => '账号未被选择：$reason',
+    };
 
 class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
   final LlmAccountConnectorService _accounts;
@@ -1081,8 +1073,7 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
         .where((item) => item.id == account.id)
         .firstOrNull;
     if (account.authType == 'oauth') {
-      final alreadyOAuthForConnector =
-          existing?.authType == 'oauth' &&
+      final alreadyOAuthForConnector = existing?.authType == 'oauth' &&
           existing?.connectorType == account.connectorType;
       if (!alreadyOAuthForConnector || secret != null) {
         throw const AiGatewayOAuthException();
@@ -1132,14 +1123,15 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
     required String accountId,
     required AiGatewayMetricObservation remainingQuota,
     required Map<String, AiGatewayMetricObservation> quotaSignals,
-  }) => _accounts.recordQuotaObservation(
-    accountId: accountId,
-    remainingQuota: _llmMetricObservation(remainingQuota),
-    quotaSignals: {
-      for (final entry in quotaSignals.entries)
-        entry.key: _llmMetricObservation(entry.value),
-    },
-  );
+  }) =>
+      _accounts.recordQuotaObservation(
+        accountId: accountId,
+        remainingQuota: _llmMetricObservation(remainingQuota),
+        quotaSignals: {
+          for (final entry in quotaSignals.entries)
+            entry.key: _llmMetricObservation(entry.value),
+        },
+      );
 }
 
 class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
@@ -1152,11 +1144,11 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
           supportedAuthTypes: Set.unmodifiable(connector.authTypes),
           capabilities:
               LlmConnectorRegistry.chatAdapterEndpointType(connector.id) == null
-              ? const {}
-              : const {'chat'},
+                  ? const {}
+                  : const {'chat'},
           supportsChatAdapter:
               LlmConnectorRegistry.chatAdapterEndpointType(connector.id) !=
-              null,
+                  null,
           chatProtocolId: LlmConnectorRegistry.chatAdapterEndpointType(
             connector.id,
           ),
@@ -1200,10 +1192,13 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
   Future<List<AiGatewayUpstreamModel>> discoverModels(
     AiGatewayAccount account, {
     bool refreshRemote = false,
-  }) async => (await _accounts.discoverModels(
-    _legacyAccount(account),
-    refreshRemote: refreshRemote,
-  )).map(_gatewayModel).toList(growable: false);
+  }) async =>
+      (await _accounts.discoverModels(
+        _legacyAccount(account),
+        refreshRemote: refreshRemote,
+      ))
+          .map(_gatewayModel)
+          .toList(growable: false);
 
   @override
   Future<List<AiGatewayUpstreamModel>> discoverGroupModels({
@@ -1280,30 +1275,25 @@ bool _hasRequiredModelCapabilities(
     final explicitlyDisabled =
         capabilities.containsKey(capability) && !explicitlyEnabled;
     final methods = capabilities['supportedGenerationMethods'];
-    final chatMethodsExplicitlyUnsupported =
-        capability == 'chat' &&
+    final chatMethodsExplicitlyUnsupported = capability == 'chat' &&
         methods is Iterable &&
         !methods.contains('generateContent') &&
         !methods.contains('streamGenerateContent');
     final inputModalities = capabilities['inputModalities'];
-    final methodSupported =
-        methods is Iterable &&
+    final methodSupported = methods is Iterable &&
         switch (capability) {
-          'chat' =>
-            methods.contains('generateContent') ||
-                methods.contains('streamGenerateContent'),
+          'chat' => methods.contains('generateContent') ||
+              methods.contains('streamGenerateContent'),
           'streaming' => methods.contains('streamGenerateContent'),
           _ => false,
         };
-    final modalitySupported =
-        inputModalities is Iterable &&
+    final modalitySupported = inputModalities is Iterable &&
         switch (capability) {
           'vision' => inputModalities.contains('image'),
           'audio' => inputModalities.contains('audio'),
           _ => false,
         };
-    final protocolObserved =
-        capability == 'chat' &&
+    final protocolObserved = capability == 'chat' &&
             const {
               LlmNativeProtocol.openAIResponses,
               LlmNativeProtocol.anthropicMessages,
@@ -1317,8 +1307,7 @@ bool _hasRequiredModelCapabilities(
               LlmNativeProtocol.bedrockConverse,
             }.contains(protocol) ||
         capability == 'streaming' && streamingProtocols.contains(protocol);
-    final geminiMethodListOverridesProtocol =
-        !explicitlyEnabled &&
+    final geminiMethodListOverridesProtocol = !explicitlyEnabled &&
         methods is Iterable &&
         const {
           LlmNativeProtocol.geminiGenerateContent,
@@ -1326,9 +1315,9 @@ bool _hasRequiredModelCapabilities(
         }.contains(protocol) &&
         (capability == 'chat'
             ? !(methods.contains('generateContent') ||
-                  methods.contains('streamGenerateContent'))
+                methods.contains('streamGenerateContent'))
             : capability == 'streaming' &&
-                  !methods.contains('streamGenerateContent'));
+                !methods.contains('streamGenerateContent'));
     if (explicitlyDisabled ||
         chatMethodsExplicitlyUnsupported ||
         geminiMethodListOverridesProtocol ||
@@ -1403,67 +1392,70 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
 
 AiGatewayConnectorObservation _gatewayObservation(
   LlmConnectorObservation observation,
-) => AiGatewayConnectorObservation(
-  requestUsage: _gatewayMetricObservation(observation.requestUsage),
-  remainingQuota: _gatewayMetricObservation(observation.remainingQuota),
-  quotaSignals: {
-    for (final entry in observation.quotaSignals.entries)
-      entry.key: _gatewayMetricObservation(entry.value),
-  },
-);
+) =>
+    AiGatewayConnectorObservation(
+      requestUsage: _gatewayMetricObservation(observation.requestUsage),
+      remainingQuota: _gatewayMetricObservation(observation.remainingQuota),
+      quotaSignals: {
+        for (final entry in observation.quotaSignals.entries)
+          entry.key: _gatewayMetricObservation(entry.value),
+      },
+    );
 
 AiGatewayMetricObservation _gatewayMetricObservation(
   LlmMetricObservation observation,
-) => AiGatewayMetricObservation(
-  unit: observation.unit,
-  value: observation.value,
-  isKnown: observation.isKnown,
-  source: observation.source,
-  observedAt: observation.observedAt,
-  resetAt: observation.resetAt,
-);
+) =>
+    AiGatewayMetricObservation(
+      unit: observation.unit,
+      value: observation.value,
+      isKnown: observation.isKnown,
+      source: observation.source,
+      observedAt: observation.observedAt,
+      resetAt: observation.resetAt,
+    );
 
 LlmMetricObservation _llmMetricObservation(
   AiGatewayMetricObservation observation,
-) => observation.isKnown
-    ? LlmMetricObservation.reported(
-        observation.value,
-        unit: observation.unit,
-        source: observation.source,
-        observedAt: observation.observedAt,
-        resetAt: observation.resetAt,
-      )
-    : const LlmMetricObservation.unknown();
+) =>
+    observation.isKnown
+        ? LlmMetricObservation.reported(
+            observation.value,
+            unit: observation.unit,
+            source: observation.source,
+            observedAt: observation.observedAt,
+            resetAt: observation.resetAt,
+          )
+        : const LlmMetricObservation.unknown();
 
 AiGatewayAccount _gatewayAccount(LlmAccount account) => AiGatewayAccount(
-  id: account.id,
-  connectorType: account.connectorType,
-  authType: account.authType,
-  displayName: account.displayName,
-  status: AiGatewayAccountStatus.values.byName(account.status.name),
-  hasCredential: account.credentialRef != null,
-  credentialRef: account.credentialRef,
-  endpointConfig: account.endpointConfig,
-  models: account.models.map(_gatewayModel).toList(growable: false),
-  policy: _gatewayPolicy(account.policy),
-  usageByWindow: {
-    for (final entry in account.usageByWindow.entries)
-      AiGatewayUsageWindow.values.byName(
-        entry.key.name,
-      ): AiGatewayUsageWindowState(
-        quota: _gatewayMetricObservation(entry.value.quota),
-        used: _gatewayMetricObservation(entry.value.used),
-        remaining: _gatewayMetricObservation(entry.value.remaining),
-        resetAt: entry.value.resetAt,
-        source: entry.value.source,
-      ),
-  },
-  remainingQuota: _gatewayMetricObservation(account.remainingQuota),
-  quotaSignals: {
-    for (final entry in account.quotaSignals.entries)
-      entry.key: _gatewayMetricObservation(entry.value),
-  },
-);
+      id: account.id,
+      connectorType: account.connectorType,
+      authType: account.authType,
+      displayName: account.displayName,
+      status: AiGatewayAccountStatus.values.byName(account.status.name),
+      hasCredential: account.credentialRef != null,
+      credentialRef: account.credentialRef,
+      endpointConfig: account.endpointConfig,
+      models: account.models.map(_gatewayModel).toList(growable: false),
+      policy: _gatewayPolicy(account.policy),
+      usageByWindow: {
+        for (final entry in account.usageByWindow.entries)
+          AiGatewayUsageWindow.values.byName(
+            entry.key.name,
+          ): AiGatewayUsageWindowState(
+            quota: _gatewayMetricObservation(entry.value.quota),
+            used: _gatewayMetricObservation(entry.value.used),
+            remaining: _gatewayMetricObservation(entry.value.remaining),
+            resetAt: entry.value.resetAt,
+            source: entry.value.source,
+          ),
+      },
+      remainingQuota: _gatewayMetricObservation(account.remainingQuota),
+      quotaSignals: {
+        for (final entry in account.quotaSignals.entries)
+          entry.key: _gatewayMetricObservation(entry.value),
+      },
+    );
 
 LlmAccount _legacyAccount(AiGatewayAccount account, {String? credentialRef}) =>
     LlmAccount(
@@ -1503,12 +1495,12 @@ AiGatewayUpstreamModel _gatewayModel(LlmUpstreamModel model) =>
     );
 
 LlmUpstreamModel _legacyModel(AiGatewayUpstreamModel model) => LlmUpstreamModel(
-  id: model.id,
-  upstreamModelId: model.upstreamModelId,
-  displayName: model.displayName,
-  capabilities: model.capabilities,
-  config: model.config,
-);
+      id: model.id,
+      upstreamModelId: model.upstreamModelId,
+      displayName: model.displayName,
+      capabilities: model.capabilities,
+      config: model.config,
+    );
 
 AiGatewayModelGroupMember _gatewayMember(LlmModelGroupMember member) =>
     AiGatewayModelGroupMember(
@@ -1537,13 +1529,13 @@ AiGatewayModelGroup _gatewayModelGroup(LlmModelGroup group) =>
     );
 
 LlmModelGroup _legacyModelGroup(AiGatewayModelGroup group) => LlmModelGroup(
-  id: group.id,
-  displayName: group.displayName,
-  members: group.members.map(_legacyMember).toList(growable: false),
-  policy: _legacyPolicy(group.policy),
-  legacyModelId: group.legacyModelId,
-  legacyProviderName: group.legacyProviderName,
-);
+      id: group.id,
+      displayName: group.displayName,
+      members: group.members.map(_legacyMember).toList(growable: false),
+      policy: _legacyPolicy(group.policy),
+      legacyModelId: group.legacyModelId,
+      legacyProviderName: group.legacyProviderName,
+    );
 
 AiGatewayRoutingPolicy _gatewayPolicy(LlmRoutingPolicy policy) =>
     AiGatewayRoutingPolicy(
@@ -1583,32 +1575,35 @@ LlmRoutingPolicy _legacyPolicy(AiGatewayRoutingPolicy policy) =>
 
 AiGatewayLimitThreshold? _gatewayThreshold(LlmLimitThreshold? threshold) =>
     threshold == null
-    ? null
-    : threshold.kind == LlmLimitKind.percentage
-    ? AiGatewayLimitThreshold.percentage(threshold.value)
-    : AiGatewayLimitThreshold.fixed(threshold.value, unit: threshold.unit);
+        ? null
+        : threshold.kind == LlmLimitKind.percentage
+            ? AiGatewayLimitThreshold.percentage(threshold.value)
+            : AiGatewayLimitThreshold.fixed(threshold.value,
+                unit: threshold.unit);
 
 LlmLimitThreshold? _legacyThreshold(AiGatewayLimitThreshold? threshold) =>
     threshold == null
-    ? null
-    : threshold.kind == AiGatewayLimitKind.percentage
-    ? LlmLimitThreshold.percentage(threshold.value)
-    : LlmLimitThreshold.fixed(threshold.value, unit: threshold.unit);
+        ? null
+        : threshold.kind == AiGatewayLimitKind.percentage
+            ? LlmLimitThreshold.percentage(threshold.value)
+            : LlmLimitThreshold.fixed(threshold.value, unit: threshold.unit);
 
 List<AiGatewayRouteDecision> _gatewayRouteDecisions(
   Iterable<LlmRouteDecision> decisions,
-) => decisions
-    .map(
-      (decision) => AiGatewayRouteDecision(
-        subjectId: decision.subjectId,
-        reason: decision.reason,
-      ),
-    )
-    .toList(growable: false);
+) =>
+    decisions
+        .map(
+          (decision) => AiGatewayRouteDecision(
+            subjectId: decision.subjectId,
+            reason: decision.reason,
+          ),
+        )
+        .toList(growable: false);
 
 AiGatewayRoutingException _gatewayRoutingFailure(
   LlmRoutingUnavailableException error,
-) => AiGatewayRoutingException(_gatewayRouteDecisions(error.decisions));
+) =>
+    AiGatewayRoutingException(_gatewayRouteDecisions(error.decisions));
 
 AiGatewayRouteCandidate _gatewayCandidate(LlmRouteCandidate candidate) =>
     AiGatewayRouteCandidate(
@@ -1622,12 +1617,13 @@ AiGatewayRouteCandidate _gatewayCandidate(LlmRouteCandidate candidate) =>
 
 AiGatewayRoutingExecution<T> _gatewayExecution<T>(
   LlmRoutingExecution<T> execution,
-) => AiGatewayRoutingExecution(
-  value: execution.value,
-  candidate: _gatewayCandidate(execution.candidate),
-  attemptedAccountIds: execution.attemptedAccountIds,
-  decisions: _gatewayRouteDecisions(execution.decisions),
-);
+) =>
+    AiGatewayRoutingExecution(
+      value: execution.value,
+      candidate: _gatewayCandidate(execution.candidate),
+      attemptedAccountIds: execution.attemptedAccountIds,
+      decisions: _gatewayRouteDecisions(execution.decisions),
+    );
 
 class _GatewayRouteProgressAdapter implements AiGatewayRouteProgress {
   final LlmRouteProgress _progress;
@@ -1657,7 +1653,8 @@ class _GatewayRouteProgressAdapter implements AiGatewayRouteProgress {
     required String unit,
     required num value,
     required String source,
-  }) => _progress.recordUsage(unit: unit, value: value, source: source);
+  }) =>
+      _progress.recordUsage(unit: unit, value: value, source: source);
 }
 
 class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
