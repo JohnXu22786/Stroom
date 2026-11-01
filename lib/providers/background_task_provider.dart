@@ -1256,7 +1256,16 @@ String _legacyOcrDocumentationCredentialWhitespaceContinuation(
       .where((match) {
         final suffix = match.group(1)!;
         final alphabeticSuffix = suffix.replaceAll('-', '');
+        final isOpaqueHyphenatedContinuation = suffix.contains('-') &&
+            !_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              alphabeticSuffix,
+              minimumLength: 8,
+              minimumEntropy: 2.6,
+              maximumVowelRatio: 0.4,
+            );
         return RegExp(r'[0-9_]').hasMatch(suffix) ||
+            isOpaqueHyphenatedContinuation ||
             (!_legacyOcrHasNaturalAlphaContinuation(alphabeticSuffix) &&
                 _legacyOcrHasHighAlphabeticEntropy(
                   alphabeticSuffix,
@@ -1308,9 +1317,16 @@ bool _legacyOcrIsNaturalDocumentationContinuation(
     r'(?:s|es|ed|ing|er|est|ly|able|ary|aries|ation|ization|istic|based)$',
     caseSensitive: false,
   ).hasMatch(suffix);
-  final terminalCarefullyPrompt =
-      suffix.toLowerCase() == 'carefully' && after.isEmpty && naturalActionLead;
-  return terminalCarefullyPrompt ||
+  final terminalNaturalActionContinuation = const {
+        'carefully',
+        'thoroughly',
+        'closely',
+        'fully',
+        'completely',
+      }.contains(suffix.toLowerCase()) &&
+      (after.isEmpty || RegExp(r'^[.!?]+$').hasMatch(after)) &&
+      naturalActionLead;
+  return terminalNaturalActionContinuation ||
       (naturalWordForm && naturalActionLead && naturalObject) ||
       (naturalWordForm &&
           naturalDescriptionLead &&
