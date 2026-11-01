@@ -3161,6 +3161,9 @@ class LlmNativeRequestBuilder {
         if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
         break;
     }
+    if (nativeFormat == 'anthropic') {
+      headers.putIfAbsent('anthropic-version', () => '2023-06-01');
+    }
     if (stream && account.connectorType == 'bedrock') {
       headers['Accept'] = 'application/vnd.amazon.eventstream';
     } else if (stream) {
@@ -3431,7 +3434,8 @@ class LlmNativeRequestBuilder {
     String? query;
     final preserveLegacyOcrEndpoint =
         account.connectorType == 'openai-compatibility' &&
-            config['legacyOcrFullEndpoint'] == true;
+            config['legacyOcrFullEndpoint'] == true &&
+            nativeFormat == null;
     switch (account.connectorType) {
       case 'codex':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');

@@ -246,6 +246,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
+    bool Function(AiGatewayRouteCandidate candidate)? candidateFilter,
     String? conversationId,
     String? selectedAccountId,
   }) async {
@@ -278,6 +279,9 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
       requiredCapabilities: requiredCapabilities,
       estimatedUsage: estimatedUsage,
       supportedConnectorTypes: supportedConnectorTypes,
+      candidateFilter: candidateFilter == null
+          ? null
+          : (candidate) => candidateFilter(_gatewayCandidate(candidate)),
       conversationId: conversationId,
       selectedAccountId: selectedAccountId,
     );
@@ -369,6 +373,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required Set<String> requiredCapabilities,
     required Map<String, num> estimatedUsage,
     required Set<String>? supportedConnectorTypes,
+    bool Function(LlmRouteCandidate candidate)? candidateFilter,
     String? conversationId,
     String? selectedAccountId,
   }) async {
@@ -399,13 +404,27 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
             account.id: account,
         };
         final eligibleMembers = <LlmModelGroupMember>[];
-        for (final member in group.members) {
+        for (final entry in group.members.indexed) {
+          final member = entry.$2;
           final account = accounts[member.accountId];
           final connectorType = account == null
               ? null
               : LlmConnectorRegistry.canonicalId(account.connectorType);
+          final candidateIsSupported = account == null ||
+              candidateFilter == null ||
+              candidateFilter(
+                LlmRouteCandidate(
+                  account: account,
+                  member: member,
+                  localModelId: member.localModelId ?? localModelId,
+                  upstreamModelId: member.upstreamModelId,
+                  priorityTier: member.priorityTier,
+                  memberIndex: entry.$1,
+                ),
+              );
           if (connectorType != null &&
               (!allowedConnectorTypes.contains(connectorType) ||
+                  !candidateIsSupported ||
                   !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
                     connectorType,
                     account!.authType,

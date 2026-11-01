@@ -2701,6 +2701,7 @@ void main() {
 
       expect(request.uri.toString(), 'https://api.example.test/v1/messages');
       expect(request.headers['Authorization'], 'Bearer custom-api-key');
+      expect(request.headers['anthropic-version'], '2023-06-01');
     });
 
     test('does not duplicate full Responses or Messages endpoint suffixes', () {

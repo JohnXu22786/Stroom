@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -203,6 +204,131 @@ void main() {
     },
   );
 
+  test('Task Flow OCR uses the captured model protocol for image requests',
+      () async {
+    const groupId = 'task-flow-anthropic-ocr-group';
+    const localModelId = 'task-flow-ocr-model';
+    const upstreamModelId = 'claude-vision';
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'task-flow-anthropic-account',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Task Flow Anthropic account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {'baseUrl': 'https://api.anthropic.com/v1'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'claude-model',
+            upstreamModelId: upstreamModelId,
+            displayName: 'Claude vision',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'test-api-key',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: groupId,
+        displayName: 'Task Flow OCR model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'task-flow-anthropic-account',
+            upstreamModelId: upstreamModelId,
+            localModelId: localModelId,
+          ),
+        ],
+      ),
+    );
+    final connector = _ExecutorFakeConnector(
+      accounts,
+      responseBody: const {
+        'type': 'message',
+        'content': [
+          {'type': 'text', 'text': 'task flow recognized'},
+        ],
+        'stop_reason': 'end_turn',
+        'usage': {'input_tokens': 4, 'output_tokens': 3},
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final bytes = _validPng();
+    final source = await File('${directory.path}/task-flow-anthropic.png')
+        .writeAsBytes(bytes);
+    final providerEntries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          name: 'Captured OCR model',
+          type: 'ocr',
+          configs: [
+            ProviderConfigItem(
+              id: 'captured-ocr-config',
+              models: [
+                ModelConfig(
+                  id: localModelId,
+                  name: 'Captured vision model',
+                  modelId: upstreamModelId,
+                ),
+              ],
+              legacyFields: {kLlmModelGroupConfigField: groupId},
+            ),
+          ],
+        ),
+      ],
+    );
+    final block = TaskFlowBlock(
+      typeKey: BlockType.ocr,
+      params: {
+        'modelRef': {
+          'configId': 'captured-ocr-config',
+          'modelId': localModelId,
+        },
+      },
+    );
+
+    final result = await executeOcrBlock(
+      block: block,
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerEntries,
+      routingRuntime: Future.value(runtime),
+    );
+
+    expect(result, 'task flow recognized');
+    expect(connector.requestedAccountId, 'task-flow-anthropic-account');
+    expect(connector.requestedModelId, upstreamModelId);
+    expect(connector.requestedNativeFormat, 'anthropic');
+    expect(connector.requestBody?['model'], upstreamModelId);
+    final content = connector.requestBody?['messages'][0]['content'] as List;
+    expect(content.single, {
+      'type': 'image',
+      'source': {
+        'type': 'base64',
+        'media_type': 'image/png',
+        'data': base64Encode(bytes),
+      },
+    });
+  });
+
   test('OCR rejects corrupt bytes before invoking its request', () async {
     final source = await File(
       '${directory.path}/corrupt.png',
@@ -240,11 +366,22 @@ void main() {
 }
 
 class _ExecutorFakeConnector extends LlmConnectorHttpClient {
-  _ExecutorFakeConnector(LlmAccountConnectorService accountService)
-      : super(accountService: accountService);
+  _ExecutorFakeConnector(
+    LlmAccountConnectorService accountService, {
+    this.responseBody = const {
+      'choices': [
+        {
+          'finish_reason': 'stop',
+          'message': {'content': 'task flow recognized'},
+        },
+      ],
+    },
+  }) : super(accountService: accountService);
 
+  final Object responseBody;
   String? requestedAccountId;
   String? requestedModelId;
+  String? requestedNativeFormat;
   Map<String, dynamic>? requestBody;
 
   @override
@@ -263,18 +400,12 @@ class _ExecutorFakeConnector extends LlmConnectorHttpClient {
   }) async {
     requestedAccountId = account.id;
     requestedModelId = modelId;
+    requestedNativeFormat = nativeFormat;
     requestBody = Map<String, dynamic>.from(body! as Map);
     await onRequestSent?.call();
     return LlmConnectorResponse(
       statusCode: 200,
-      body: const {
-        'choices': [
-          {
-            'finish_reason': 'stop',
-            'message': {'content': 'task flow recognized'},
-          },
-        ],
-      },
+      body: responseBody,
       observation: LlmConnectorObservation(),
     );
   }

@@ -1039,13 +1039,7 @@ abstract base class _MapBridge
           }),
         );
       } else if (part.type == 'image') {
-        final source = _targetSource(message, part);
-        if (source.isEmpty) {
-          throw UnsupportedError(
-            'This image has no Gemini Interactions representation.',
-          );
-        }
-        contents.add(source);
+        contents.add(_interactionImagePart(part));
       } else if (part.type == 'tool_call') {
         steps.add({
           ..._targetSource(message, part),
@@ -1076,6 +1070,58 @@ abstract base class _MapBridge
       steps.insertAll(0, contents);
     }
     return steps;
+  }
+
+  Map<String, dynamic> _interactionImagePart(StroomContentPart part) {
+    final source = _sourceOf(part);
+    final image = part.data['imageUrl'] ?? source['image_url'];
+    final reference = image is Map ? image['url'] : image;
+    if (reference is String) {
+      final dataUri = RegExp(
+        r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+      ).firstMatch(reference);
+      if (dataUri != null) {
+        final data = dataUri.group(2);
+        final mimeType = dataUri.group(1)!;
+        if (data == null || data.isEmpty || !_isValidGeminiBase64(data)) {
+          throw UnsupportedError(
+            'Gemini Interactions image data URL contains invalid base64.',
+          );
+        }
+        return {
+          'type': 'image',
+          'data': data,
+          'mime_type': mimeType,
+        };
+      }
+      final uri = Uri.tryParse(reference);
+      if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
+        return {
+          'type': 'image',
+          'uri': reference,
+          if (part.data['mimeType'] is String)
+            'mime_type': part.data['mimeType'],
+        };
+      }
+    }
+    final nativeData = part.data['data'] ?? source['data'];
+    final nativeMimeType =
+        part.data['mimeType'] ?? source['mime_type'] ?? source['mimeType'];
+    if (nativeData is String && nativeMimeType is String) {
+      if (nativeData.isEmpty || !_isValidGeminiBase64(nativeData)) {
+        throw UnsupportedError(
+          'Gemini Interactions image data contains invalid base64.',
+        );
+      }
+      return {
+        'type': 'image',
+        'data': nativeData,
+        'mime_type': nativeMimeType,
+      };
+    }
+    throw UnsupportedError(
+      'Gemini Interactions requires an image data URL or HTTPS reference.',
+    );
   }
 
   StroomMessage _message(
@@ -2667,6 +2713,8 @@ final class _GeminiInteractionsBridge extends _MapBridge {
           for (final part in message.content)
             if (part.type == 'text')
               {'type': 'text', 'text': part.data['text']}
+            else if (part.type == 'image')
+              _interactionImagePart(part)
             else if (part.type == 'tool_call')
               {
                 'type': 'function_call',
