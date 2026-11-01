@@ -22,7 +22,7 @@ class MessageWebHost extends StatefulWidget {
 }
 
 class _MessageWebHostState extends State<MessageWebHost> {
-  static final Uri _macDocumentUri = Uri.parse('https://stroom.invalid/');
+  static final Uri _macDocumentUri = Uri.parse('about:blank');
 
   InAppWebViewController? _controller;
   Future<void> _pending = Future.value();
@@ -65,22 +65,27 @@ class _MessageWebHostState extends State<MessageWebHost> {
       return;
     }
     try {
-      // Register the bridge before navigation; macOS may finish inline HTML
-      // during native-view creation, before onWebViewCreated installs handlers.
-      // Wait until Flutter submits the frame so the native view is attached
-      // before asking WebKit to start its first navigation.
+      // WebKit's loadData call returns without starting navigation in the
+      // macOS host. Write into its initial about:blank main document instead.
+      // Wait until Flutter submits the frame so the native view is attached.
       if (kDebugMode) {
         debugPrint(
-          '[MessageWebHost][load-request] generation=$generation htmlLength=${widget.html.length}',
+          '[MessageWebHost][document-write] generation=$generation htmlLength=${widget.html.length}',
         );
       }
-      await controller.loadData(
-        data: widget.html,
-        baseUrl: WebUri(_macDocumentUri.toString()),
+      await controller.evaluateJavascript(
+        source: '''
+(() => {
+  document.open();
+  document.write(${jsonEncode(widget.html)});
+  document.close();
+  return true;
+})()
+''',
       );
       if (kDebugMode) {
         debugPrint(
-          '[MessageWebHost][load-request-sent] generation=$generation',
+          '[MessageWebHost][document-write-complete] generation=$generation',
         );
       }
     } catch (error) {
