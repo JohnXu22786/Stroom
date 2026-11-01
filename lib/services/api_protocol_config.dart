@@ -63,7 +63,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
     switch (connectorType) {
       'codex' => 'openai.responses',
       'claude' => 'anthropic.messages',
-      'gemini' || 'aistudio' => 'google.gemini.generate_content',
+      'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
       'ollama' => 'ollama.chat',
       _ => 'openai.chat_completions',

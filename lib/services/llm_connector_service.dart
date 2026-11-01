@@ -274,6 +274,7 @@ abstract final class LlmConnectorRegistry {
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
         'gemini-interactions' => 'google.gemini.interactions',
+        'vertex' => 'google.gemini.generate_content',
         'ollama' => 'ollama.chat',
         'bedrock' => 'openai',
         'openai-compatibility' ||
@@ -296,8 +297,13 @@ abstract final class LlmConnectorRegistry {
   static bool isChatAdapterAuthTypeSupported(
     String connectorType,
     String authType,
-  ) =>
-      canonicalId(connectorType) != 'codex' || authType == 'oauth';
+  ) {
+    final connector = find(connectorType);
+    if (connector == null || !connector.authTypes.contains(authType)) {
+      return false;
+    }
+    return canonicalId(connectorType) != 'codex' || authType == 'oauth';
+  }
 }
 
 /// Result of a capability observation. Unknown quota is represented by a
@@ -1738,6 +1744,20 @@ class LlmAccountConnectorService {
               .replaceFirst(RegExp(r'^models/'), '');
           final methods = map['supportedGenerationMethods'];
           final actions = map['supportedActions'];
+          final vertexActions = account.connectorType != 'vertex'
+              ? const <String>{}
+              : {
+                  if (methods is Iterable)
+                    for (final method in methods.whereType<String>())
+                      method.toLowerCase().replaceAll('_', ''),
+                  if (actions is Iterable)
+                    for (final action in actions.whereType<String>())
+                      action.toLowerCase().replaceAll('_', ''),
+                };
+          final vertexSupportsGenerateContent =
+              vertexActions.contains('generatecontent');
+          final vertexSupportsStreaming =
+              vertexActions.contains('streamgeneratecontent');
           var modelExtensions = map;
           var providerCapabilities = map['capabilities'];
           if (account.connectorType == 'ollama') {
@@ -1776,13 +1796,7 @@ class LlmAccountConnectorService {
             continue;
           }
           if (account.connectorType == 'vertex' &&
-              actions is List &&
-              !actions.any(
-                (action) =>
-                    action is String &&
-                    (action.toLowerCase().contains('generatecontent') ||
-                        action.toLowerCase().contains('generate_content')),
-              ) &&
+              !vertexSupportsGenerateContent &&
               !supportsImagenPredict) {
             continue;
           }
@@ -1795,6 +1809,10 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if (account.connectorType == 'vertex') ...{
+                  'chat': vertexSupportsGenerateContent,
+                  if (vertexSupportsStreaming) 'streaming': true,
+                },
                 if (methods is List) ...{
                   'supportedGenerationMethods': List<String>.from(
                     methods.whereType<String>(),

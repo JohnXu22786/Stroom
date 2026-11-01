@@ -113,6 +113,13 @@ void main() {
       const selected = 'openai.responses';
       expect(resolveConnectorProtocol(selected, 'openai-api'), selected);
       expect(resolveConnectorProtocol(selected, 'claude'), selected);
+      expect(
+        resolveConnectorProtocol(
+          'google.gemini.generate_content',
+          'vertex',
+        ),
+        'google.gemini.generate_content',
+      );
     });
 
     test('keeps native suppliers on their declared protocol', () {
@@ -137,6 +144,17 @@ void main() {
         supportedApiProtocolsForSupplier(
           'google.gemini.generate_content',
           connectorType: 'gemini',
+        ),
+        {'google.gemini.generate_content'},
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('vertex'),
+        'google.gemini.generate_content',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'google.gemini.generate_content',
+          connectorType: 'vertex',
         ),
         {'google.gemini.generate_content'},
       );
