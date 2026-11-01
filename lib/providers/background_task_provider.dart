@@ -2246,8 +2246,9 @@ String _legacyOcrRedactSpacedDocumentationCredentialEchoes(
         final alphabeticSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
         final detectedLineBrokenMaskedEcho =
             match.group(2)!.contains(RegExp(r'[\r\n]')) &&
+                RegExp(r'^[A-Z0-9]{6,}$').hasMatch(suffix) &&
                 _legacyOcrTextContainsMaskedCredential(
-                  match.group(0)!,
+                  '$prefix\n$suffix',
                   [value],
                 );
         final hasMarkerCredentialShape = RegExp(r'[0-9_]').hasMatch(suffix) &&
