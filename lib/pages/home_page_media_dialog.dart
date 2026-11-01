@@ -268,7 +268,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 child: const Text('取消'),
               ),
               FilledButton(
-                onPressed: selectedUrls.isNotEmpty ||
+                onPressed:
+                    selectedUrls.isNotEmpty ||
                         (mediaList.length == 1 && visibleResources.length == 1)
                     ? () {
                         final selectedMediaList = mediaList.length == 1

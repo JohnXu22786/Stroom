@@ -69,18 +69,18 @@ class MediaResource {
 
   /// 是否视频格式
   bool get isVideo => [
-        'mp4',
-        'webm',
-        'ogg',
-        'ogv',
-        'mov',
-        'mkv',
-        'avi',
-        'flv',
-        'ev1',
-        'mpeg',
-        'mpg'
-      ].contains(ext);
+    'mp4',
+    'webm',
+    'ogg',
+    'ogv',
+    'mov',
+    'mkv',
+    'avi',
+    'flv',
+    'ev1',
+    'mpeg',
+    'mpg',
+  ].contains(ext);
 
   /// 是否音频格式
   bool get isAudio =>
@@ -111,36 +111,36 @@ class MediaResource {
   // ---------------------------------------------------------------------------
 
   Map<String, dynamic> toMap() => {
-        'url': url,
-        'name': name,
-        'ext': ext,
-        'mimeType': mimeType,
-        'size': size,
-        'initiator': initiator,
-        'isPlayable': isPlayable,
-        'isPlaylist': isPlaylist,
-        'duration': duration,
-        'groupId': groupId,
-        'isLikelySplitTrack': isLikelySplitTrack,
-        'width': width,
-        'height': height,
-      };
+    'url': url,
+    'name': name,
+    'ext': ext,
+    'mimeType': mimeType,
+    'size': size,
+    'initiator': initiator,
+    'isPlayable': isPlayable,
+    'isPlaylist': isPlaylist,
+    'duration': duration,
+    'groupId': groupId,
+    'isLikelySplitTrack': isLikelySplitTrack,
+    'width': width,
+    'height': height,
+  };
 
   factory MediaResource.fromMap(Map<String, dynamic> map) => MediaResource(
-        url: map['url'] as String,
-        name: map['name'] as String,
-        ext: map['ext'] as String,
-        mimeType: map['mimeType'] as String?,
-        size: map['size'] as int?,
-        initiator: map['initiator'] as String?,
-        isPlayable: map['isPlayable'] as bool? ?? false,
-        isPlaylist: map['isPlaylist'] as bool? ?? false,
-        duration: map['duration'] as String?,
-        groupId: map['groupId'] as String?,
-        isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
-        width: map['width'] as int?,
-        height: map['height'] as int?,
-      );
+    url: map['url'] as String,
+    name: map['name'] as String,
+    ext: map['ext'] as String,
+    mimeType: map['mimeType'] as String?,
+    size: map['size'] as int?,
+    initiator: map['initiator'] as String?,
+    isPlayable: map['isPlayable'] as bool? ?? false,
+    isPlaylist: map['isPlaylist'] as bool? ?? false,
+    duration: map['duration'] as String?,
+    groupId: map['groupId'] as String?,
+    isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
+    width: map['width'] as int?,
+    height: map['height'] as int?,
+  );
 
   MediaResource copyWith({
     String? url,
@@ -158,24 +158,23 @@ class MediaResource {
     int? height,
     bool clearGroupId = false,
     bool clearIsLikelySplitTrack = false,
-  }) =>
-      MediaResource(
-        url: url ?? this.url,
-        name: name ?? this.name,
-        ext: ext ?? this.ext,
-        mimeType: mimeType ?? this.mimeType,
-        size: size ?? this.size,
-        initiator: initiator ?? this.initiator,
-        isPlayable: isPlayable ?? this.isPlayable,
-        isPlaylist: isPlaylist ?? this.isPlaylist,
-        duration: duration ?? this.duration,
-        groupId: clearGroupId ? null : (groupId ?? this.groupId),
-        isLikelySplitTrack: clearIsLikelySplitTrack
-            ? false
-            : (isLikelySplitTrack ?? this.isLikelySplitTrack),
-        width: width ?? this.width,
-        height: height ?? this.height,
-      );
+  }) => MediaResource(
+    url: url ?? this.url,
+    name: name ?? this.name,
+    ext: ext ?? this.ext,
+    mimeType: mimeType ?? this.mimeType,
+    size: size ?? this.size,
+    initiator: initiator ?? this.initiator,
+    isPlayable: isPlayable ?? this.isPlayable,
+    isPlaylist: isPlaylist ?? this.isPlaylist,
+    duration: duration ?? this.duration,
+    groupId: clearGroupId ? null : (groupId ?? this.groupId),
+    isLikelySplitTrack: clearIsLikelySplitTrack
+        ? false
+        : (isLikelySplitTrack ?? this.isLikelySplitTrack),
+    width: width ?? this.width,
+    height: height ?? this.height,
+  );
 
   @override
   String toString() =>

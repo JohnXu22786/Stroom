@@ -43,8 +43,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   bool _isFlowActionPending(String taskId) =>
       widget.isFlowManaged && _pendingFlowActions.contains(taskId);
 
-  Future<void> _performFlowAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<void> _performFlowAction(
+    String taskId,
+    bool selecting,
+    void Function(CatCatchNotifier) action,
+  ) async {
     if (!_pendingFlowActions.add(taskId)) return;
     setState(() {});
     try {
@@ -177,17 +180,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                               : truncateUrl(task.url),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
+                          style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${task.status.label} · ${task.progress}%',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(color: statusColor),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: statusColor),
                         ),
                         if (task.status == catcatch.TaskStatus.running) ...[
                           const SizedBox(height: 2),
@@ -195,9 +195,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           // long download/conversion is still alive.
                           RunningElapsedLabel(
                             startedAt: task.createdAt,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: Colors.grey),
                           ),
                         ],
@@ -320,8 +318,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             color: step.skipped
                                 ? Colors.orange.shade300
                                 : step.completed
-                                    ? Colors.green.shade300
-                                    : colorScheme.outlineVariant,
+                                ? Colors.green.shade300
+                                : colorScheme.outlineVariant,
                           ),
                         ),
                     ],
@@ -339,20 +337,18 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             Expanded(
                               child: Text(
                                 step.type.label,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
+                                style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: step.completed
                                           ? Colors.green.shade700
                                           : step.skipped
-                                              ? Colors.orange.shade700
-                                              : step.running
-                                                  ? colorScheme.primary
-                                                  : step.failed
-                                                      ? Colors.red.shade700
-                                                      : colorScheme.onSurface,
+                                          ? Colors.orange.shade700
+                                          : step.running
+                                          ? colorScheme.primary
+                                          : step.failed
+                                          ? Colors.red.shade700
+                                          : colorScheme.onSurface,
                                     ),
                               ),
                             ),
@@ -494,18 +490,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final splitUrls = splitGroups.values
         .expand((group) => group.map((media) => media.url))
         .toSet();
-    final selectableMedia =
-        mediaList.where((media) => !splitUrls.contains(media.url)).toList();
+    final selectableMedia = mediaList
+        .where((media) => !splitUrls.contains(media.url))
+        .toList();
     final segments = selectableMedia.where(isSegment).toList();
     final segmentsExpanded = _expandedSegments.contains(task.id);
     final visibleResources = segments.isEmpty || segmentsExpanded
         ? selectableMedia
         : selectableMedia.where((media) => !isSegment(media)).toList();
     // Keep a nested resource viewport so the task action remains reachable.
-    final viewportHeight = Scrollable.maybeOf(context)?.position.viewportDimension;
-    final resourceHeight = viewportHeight != null &&
-            viewportHeight.isFinite &&
-            viewportHeight > 0
+    final viewportHeight = Scrollable.maybeOf(context)
+        ?.position
+        .viewportDimension;
+    final resourceHeight =
+        viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
         ? viewportHeight * (2 / 3)
         : MediaQuery.sizeOf(context).height / 3;
 
@@ -518,10 +516,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             selectedUrls.isNotEmpty
                 ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
                 : '检测到 ${mediaList.length} 个媒体资源'
-                    '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                      '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           if (splitGroups.isNotEmpty) ...[
@@ -541,12 +538,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     _expandedSegments.add(task.id);
                   }
                 }),
-                icon: Icon(segmentsExpanded
-                    ? Icons.expand_less
-                    : Icons.expand_more),
-                label: Text(segmentsExpanded
-                    ? '收起 ${segments.length} 个分片'
-                    : '显示 ${segments.length} 个分片'),
+                icon: Icon(
+                  segmentsExpanded ? Icons.expand_less : Icons.expand_more,
+                ),
+                label: Text(
+                  segmentsExpanded
+                      ? '收起 ${segments.length} 个分片'
+                      : '显示 ${segments.length} 个分片',
+                ),
               ),
             ),
           if (visibleResources.isNotEmpty)
@@ -563,7 +562,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: selectedUrls.isNotEmpty &&
+              onPressed:
+                  selectedUrls.isNotEmpty &&
                       !_isFlowActionPending(task.id) &&
                       (!widget.isFlowManaged ||
                           task.status == catcatch.TaskStatus.running)
@@ -576,11 +576,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       final mergeAudio = _mergeAudioUrls[task.id];
                       if (widget.isFlowManaged) {
                         await _performFlowAction(
+                          task.id,
+                          true,
+                          (notifier) => notifier.selectMedia(
                             task.id,
-                            true,
-                            (notifier) => notifier.selectMedia(
-                                task.id, selectedMediaList.first,
-                                mergeAudioUrl: mergeAudio));
+                            selectedMediaList.first,
+                            mergeAudioUrl: mergeAudio,
+                          ),
+                        );
                       } else {
                         notifier.batchSelectMedia(
                           task.id,
@@ -590,15 +593,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       }
                     }
                   : null,
-              icon: Icon(_isFlowActionPending(task.id)
-                  ? Icons.hourglass_top
-                  : Icons.download),
+              icon: Icon(
+                _isFlowActionPending(task.id)
+                    ? Icons.hourglass_top
+                    : Icons.download,
+              ),
               label: Text(
                 _isFlowActionPending(task.id)
                     ? '正在等待任务流资源'
                     : selectedUrls.isNotEmpty
-                        ? '下载选中的 ${selectedUrls.length} 个资源'
-                        : '请选择要下载的资源',
+                    ? '下载选中的 ${selectedUrls.length} 个资源'
+                    : '请选择要下载的资源',
               ),
               style: FilledButton.styleFrom(
                 shape: RoundedRectangleBorder(
@@ -843,8 +848,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                 ),
               ),
@@ -867,16 +873,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 tooltip: media.isPlaylistSegment
                     ? '分片需通过播放列表预览'
                     : isAudio
-                        ? '预览音频'
-                        : '预览视频',
+                    ? '预览音频'
+                    : '预览视频',
                 onPressed: media.canPreview
                     ? () => showMediaPreview(
-                          context,
-                          media,
-                          task.title.isNotEmpty
-                              ? task.title
-                              : truncateUrl(task.url),
-                        )
+                        context,
+                        media,
+                        task.title.isNotEmpty
+                            ? task.title
+                            : truncateUrl(task.url),
+                      )
                     : null,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -901,8 +907,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         splitIds.add(m.url);
       }
     }
-    final remaining =
-        mediaList.where((m) => !splitIds.contains(m.url)).toList();
+    final remaining = mediaList
+        .where((m) => !splitIds.contains(m.url))
+        .toList();
     if (remaining.isEmpty) return [];
 
     final withDuration = <MediaResource>[];
@@ -931,7 +938,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       final currSec = media.duration != null
           ? parseDurationToSeconds(media.duration!)
           : null;
-      final showLabel = currSec != null &&
+      final showLabel =
+          currSec != null &&
           (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
       if (showLabel) {
         lastDurationSec = currSec;
@@ -1036,8 +1044,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           label: media.isPlaylistSegment
                               ? '分片'
                               : media.isPlaylist
-                                  ? '播放列表'
-                                  : '整片',
+                              ? '播放列表'
+                              : '整片',
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -1045,9 +1053,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             '${media.name}.${media.ext}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                         ),
@@ -1058,9 +1064,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       children: [
                         Text(
                           '${formatSize(media.size)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                         if (media.isLikelySplitTrack) ...[
@@ -1180,10 +1184,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ? () async {
                             if (widget.isFlowManaged) {
                               await _performFlowAction(
-                                  task.id,
-                                  false,
-                                  (notifier) =>
-                                      notifier.confirmAndContinue(task.id));
+                                task.id,
+                                false,
+                                (notifier) =>
+                                    notifier.confirmAndContinue(task.id),
+                              );
                             } else {
                               ref
                                   .read(catcatchTasksProvider.notifier)
@@ -1202,10 +1207,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ? () async {
                             if (widget.isFlowManaged) {
                               await _performFlowAction(
-                                  task.id,
-                                  false,
-                                  (notifier) =>
-                                      notifier.skipConversion(task.id));
+                                task.id,
+                                false,
+                                (notifier) => notifier.skipConversion(task.id),
+                              );
                             } else {
                               ref
                                   .read(catcatchTasksProvider.notifier)

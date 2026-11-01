@@ -13,8 +13,19 @@ import '../../catcatch/models/media_resource.dart';
 String previewExtensionForResource(MediaResource resource) {
   final ext = resource.ext.toLowerCase().replaceFirst(RegExp(r'^\.'), '');
   const supported = {
-    'mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv',
-    'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'weba',
+    'mp4',
+    'webm',
+    'ogg',
+    'mov',
+    'mkv',
+    'ogv',
+    'mp3',
+    'wav',
+    'm4a',
+    'aac',
+    'wma',
+    'opus',
+    'weba',
   };
   if (supported.contains(ext)) return ext;
   const mimeExtensions = {
@@ -50,10 +61,8 @@ Future<void> showMediaPreview(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => MediaPreviewSheet(
-      resource: resource,
-      taskTitle: taskTitle,
-    ),
+    builder: (ctx) =>
+        MediaPreviewSheet(resource: resource, taskTitle: taskTitle),
   );
 }
 
@@ -91,8 +100,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (resource.isPlaylist && resource.isM3U8) {
         final headers = <String, String>{
           'User-Agent': DefaultRules.defaultHeaders['User-Agent']!,
-          if (resource.initiator != null)
-            'Referer': resource.initiator!,
+          if (resource.initiator != null) 'Referer': resource.initiator!,
         };
         await _initializeVideoPreview(
           VideoPlayerController.networkUrl(
@@ -104,11 +112,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       }
 
       final ext = previewExtensionForResource(resource);
-      final isVideoFormat =
-          ['mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'].contains(ext);
-      final isAudioFormat =
-          ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'weba']
-              .contains(ext);
+      final isVideoFormat = [
+        'mp4',
+        'webm',
+        'ogg',
+        'mov',
+        'mkv',
+        'ogv',
+      ].contains(ext);
+      final isAudioFormat = [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'wma',
+        'opus',
+        'weba',
+      ].contains(ext);
 
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {
@@ -121,8 +141,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       _isAudioFormat = isAudioFormat;
 
       final tempDir = await getTemporaryDirectory();
-      final safeName =
-          widget.resource.name.replaceAll(RegExp(r'[^\w\-.]'), '_');
+      final safeName = widget.resource.name.replaceAll(
+        RegExp(r'[^\w\-.]'),
+        '_',
+      );
       _tempFile = File(p.join(tempDir.path, 'preview_$safeName.$ext'));
 
       await _downloadToFile(widget.resource.url, _tempFile!);
@@ -198,10 +220,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
       final response = await request.close();
       if (response.statusCode != 200) {
-        throw HttpException(
-          'HTTP ${response.statusCode}',
-          uri: uri,
-        );
+        throw HttpException('HTTP ${response.statusCode}', uri: uri);
       }
 
       await response.pipe(file.openWrite());
@@ -252,9 +271,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
             ),
           ),
           const Divider(height: 1),
-          Flexible(
-            child: _buildPreviewContent(context),
-          ),
+          Flexible(child: _buildPreviewContent(context)),
         ],
       ),
     );
@@ -300,10 +317,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
-            Text(
-              '音频文件',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('音频文件', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               '${widget.resource.name}.${widget.resource.ext}',
@@ -315,8 +329,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
