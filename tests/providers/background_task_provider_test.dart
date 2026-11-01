@@ -15026,7 +15026,11 @@ void main() {
           't r o u b l e s h o o t i n g c o n f i g u r a t i o n',
           'foo bar baz qux zot',
         ];
-        BackgroundTask taskFor(String id, String instruction) =>
+        BackgroundTask taskFor(
+          String id,
+          String instruction, {
+          String authorization = 'Bearer documentation…',
+        }) =>
             BackgroundTask.fromMap({
               'id': id,
               'type': 'ocr',
@@ -15035,7 +15039,7 @@ void main() {
               'createdAt': DateTime(2025, 1, 1).toIso8601String(),
               'rawRequest': {
                 'url': 'https://api.example.com/v1/chat/completions',
-                'headers': {'Authorization': 'Bearer documentation…'},
+                'headers': {'Authorization': authorization},
                 'body': {
                   'model': 'vision-model',
                   'messages': [
@@ -15062,6 +15066,30 @@ void main() {
         expect(persisted, contains('Please read the [redacted].'));
         expect(instructionContent, isNot(contains(echoedCredential)));
         expect(persisted, isNot(contains(echoedCredential)));
+
+        const exactCredential = 'documentationchapter123456';
+        final exactCredentialTask = taskFor(
+          'legacy-ocr-natural-reference-exact-credential-echo',
+          'Please read documentation chapter 123456 carefully.',
+          authorization: 'Bearer $exactCredential',
+        );
+        final exactCredentialInstruction = OcrRetrySnapshot.fromMap(
+          exactCredentialTask.retryData!,
+        ).instructionContent!;
+        final exactCredentialPersisted =
+            jsonEncode(exactCredentialTask.toMap());
+        expect(
+          exactCredentialInstruction,
+          'Please read [redacted] carefully.',
+        );
+        expect(
+          exactCredentialInstruction.replaceAll(RegExp(r'\s+'), ''),
+          isNot(contains(exactCredential)),
+        );
+        expect(
+          exactCredentialPersisted.replaceAll(RegExp(r'\s+'), ''),
+          isNot(contains(exactCredential)),
+        );
 
         final trailingCredentialTask = taskFor(
           'legacy-ocr-natural-adverb-then-spaced-credential',
@@ -15224,9 +15252,11 @@ void main() {
             'Please read the documentation on compliance carefully.\n'
             'Please read the documentation on security carefully.\n'
             'Please read the documentation for networking carefully.\n'
+            'Please read the documentation about encryption carefully.\n'
             'Please read the documentation v2 guide carefully.\n'
             'Please read documentation chapter12 carefully.\n'
             'Please read documentation section_2 carefully.\n'
+            'Please read documentation c h a p t e r 1 2 3 carefully.\n'
             'Please read documentation id123456 carefully.\n'
             'Please read documentation id123456789 carefully.\n'
             'Please read documentation ID 123456 carefully.\n'
