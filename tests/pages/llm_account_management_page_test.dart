@@ -39,15 +39,16 @@ void main() {
     final connectorDropdown =
         find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
-    final connectorField =
-        tester.widget<DropdownButtonFormField<String>>(connectorDropdown);
-    expect(
-      connectorField.items!.any((item) => item.value == claudeProvider.id),
-      isTrue,
-    );
     final connectorButton = find.descendant(
       of: connectorDropdown,
       matching: find.byType(DropdownButton<String>),
+    );
+    final connectorWidget = tester.widget<DropdownButton<String>>(
+      connectorButton,
+    );
+    expect(
+      connectorWidget.items!.any((item) => item.value == claudeProvider.id),
+      isTrue,
     );
     await tester.tap(connectorButton);
     await tester.pumpAndSettle();
