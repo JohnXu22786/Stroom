@@ -308,10 +308,15 @@ class OcrRetrySnapshot {
           continue;
         }
         try {
-          final imageMap = Map<String, dynamic>.from(rawImage);
-          hasUnknownFields |= imageMap.keys.any(
-            (key) => !_imageFields.contains(key),
-          );
+          final imageMap = <String, dynamic>{};
+          for (final entry in rawImage.entries) {
+            final key = entry.key;
+            if (key is! String || !_imageFields.contains(key)) {
+              hasUnknownFields = true;
+              continue;
+            }
+            imageMap[key] = entry.value;
+          }
           hasInlineImageData |= imageMap.containsKey('bytes');
           hasInvalidImageMetadata |= imageMap['format'] is! String ||
               (imageMap['name'] != null && imageMap['name'] is! String);
