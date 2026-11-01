@@ -3237,14 +3237,14 @@ class BackgroundTask {
     this.retryData,
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
-    Iterable<String> _ocrCredentialValuesForSanitization = const [],
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
                 error,
                 rawRequest,
                 additionalCredentialValues: _combinedOcrCredentialValues(
                   ocrDiagnosticCredentialValues,
-                  _ocrCredentialValuesForSanitization,
+                  ocrCredentialValuesForSanitization,
                 ),
               )
             : error,
@@ -3259,7 +3259,7 @@ class BackgroundTask {
                       rawRequest,
                       additionalCredentialValues: _combinedOcrCredentialValues(
                         ocrDiagnosticCredentialValues,
-                        _ocrCredentialValuesForSanitization,
+                        ocrCredentialValuesForSanitization,
                       ),
                     ),
                   ),
@@ -3277,7 +3277,7 @@ class BackgroundTask {
                 rawRequest,
                 additionalCredentialValues: _combinedOcrCredentialValues(
                   ocrDiagnosticCredentialValues,
-                  _ocrCredentialValuesForSanitization,
+                  ocrCredentialValuesForSanitization,
                 ),
               )
             : rawRequest,
@@ -3287,7 +3287,7 @@ class BackgroundTask {
                 rawRequest,
                 additionalCredentialValues: _combinedOcrCredentialValues(
                   ocrDiagnosticCredentialValues,
-                  _ocrCredentialValuesForSanitization,
+                  ocrCredentialValuesForSanitization,
                 ),
               )
             : rawResponse,
@@ -3303,7 +3303,7 @@ class BackgroundTask {
                       rawRequest,
                       additionalCredentialValues: _combinedOcrCredentialValues(
                         ocrDiagnosticCredentialValues,
-                        _ocrCredentialValuesForSanitization,
+                        ocrCredentialValuesForSanitization,
                       ),
                     ),
                   ),
@@ -3398,45 +3398,44 @@ class BackgroundTask {
   factory BackgroundTask.fromMap(Map<String, dynamic> map) {
     final type = BackgroundTaskType.values.byName(map['type'] as String);
     final rawRetryData = map['retryData'];
-    final retryCredentialValues = type == BackgroundTaskType.ocr &&
-            rawRetryData is Map
-        ? _credentialValuesFromOcrRetryData(
-            rawRetryData,
-          ).toList(growable: false)
-        : const <String>[];
+    final retryCredentialValues =
+        type == BackgroundTaskType.ocr && rawRetryData is Map
+            ? _credentialValuesFromOcrRetryData(
+                rawRetryData,
+              ).toList(growable: false)
+            : const <String>[];
     return BackgroundTask(
-        id: map['id'] as String,
-        type: type,
-        title: map['title'] as String,
-        status: TaskStatus.values.byName(map['status'] as String),
-        result: map['result'] as String?,
-        resultIsComplete: map['resultIsComplete'] as bool? ??
-            !((map['error'] as String? ?? '').contains('finish_reason=length')),
-        resultFolder: map['resultFolder'] as String? ?? '',
-        partialSaveRequested: map['partialSaveRequested'] as bool? ?? false,
-        resultSavedAsPartial: map['resultSavedAsPartial'] as bool? ?? false,
-        error: map['error'] as String?,
-        createdAt: DateTime.parse(map['createdAt'] as String),
-        completedAt: map['completedAt'] != null
-            ? DateTime.parse(map['completedAt'] as String)
-            : null,
-        statusChangedAt: map['statusChangedAt'] != null
-            ? DateTime.parse(map['statusChangedAt'] as String)
-            : null,
-        steps: (map['steps'] as List?)
-                ?.map(
-                  (s) =>
-                      BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
-                )
-                .toList() ??
-            [],
-        downloadedFilePath: map['downloadedFilePath'] as String?,
-        rawRequest: map['rawRequest'] as Map<String, dynamic>?,
-        rawResponse: map['rawResponse'] as Map<String, dynamic>?,
-        retryData: _retryDataFromTaskMap(map),
-        ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
-        _ocrCredentialValuesForSanitization: retryCredentialValues,
-      );
+      id: map['id'] as String,
+      type: type,
+      title: map['title'] as String,
+      status: TaskStatus.values.byName(map['status'] as String),
+      result: map['result'] as String?,
+      resultIsComplete: map['resultIsComplete'] as bool? ??
+          !((map['error'] as String? ?? '').contains('finish_reason=length')),
+      resultFolder: map['resultFolder'] as String? ?? '',
+      partialSaveRequested: map['partialSaveRequested'] as bool? ?? false,
+      resultSavedAsPartial: map['resultSavedAsPartial'] as bool? ?? false,
+      error: map['error'] as String?,
+      createdAt: DateTime.parse(map['createdAt'] as String),
+      completedAt: map['completedAt'] != null
+          ? DateTime.parse(map['completedAt'] as String)
+          : null,
+      statusChangedAt: map['statusChangedAt'] != null
+          ? DateTime.parse(map['statusChangedAt'] as String)
+          : null,
+      steps: (map['steps'] as List?)
+              ?.map(
+                (s) => BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
+              )
+              .toList() ??
+          [],
+      downloadedFilePath: map['downloadedFilePath'] as String?,
+      rawRequest: map['rawRequest'] as Map<String, dynamic>?,
+      rawResponse: map['rawResponse'] as Map<String, dynamic>?,
+      retryData: _retryDataFromTaskMap(map),
+      ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
+      ocrCredentialValuesForSanitization: retryCredentialValues,
+    );
   }
 }
 
