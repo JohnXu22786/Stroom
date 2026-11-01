@@ -42,8 +42,15 @@ class TaskExecutor {
     CancelToken? cancelToken,
   }) async {
     try {
-      final stepIndex = StepType.values.indexOf(fromStep);
+      var stepIndex = StepType.values.indexOf(fromStep);
       if (stepIndex < 0) throw ArgumentError('Unknown step type: $fromStep');
+      // Conversion retries can happen after a restart, when the download step
+      // is complete but its local path was not persisted. Re-run that step.
+      if (fromStep == StepType.converting &&
+          (task.downloadedFilePath == null ||
+              task.downloadedFilePath!.isEmpty)) {
+        stepIndex = StepType.values.indexOf(StepType.downloading);
+      }
       final newSteps = List<StepStatus>.from(task.steps);
       for (int i = stepIndex; i < newSteps.length; i++) {
         newSteps[i] = StepStatus.pending(newSteps[i].type);
@@ -218,10 +225,11 @@ class TaskExecutor {
             );
             break;
           case StepType.converting:
-            if (downloadedFilePath == null) throw Exception('下载文件路径为空，无法转换');
-
-            // 检查下载的文件是否仍然存在（防止重启后临时文件被清理）
-            if (!File(downloadedFilePath).existsSync()) {
+            // A restarted task may retain a completed download step without
+            // its path, or the temp file may have been cleaned up. Re-download.
+            if (downloadedFilePath == null ||
+                downloadedFilePath.isEmpty ||
+                !File(downloadedFilePath).existsSync()) {
               debugPrint('[TaskExecutor] 下载文件不存在，重新下载: $downloadedFilePath');
               downloadedFilePath = await _executeDownload(
                 task: task,
@@ -232,11 +240,16 @@ class TaskExecutor {
                 onUpdate: onUpdate,
                 cancelToken: cancelToken,
               );
-              if (downloadedFilePath == null) {
+              if (downloadedFilePath == null || downloadedFilePath.isEmpty) {
                 throw Exception('重新下载失败，下载文件不存在');
               }
               // 更新任务状态中的下载路径
               onUpdate(task.copyWith(downloadedFilePath: downloadedFilePath));
+            }
+
+            final localPath = downloadedFilePath;
+            if (localPath == null || localPath.isEmpty) {
+              throw Exception('重新下载失败，下载文件路径为空');
             }
 
             // Only formats that actually need MP4 conversion require
@@ -245,7 +258,7 @@ class TaskExecutor {
             final pendingConfirm = task.metadata['pendingConfirm'];
             if (pendingConfirm != 'done') {
               final ext = p
-                  .extension(downloadedFilePath)
+                  .extension(localPath)
                   .toLowerCase()
                   .replaceAll('.', '');
               if (isSpecialFormat(ext)) {
@@ -263,7 +276,7 @@ class TaskExecutor {
 
             // 普通格式文件不需要转码/合并，直接跳过
             final skipExt = p
-                .extension(downloadedFilePath)
+                .extension(localPath)
                 .toLowerCase()
                 .replaceAll('.', '');
             if (!isSpecialFormat(skipExt)) {
@@ -277,7 +290,7 @@ class TaskExecutor {
             downloadedFilePath = await _executeConvert(
                 task: task,
                 steps: steps,
-                inputPath: downloadedFilePath,
+                inputPath: localPath,
                 onUpdate: onUpdate,
                 cancelToken: cancelToken);
             break;
@@ -574,7 +587,16 @@ class TaskExecutor {
       } else {
         continue;
       }
-      final segmentMedia = segments.map((segUrl) {
+      final playlistSegmentUrls = segments.toSet();
+      final enrichedMedia = media.map((resource) {
+        return playlistSegmentUrls.contains(resource.url)
+            ? resource.copyWith(initiator: pl.url, isPlayable: false)
+            : resource;
+      }).toList();
+      final existingUrls = media.map((resource) => resource.url).toSet();
+      final uniqueSegments =
+          segments.where((segmentUrl) => existingUrls.add(segmentUrl)).toList();
+      final segmentMedia = uniqueSegments.map((segUrl) {
         final (name, ext) = SniffingEngine.parseFileName(segUrl);
         return MediaResource(
             url: segUrl,
@@ -587,7 +609,7 @@ class TaskExecutor {
       final totalCount = media.length + segmentMedia.length;
       markExecutorStep(steps, 2,
           done: true, detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）');
-      return [...media, ...segmentMedia];
+      return [...enrichedMedia, ...segmentMedia];
     }
     markExecutorStep(steps, 2, done: true);
     return null;
