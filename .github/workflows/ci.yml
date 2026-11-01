@@ -144,13 +144,21 @@ jobs:
           fi
           exit "$result"
       - uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 20
+        timeout-minutes: 30
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_2
-          script: >-
-            bash -c 'set +e; flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/android-message-smoke.log"; result=${PIPESTATUS[0]}; if [ "$result" -ne 0 ]; then adb -s emulator-5554 logcat -d -t 500 > "$RUNNER_TEMP/android-message-logcat.log"; fi; exit "$result"'
+          script: |
+            bash -c '
+            set +e
+            timeout --signal=TERM --kill-after=15s 8m flutter test -d emulator-5554 integration_test/message_view_smoke_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/android-message-smoke.log"
+            result=${PIPESTATUS[0]}
+            if [ "$result" -ne 0 ]; then
+              adb -s emulator-5554 logcat -d -t 500 > "$RUNNER_TEMP/android-message-logcat.log"
+            fi
+            exit "$result"
+            '
       - name: Summarize Android smoke failure
         if: failure()
         shell: bash
@@ -279,7 +287,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          # Flutter 3.44.9 can race its iOS simulator log reader and miss the
+          # VM service URI; verify with the upstream fix until it reaches stable.
+          channel: master
+          flutter-version: c3ed85ef987759ee54a6bce275490cde2a238dc1
           cache: true
           pub-cache: true
       - run: flutter pub get
