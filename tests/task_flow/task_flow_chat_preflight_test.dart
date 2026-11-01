@@ -199,7 +199,7 @@ void main() {
         defaultProviderName: config.providerName,
       );
 
-      expect(flowChatEndpointType(assistant, providers), 'anthropic');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
       await validateTaskFlow(
         chatFlow(IOType.text),
         [FlowRunInput(text: 'hello')],

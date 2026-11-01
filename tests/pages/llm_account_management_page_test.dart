@@ -33,12 +33,21 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
 
+    final claudeProvider =
+        _testGateway(service).providerCatalog.findProvider('claude')!;
+    expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
     final connectorDropdown =
         find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Anthropic Claude Code').last);
+    final claudeConnector = find.text(claudeProvider.displayName);
+    await tester.scrollUntilVisible(
+      claudeConnector,
+      80,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(claudeConnector.last);
     await tester.pumpAndSettle();
     final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
     await tester.ensureVisible(authDropdown);
