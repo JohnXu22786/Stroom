@@ -108,9 +108,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                           ? Icons.audiotrack
                                           : Icons.videocam,
                                       size: 18,
-                                      color: isAudio
-                                          ? Colors.purple
-                                          : Colors.blue,
+                                      color:
+                                          isAudio ? Colors.purple : Colors.blue,
                                     ),
                                     const SizedBox(width: 8),
                                     Icon(
@@ -136,22 +135,24 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 5,
-                                                      vertical: 2,
-                                                    ),
+                                                  horizontal: 5,
+                                                  vertical: 2,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: media.isPlaylistSegment
                                                       ? Colors.orange
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            )
-                                                      : media.isPlaylist
-                                                      ? Colors.blue.withValues(
+                                                          .withValues(
                                                           alpha: 0.12,
                                                         )
-                                                      : Colors.teal.withValues(
-                                                          alpha: 0.12,
-                                                        ),
+                                                      : media.isPlaylist
+                                                          ? Colors.blue
+                                                              .withValues(
+                                                              alpha: 0.12,
+                                                            )
+                                                          : Colors.teal
+                                                              .withValues(
+                                                              alpha: 0.12,
+                                                            ),
                                                   borderRadius:
                                                       BorderRadius.circular(4),
                                                 ),
@@ -159,16 +160,18 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                   media.isPlaylistSegment
                                                       ? '分片'
                                                       : media.isPlaylist
-                                                      ? '播放列表'
-                                                      : '整片',
+                                                          ? '播放列表'
+                                                          : '整片',
                                                   style: TextStyle(
                                                     fontSize: 10,
-                                                    color:
-                                                        media.isPlaylistSegment
+                                                    color: media
+                                                            .isPlaylistSegment
                                                         ? Colors.orange.shade800
                                                         : media.isPlaylist
-                                                        ? Colors.blue.shade800
-                                                        : Colors.teal.shade800,
+                                                            ? Colors
+                                                                .blue.shade800
+                                                            : Colors
+                                                                .teal.shade800,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -217,9 +220,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                       IconButton(
                                         icon: Icon(
                                           Icons.play_circle_filled,
-                                          color: Theme.of(ctx)
-                                              .colorScheme
-                                              .primary,
+                                          color:
+                                              Theme.of(ctx).colorScheme.primary,
                                           size: 22,
                                         ),
                                         tooltip: '预览',
@@ -268,15 +270,14 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 child: const Text('取消'),
               ),
               FilledButton(
-                onPressed:
-                    selectedUrls.isNotEmpty ||
+                onPressed: selectedUrls.isNotEmpty ||
                         (mediaList.length == 1 && visibleResources.length == 1)
                     ? () {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
                             : mediaList
-                                  .where((m) => selectedUrls.contains(m.url))
-                                  .toList();
+                                .where((m) => selectedUrls.contains(m.url))
+                                .toList();
                         Navigator.pop(ctx);
                         ref
                             .read(catcatchTasksProvider.notifier)

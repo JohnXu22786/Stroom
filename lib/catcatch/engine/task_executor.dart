@@ -199,15 +199,13 @@ class TaskExecutor {
               );
               return null;
             }
-            selectedMedia ??= detectedMedia.isNotEmpty
-                ? detectedMedia.first
-                : null;
+            selectedMedia ??=
+                detectedMedia.isNotEmpty ? detectedMedia.first : null;
             if (selectedMedia == null) {
               throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
             }
-            final autoDetail = detectedMedia.length == 1
-                ? '剩余1个结果，自动进入下载'
-                : '自动选择第1个结果，进入下载';
+            final autoDetail =
+                detectedMedia.length == 1 ? '剩余1个结果，自动进入下载' : '自动选择第1个结果，进入下载';
             markExecutorStep(steps, i, done: true, detail: autoDetail);
             onUpdate(
               task.copyWith(
@@ -223,11 +221,11 @@ class TaskExecutor {
                 selectedMedia != null) {
               final supportsResume =
                   await DownloadManager.checkServerResumeSupport(
-                    selectedMedia.url,
-                    headers: DefaultRules.buildBrowserHeaders(
-                      referer: selectedMedia.initiator,
-                    ),
-                  );
+                selectedMedia.url,
+                headers: DefaultRules.buildBrowserHeaders(
+                  referer: selectedMedia.initiator,
+                ),
+              );
               onUpdate(
                 task.copyWith(
                   metadata: {
@@ -240,8 +238,7 @@ class TaskExecutor {
             downloadedFilePath = await _executeDownload(
               task: task,
               steps: steps,
-              media:
-                  selectedMedia ??
+              media: selectedMedia ??
                   (detectedMedia.isNotEmpty ? detectedMedia.first : null),
               detectedMedia: detectedMedia,
               onUpdate: onUpdate,
@@ -258,8 +255,7 @@ class TaskExecutor {
               downloadedFilePath = await _executeDownload(
                 task: task,
                 steps: steps,
-                media:
-                    selectedMedia ??
+                media: selectedMedia ??
                     (detectedMedia.isNotEmpty ? detectedMedia.first : null),
                 detectedMedia: detectedMedia,
                 onUpdate: onUpdate,
@@ -282,10 +278,8 @@ class TaskExecutor {
             // file, in which case its container must be preserved.
             final pendingConfirm = task.metadata['pendingConfirm'];
             if (pendingConfirm != 'done') {
-              final ext = p
-                  .extension(localPath)
-                  .toLowerCase()
-                  .replaceAll('.', '');
+              final ext =
+                  p.extension(localPath).toLowerCase().replaceAll('.', '');
               if (isSpecialFormat(ext)) {
                 onUpdate(
                   task.copyWith(
@@ -302,10 +296,8 @@ class TaskExecutor {
             }
 
             // 普通格式文件不需要转码/合并，直接跳过
-            final skipExt = p
-                .extension(localPath)
-                .toLowerCase()
-                .replaceAll('.', '');
+            final skipExt =
+                p.extension(localPath).toLowerCase().replaceAll('.', '');
             if (!isSpecialFormat(skipExt)) {
               markExecutorStep(
                 steps,
@@ -504,8 +496,7 @@ class TaskExecutor {
       // -------------------------------------------------------------------
       // Tier 3: WebView sniffing if direct sniffing found nothing useful
       // -------------------------------------------------------------------
-      final needsWebView =
-          resources.isEmpty ||
+      final needsWebView = resources.isEmpty ||
           (resources.length == 1 &&
               !SniffingEngine.isMediaExtension(resources.first.ext));
       if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
@@ -675,9 +666,8 @@ class TaskExecutor {
               : resource,
         );
       }
-      final uniqueSegments = segments
-          .where((segmentUrl) => existingUrls.add(segmentUrl))
-          .toList();
+      final uniqueSegments =
+          segments.where((segmentUrl) => existingUrls.add(segmentUrl)).toList();
       final segmentMedia = uniqueSegments.map((segUrl) {
         final (name, ext) = SniffingEngine.parseFileName(segUrl);
         return MediaResource(

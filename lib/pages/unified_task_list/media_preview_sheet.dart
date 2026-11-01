@@ -329,8 +329,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ],
