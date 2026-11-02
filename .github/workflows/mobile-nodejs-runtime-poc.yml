@@ -66,7 +66,9 @@ jobs:
               > "nodejs-mobile/out_android/$abi/libnode.so"
           done
           cp tools/mobile-runtime-poc/runtime-check.cjs nodejs-mobile/test/runtime-check.cjs
-          cp tools/mobile-runtime-poc/mcp-stdio-roundtrip.cjs nodejs-mobile/test/mcp-stdio-roundtrip.cjs
+          mkdir -p nodejs-mobile/test/mobile-runtime-poc
+          cp tools/mobile-runtime-poc/compatibility-shim.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp -R tools/mobile-runtime-poc/npm-fixture nodejs-mobile/test/mobile-runtime-poc/
 
       - name: Build upstream Android sample app
         working-directory: nodejs-mobile/tools/mobile-test/android/testnode
@@ -78,7 +80,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Run npm and MCP runtime checks on Android
+      - name: Run npm, TypeScript, and MCP runtime checks on Android
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 29
@@ -90,5 +92,6 @@ jobs:
           script: |
             adb install nodejs-mobile/tools/mobile-test/android/testnode/app/build/outputs/apk/debug/app-debug.apk
             cp tools/mobile-runtime-poc/run-nodejs-mobile.sh "$RUNNER_TEMP/run-nodejs-mobile.sh"
+            cp tools/mobile-runtime-poc/compatibility-shim.cjs "$RUNNER_TEMP/compatibility-shim.cjs"
             chmod +x "$RUNNER_TEMP/run-nodejs-mobile.sh"
             "$RUNNER_TEMP/run-nodejs-mobile.sh"

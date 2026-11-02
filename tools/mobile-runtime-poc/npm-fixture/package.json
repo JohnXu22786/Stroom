@@ -1,0 +1,14 @@
+{
+  "name": "stroom-nodejs-mobile-runtime-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Locked pure-JS npm fixtures for the isolated Android Node Mobile feasibility test",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "sucrase": "3.35.0",
+    "zod": "3.25.76"
+  },
+  "overrides": {
+    "fast-uri": "3.1.0"
+  }
+}
