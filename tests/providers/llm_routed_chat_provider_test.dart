@@ -215,6 +215,7 @@ void main() {
     expect(connector.requestedAccountIds, ['devin-chat-account']);
     expect(connector.requestedModelIds, ['devin/swe-2']);
     expect(connector.requestBody?['conversation_id'], 'chat-conversation-1');
+    expect(connector.lastConversationId, 'chat-conversation-1');
     expect(connector.requestBody?['messages'], isNotEmpty);
   });
 
@@ -5070,12 +5071,14 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   final requestStarted = Completer<void>();
   CancelToken? lastCancelToken;
   String? lastNativeFormat;
+  String? lastConversationId;
 
   @override
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,
@@ -5088,6 +5091,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     requestedAccountIds.add(account.id);
     requestedModelIds.add(modelId);
     lastNativeFormat = nativeFormat;
+    lastConversationId = conversationId;
     lastCancelToken = cancelToken;
     if (!requestStarted.isCompleted) requestStarted.complete();
     requestBody = Map<String, dynamic>.from(body! as Map);

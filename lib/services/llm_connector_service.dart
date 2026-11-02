@@ -43,6 +43,137 @@ const _qwenCloudRegions = {
   'us-east-1',
 };
 
+void _addTencentClientHeaders(
+  String connectorType,
+  Map<String, String> headers, {
+  bool discovery = false,
+  Object? body,
+  String? conversationId,
+}) {
+  switch (connectorType) {
+    case 'codebuddy-cn':
+      headers.addAll({
+        'User-Agent': 'CLI/2.108.1 CodeBuddy/2.108.1',
+        'X-Product': 'SaaS',
+        'X-IDE-Type': 'CLI',
+        'X-IDE-Name': 'CLI',
+        'X-Requested-With': 'XMLHttpRequest',
+        'x-codebuddy-request': '1',
+        'Accept': 'text/event-stream',
+      });
+    case 'codebuddy-intl':
+      headers.addAll({
+        'User-Agent': 'IDE/2.108.1 CodeBuddy/2.108.1',
+        'X-Product': 'SaaS',
+        'X-IDE-Type': 'IDE',
+        'X-IDE-Name': 'IDE',
+        'X-Requested-With': 'XMLHttpRequest',
+        'x-codebuddy-request': '1',
+        'Accept': 'text/event-stream',
+      });
+      if (!discovery) _addConversationHeaders(headers, body);
+    case 'workbuddy':
+      headers.addAll({
+        'User-Agent': 'WorkBuddy/5.5.6',
+        'X-Product': 'SaaS',
+        'X-IDE-Type': 'WorkBuddy',
+        'X-IDE-Name': 'WorkBuddy',
+        'X-IDE-Version': '5.5.6',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Domain': 'www.workbuddy.ai',
+        'Accept': discovery ? 'application/json' : 'text/event-stream',
+      });
+      if (!discovery) {
+        headers.addAll({
+          'X-Agent-Intent': 'craft',
+          'X-Agent-Purpose': 'conversation',
+          'X-Agent-Type': 'main',
+        });
+        _addConversationHeaders(
+          headers,
+          body,
+          workbuddy: true,
+          conversationId: conversationId,
+        );
+      }
+  }
+}
+
+void _addConversationHeaders(
+  Map<String, String> headers,
+  Object? body, {
+  bool workbuddy = false,
+  String? conversationId,
+}) {
+  final map = body is Map ? body : const <Object?, Object?>{};
+  String key = conversationId?.trim().isNotEmpty == true
+      ? conversationId!.trim()
+      : [
+          map['session_id'],
+          map['prompt_cache_key'],
+          map['conversation_id'],
+        ]
+          .whereType<String>()
+          .map((value) => value.trim())
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+  if (key.isEmpty && !workbuddy) {
+    final messages = map['messages'];
+    if (messages is Iterable) {
+      final firstUser = messages.whereType<Map>().firstWhere(
+            (message) => message['role'] == 'user',
+            orElse: () => const {},
+          );
+      if (firstUser.isNotEmpty) key = jsonEncode(firstUser);
+    }
+  }
+  final resolvedConversationId = key.isEmpty
+      ? const Uuid().v4()
+      : crypto.sha256.convert(utf8.encode(key)).toString().substring(0, 32);
+  headers['X-Conversation-ID'] = resolvedConversationId;
+  headers['X-Conversation-Request-ID'] = const Uuid().v4();
+  final messageId = const Uuid().v4();
+  headers['X-Conversation-Message-ID'] = messageId;
+  if (workbuddy || headers.containsKey('X-Conversation-ID')) {
+    headers['X-Request-ID'] = messageId;
+  }
+}
+
+Map<String, Object?> _staticTencentModelCapabilities(
+  String connectorType,
+  String modelId,
+) {
+  final visualModels = connectorType == 'codebuddy-cn'
+      ? const {
+          'glm-5v-turbo',
+          'minimax-m3',
+          'minimax-m2.7',
+          'kimi-k2.7',
+          'kimi-k2.6',
+          'kimi-k2.5',
+          'hy3-preview',
+          'hy3',
+          'deepseek-v4-pro',
+          'deepseek-v4-flash',
+        }
+      : const {
+          'hy4-preview',
+          'hy3',
+          'gemini-3.5-flash',
+          'glm-5v-turbo',
+          'minimax-m3',
+          'kimi-k3',
+          'kimi-k2.7',
+          'kimi-k2.6',
+          'deepseek-v4.1-flash',
+        };
+  return {
+    'chat': true,
+    'streaming': true,
+    'reasoning': true,
+    if (visualModels.contains(modelId)) 'vision': true,
+  };
+}
+
 String _qwenCloudBaseUrl(Map<String, dynamic> config) {
   final configured = config['baseUrl'];
   if (configured is String && configured.trim().isNotEmpty) {
@@ -268,6 +399,29 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'codebuddy-cn',
+      displayName: 'CodeBuddy（中国）',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth', 'api_key'},
+      modelCatalog: kPinnedCodeBuddyCnModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'codebuddy-intl',
+      displayName: 'CodeBuddy International',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth', 'api_key'},
+      modelCatalog: kPinnedCodeBuddyIntlModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'workbuddy',
+      displayName: 'WorkBuddy',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth'},
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
       id: 'gemini',
       displayName: 'Google Gemini API',
       protocol: LlmNativeProtocol.geminiGenerateContent,
@@ -418,7 +572,15 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
-        'xai' || 'grok-cli' || 'xai-oauth' || 'meta' || 'muse-code' => 'openai',
+        'xai' ||
+        'grok-cli' ||
+        'xai-oauth' ||
+        'meta' ||
+        'muse-code' ||
+        'codebuddy-cn' ||
+        'codebuddy-intl' ||
+        'workbuddy' =>
+          'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
         'aistudio' => 'google.gemini.generate_content',
@@ -1183,6 +1345,7 @@ class LlmAccountConnectorService {
       'grok-cli',
       'xai-oauth',
       'muse-code',
+      'workbuddy',
       'bedrock',
       'vertex',
       'ollama',
@@ -1245,6 +1408,12 @@ class LlmAccountConnectorService {
           displayName: connector.modelCatalog[index],
           capabilities: switch (connector.id) {
             'devin-cli-agentic' => const {'chat': true, 'streaming': true},
+            'codebuddy-cn' ||
+            'codebuddy-intl' =>
+              _staticTencentModelCapabilities(
+                connector.id,
+                connector.modelCatalog[index],
+              ),
             'devin' => {
                 // Stroom emits a completed SSE event for Devin's unary RPC so
                 // Chat and Task Flow share the standard stream lifecycle.
@@ -1341,7 +1510,11 @@ class LlmAccountConnectorService {
         cancelToken: cancelToken,
       );
       if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
-      final tokenResponse = _asJsonMap(response.data);
+      final outerTokenResponse = _asJsonMap(response.data);
+      final nestedTokenData = outerTokenResponse?['data'];
+      final tokenResponse = nestedTokenData is Map
+          ? Map<String, dynamic>.from(nestedTokenData)
+          : outerTokenResponse;
       final accessToken = _firstString(tokenResponse, const [
         'access_token',
         'accessToken',
@@ -1355,6 +1528,13 @@ class LlmAccountConnectorService {
       final updated = Map<String, dynamic>.from(bundle)
         ..addAll(freshFields)
         ..['access_token'] = accessToken;
+      final rotatedRefreshToken = _firstString(tokenResponse, const [
+        'refresh_token',
+        'refreshToken',
+      ]);
+      if (rotatedRefreshToken != null) {
+        updated['refresh_token'] = rotatedRefreshToken;
+      }
       if (xaiRefreshScope != null) updated['scope'] = xaiRefreshScope;
       final claudeAccount = tokenResponse?['account'];
       if (account.connectorType == 'claude' && claudeAccount is Map) {
@@ -1380,7 +1560,10 @@ class LlmAccountConnectorService {
           null) {
         updated['refresh_token'] = refreshToken;
       }
-      final expiresIn = updated['expires_in'];
+      final expiresIn = tokenResponse?['expires_in'] ??
+          tokenResponse?['expiresIn'] ??
+          bundle['expires_in'] ??
+          bundle['expiresIn'];
       final seconds = expiresIn is num
           ? expiresIn.toInt()
           : expiresIn is String
@@ -1388,6 +1571,8 @@ class LlmAccountConnectorService {
               : null;
       if (seconds != null && seconds > 0) {
         final expiry = DateTime.now().toUtc().add(Duration(seconds: seconds));
+        updated['expires_in'] = seconds;
+        updated.remove('expiresIn');
         updated['expires_at'] = expiry.toIso8601String();
         updated['expired'] = expiry.toIso8601String();
       }
@@ -1817,6 +2002,34 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
+      case 'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy':
+        final host = account.connectorType == 'codebuddy-cn'
+            ? 'copilot.tencent.com'
+            : account.connectorType == 'codebuddy-intl'
+                ? 'www.codebuddy.ai'
+                : 'www.workbuddy.ai';
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Refresh-Token': refreshToken,
+          'X-Product': 'SaaS',
+          'X-Domain': host,
+          'User-Agent': account.connectorType == 'workbuddy'
+              ? 'WorkBuddy/5.5.6'
+              : account.connectorType == 'codebuddy-cn'
+                  ? 'CLI/2.108.1 CodeBuddy/2.108.1'
+                  : 'IDE/2.108.1 CodeBuddy/2.108.1',
+          if (account.connectorType != 'workbuddy') ...{
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-Auth-Refresh-Source': 'plugin',
+          },
+        };
+        return _LlmTokenRefreshRequest(
+          uri: Uri.https(host, '/v2/plugin/auth/token/refresh'),
+          body: const <String, dynamic>{},
+          contentType: Headers.jsonContentType,
+          headers: headers,
+        );
       default:
         return null;
     }
@@ -1882,6 +2095,9 @@ class LlmAccountConnectorService {
       'grok-cli' => 'https://cli-chat-proxy.grok.com/v1',
       'xai-oauth' => 'https://api.x.ai/v1',
       'muse-code' => 'https://api.meta.ai/v1',
+      'codebuddy-cn' => 'https://copilot.tencent.com/v2',
+      'codebuddy-intl' => 'https://www.codebuddy.ai/v2',
+      'workbuddy' => 'https://www.workbuddy.ai/v2',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       _ => null,
@@ -1897,11 +2113,13 @@ class LlmAccountConnectorService {
     final secret = account.credentialRef == null
         ? null
         : await _readSecureValue(account.credentialRef!);
-    final uri = account.connectorType == 'ollama'
-        ? _ollamaModelListUri(base)
-        : account.connectorType == 'vertex'
-            ? _vertexModelListUri(account.endpointConfig, base, secret)
-            : _modelListUri(base, isGemini: isGemini);
+    final uri = account.connectorType == 'workbuddy'
+        ? Uri.https('www.workbuddy.ai', '/v3/config')
+        : account.connectorType == 'ollama'
+            ? _ollamaModelListUri(base)
+            : account.connectorType == 'vertex'
+                ? _vertexModelListUri(account.endpointConfig, base, secret)
+                : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
     final usesGeminiOAuth = account.authType == 'oauth' &&
@@ -1912,7 +2130,14 @@ class LlmAccountConnectorService {
             account.connectorType == 'xai-oauth');
     final usesMuseOAuth =
         account.authType == 'oauth' && account.connectorType == 'muse-code';
-    final usesRefreshableOAuth = usesGeminiOAuth || usesXaiOAuth;
+    final usesTencentOAuth = account.authType == 'oauth' &&
+        {
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
+        }.contains(account.connectorType);
+    final usesRefreshableOAuth =
+        usesGeminiOAuth || usesXaiOAuth || usesTencentOAuth;
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
     final configuredHeaders = account.endpointConfig['headers'];
@@ -1964,6 +2189,13 @@ class LlmAccountConnectorService {
       }
       headers['Authorization'] =
           'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
+      if (usesTencentOAuth) {
+        _addTencentClientHeaders(
+          account.connectorType,
+          headers,
+          discovery: true,
+        );
+      }
       if (usesGeminiOAuth) {
         headers['x-goog-user-project'] =
             LlmNativeRequestBuilder._requiredGoogleCloudProjectId(
@@ -2065,10 +2297,27 @@ class LlmAccountConnectorService {
           );
         }
         final data = _asJsonMap(response.data);
-        final rawModels =
-            data?['data'] ?? data?['models'] ?? data?['publisherModels'];
-        if (rawModels is! List) break;
-        for (final raw in rawModels) {
+        final innerWorkbuddy =
+            account.connectorType == 'workbuddy' && data?['data'] is Map
+                ? Map<String, dynamic>.from(data!['data'] as Map)
+                : null;
+        final rawModels = innerWorkbuddy?['models'] ??
+            data?['data'] ??
+            data?['models'] ??
+            data?['publisherModels'];
+        final normalizedWorkbuddyModels = rawModels is Map
+            ? rawModels.entries
+                .map(
+                  (entry) => <String, dynamic>{
+                    'id': entry.key,
+                    if (entry.value is Map)
+                      ...Map<String, dynamic>.from(entry.value as Map),
+                  },
+                )
+                .toList()
+            : rawModels;
+        if (normalizedWorkbuddyModels is! List) break;
+        for (final raw in normalizedWorkbuddyModels) {
           if (raw is! Map) continue;
           final map = Map<String, dynamic>.from(raw);
           final rawId = map['id'] ?? map['name'];
@@ -2077,6 +2326,22 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          if (account.connectorType == 'workbuddy') {
+            final tags = map['tags'];
+            const mediaOnlyTags = {
+              'text-to-image',
+              'image-to-image',
+              'text-to-video',
+              'image-to-video',
+            };
+            if (tags is List &&
+                tags.isNotEmpty &&
+                tags.every(
+                  (tag) => tag is String && mediaOnlyTags.contains(tag),
+                )) {
+              continue;
+            }
+          }
           if (account.connectorType == 'muse-code' &&
               !kPinnedMuseCodeModels.contains(modelId)) {
             continue;
@@ -2150,6 +2415,22 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if (account.connectorType == 'workbuddy') ...{
+                  'chat': true,
+                  'streaming': true,
+                  if (providerCapabilities is List &&
+                      providerCapabilities.contains('tools'))
+                    'tools': true,
+                  if (providerCapabilities is List &&
+                      providerCapabilities.contains('vision'))
+                    'vision': true,
+                },
+                if (account.connectorType == 'codebuddy-cn' ||
+                    account.connectorType == 'codebuddy-intl')
+                  ..._staticTencentModelCapabilities(
+                    account.connectorType,
+                    modelId,
+                  ),
                 if (const {
                   'glm-cn',
                   'minimax-cn',
@@ -3370,6 +3651,7 @@ class LlmNativeRequestBuilder {
     required String? credential,
     required String modelId,
     required Object? body,
+    String? conversationId,
     AwsSigV4Credentials? awsCredentials,
     bool stream = false,
     String? nativeFormat,
@@ -3521,6 +3803,15 @@ class LlmNativeRequestBuilder {
       case 'xai-oauth':
         headers['Authorization'] = 'Bearer $secret';
         break;
+      case 'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy':
+        headers['Authorization'] = 'Bearer $secret';
+        _addTencentClientHeaders(
+          account.connectorType,
+          headers,
+          body: body,
+          conversationId: conversationId,
+        );
+        break;
       case 'antigravity':
         headers['Authorization'] = 'Bearer $secret';
         headers['User-Agent'] = kLlmAntigravityRequestUserAgent;
@@ -3614,6 +3905,45 @@ class LlmNativeRequestBuilder {
     required bool stream,
     required String? nativeFormat,
   }) {
+    if ({
+      'codebuddy-cn',
+      'codebuddy-intl',
+      'workbuddy',
+    }.contains(account.connectorType)) {
+      if (body is! Map) throw const LlmAccountConnectorException();
+      final payload = Map<String, dynamic>.from(body)..['stream'] = true;
+      if (account.connectorType != 'workbuddy') {
+        final effort = payload['reasoning_effort'];
+        if (effort == 'none' || effort == 'off') {
+          payload.remove('reasoning_effort');
+        } else if (effort is String && effort.isNotEmpty) {
+          payload['reasoning_summary'] = 'auto';
+        }
+        if (payload['max_completion_tokens'] != null) {
+          payload.putIfAbsent(
+            'max_tokens',
+            () => payload['max_completion_tokens'],
+          );
+          payload.remove('max_completion_tokens');
+        }
+        if (payload['tools'] is List && (payload['tools'] as List).isEmpty) {
+          payload.remove('tools');
+        }
+        if (account.connectorType == 'codebuddy-intl') {
+          final messages = payload['messages'];
+          if (messages is List &&
+              (messages.isEmpty ||
+                  messages.first is! Map ||
+                  (messages.first as Map)['role'] != 'system')) {
+            payload['messages'] = [
+              {'role': 'system', 'content': 'You are a helpful assistant.'},
+              ...messages,
+            ];
+          }
+        }
+      }
+      return payload;
+    }
     if (!_usesBodyStreamOption(account, config, nativeFormat)) return body;
     if (body is! Map) {
       if (stream) throw const LlmAccountConnectorException();
@@ -3653,6 +3983,9 @@ class LlmNativeRequestBuilder {
         'xai-oauth' ||
         'meta' ||
         'muse-code' ||
+        'codebuddy-cn' ||
+        'codebuddy-intl' ||
+        'workbuddy' ||
         'gemini-interactions' ||
         'openai-compatibility' ||
         'openai-api' ||
@@ -3924,6 +4257,17 @@ class LlmNativeRequestBuilder {
       case 'xai-oauth':
         baseUrl = _baseUrl(config, 'https://api.x.ai/v1');
         path = '/responses';
+      case 'codebuddy-cn' || 'codebuddy-intl':
+        baseUrl = _baseUrl(
+          config,
+          account.connectorType == 'codebuddy-cn'
+              ? 'https://copilot.tencent.com/v2'
+              : 'https://www.codebuddy.ai/v2',
+        );
+        path = '/chat/completions';
+      case 'workbuddy':
+        baseUrl = _baseUrl(config, 'https://www.workbuddy.ai/v2');
+        path = '/chat/completions';
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
         path = '/exa.api_server_pb.ApiServerService/GetChatMessage';
@@ -4234,6 +4578,9 @@ class LlmNativeRequestBuilder {
       'kimi' || 'kimi-coding' => host == 'api.kimi.com',
       'kimi-ai' || 'kimi.ai' => host == 'api.kimi.ai',
       'xai' || 'xai-oauth' => host == 'api.x.ai',
+      'codebuddy-cn' => host == 'copilot.tencent.com',
+      'codebuddy-intl' => host == 'www.codebuddy.ai',
+      'workbuddy' => host == 'www.workbuddy.ai',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
       'meta' || 'muse-code' => host == 'api.meta.ai',

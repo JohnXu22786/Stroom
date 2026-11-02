@@ -36,6 +36,9 @@ void main() {
           'devin-cli-agentic',
           'meta',
           'muse-code',
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
           'gemini',
           'gemini-interactions',
           'aistudio',
@@ -111,6 +114,23 @@ void main() {
         'muse-spark-1.1',
       });
       expect(LlmOAuthProviderPolicy.forProvider('muse-code').supported, isTrue);
+      for (final connector in ['codebuddy-cn', 'codebuddy-intl']) {
+        expect(LlmConnectorRegistry.find(connector)!.authTypes, {
+          'oauth',
+          'api_key',
+        });
+        expect(LlmOAuthProviderPolicy.forProvider(connector).supported, isTrue);
+        expect(
+          LlmConnectorRegistry.chatAdapterEndpointType(connector),
+          'openai',
+        );
+      }
+      expect(LlmConnectorRegistry.find('workbuddy')!.authTypes, {'oauth'});
+      expect(LlmOAuthProviderPolicy.forProvider('workbuddy').supported, isTrue);
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('workbuddy'),
+        'openai',
+      );
       expect(LlmOAuthProviderPolicy.forProvider('devin').supported, isTrue);
       expect(LlmOAuthProviderPolicy.forProvider('meta').supported, isFalse);
       expect(
@@ -1962,6 +1982,79 @@ void main() {
       },
     );
 
+    test(
+      'discovers WorkBuddy chat models from its authenticated config',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': {
+                  'models': [
+                    {
+                      'id': 'deepseek-v4.1-flash',
+                      'name': 'DeepSeek V4.1 Flash',
+                      'tags': ['craft'],
+                      'capabilities': ['completion', 'tools'],
+                    },
+                    {
+                      'id': 'hunyuan-video-art',
+                      'tags': ['text-to-video'],
+                    },
+                  ],
+                },
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          _account('workbuddy-discovery', 'workbuddy', authType: 'oauth'),
+          secret: jsonEncode({'access_token': 'workbuddy-private-token'}),
+        );
+
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(captured?.uri.toString(), 'https://www.workbuddy.ai/v3/config');
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer workbuddy-private-token',
+        );
+        expect(captured?.headers['Accept'], 'application/json');
+        expect(
+          captured?.headers.entries
+              .where((entry) => entry.key.toLowerCase() == 'x-product')
+              .single
+              .value,
+          'SaaS',
+        );
+        expect(
+          captured?.headers.keys.any(
+            (key) => key.toLowerCase() == 'x-agent-intent',
+          ),
+          isFalse,
+        );
+        expect(models.map((model) => model.upstreamModelId), [
+          'deepseek-v4.1-flash',
+        ]);
+        expect(models.single.capabilities['chat'], isTrue);
+        expect(models.single.capabilities['streaming'], isTrue);
+        expect(models.single.capabilities['tools'], isTrue);
+      },
+    );
+
     test('discovers regional Qwen Cloud and Token Plan chat models', () async {
       final requestedUris = <Uri>[];
       final dio = Dio()
@@ -2136,10 +2229,14 @@ void main() {
       );
 
       expect(account.connectorType, 'glm');
-      expect(request.uri.toString(),
-          'https://open.bigmodel.cn/api/paas/v4/chat/completions');
       expect(
-          request.headers['Authorization'], 'Bearer glm-thinking-private-key');
+        request.uri.toString(),
+        'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      );
+      expect(
+        request.headers['Authorization'],
+        'Bearer glm-thinking-private-key',
+      );
       expect((request.body as Map)['model'], 'glm-5');
     });
 
@@ -3538,6 +3635,73 @@ void main() {
       );
     });
 
+    test('routes CodeBuddy and WorkBuddy to their distinct chat gateways', () {
+      final body = {
+        'model': 'model-one',
+        'messages': [
+          {'role': 'user', 'content': 'hello'},
+        ],
+        'stream': false,
+      };
+      for (final (connector, host) in [
+        ('codebuddy-cn', 'copilot.tencent.com'),
+        ('codebuddy-intl', 'www.codebuddy.ai'),
+      ]) {
+        final request = builder.build(
+          account: _account('tencent-key-$connector', connector),
+          credential: 'plain-api-key',
+          modelId: 'model-one',
+          body: body,
+        );
+        expect(request.uri.toString(), 'https://$host/v2/chat/completions');
+        expect(request.headers['Authorization'], 'Bearer plain-api-key');
+        expect(request.headers['X-Product'], 'SaaS');
+        expect((request.body as Map)['stream'], isTrue);
+      }
+      final workbuddy = builder.build(
+        account: _account('workbuddy-oauth', 'workbuddy', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'workbuddy-access'}),
+        modelId: 'model-one',
+        body: body,
+        conversationId: 'stroom-conversation-one',
+      );
+      expect(
+        workbuddy.uri.toString(),
+        'https://www.workbuddy.ai/v2/chat/completions',
+      );
+      expect(workbuddy.headers['Authorization'], 'Bearer workbuddy-access');
+      expect(workbuddy.headers['X-Agent-Purpose'], 'conversation');
+      expect(workbuddy.headers['X-Conversation-ID'], isNotEmpty);
+      expect((workbuddy.body as Map)['stream'], isTrue);
+      final sameConversation = builder.build(
+        account: _account('workbuddy-oauth', 'workbuddy', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'workbuddy-access'}),
+        modelId: 'model-one',
+        body: const {
+          'model': 'model-one',
+          'messages': [
+            {'role': 'user', 'content': 'a different turn'},
+          ],
+        },
+        conversationId: 'stroom-conversation-one',
+      );
+      final otherConversation = builder.build(
+        account: _account('workbuddy-oauth', 'workbuddy', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'workbuddy-access'}),
+        modelId: 'model-one',
+        body: body,
+        conversationId: 'stroom-conversation-two',
+      );
+      expect(
+        sameConversation.headers['X-Conversation-ID'],
+        workbuddy.headers['X-Conversation-ID'],
+      );
+      expect(
+        otherConversation.headers['X-Conversation-ID'],
+        isNot(workbuddy.headers['X-Conversation-ID']),
+      );
+    });
+
     test(
       'routes regional GLM and MiniMax API-key accounts to service hosts',
       () {
@@ -4858,6 +5022,209 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test(
+      'buffers CodeBuddy SSE when the caller requests a completed response',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              'data: {"id":"completion-1","model":"glm-5.2","choices":[{"index":0,"delta":{"content":"answer"},"finish_reason":null}]}\n\n'
+              'data: {"id":"completion-1","model":"glm-5.2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+              'data: {"id":"completion-1","model":"glm-5.2","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":5,"total_tokens":12}}\n\n'
+              'data: [DONE]\n\n',
+              200,
+              headers: const {
+                'content-type': ['text/event-stream'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          _account('codebuddy-buffer', 'codebuddy-cn'),
+          secret: 'codebuddy-api-key',
+        );
+
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'glm-5.2',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+            'stream': false,
+          },
+        );
+
+        expect(captured?.data['stream'], isTrue);
+        expect(response.body, isA<Map>());
+        expect(
+          (response.body as Map)['choices'].first['message']['content'],
+          'answer',
+        );
+        expect(response.observation.requestUsage.value, 12);
+      },
+    );
+
+    test(
+      'does not turn a CodeBuddy SSE error frame into an empty success',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString(
+              'data: {"error":{"message":"account is unavailable"}}\n\n',
+              200,
+              headers: const {
+                'content-type': ['text/event-stream'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          _account('codebuddy-error-buffer', 'codebuddy-cn'),
+          secret: 'codebuddy-api-key',
+        );
+
+        await expectLater(
+          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+            account: account,
+            modelId: 'glm-5.2',
+            body: const {
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+              'stream': false,
+            },
+          ),
+          throwsA(isA<LlmConnectorHttpException>()),
+        );
+      },
+    );
+
+    test(
+      'refreshes expired Tencent OAuth tokens before chat dispatch',
+      () async {
+        for (final (connector, host) in [
+          ('codebuddy-cn', 'copilot.tencent.com'),
+          ('codebuddy-intl', 'www.codebuddy.ai'),
+          ('workbuddy', 'www.workbuddy.ai'),
+        ]) {
+          RequestOptions? refreshRequest;
+          RequestOptions? chatRequest;
+          var refreshCount = 0;
+          final refreshDio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              refreshCount++;
+              refreshRequest = options;
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'code': 0,
+                  'data': {
+                    'accessToken': 'fresh-$connector-token',
+                    'refreshToken': 'rotated-$connector-token',
+                    'expiresIn': 1800,
+                  },
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final credentials = _MemoryCredentials();
+          final accounts = LlmAccountConnectorService(
+            preferences: _MemoryPreferences(),
+            credentialStore: credentials,
+            dio: refreshDio,
+          );
+          final account = await accounts.saveAccount(
+            _account('oauth-$connector', connector, authType: 'oauth'),
+            secret: jsonEncode({
+              'access_token': 'expired-$connector-token',
+              'refresh_token': 'refresh-$connector-token',
+              'expires_in': 1,
+              'expires_at': DateTime.utc(2020).toIso8601String(),
+            }),
+          );
+          final chatDio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              chatRequest = options;
+              return ResponseBody.fromString(
+                '{"choices":[{"message":{"role":"assistant","content":"ok"}}]}',
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: chatDio,
+          ).request(
+            account: account,
+            modelId: 'glm-5.2',
+            body: const {
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+            },
+          );
+
+          expect(
+            refreshRequest?.uri.toString(),
+            'https://$host/v2/plugin/auth/token/refresh',
+          );
+          expect(
+            refreshRequest?.headers['X-Refresh-Token'],
+            'refresh-$connector-token',
+          );
+          expect(
+            chatRequest?.headers['Authorization'],
+            'Bearer fresh-$connector-token',
+          );
+          final updated =
+              jsonDecode(credentials.values[account.credentialRef]!) as Map;
+          expect(updated['refresh_token'], 'rotated-$connector-token');
+          expect(updated['expires_in'], 1800);
+          expect(updated.containsKey('expiresIn'), isFalse);
+          expect(
+            DateTime.parse(
+              updated['expires_at'] as String,
+            ).isAfter(DateTime.now().toUtc()),
+            isTrue,
+          );
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: chatDio,
+          ).request(
+            account: account,
+            modelId: 'glm-5.2',
+            body: const {
+              'messages': [
+                {'role': 'user', 'content': 'followup'},
+              ],
+            },
+          );
+          expect(refreshCount, 1);
+          expect(
+            chatRequest?.headers['Authorization'],
+            'Bearer fresh-$connector-token',
+          );
+        }
+      },
+    );
+
     test(
       'adapts Devin unary Connect-RPC to the Chat stream contract',
       () async {

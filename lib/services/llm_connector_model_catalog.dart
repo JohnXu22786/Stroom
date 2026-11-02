@@ -76,6 +76,51 @@ const kPinnedKimiCodeModels = <String>[
   'kimi-for-coding-highspeed',
 ];
 
+// Conversational models exposed by the pinned Tencent CodeBuddy registries.
+// WorkBuddy uses its authenticated `/v3/config` catalog instead.
+const kPinnedCodeBuddyCnModels = <String>[
+  'glm-5.2',
+  'glm-5.1',
+  'glm-5.0',
+  'glm-5.0-turbo',
+  'glm-5v-turbo',
+  'minimax-m3',
+  'minimax-m2.7',
+  'kimi-k2.7',
+  'kimi-k2.6',
+  'kimi-k2.5',
+  'hy3-preview',
+  'hy3',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
+  'deepseek-v3-2-volc',
+];
+
+const kPinnedCodeBuddyIntlModels = <String>[
+  'hy4-preview',
+  'hy3',
+  'gpt-6-astra',
+  'gpt-6-luna',
+  'gpt-6-sol',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.3-codex',
+  'gemini-3.5-flash',
+  'glm-5v-turbo',
+  'glm-5.3',
+  'glm-5.3-flash',
+  'glm-5.2',
+  'glm-5.1',
+  'minimax-m3',
+  'kimi-k3',
+  'kimi-k2.7',
+  'kimi-k2.6',
+  'deepseek-v4.1-flash',
+];
+
 const kPinnedXaiModels = <String>[
   'grok-4.7',
   'grok-4.7-build-fast',

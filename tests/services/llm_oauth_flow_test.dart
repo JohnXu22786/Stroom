@@ -10,6 +10,138 @@ import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
   test(
+    'Tencent device auth uses distinct hosts and stores only bearer tokens',
+    () async {
+      for (final (connector, host, platform) in [
+        ('codebuddy-cn', 'copilot.tencent.com', 'CLI'),
+        ('codebuddy-intl', 'www.codebuddy.ai', 'ide'),
+        ('workbuddy', 'www.workbuddy.ai', 'CLI'),
+      ]) {
+        expect(LlmOAuthProviderPolicy.forProvider(connector).supported, isTrue);
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _OAuthAdapter((request) async {
+            requests.add(request);
+            if (request.uri.path.endsWith('/state')) {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'code': 0,
+                  'data': {
+                    'state': 'device-state',
+                    'authUrl': 'https://$host/device',
+                  },
+                }),
+                200,
+              );
+            }
+            return ResponseBody.fromString(
+              jsonEncode({
+                'code': 0,
+                'data': {
+                  'accessToken': 'account-access-token',
+                  'refreshToken': 'account-refresh-token',
+                  'expiresIn': 1800,
+                },
+              }),
+              200,
+            );
+          });
+        final client = LlmOAuthTokenClient(dio: dio);
+        final challenge = await client.startTencentDeviceAuthorization(
+          connectorType: connector,
+        );
+        expect(challenge.verificationUri.host, host);
+        expect(requests.single.uri.queryParameters['platform'], platform);
+        final bundle = await client.pollTencentDeviceAuthorization(
+          connectorType: connector,
+          deviceCode: challenge,
+        );
+        expect(requests.last.uri.host, host);
+        expect(requests.last.uri.queryParameters['state'], 'device-state');
+        expect(requests.last.headers['X-Product'], 'SaaS');
+        expect(bundle['access_token'], 'account-access-token');
+        expect(bundle['refresh_token'], 'account-refresh-token');
+      }
+    },
+  );
+
+  test('Tencent device polling stops promptly when cancelled', () async {
+    final firstPollReturned = Completer<void>();
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        if (request.uri.path.endsWith('/state')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'state': 'device-state',
+                'authUrl': 'https://copilot.tencent.com/device',
+              },
+            }),
+            200,
+          );
+        }
+        tokenRequests++;
+        firstPollReturned.complete();
+        return ResponseBody.fromString(jsonEncode({'code': 11217}), 200);
+      });
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = await client.startTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+    );
+    final cancelToken = CancelToken();
+    final polling = client.pollTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+      deviceCode: deviceCode,
+      cancelToken: cancelToken,
+    );
+
+    await firstPollReturned.future;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final stopwatch = Stopwatch()..start();
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(tokenRequests, 1);
+  });
+
+  test('Tencent device polling stops on a rejected token request', () async {
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        if (request.uri.path.endsWith('/state')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'state': 'device-state',
+                'authUrl': 'https://copilot.tencent.com/device',
+              },
+            }),
+            200,
+          );
+        }
+        tokenRequests++;
+        return ResponseBody.fromString('{}', 401);
+      });
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = await client.startTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+    );
+
+    await expectLater(
+      client.pollTencentDeviceAuthorization(
+        connectorType: 'codebuddy-cn',
+        deviceCode: deviceCode,
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    expect(tokenRequests, 1);
+  });
+
+  test(
     'Devin OAuth is separate and uses its pinned PKCE callback contract',
     () {
       expect(LlmOAuthProviderPolicy.forProvider('devin').supported, isTrue);
@@ -1320,7 +1452,7 @@ class _OAuthAdapter implements HttpClientAdapter {
 }
 
 Uint8List _devinStatusResponse({required String userId, required String plan}) {
-  final status = <int>[]..addAll(_protoBytes(36, utf8.encode(userId)));
+  final status = <int>[..._protoBytes(36, utf8.encode(userId))];
   if (plan.isNotEmpty) {
     final planInfo = _protoBytes(2, utf8.encode(plan));
     status.addAll(_protoBytes(13, _protoBytes(1, planInfo)));

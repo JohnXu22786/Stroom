@@ -823,6 +823,41 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginTencentDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (!{
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
+        }.contains(account.connectorType) ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      final existing = await _accounts.getAccount(account.id);
+      if (existing != null &&
+          (existing.connectorType != account.connectorType ||
+              existing.authType != 'oauth')) {
+        throw const AiGatewayOAuthException();
+      }
+      final deviceCode = await _tokenClient.startTencentDeviceAuthorization(
+        connectorType: account.connectorType,
+      );
+      return _LlmTencentDeviceAuthorization(
+        account: account,
+        deviceCode: deviceCode,
+        tokenClient: _tokenClient,
+        accountManagement: _accountManagement,
+        accounts: _accounts,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<void> revoke(AiGatewayAccount account) async {
     try {
       if (account.authType != 'oauth') {
@@ -851,7 +886,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
     }
     if (account.connectorType == 'claude' ||
         account.connectorType == 'kimi-coding' ||
-        account.connectorType == 'muse-code') {
+        account.connectorType == 'muse-code' ||
+        account.connectorType == 'codebuddy-cn' ||
+        account.connectorType == 'codebuddy-intl' ||
+        account.connectorType == 'workbuddy') {
       // These OAuth contracts provide token refresh but no revocation endpoint.
       await _accountManagement.deleteAccount(account.id);
       return true;
@@ -1201,6 +1239,168 @@ class _LlmMetaMuseDeviceAuthorization
       throw const AiGatewayOAuthException();
     }
   }
+}
+
+class _LlmTencentDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmTencentDeviceCode _deviceCode;
+  final LlmOAuthTokenClient _tokenClient;
+  final LlmAccountConnectorService _accounts;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmTencentDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmTencentDeviceCode deviceCode,
+    required LlmOAuthTokenClient tokenClient,
+    required LlmAccountConnectorService accounts,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _tokenClient = tokenClient,
+        _accounts = accounts,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.verificationUri;
+  @override
+  Uri get verificationUriComplete => _deviceCode.verificationUriComplete;
+  @override
+  String get userCode => _deviceCode.userCode;
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final bundle = await _tokenClient.pollTencentDeviceAuthorization(
+        connectorType: _account.connectorType,
+        deviceCode: _deviceCode,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+      var models = _account.models;
+      if (_account.connectorType == 'workbuddy') {
+        final temporaryId = '${_account.id}:discovery:${const Uuid().v4()}';
+        try {
+          final temporary = await _accountManagement.saveAuthorizedOAuthAccount(
+            AiGatewayAccount(
+              id: temporaryId,
+              connectorType: _account.connectorType,
+              authType: _account.authType,
+              displayName: _account.displayName,
+              status: AiGatewayAccountStatus.ready,
+              hasCredential: true,
+              endpointConfig: _account.endpointConfig,
+              models: const [],
+            ),
+            secret: jsonEncode(bundle),
+          );
+          if (_cancelToken.isCancelled) {
+            throw const AiGatewayOAuthException();
+          }
+          try {
+            final discovered = await _accounts.discoverModels(
+              _legacyAccount(temporary),
+              refreshRemote: true,
+            );
+            if (_cancelToken.isCancelled) {
+              throw const AiGatewayOAuthException();
+            }
+            models = [for (final model in discovered) _gatewayModel(model)];
+          } catch (_) {
+            if (_cancelToken.isCancelled) {
+              throw const AiGatewayOAuthException();
+            }
+            models = const [];
+          }
+        } finally {
+          await _accountManagement.deleteAccount(temporaryId);
+        }
+      } else {
+        final catalog = _account.connectorType == 'codebuddy-cn'
+            ? kPinnedCodeBuddyCnModels
+            : kPinnedCodeBuddyIntlModels;
+        models = [
+          for (var i = 0; i < catalog.length; i++)
+            AiGatewayUpstreamModel(
+              id: '${_account.id}:catalog:$i',
+              upstreamModelId: catalog[i],
+              displayName: catalog[i],
+              capabilities: _tencentCatalogCapabilities(
+                _account.connectorType,
+                catalog[i],
+              ),
+              config: const {'catalogSource': 'OmniRoute pinned registry'},
+            ),
+        ];
+      }
+      final saved = await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: _account.authType,
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          models: models,
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(bundle),
+      );
+      return saved;
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+Map<String, Object?> _tencentCatalogCapabilities(
+  String connectorType,
+  String modelId,
+) {
+  final vision = connectorType == 'codebuddy-cn'
+      ? const {
+          'glm-5v-turbo',
+          'minimax-m3',
+          'minimax-m2.7',
+          'kimi-k2.7',
+          'kimi-k2.6',
+          'kimi-k2.5',
+          'hy3-preview',
+          'hy3',
+          'deepseek-v4-pro',
+          'deepseek-v4-flash',
+        }
+      : const {
+          'hy4-preview',
+          'hy3',
+          'gemini-3.5-flash',
+          'glm-5v-turbo',
+          'minimax-m3',
+          'kimi-k3',
+          'kimi-k2.7',
+          'kimi-k2.6',
+          'deepseek-v4.1-flash',
+        };
+  return {
+    'chat': true,
+    'streaming': true,
+    'reasoning': true,
+    if (vision.contains(modelId)) 'vision': true,
+  };
 }
 
 class _LlmXaiDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
@@ -1713,6 +1913,7 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
     required AiGatewayAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,
@@ -1745,6 +1946,7 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
         account: _legacyAccount(account),
         modelId: modelId,
         body: body,
+        conversationId: conversationId,
         stream: stream,
         nativeFormat: nativeFormat,
         cancelToken: cancelToken,

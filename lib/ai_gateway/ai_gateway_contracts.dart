@@ -491,6 +491,10 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account,
   );
 
+  Future<AiGatewayOAuthDeviceAuthorization> beginTencentDeviceAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<void> revoke(AiGatewayAccount account);
 
   /// Deletes an OAuth account before attempting provider revocation. Returns
@@ -547,6 +551,7 @@ abstract interface class AiGatewayExecutor {
     required AiGatewayAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,

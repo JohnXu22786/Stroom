@@ -1354,6 +1354,133 @@ void main() {
     },
   );
 
+  test('Tencent OAuth deletion succeeds without a revoke endpoint', () async {
+    for (final connectorType in [
+      'codebuddy-cn',
+      'codebuddy-intl',
+      'workbuddy',
+    ]) {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: '$connectorType-oauth-delete',
+          connectorType: connectorType,
+          authType: 'oauth',
+          displayName: '$connectorType account',
+        ),
+        secret: jsonEncode({
+          'access_token': 'access-token',
+          'refresh_token': 'refresh-token',
+        }),
+      );
+      final gateway = _testGateway(service);
+      final account = (await gateway.accountManagement.listAccounts()).single;
+
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+        isTrue,
+      );
+      expect(await service.getAccount(account.id), isNull);
+      expect(await service.readCredential(account.id), isNull);
+    }
+  });
+
+  test(
+    'cancelling WorkBuddy model discovery removes its temporary account',
+    () async {
+      final discoveryStarted = Completer<void>();
+      final discoveryResponse = Completer<ResponseBody>();
+      final discoveryDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path == '/v3/config') {
+            discoveryStarted.complete();
+            return discoveryResponse.future;
+          }
+          throw StateError('Unexpected model-discovery request');
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+        dio: discoveryDio,
+      );
+      const originalCredential = '{"access_token":"existing-access"}';
+      final originalAccount = LlmAccount(
+        id: 'workbuddy-cancel-discovery',
+        connectorType: 'workbuddy',
+        authType: 'oauth',
+        displayName: 'Existing WorkBuddy',
+        status: LlmAccountStatus.ready,
+      );
+      await service.saveAccount(
+        originalAccount,
+        secret: originalCredential,
+      );
+      final oauthDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path.endsWith('/state')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'code': 0,
+                'data': {
+                  'state': 'device-state',
+                  'authUrl': 'https://www.workbuddy.ai/device',
+                },
+              }),
+              200,
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'accessToken': 'workbuddy-access',
+                'refreshToken': 'workbuddy-refresh',
+                'expiresIn': 3600,
+              },
+            }),
+            200,
+          );
+        });
+      final gateway = _testGateway(service, oauthDio: oauthDio);
+      final authorization =
+          await gateway.oauthAuthorization.beginTencentDeviceAuthorization(
+        AiGatewayAccount(
+          id: 'workbuddy-cancel-discovery',
+          connectorType: 'workbuddy',
+          authType: 'oauth',
+          displayName: 'WorkBuddy',
+        ),
+      );
+
+      await discoveryStarted.future;
+      authorization.cancel();
+      discoveryResponse.complete(
+        ResponseBody.fromString(
+          jsonEncode({
+            'data': {'models': []},
+          }),
+          200,
+        ),
+      );
+      await expectLater(
+        authorization.completed,
+        throwsA(isA<AiGatewayOAuthException>()),
+      );
+      final remainingAccount = (await service.listAccounts()).single;
+      expect(remainingAccount.id, originalAccount.id);
+      expect(remainingAccount.displayName, originalAccount.displayName);
+      expect(remainingAccount.status, originalAccount.status);
+      expect(remainingAccount.models, isEmpty);
+      expect(
+        await service.readCredential('workbuddy-cancel-discovery'),
+        originalCredential,
+      );
+    },
+  );
+
   testWidgets('does not revoke OAuth while local account deletion fails', (
     tester,
   ) async {
@@ -3356,6 +3483,7 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final deviceAuthorizationAccounts = <AiGatewayAccount>[];
   final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final tencentDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
@@ -3398,6 +3526,17 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
     return deviceAuthorization = _PendingOAuthDeviceAuthorization(
       verificationUri: Uri.parse('https://www.meta.ai/device'),
       userCode: 'META-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginTencentDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    tencentDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://www.workbuddy.ai/device'),
+      userCode: 'TENCENT-1234',
     );
   }
 

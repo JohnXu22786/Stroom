@@ -240,6 +240,26 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       );
     }
     if (result.account.connectorType != 'kimi-coding') {
+      if ({
+        'codebuddy-cn',
+        'codebuddy-intl',
+        'workbuddy',
+      }.contains(result.account.connectorType)) {
+        final authorization = await gateway.oauthAuthorization
+            .beginTencentDeviceAuthorization(result.account);
+        if (!mounted) {
+          authorization.cancel();
+          return null;
+        }
+        return showDialog<AiGatewayAccount>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _TencentDeviceAuthorizationDialog(
+            authorization: authorization,
+            connectorType: result.account.connectorType,
+          ),
+        );
+      }
       if (result.account.connectorType == 'grok-cli' ||
           result.account.connectorType == 'xai-oauth') {
         final authorization = await gateway.oauthAuthorization
@@ -1284,6 +1304,15 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (type == 'oauth' && connectorType == 'codebuddy-cn') {
+    return 'CodeBuddy 国内设备 OAuth';
+  }
+  if (type == 'oauth' && connectorType == 'codebuddy-intl') {
+    return 'CodeBuddy International 设备 OAuth';
+  }
+  if (type == 'oauth' && connectorType == 'workbuddy') {
+    return 'WorkBuddy CLI 设备 OAuth';
+  }
   if (type == 'oauth' && connectorType == 'vertex') {
     return '旧版 OAuth（不支持）';
   }
@@ -1303,6 +1332,87 @@ String _authLabel(String type, {String? connectorType}) {
     'none' => '无认证',
     _ => type,
   };
+}
+
+class _TencentDeviceAuthorizationDialog extends StatefulWidget {
+  final AiGatewayOAuthDeviceAuthorization authorization;
+  final String connectorType;
+
+  const _TencentDeviceAuthorizationDialog({
+    required this.authorization,
+    required this.connectorType,
+  });
+
+  @override
+  State<_TencentDeviceAuthorizationDialog> createState() =>
+      _TencentDeviceAuthorizationDialogState();
+}
+
+class _TencentDeviceAuthorizationDialogState
+    extends State<_TencentDeviceAuthorizationDialog> {
+  String? _error;
+
+  String get _name => switch (widget.connectorType) {
+        'codebuddy-cn' => 'CodeBuddy',
+        'codebuddy-intl' => 'CodeBuddy International',
+        _ => 'WorkBuddy',
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authorization.completed.then(
+      (account) {
+        if (mounted) Navigator.of(context).pop(account);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _error = '$_name 授权失败，请重新开始登录。');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) widget.authorization.cancel();
+        },
+        child: AlertDialog(
+          title: Text('登录 $_name'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('打开 $_name 验证页面并输入下方代码。授权完成后 Stroom 会自动保存账号。'),
+              const SizedBox(height: 12),
+              SelectableText(widget.authorization.userCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                widget.authorization.verificationUriComplete.toString(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => launchUrl(
+                widget.authorization.verificationUriComplete,
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('打开验证页面'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
 }
 
 String _authSourceLabel(
