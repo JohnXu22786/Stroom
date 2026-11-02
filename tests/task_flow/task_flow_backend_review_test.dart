@@ -251,6 +251,7 @@ class _Manager extends ChatStreamManager {
       Map<String, String> reasoningParamValues = const {},
       String? streamingMsgId,
       Assistant? assistant,
+      Map<String, String>? customParamValues,
       ProviderEntriesState? entriesStateOverride}) async {
     assistants.add(assistant);
     entries.add(entriesStateOverride);

@@ -94,17 +94,17 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // reasoning extras, which remain available in this same panel.
     // ═══════════════════════════════════════════════════════════
     final customParamValues = ref.watch(customParamValuesProvider);
-    final activeConfiguredCustomParamsCount = widget.customParams
-        .where((param) {
-          final selected = customParamValues != null
-              ? customParamValues.containsKey(param.paramName)
-                  ? param.type == 'json'
-                      ? param.defaultValue
-                      : customParamValues[param.paramName] ?? ''
-                  : ''
-              : param.type == 'json'
+    final activeConfiguredCustomParamsCount =
+        widget.customParams.where((param) {
+      final selected = customParamValues != null
+          ? customParamValues.containsKey(param.paramName)
+              ? param.type == 'json'
                   ? param.defaultValue
-                  : param.options.isNotEmpty
+                  : customParamValues[param.paramName] ?? ''
+              : ''
+          : param.type == 'json'
+              ? param.defaultValue
+              : param.options.isNotEmpty
                   ? param.options.first
                   : param.optionOrder.isEmpty &&
                           param.defaultValue.trim().isNotEmpty
@@ -112,16 +112,14 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                       : param.type == 'boolean'
                           ? 'true'
                           : '';
-          final isSelectable = param.options.isNotEmpty ||
-              param.optionOrder.isNotEmpty ||
-              param.type == 'boolean' ||
-              (param.optionOrder.isEmpty &&
-                  param.defaultValue.trim().isNotEmpty);
-          return param.paramName.trim().isNotEmpty &&
-              isSelectable &&
-              selected.isNotEmpty;
-        })
-        .length;
+      final isSelectable = param.options.isNotEmpty ||
+          param.optionOrder.isNotEmpty ||
+          param.type == 'boolean' ||
+          (param.optionOrder.isEmpty && param.defaultValue.trim().isNotEmpty);
+      return param.paramName.trim().isNotEmpty &&
+          isSelectable &&
+          selected.isNotEmpty;
+    }).length;
     final activeReasoningCustomParamsCount = reasoningEnabled
         ? widget.reasoningParams
             .where(
@@ -134,8 +132,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             )
             .length
         : 0;
-    final activeCustomParamsCount = activeConfiguredCustomParamsCount +
-        activeReasoningCustomParamsCount;
+    final activeCustomParamsCount =
+        activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
     final Color customParamsColor =
         hasActiveCustomParams ? toolAccentColor : Colors.grey;

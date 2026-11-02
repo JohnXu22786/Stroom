@@ -348,9 +348,8 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEffortProvider.notifier).state = 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = {};
     }
-    final savedCustomValues = modelSettings is Map
-        ? modelSettings['customParamValues']
-        : null;
+    final savedCustomValues =
+        modelSettings is Map ? modelSettings['customParamValues'] : null;
     ref.read(customParamValuesProvider.notifier).state =
         savedCustomValues is Map
             ? savedCustomValues.map(

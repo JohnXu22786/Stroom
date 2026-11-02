@@ -256,7 +256,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ? null
         : Map<String, String>.from(storedCustomParamValues);
     if (customParamValues != null) {
-      for (final param in _adapter.customParams.where((p) => p.type == 'json')) {
+      for (final param
+          in _adapter.customParams.where((p) => p.type == 'json')) {
         if (!customParamValues.containsKey(param.paramName)) continue;
         if (param.defaultValue.trim().isEmpty) {
           customParamValues.remove(param.paramName);

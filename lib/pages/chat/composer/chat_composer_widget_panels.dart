@@ -220,8 +220,7 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
           ref.read(customParamValuesProvider) ?? customParamValues,
         );
         if (enabled) {
-          if (param.type == 'json' &&
-              param.defaultValue.trim().isNotEmpty) {
+          if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
             current[param.paramName] = param.defaultValue;
           } else {
             final options = param.optionOrder.isNotEmpty

@@ -425,8 +425,7 @@ extension _ChatServiceParamsExt on ChatService {
           result,
           cp.paramName,
           const _OmittedSentinel(),
-          replaceExistingMap: cp.type == 'json' &&
-              !cp.paramName.contains('.'),
+          replaceExistingMap: cp.type == 'json' && !cp.paramName.contains('.'),
         );
         continue;
       }

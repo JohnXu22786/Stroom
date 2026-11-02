@@ -651,8 +651,7 @@ void showCustomReasoningParamsPanel({
   List<CustomParam> configuredCustomParams = const [],
   Map<String, String> configuredCustomParamSelections = const {},
   void Function(String paramName, String value)? onConfiguredCustomParamChanged,
-  void Function(CustomParam param, bool enabled)?
-      onConfiguredCustomParamToggle,
+  void Function(CustomParam param, bool enabled)? onConfiguredCustomParamToggle,
 }) {
   var localReasoningSelections =
       Map<String, String>.from(reasoningParamSelections);
@@ -674,20 +673,20 @@ void showCustomReasoningParamsPanel({
   for (final param in configuredCustomParams) {
     if (param.paramName.trim().isEmpty) continue;
     final row = ReasoningParam(
-          paramName: param.paramName,
-          options: param.type == 'json'
-              ? param.defaultValue.trim().isNotEmpty
-                  ? [param.defaultValue]
-                  : const []
-              : param.optionOrder.isNotEmpty
-                  ? param.optionOrder
-                  : param.options.isNotEmpty
-                      ? param.options
-                      : param.defaultValue.trim().isNotEmpty
-                          ? [param.defaultValue]
-                          : const [],
-          type: param.type,
-        );
+      paramName: param.paramName,
+      options: param.type == 'json'
+          ? param.defaultValue.trim().isNotEmpty
+              ? [param.defaultValue]
+              : const []
+          : param.optionOrder.isNotEmpty
+              ? param.optionOrder
+              : param.options.isNotEmpty
+                  ? param.options
+                  : param.defaultValue.trim().isNotEmpty
+                      ? [param.defaultValue]
+                      : const [],
+      type: param.type,
+    );
     configuredByRow[row] = param;
     configuredDisplayParams.add(row);
   }
@@ -767,16 +766,15 @@ void showCustomReasoningParamsPanel({
                         itemBuilder: (context, index) {
                           final param = displayParams[index];
                           final configuredParam = configuredByRow[param];
-                          final canEdit = configuredParam != null ||
-                              localReasoningEnabled;
+                          final canEdit =
+                              configuredParam != null || localReasoningEnabled;
                           final selections = configuredParam != null
                               ? localConfiguredSelections
                               : localReasoningSelections;
-                          final currentValue =
-                              selections[param.paramName] ??
-                                  (param.options.isNotEmpty
-                                      ? param.options.first
-                                      : '');
+                          final currentValue = selections[param.paramName] ??
+                              (param.options.isNotEmpty
+                                  ? param.options.first
+                                  : '');
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Column(
@@ -823,11 +821,10 @@ void showCustomReasoningParamsPanel({
                                           // 不依赖参数对象上可变的 enabled 标记。
                                           // boolean 类型参数：开 = 'true'，
                                           // 关 = 'false'（无选项也提供开关）。
-                                          value:
-                                              (selections[param.paramName]
-                                                          ?.isNotEmpty ??
-                                                      false) &&
-                                                  canEdit,
+                                          value: (selections[param.paramName]
+                                                      ?.isNotEmpty ??
+                                                  false) &&
+                                              canEdit,
                                           activeThumbColor: cs.primary,
                                           onChanged: canEdit
                                               ? (value) {
@@ -836,9 +833,8 @@ void showCustomReasoningParamsPanel({
                                                       if (param
                                                           .options.isNotEmpty) {
                                                         final selected =
-                                                            selections[
-                                                                param
-                                                                    .paramName];
+                                                            selections[param
+                                                                .paramName];
                                                         if (configuredParam !=
                                                                 null &&
                                                             !param.options
@@ -849,13 +845,11 @@ void showCustomReasoningParamsPanel({
                                                               param.options
                                                                   .first;
                                                         } else {
-                                                          selections
-                                                              .putIfAbsent(
-                                                                  param
-                                                                      .paramName,
-                                                                  () => param
-                                                                      .options
-                                                                      .first);
+                                                          selections.putIfAbsent(
+                                                              param.paramName,
+                                                              () => param
+                                                                  .options
+                                                                  .first);
                                                         }
                                                       } else if (param.type ==
                                                           'boolean') {
@@ -878,8 +872,7 @@ void showCustomReasoningParamsPanel({
                                                   // switch state.
                                                   if (configuredParam != null) {
                                                     onConfiguredCustomParamToggle
-                                                        ?.call(
-                                                            configuredParam,
+                                                        ?.call(configuredParam,
                                                             value);
                                                   } else {
                                                     onCustomParamToggle(
@@ -893,8 +886,7 @@ void showCustomReasoningParamsPanel({
                                 ),
                                 // Options (only shown when the param is
                                 // active — 与开关同一判定：已选值存在)
-                                if ((selections[param.paramName]
-                                            ?.isNotEmpty ??
+                                if ((selections[param.paramName]?.isNotEmpty ??
                                         false) &&
                                     canEdit &&
                                     param.options.isNotEmpty) ...[
@@ -909,7 +901,8 @@ void showCustomReasoningParamsPanel({
                                         selected: isSelected,
                                         onTap: () {
                                           setState(() {
-                                            selections[param.paramName] = option;
+                                            selections[param.paramName] =
+                                                option;
                                           });
                                           if (configuredParam != null) {
                                             onConfiguredCustomParamChanged
