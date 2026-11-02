@@ -99,7 +99,8 @@ run_expected_raw_failure() {
   echo 'RAW_NODE_MOBILE_REQUIRE_FAILURE_CONFIRMED'
 }
 
-run_node 'Node runtime + app-private fs' './test/runtime-check.cjs' 'NODE_RUNTIME_PASS v18.20.4'
+runtime_args="-p (()=>{const fs=require('node:fs');const p='$files/node-runtime-check.txt';fs.writeFileSync(p,'node-fs-ok');const bytes=fs.readFileSync(p);if(bytes.length!==10)throw Error('private-file-bytes-mismatch');if(Buffer.from('mobile').toString('utf8')!=='mobile')throw Error('Buffer_UTF8_mismatch');fs.unlinkSync(p);console.log('NODE_RUNTIME_PASS_'+process.version);console.log('RESULT:PASS')})()"
+run_node 'Node runtime + app-private fs' "$runtime_args" 'NODE_RUNTIME_PASS_v18.20.4'
 run_expected_raw_failure
 
 adb shell run-as "$package" rm -rf "$fixture/node_modules" "$fixture/.npm" "$files/.npm-cache"
