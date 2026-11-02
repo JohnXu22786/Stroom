@@ -100,7 +100,7 @@ run_expected_raw_failure() {
   echo '===== Confirm unpatched UTF-8 module read failure ====='
   local output log i
   output=$(start_with_nodeargs \
-    "-p (console.log('RAW_REQUIRE_BEGIN_mobile_runtime_poc'),(()=>{try{return require('$fixture/verify-install.cjs')}catch(error){console.log('RAW_REQUIRE_ERROR:'+error.name+': '+error.message)}})())" 2>&1) || {
+    "-p (console.log('RAW_REQUIRE_BEGIN_mobile_runtime_poc'),(()=>{try{return require('$fixture/verify-install.cjs')}catch(error){console.log('RAW_REQUIRE_ERROR:'+error.name+':'+String.fromCharCode(32)+error.message)}})())" 2>&1) || {
     printf '%s\n' "$output"
     adb logcat -d -v threadtime -t 400 2>&1 || true
     return 1
