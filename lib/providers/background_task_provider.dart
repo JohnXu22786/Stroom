@@ -6492,6 +6492,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
         if (hasUnserializedOcrCacheReferences) {
           ocrCacheCleanupSafe = false;
+          recordUnknownOcrCacheOwnership();
         }
         try {
           if (rawMap == null) {
@@ -6621,9 +6622,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 _canSafelyPreserveSkippedAsrEntry(rawMap!)) {
               // Preserve safe legacy metadata (for example an input path) as
               // current main does, while rejecting keys and inline audio.
-              if (hasUnserializedOcrCacheReferences) {
-                recordUnknownOcrCacheOwnership();
-              }
               skippedEntries.add(m);
             } else {
               // Keep only validated retry ownership; raw versioned/future rows
