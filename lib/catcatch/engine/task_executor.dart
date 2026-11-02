@@ -13,6 +13,7 @@ import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
 import 'm3u8_parser.dart';
+import 'playlist_merged_extensions.dart';
 import 'webview_sniffer.dart';
 import 'mpd_parser.dart';
 import 'dart_cat_catch_sniffer.dart';
@@ -153,11 +154,14 @@ class TaskExecutor {
             );
             if (result != null) {
               detectedMedia = result.media;
-              if (result.mergedExtension != null) {
+              if (result.mergedExtensions.isNotEmpty) {
                 task = task.copyWith(
                   metadata: {
                     ...task.metadata,
-                    'playlistMergedExtension': result.mergedExtension!,
+                    PlaylistMergedExtensions.metadataKey:
+                        PlaylistMergedExtensions.encode(
+                          result.mergedExtensions,
+                        ),
                   },
                 );
               }
@@ -627,8 +631,10 @@ class TaskExecutor {
   }
 
   /// Step 2: 解析播放列表
-  static Future<({List<MediaResource> media, String? mergedExtension})?>
-      _executeParsePlaylist({
+  static Future<
+    ({List<MediaResource> media, Map<String, String> mergedExtensions})?
+  >
+  _executeParsePlaylist({
     required CatCatchTask task,
     required List<StepStatus> steps,
     required List<MediaResource> media,
@@ -639,6 +645,8 @@ class TaskExecutor {
       markExecutorStep(steps, 2, done: true);
       return null;
     }
+    var parsedMedia = List<MediaResource>.from(media);
+    final mergedExtensions = <String, String>{};
     for (final pl in playlist) {
       final dio = Dio();
       cancelToken?.whenCancel.then((_) {
@@ -662,7 +670,6 @@ class TaskExecutor {
       List<String> segments;
       List<M3U8PlaylistResource> playlistResources = [];
       var mediaSegmentCount = 0;
-      String? mergedExtension;
       if (pl.isM3U8) {
         final parsed = await M3U8Parser.parsePlaylistWithDetails(
           content,
@@ -671,7 +678,7 @@ class TaskExecutor {
         segments = parsed.resources;
         playlistResources = parsed.playlistResources;
         mediaSegmentCount = parsed.mediaSegmentCount;
-        mergedExtension = M3U8Parser.mergedFileExtension(
+        mergedExtensions[pl.url] = M3U8Parser.mergedFileExtension(
           hasInitializationMap: parsed.hasInitializationMap,
         );
       } else if (pl.isMPD) {
@@ -686,7 +693,7 @@ class TaskExecutor {
       final playlistSegmentUrls = segments.toSet();
       final existingUrls = <String>{};
       final enrichedMedia = <MediaResource>[];
-      for (final resource in media) {
+      for (final resource in parsedMedia) {
         if (pl.isM3U8 && playlistSegmentUrls.contains(resource.url)) {
           continue;
         }
@@ -700,8 +707,8 @@ class TaskExecutor {
       final selectedPlaylistResources = pl.isM3U8
           ? playlistResources
           : playlistResources
-              .where((resource) => existingUrls.add(resource.url))
-              .toList();
+                .where((resource) => existingUrls.add(resource.url))
+                .toList();
       final segmentMedia = selectedPlaylistResources.map((resource) {
         final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
@@ -722,13 +729,13 @@ class TaskExecutor {
         done: true,
         detail: '获取到$totalCount个资源（播放列表$mediaSegmentCount个分段）',
       );
-      return (
-        media: [...enrichedMedia, ...segmentMedia],
-        mergedExtension: mergedExtension,
-      );
+      parsedMedia = [...enrichedMedia, ...segmentMedia];
     }
     markExecutorStep(steps, 2, done: true);
-    return null;
+    if (mergedExtensions.isEmpty && parsedMedia.length == media.length) {
+      return null;
+    }
+    return (media: parsedMedia, mergedExtensions: mergedExtensions);
   }
 
   static Future<String?> _executeDownload({
@@ -775,7 +782,7 @@ class TaskExecutor {
             segmentRanges: segmentRanges,
             outputPath: p.join(
               downloadDir,
-              '${playlistBaseName}_merged.${task.metadata['playlistMergedExtension'] == 'mp4' ? 'mp4' : 'ts'}',
+              '${playlistBaseName}_merged.${PlaylistMergedExtensions.forPlaylist(task.metadata, media.url) == 'mp4' ? 'mp4' : 'ts'}',
             ),
             headers: browserHeaders,
             concurrency: DefaultRules.maxConcurrency,
