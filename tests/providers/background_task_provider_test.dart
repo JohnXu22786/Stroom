@@ -18571,6 +18571,18 @@ void main() {
           try {
             expect(await notifier.restoreFromPersistence(), isFalse);
             expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+            if (row['type'] == 'future-task-type') {
+              notifier.addTask(
+                type: BackgroundTaskType.ocr,
+                title: 'Unrelated OCR task after unknown row restore',
+                startImmediately: false,
+              );
+              await notifier.pendingPersistence;
+              expect(
+                notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+                isNull,
+              );
+            }
           } finally {
             notifier.dispose();
             await notifier.pendingPersistence;
@@ -18661,6 +18673,88 @@ void main() {
     );
 
     test(
+      'loaded OCR cache ownership retains refs until a snapshot write succeeds',
+      () async {
+        WebFileStore.enableTestMode();
+        const taskId = 'ocr-durable-cache-owner';
+        final bytes = Uint8List.fromList([23, 24, 25]);
+        final originalRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final cacheReference =
+            OcrRetryStorage.referencesFromSnapshot(originalRetryData).single;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'OCR task with a durable cache owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': originalRetryData,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          final writeStarted = Completer<void>();
+          final finishWrite = Completer<void>();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeStarted.complete();
+            await finishWrite.future;
+            throw StateError('injected task snapshot write failure');
+          };
+          notifier.setRetryData(taskId, {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+          });
+          await writeStarted.future;
+
+          final references =
+              notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup();
+          expect(references, contains(cacheReference));
+          await OcrRetryStorage.deleteUnreferenced(
+            candidates: {cacheReference},
+            referenced: references!,
+          );
+          expect(await OcrRetryStorage.read(cacheReference), bytes);
+
+          finishWrite.complete();
+          await notifier.pendingPersistence;
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason: 'a failed write must leave the durable owner authoritative',
+          );
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            OcrRetryStorage.referencesFromSnapshot(
+              persistedRows
+                  .whereType<Map<String, dynamic>>()
+                  .single['retryData'] as Map<String, dynamic>,
+            ),
+            contains(cacheReference),
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'OCR cache ownership stays unavailable for unknown task row references',
       () async {
         final file = _tasksFileIn(testDir.path);
@@ -18668,6 +18762,7 @@ void main() {
         const taskId = 'ocr-unknown-task-row-cache-owner';
         const stepTaskId = 'ocr-unknown-step-cache-owner';
         const outcomeTaskId = 'ocr-unknown-outcome-cache-owner';
+        const asrTaskId = 'asr-unknown-ocr-cache-owner';
         await file.writeAsString(
           jsonEncode([
             {
@@ -18726,6 +18821,16 @@ void main() {
                 imageCount: 0,
               ),
             },
+            BackgroundTask(
+              id: asrTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR row with an unknown OCR cache owner',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
+            ).toMap()
+              ..['additionalCacheRefs'] = [
+                'ocr_retry_cache/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.bin',
+              ],
           ]),
         );
 
@@ -18734,9 +18839,18 @@ void main() {
           await notifier.restoreFromPersistence();
           expect(notifier.taskById(taskId), isNotNull);
           expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+          );
           final persistedRows =
               jsonDecode(await file.readAsString()) as List<dynamic>;
-          for (final expectedTaskId in [taskId, stepTaskId, outcomeTaskId]) {
+          for (final expectedTaskId in [
+            taskId,
+            stepTaskId,
+            outcomeTaskId,
+            asrTaskId,
+          ]) {
             expect(
               persistedRows.whereType<Map<String, dynamic>>().any(
                     (row) =>
@@ -19135,6 +19249,10 @@ void main() {
             await notifier.restoreFromPersistence();
             expect(notifier.taskById(taskId), isNotNull);
             expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+            expect(
+              notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+              isNull,
+            );
             final persistedRows =
                 jsonDecode(await file.readAsString()) as List<dynamic>;
             expect(

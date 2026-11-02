@@ -32,7 +32,7 @@ Map<String, dynamic> _unrestoredTaskRecord({
     {
       '_unrestoredTaskRecord': true,
       'retryAudioOwnershipKnown': retryAudioOwnershipKnown,
-      if (!ocrCacheOwnershipKnown) 'ocrCacheOwnershipKnown': false,
+      'ocrCacheOwnershipKnown': ocrCacheOwnershipKnown,
       if (ocrCacheTaskId != null) 'ocrCacheTaskId': ocrCacheTaskId,
       if (retryAudioIds.isNotEmpty)
         'retryAudioIds': retryAudioIds.toList()..sort(),
@@ -3794,6 +3794,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   // The last durable task snapshot remains authoritative until another write
   // replaces it, even when live retryData has already changed.
   final Set<String> _persistedRetryAudioIds = <String>{};
+  final Set<String> _persistedOcrCacheReferences = <String>{};
+  bool _ocrCacheOwnershipLoaded = false;
+  bool _ocrCacheCleanupSafe = false;
   List<dynamic> _unrestoredTaskRecords = [];
 
   /// Whether retry audio references are complete enough to authorize pruning.
@@ -5252,7 +5255,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       ...prepared.map((task) => task.toMap()),
       ...preservedEntries,
     ];
-    return _writeSnapshotData(data, dirOverride);
+    final saved = await _writeSnapshotData(data, dirOverride);
+    if (saved) {
+      _persistedOcrCacheReferences
+        ..clear()
+        ..addAll(
+          _ocrCacheReferencesFromTasksAndEntries(prepared, preservedEntries),
+        );
+      _ocrCacheOwnershipLoaded = true;
+      _ocrCacheCleanupSafe = _hasKnownOcrCacheOwnership(
+        prepared,
+        preservedEntries,
+      );
+    }
+    return saved;
   }
 
   List<BackgroundTask>? _prepareAsrRetriesForPersistence(
@@ -5429,6 +5445,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// task snapshot cannot be read safely enough to authorize deletion.
   Future<Set<String>?> ocrCacheReferencesForCleanup() =>
       _ocrCacheReferencesForCleanup();
+
+  /// Uses the already loaded snapshot while OCR cache maintenance is locked.
+  Set<String>? ocrCacheReferencesFromLoadedSnapshotForCleanup() {
+    if (!_ocrCacheOwnershipLoaded || !_ocrCacheCleanupSafe) return null;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    return {
+      for (final task in tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      ..._persistedOcrCacheReferences,
+      ..._referencesFromSkippedTaskEntries(),
+      for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
+        for (final task in removedTasks)
+          if (task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+    };
+  }
 
   Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
     final persisted = await _loadPersistedTasks();
@@ -5680,7 +5713,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
-  bool _hasUnserializedOcrTaskCacheReferences(Map<dynamic, dynamic> taskRow) {
+  bool _hasUnserializedTaskOcrCacheReferences(Map<dynamic, dynamic> taskRow) {
     bool containsCacheReference(Object? value) =>
         _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
 
@@ -5787,6 +5820,44 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
     }
     return references;
+  }
+
+  Set<String> _ocrCacheReferencesFromTasksAndEntries(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) =>
+      {
+        for (final task in tasks)
+          if (task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        ..._referencesFromSkippedTaskEntries(entries),
+      };
+
+  bool _hasKnownOcrCacheOwnership(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) {
+    for (final task in tasks) {
+      if (task.type == BackgroundTaskType.ocr &&
+          _requiresDurableOcrCacheOwnershipMarker(task.retryData)) {
+        return false;
+      }
+    }
+    for (final entry in entries) {
+      if (entry is! Map) return false;
+      if (entry['_unrestoredTaskRecord'] == true) {
+        if (entry['ocrCacheOwnershipKnown'] != true) return false;
+        continue;
+      }
+      if (entry['type'] != BackgroundTaskType.ocr.name) continue;
+      final retryData = entry['retryData'];
+      if (!_canSafelyCollectSkippedOcrCacheReferences(retryData) ||
+          _requiresDurableOcrCacheOwnershipMarker(retryData) ||
+          _hasUnserializedTaskOcrCacheReferences(entry)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _hasCacheMigrations(List<BackgroundTask> snapshot) {
@@ -6243,7 +6314,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               retryAudioIds.add(id);
             }
           }
-          final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] != false;
+          final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] == true;
           if (!markerValid || !ownershipKnown || !ocrCacheOwnershipKnown) {
             cleanupSafe = false;
           }
@@ -6272,8 +6343,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               (type) => type.name == rawMap?['type'],
             );
         final hasUnserializedOcrCacheReferences =
-            rawMap?['type'] == BackgroundTaskType.ocr.name &&
-                _hasUnserializedOcrTaskCacheReferences(rawMap!);
+            rawMap != null && _hasUnserializedTaskOcrCacheReferences(rawMap);
         var ocrCacheOwnershipMarkerRecorded = false;
         void recordUnknownOcrCacheOwnership() {
           if (ocrCacheOwnershipMarkerRecorded || rawMap == null) return;
@@ -6301,9 +6371,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             // Keep cleanup fail-closed until retry data has been normalized.
             cleanupSafe = false;
           }
-          if (task.type == BackgroundTaskType.ocr &&
-              (_requiresDurableOcrCacheOwnershipMarker(rawRetryData) ||
-                  hasUnserializedOcrCacheReferences)) {
+          if (hasUnserializedOcrCacheReferences ||
+              (task.type == BackgroundTaskType.ocr &&
+                  _requiresDurableOcrCacheOwnershipMarker(rawRetryData))) {
             // Unknown fields can contain cache owners outside the images list.
             // Persist the sanitized task together with this marker so future
             // writes cannot accidentally authorize cleanup; removing the task
@@ -6433,8 +6503,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               );
             }
           } else if (isKnownNonAsrRecord) {
-            if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
-                hasUnserializedOcrCacheReferences) {
+            if (hasUnserializedOcrCacheReferences) {
               recordUnknownOcrCacheOwnership();
             }
             if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
@@ -6445,7 +6514,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           } else {
             cleanupSafe = false;
             unrestoredRecords.add(
-              _unrestoredTaskRecord(retryAudioOwnershipKnown: false),
+              _unrestoredTaskRecord(
+                retryAudioOwnershipKnown: false,
+                ocrCacheOwnershipKnown: false,
+                ocrCacheTaskId:
+                    rawMap?['id'] is String ? rawMap!['id'] as String : null,
+              ),
             );
           }
           debugPrint(
@@ -6518,6 +6592,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<bool> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = loaded.isReadable && loaded.cleanupSafe;
+    _persistedOcrCacheReferences
+      ..clear()
+      ..addAll(
+        _ocrCacheReferencesFromTasksAndEntries(
+          loaded.tasks,
+          [...loaded.skippedEntries, ...loaded.unrestoredRecords],
+        ),
+      );
     _persistedRetryAudioIds
       ..clear()
       ..addAll(
@@ -6628,6 +6712,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         _pendingRestoreTaskRemovals.clear();
         await _cleanupOrphanedOcrCache();
       }
+      _ocrCacheOwnershipLoaded = loaded.isReadable;
+      _ocrCacheCleanupSafe = loaded.isReadable && loaded.cleanupSafe;
       return snapshotComplete;
     }
     final restored = <BackgroundTask>[];
@@ -6722,6 +6808,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             _pendingReplacedRestoreAsrRetryAudioIds.isNotEmpty)) {
       _retryAudioCleanupSafe = false;
     }
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = snapshotSaved
+        ? _hasKnownOcrCacheOwnership(
+            mounted ? state : (_disposedSnapshot ?? restored),
+            [..._skippedTaskEntries, ..._unrestoredTaskRecords],
+          )
+        : loaded.isReadable && loaded.cleanupSafe;
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
     if (snapshotComplete && snapshotSaved) {

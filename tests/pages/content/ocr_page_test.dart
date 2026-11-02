@@ -1369,7 +1369,11 @@ void main() {
         final migrationStarted = Completer<void>();
         final finishMigration = Completer<void>();
         final notifier = _InspectableBackgroundTaskNotifier();
+        var taskSnapshotReads = 0;
         BackgroundTaskNotifier.debugStorageDirectoryOverride = storageDir.path;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = () async {
+          taskSnapshotReads++;
+        };
         try {
           final sharedRetryData = await tester.runAsync(
             () => OcrRetryStorage.cacheSnapshot(
@@ -1402,6 +1406,7 @@ void main() {
             await tasksFile.writeAsString(jsonEncode([skippedRow]));
           });
           expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(taskSnapshotReads, 1);
           expect(notifier.tasksForTest, isEmpty);
           notifier.setTasksForTest([
             BackgroundTask(
@@ -1465,6 +1470,7 @@ void main() {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 100)),
           );
+          expect(taskSnapshotReads, 1);
 
           expect(
             await tester.runAsync(() => OcrRetryStorage.read(sharedReference)),
@@ -1481,6 +1487,7 @@ void main() {
           if (!finishMigration.isCompleted) finishMigration.complete();
           await tester.pumpWidget(const SizedBox.shrink());
           notifier.dispose();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = null;
           BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
           WebFileStore.disableTestMode();
           await tester.runAsync(() => storageDir.delete(recursive: true));
