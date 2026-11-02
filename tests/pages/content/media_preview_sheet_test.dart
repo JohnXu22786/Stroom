@@ -53,15 +53,17 @@ void main() {
           await tester.pumpWidget(
             ProviderScope(
               child: MaterialApp(
-                home: MediaPreviewSheet(
-                  resource: const MediaResource(
-                    url: 'https://example.invalid/audio.mp3',
-                    name: 'audio',
-                    ext: 'mp3',
-                    isPlayable: true,
+                home: Scaffold(
+                  body: MediaPreviewSheet(
+                    resource: const MediaResource(
+                      url: 'https://example.invalid/audio.mp3',
+                      name: 'audio',
+                      ext: 'mp3',
+                      isPlayable: true,
+                    ),
+                    taskTitle: 'Audio preview',
+                    audioPlayerFactory: () => player,
                   ),
-                  taskTitle: 'Audio preview',
-                  audioPlayerFactory: () => player,
                 ),
               ),
             ),
