@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -15,8 +16,555 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 import 'package:stroom/services/llm_routing_service.dart';
+import 'package:stroom/services/devin_cli_acp.dart';
+import 'package:stroom/services/devin_cli_acp_service.dart';
+
+const _devinCliTestExecutableSha256 =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('editing a Devin CLI account does not restart CLI login', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-existing',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Existing Devin CLI',
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, isEmpty);
+    expect(
+      (await service.listAccounts()).single.displayName,
+      'Existing Devin CLI',
+    );
+
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('重新登录官方 Devin CLI'));
+    await tester.tap(find.text('重新登录官方 Devin CLI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.loginAccounts.single.id, 'devin-cli-existing');
+  });
+
+  testWidgets('failed CLI reconnect save preserves the existing login', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-reconnect-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Existing Devin CLI',
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('重新登录官方 Devin CLI'));
+    await tester.tap(find.text('重新登录官方 Devin CLI'));
+    await tester.pumpAndSettle();
+
+    preferences.failNextSet = true;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.logoutAccounts, isEmpty);
+    expect(
+      (await service.listAccounts()).single.displayName,
+      'Existing Devin CLI',
+    );
+  });
+
+  testWidgets('an existing Devin CLI executable can be explicitly reapproved', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-reapprove-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(() => executable.writeAsString('original CLI build'));
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+    final originalApproval = (await tester.runAsync(
+      () => DevinCliAcpLaunch.approveExecutablePath(executable.path),
+    ))!;
+    await tester.runAsync(() => executable.writeAsString('updated CLI build'));
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-reapprove',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          DevinCliAcpLaunch.executablePathKey: originalApproval.path,
+          DevinCliAcpLaunch.executableSha256Key: originalApproval.sha256,
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(
+            service,
+            devinCliAcpService: _RecordingDevinCliAcpService(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重新信任当前 CLI 可执行文件并更新 SHA-256'), findsOneWidget);
+    await tester.tap(find.text('重新信任当前 CLI 可执行文件并更新 SHA-256'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    final updated = (await service.listAccounts()).single;
+    final currentApproval = (await tester.runAsync(
+      () => DevinCliAcpLaunch.approveExecutablePath(executable.path),
+    ))!;
+    expect(
+      updated.endpointConfig[DevinCliAcpLaunch.executableSha256Key],
+      currentApproval.sha256,
+    );
+    expect(
+      updated.endpointConfig[DevinCliAcpLaunch.executableSha256Key],
+      isNot(originalApproval.sha256),
+    );
+  });
+
+  testWidgets('changing away from Devin CLI removes its isolated login', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-convert',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(DropdownButtonFormField<String>);
+    tester.widget<DropdownButtonFormField<String>>(fields.at(0)).onChanged!(
+      'ollama',
+    );
+    await tester.pumpAndSettle();
+    tester.widget<DropdownButtonFormField<String>>(fields.at(1)).onChanged!(
+      'none',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect(localCli.logoutAccounts.single.id, 'devin-cli-convert');
+    expect((await service.listAccounts()).single.connectorType, 'ollama');
+  });
+
+  testWidgets(
+    'failed CLI cleanup restores the original connector and group mappings',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'devin-conversion-cleanup-failure',
+          connectorType: 'devin-cli-agentic',
+          authType: 'cli_session',
+          displayName: 'Devin CLI account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'devin-default-model',
+              upstreamModelId: 'devin-cli-default',
+              displayName: 'Devin default',
+            ),
+          ],
+        ),
+      );
+      final group = LlmModelGroup(
+        id: 'devin-conversion-group',
+        displayName: 'Devin model group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'devin-conversion-cleanup-failure',
+            localModelId: 'devin-default-model',
+            upstreamModelId: 'devin-cli-default',
+          ),
+        ],
+      );
+      await service.saveModelGroup(group);
+      final localCli = _RecordingDevinCliAcpService()
+        ..logoutError = StateError('temporary local cleanup failure');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(
+            gateway: _testGateway(service, devinCliAcpService: localCli),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byType(DropdownButtonFormField<String>).at(0),
+          )
+          .onChanged!('ollama');
+      await tester.pumpAndSettle();
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byType(DropdownButtonFormField<String>).at(1),
+          )
+          .onChanged!('none');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+        ),
+        '',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(localCli.logoutAccounts, hasLength(1));
+      expect(
+        (await service.listAccounts()).single.connectorType,
+        'devin-cli-agentic',
+      );
+      expect(
+        (await service.listModelGroups()).single.members.single.accountId,
+        'devin-conversion-cleanup-failure',
+      );
+      expect(find.text('账号保存失败。请检查账号信息和安全存储状态。'), findsOneWidget);
+    },
+  );
+
+  testWidgets('adding Devin CLI requires an approved executable path', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-ui-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+    final gateway = _testGateway(service, devinCliAcpService: localCli);
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Approved Devin CLI');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+    tester
+        .widget<DropdownButtonFormField<AiGatewayAccountStatus>>(
+          find.byType(DropdownButtonFormField<AiGatewayAccountStatus>),
+        )
+        .onChanged!(AiGatewayAccountStatus.paused);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(localCli.loginAccounts.single.id, account.id);
+    expect(account.status, LlmAccountStatus.paused);
+    expect(
+      account.endpointConfig[DevinCliAcpLaunch.executablePathKey],
+      executable.resolveSymbolicLinksSync(),
+    );
+    expect(
+      (account.endpointConfig[DevinCliAcpLaunch.executableSha256Key] as String)
+          .length,
+      64,
+    );
+  });
+
+  testWidgets('failed Devin CLI account save removes its new login', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-failed-save-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Unpersisted Devin');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+
+    preferences.failNextSet = true;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('changing an existing account to Devin CLI starts login', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-edit-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'existing-ollama-account',
+        connectorType: 'ollama',
+        authType: 'none',
+        displayName: 'Existing account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.loginAccounts.single.id, 'existing-ollama-account');
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'devin-cli-agentic');
+    expect(saved.status, LlmAccountStatus.ready);
+  });
+
   testWidgets('xAI OAuth model discovery can be retried from account editor', (
     tester,
   ) async {
@@ -412,6 +960,8 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
+    // A system back event dismisses the authorization dialog.
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -662,6 +1212,85 @@ void main() {
 
     expect(cleanupCalled, isFalse);
     expect((await service.listAccounts()).single.id, 'delete-failure-account');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  testWidgets('failed Devin CLI account deletion retains its login', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-delete-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, isEmpty);
+    expect((await service.listAccounts()).single.id, 'devin-delete-failure');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  testWidgets('failed CLI cleanup after deletion restores the account', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cleanup-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService()
+      ..logoutError = StateError('temporary local cleanup failure');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect((await service.listAccounts()).single.id, 'devin-cleanup-failure');
     expect(find.text('账号删除失败。'), findsOneWidget);
   });
 
@@ -2694,13 +3323,32 @@ LlmChatRoutingRuntime _testGateway(
   LlmAccountConnectorService service, {
   Dio? oauthDio,
   AiGatewayOAuthAuthorization? oauthAuthorization,
+  DevinCliAcpService? devinCliAcpService,
 }) =>
     LlmChatRoutingRuntime(
       accountService: service,
       routingService: LlmRoutingService(accountService: service),
       oauthDio: oauthDio,
       oauthAuthorization: oauthAuthorization,
+      devinCliAcpService: devinCliAcpService,
     );
+
+class _RecordingDevinCliAcpService extends DevinCliAcpService {
+  final loginAccounts = <AiGatewayAccount>[];
+  final logoutAccounts = <AiGatewayAccount>[];
+  Object? logoutError;
+
+  @override
+  Future<void> login(AiGatewayAccount account) async {
+    loginAccounts.add(account);
+  }
+
+  @override
+  Future<void> logout(AiGatewayAccount account) async {
+    logoutAccounts.add(account);
+    if (logoutError != null) throw logoutError!;
+  }
+}
 
 class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final configurations = <Map<String, String>>[];

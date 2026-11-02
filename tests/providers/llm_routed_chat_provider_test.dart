@@ -125,6 +125,16 @@ void main() {
     );
   });
 
+  test('routes the Devin CLI account only through local ACP', () {
+    expect(llmRoutedChatSupportedConnectorTypes('devin.acp'), {
+      'devin-cli-agentic',
+    });
+    expect(
+      llmRoutedChatSupportedConnectorTypes('devin.connect_rpc'),
+      isNot(contains('devin-cli-agentic')),
+    );
+  });
+
   test('invokes a verified Devin OAuth model through routed Chat', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
@@ -793,8 +803,11 @@ void main() {
             'modelId': modelConfig.id,
           },
         );
+        // Task Flow must preserve its routed provider when resolving the CLI.
+        // ignore: invalid_use_of_visible_for_testing_member
         expect(taskFlowService?.provider, isA<LlmRoutedChatProvider>());
         expect(
+          // ignore: invalid_use_of_visible_for_testing_member
           await taskFlowService!.provider!.chat(const [
             {'role': 'user', 'content': 'Task Flow prompt'},
           ]),

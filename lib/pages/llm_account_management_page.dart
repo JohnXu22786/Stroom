@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -5,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
+import '../services/devin_cli_acp.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -151,8 +154,44 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (result == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      final saved = await _saveAccountResult(gateway, result);
+      final changingAwayFromCli =
+          account.connectorType == 'devin-cli-agentic' &&
+              result.account.connectorType != 'devin-cli-agentic';
+      final groupsToRestore = changingAwayFromCli
+          ? (await gateway.accountManagement.listModelGroups())
+              .where(
+                (group) => group.members.any(
+                  (member) => member.accountId == account.id,
+                ),
+              )
+              .toList()
+          : const <AiGatewayModelGroup>[];
+      final saved = await _saveAccountResult(
+        gateway,
+        result,
+        cleanupCliLoginOnSaveFailure:
+            account.connectorType != 'devin-cli-agentic',
+      );
       if (saved == null) return;
+      if (changingAwayFromCli && saved.connectorType != 'devin-cli-agentic') {
+        try {
+          await gateway.localCliAuthentication.logout(account);
+        } catch (_) {
+          var restored = false;
+          try {
+            await gateway.accountManagement.saveAccount(account);
+            restored = true;
+          } catch (_) {}
+          if (restored) {
+            for (final group in groupsToRestore) {
+              try {
+                await gateway.accountManagement.saveModelGroup(group);
+              } catch (_) {}
+            }
+          }
+          rethrow;
+        }
+      }
       await widget.onAccountSaved?.call(saved);
       await _reload();
     } catch (_) {
@@ -162,8 +201,38 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
 
   Future<AiGatewayAccount?> _saveAccountResult(
     AiGatewayFacade gateway,
-    _AccountEditResult result,
-  ) async {
+    _AccountEditResult result, {
+    bool cleanupCliLoginOnSaveFailure = true,
+  }) async {
+    if (result.requiresCliLogin &&
+        result.account.connectorType == 'devin-cli-agentic') {
+      await gateway.localCliAuthentication.login(result.account);
+      final account = result.account;
+      try {
+        return await gateway.accountManagement.saveAccount(
+          AiGatewayAccount(
+            id: account.id,
+            connectorType: account.connectorType,
+            authType: account.authType,
+            displayName: account.displayName,
+            status: account.status,
+            endpointConfig: account.endpointConfig,
+            models: account.models,
+            policy: account.policy,
+            usageByWindow: account.usageByWindow,
+            remainingQuota: account.remainingQuota,
+            quotaSignals: account.quotaSignals,
+          ),
+        );
+      } catch (_) {
+        if (cleanupCliLoginOnSaveFailure) {
+          try {
+            await gateway.localCliAuthentication.logout(account);
+          } catch (_) {}
+        }
+        rethrow;
+      }
+    }
     if (!result.requiresOAuthAuthorization) {
       return gateway.accountManagement.saveAccount(
         result.account,
@@ -237,11 +306,39 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     try {
       final gateway = await _gatewayFuture;
       if (!mounted) return;
+      final groupsToRestore = account.connectorType == 'devin-cli-agentic'
+          ? (await gateway.accountManagement.listModelGroups())
+              .where(
+                (group) => group.members.any(
+                  (member) => member.accountId == account.id,
+                ),
+              )
+              .toList()
+          : const <AiGatewayModelGroup>[];
       if (account.authType == 'oauth' && account.hasCredential) {
         revocationFailed =
             !await gateway.oauthAuthorization.deleteAccountAndRevoke(account);
       } else {
         await gateway.accountManagement.deleteAccount(account.id);
+      }
+      if (account.connectorType == 'devin-cli-agentic') {
+        try {
+          await gateway.localCliAuthentication.logout(account);
+        } catch (_) {
+          var restored = false;
+          try {
+            await gateway.accountManagement.saveAccount(account);
+            restored = true;
+          } catch (_) {}
+          if (restored) {
+            for (final group in groupsToRestore) {
+              try {
+                await gateway.accountManagement.saveModelGroup(group);
+              } catch (_) {}
+            }
+          }
+          rethrow;
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -1201,6 +1298,7 @@ String _authLabel(String type, {String? connectorType}) {
     'aws_credentials' => 'AWS Access + Secret Key（Session Token 可选）',
     'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '会话令牌',
+    'cli_session' => '官方 Devin CLI 独立登录',
     'relay' => '旧版 AI Studio relay（已停用）',
     'none' => '无认证',
     _ => type,
@@ -1224,6 +1322,7 @@ String _authSourceLabel(
     'aws_credentials' => 'AWS Bedrock 用户提供的静态凭据',
     'aws_credential_chain' => 'AWS 默认凭据链',
     'session_token' => '$provider 用户提供的会话令牌',
+    'cli_session' => 'Stroom 为此账号单独创建的 Devin CLI 登录配置',
     'relay' => '旧版 AI Studio relay 已停用；请改用 API Key 或受支持的 OAuth。',
     'none' => '本地兼容端点，无凭据',
     _ => '$provider 提供的凭据',
@@ -1295,12 +1394,14 @@ class _AccountEditResult {
   final String secret;
   final Map<String, String> oauthConfiguration;
   final bool requiresOAuthAuthorization;
+  final bool requiresCliLogin;
 
   const _AccountEditResult(
     this.account,
     this.secret, {
     this.oauthConfiguration = const {},
     this.requiresOAuthAuthorization = false,
+    this.requiresCliLogin = false,
   });
 }
 
@@ -1331,10 +1432,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _oauthClientId;
   late final TextEditingController _oauthClientSecret;
   late final TextEditingController _googleCloudProjectId;
+  late final TextEditingController _devinCliExecutable;
+  String? _initialDevinCliExecutable;
   late String _connectorType;
   late String _authType;
   late AiGatewayAccountStatus _status;
   var _draftChanged = false;
+  var _reconnectCli = false;
+  var _trustDevinCliExecutable = false;
   String? _error;
 
   @override
@@ -1383,24 +1488,33 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _googleCloudProjectId = TextEditingController(
       text: googleCloudProjectId is String ? googleCloudProjectId : '',
     );
+    final devinCliExecutable =
+        account?.endpointConfig[DevinCliAcpLaunch.executablePathKey];
+    _initialDevinCliExecutable =
+        devinCliExecutable is String ? devinCliExecutable : null;
+    _devinCliExecutable = TextEditingController(
+      text: _initialDevinCliExecutable ?? '',
+    );
     _models = TextEditingController(
-      text: account?.connectorType == 'kimi-coding'
-          ? kPinnedKimiCodeModels.join('\n')
-          : account?.models
-                  .map(
-                    (model) => [
-                      model.upstreamModelId,
-                      ...model.capabilities.entries
-                          .where((entry) => entry.value is bool)
-                          .map(
-                            (entry) => entry.value == true
-                                ? entry.key
-                                : '${entry.key}=false',
-                          ),
-                    ].join(','),
-                  )
-                  .join('\n') ??
-              '',
+      text: account?.connectorType == 'devin-cli-agentic'
+          ? kPinnedDevinCliModels.join('\n')
+          : account?.connectorType == 'kimi-coding'
+              ? kPinnedKimiCodeModels.join('\n')
+              : account?.models
+                      .map(
+                        (model) => [
+                          model.upstreamModelId,
+                          ...model.capabilities.entries
+                              .where((entry) => entry.value is bool)
+                              .map(
+                                (entry) => entry.value == true
+                                    ? entry.key
+                                    : '${entry.key}=false',
+                              ),
+                        ].join(','),
+                      )
+                      .join('\n') ??
+                  '',
     );
   }
 
@@ -1414,6 +1528,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _oauthClientId.dispose();
     _oauthClientSecret.dispose();
     _googleCloudProjectId.dispose();
+    _devinCliExecutable.dispose();
     _models.dispose();
     super.dispose();
   }
@@ -1470,7 +1585,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _draftChanged = true;
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
-                    if (value == 'kimi-coding') {
+                    if (value == 'devin-cli-agentic') {
+                      _models.text = kPinnedDevinCliModels.join('\n');
+                    } else if (value == 'kimi-coding') {
                       _models.text = kPinnedKimiCodeModels.join('\n');
                     } else if (previousConnectorType == 'kimi-coding') {
                       _models.clear();
@@ -1498,6 +1615,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _region.text = 'us-central1';
                     }
                     if (_authType == 'none' ||
+                        _authType == 'cli_session' ||
                         _authType == 'relay' ||
                         _authType == 'aws_credential_chain') {
                       _credential.clear();
@@ -1546,6 +1664,54 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
+              if (_connectorType == 'devin-cli-agentic')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '仅启动官方 devin CLI。登录配置保存在此账号独立的 Stroom 应用目录；不会读取主机 Devin 登录或 API key。',
+                  ),
+                ),
+              if (_connectorType == 'devin-cli-agentic') ...[
+                TextField(
+                  controller: _devinCliExecutable,
+                  decoration: const InputDecoration(
+                    labelText: '官方 Devin CLI 可执行文件绝对路径',
+                    helperText: '从 Devin 官方安装位置复制 devin 可执行文件的完整路径。',
+                  ),
+                  onChanged: (_) => setState(() {
+                    _trustDevinCliExecutable = false;
+                    _draftChanged = true;
+                  }),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _trustDevinCliExecutable,
+                  title: Text(
+                    widget.account != null &&
+                            _devinCliExecutable.text.trim() ==
+                                _initialDevinCliExecutable
+                        ? '重新信任当前 CLI 可执行文件并更新 SHA-256'
+                        : '我已从 Devin 官方渠道安装并信任此可执行文件',
+                  ),
+                  subtitle: const Text('Stroom 固定当前文件的 SHA-256；文件改变后会拒绝启动。'),
+                  onChanged: (value) => setState(() {
+                    _trustDevinCliExecutable = value ?? false;
+                    _draftChanged = true;
+                  }),
+                ),
+              ],
+              if (_connectorType == 'devin-cli-agentic' &&
+                  widget.account != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _reconnectCli,
+                  title: const Text('重新登录官方 Devin CLI'),
+                  subtitle: const Text('重新认证此账号的独立 CLI 登录配置。'),
+                  onChanged: (value) => setState(() {
+                    _reconnectCli = value ?? false;
+                    _draftChanged = true;
+                  }),
+                ),
               if (_authType == 'oauth' && oauthLimitation != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -1603,6 +1769,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _endpoint,
+                enabled: _connectorType != 'devin-cli-agentic',
                 decoration: const InputDecoration(
                   labelText: '端点地址（连接器需要时填写）',
                   hintText: 'https://api.example.com/v1',
@@ -1641,11 +1808,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   controller: _credential,
                   enabled: _authType != 'none' &&
                       _authType != 'relay' &&
+                      _authType != 'cli_session' &&
                       _authType != 'aws_credential_chain',
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: _authType == 'none' ||
                             _authType == 'relay' ||
+                            _authType == 'cli_session' ||
                             _authType == 'aws_credential_chain'
                         ? '该认证方式无需输入凭据'
                         : _connectorType == 'bedrock'
@@ -1690,24 +1859,28 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _models,
                 minLines: 3,
                 maxLines: 7,
-                readOnly: _connectorType == 'kimi-coding' ||
+                readOnly: _connectorType == 'devin-cli-agentic' ||
+                    _connectorType == 'kimi-coding' ||
                     _connectorType == 'grok-cli' ||
                     _connectorType == 'xai-oauth' ||
                     _connectorType == 'muse-code',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
-                  helperText: _connectorType == 'kimi-coding'
-                      ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                      : _connectorType == 'grok-cli'
-                          ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                          : _connectorType == 'xai-oauth'
-                              ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                              : _connectorType == 'muse-code'
-                                  ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                  : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  helperText: _connectorType == 'devin-cli-agentic'
+                      ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                      : _connectorType == 'kimi-coding'
+                          ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                          : _connectorType == 'grok-cli'
+                              ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                              : _connectorType == 'xai-oauth'
+                                  ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                                  : _connectorType == 'muse-code'
+                                      ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                      : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
-                onChanged: _connectorType == 'kimi-coding' ||
+                onChanged: _connectorType == 'devin-cli-agentic' ||
+                        _connectorType == 'kimi-coding' ||
                         _connectorType == 'grok-cli' ||
                         _connectorType == 'xai-oauth' ||
                         _connectorType == 'muse-code'
@@ -1719,7 +1892,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 child: TextButton.icon(
                   onPressed: widget.account != null &&
                           !_draftChanged &&
-                          !{'kimi-coding'}.contains(_connectorType)
+                          !{
+                            'kimi-coding',
+                            'devin-cli-agentic',
+                          }.contains(_connectorType)
                       ? _discoverModels
                       : null,
                   icon: const Icon(Icons.refresh),
@@ -1751,10 +1927,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             _authType == 'oauth' &&
             oauthLimitation == null)
           OutlinedButton(
-            onPressed: () => _save(reconnectOAuth: true),
+            onPressed: () => _saveSafely(reconnectOAuth: true),
             child: const Text('重新授权'),
           ),
-        FilledButton(onPressed: _save, child: const Text('保存')),
+        FilledButton(onPressed: _saveSafely, child: const Text('保存')),
       ],
     );
   }
@@ -1791,7 +1967,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
   }
 
-  void _save({bool reconnectOAuth = false}) {
+  void _saveSafely({bool reconnectOAuth = false}) {
+    _save(reconnectOAuth: reconnectOAuth).catchError((_) {
+      if (!mounted) return;
+      setState(() => _error = '保存账号失败，请检查连接设置后重试。');
+    });
+  }
+
+  Future<void> _save({bool reconnectOAuth = false}) async {
     final accountName = _name.text.trim();
     if (accountName.isEmpty) {
       setState(() => _error = '请输入账号名称。');
@@ -1909,6 +2092,46 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final endpointConfig = Map<String, dynamic>.from(
       widget.account?.endpointConfig ?? const <String, dynamic>{},
     );
+    if (_connectorType == 'devin-cli-agentic') {
+      final executablePath = _devinCliExecutable.text.trim();
+      final previousExecutablePath =
+          widget.account?.endpointConfig[DevinCliAcpLaunch.executablePathKey];
+      final previousExecutableSha256 =
+          widget.account?.endpointConfig[DevinCliAcpLaunch.executableSha256Key];
+      if (executablePath.isEmpty) {
+        setState(() => _error = '请填写官方 Devin CLI 可执行文件的完整路径。');
+        return;
+      }
+      if (widget.account == null ||
+          executablePath != previousExecutablePath ||
+          previousExecutableSha256 is! String ||
+          previousExecutableSha256.isEmpty ||
+          _trustDevinCliExecutable) {
+        if (!_trustDevinCliExecutable) {
+          setState(() => _error = '请确认此可执行文件来自 Devin 官方安装渠道。');
+          return;
+        }
+        try {
+          final approval = await DevinCliAcpLaunch.approveExecutablePath(
+            executablePath,
+          );
+          endpointConfig[DevinCliAcpLaunch.executablePathKey] = approval.path;
+          endpointConfig[DevinCliAcpLaunch.executableSha256Key] =
+              approval.sha256;
+        } on FileSystemException {
+          setState(() => _error = '所选 CLI 路径无效或不可执行。');
+          return;
+        }
+      } else {
+        endpointConfig[DevinCliAcpLaunch.executablePathKey] =
+            previousExecutablePath;
+        endpointConfig[DevinCliAcpLaunch.executableSha256Key] =
+            previousExecutableSha256;
+      }
+    } else {
+      endpointConfig.remove(DevinCliAcpLaunch.executablePathKey);
+      endpointConfig.remove(DevinCliAcpLaunch.executableSha256Key);
+    }
     if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _oauthClientId.text.trim().isNotEmpty) {
@@ -2003,6 +2226,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     if (_authType != 'none' &&
         _authType != 'relay' &&
+        _authType != 'cli_session' &&
         _authType != 'aws_credential_chain' &&
         _authType != 'oauth' &&
         secret.isEmpty &&
@@ -2010,6 +2234,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       setState(() => _error = '请输入凭据。');
       return;
     }
+    if (!mounted) return;
     Navigator.pop(
       context,
       _AccountEditResult(
@@ -2017,6 +2242,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         secret,
         oauthConfiguration: oauthConfiguration,
         requiresOAuthAuthorization: requiresOAuthAuthorization,
+        requiresCliLogin: account.connectorType == 'devin-cli-agentic' &&
+            (widget.account?.connectorType != 'devin-cli-agentic' ||
+                _reconnectCli),
       ),
     );
   }

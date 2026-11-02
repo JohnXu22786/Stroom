@@ -10,6 +10,7 @@ import '../../ai_gateway/ai_gateway_contracts.dart';
 import '../../models/llm_account.dart';
 import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
+import '../../services/devin_cli_acp_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_connector_model_catalog.dart';
 import '../../services/llm_credential_store.dart';
@@ -68,6 +69,10 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   final AiGatewayOAuthAuthorization? _oauthAuthorizationOverride;
   @override
   final AiGatewayAccountManagement accountManagement;
+  final DevinCliAcpService _devinCliAcp;
+  @override
+  late final AiGatewayLocalCliAuthentication localCliAuthentication =
+      _devinCliAcp;
   @override
   late final AiGatewayOAuthAuthorization oauthAuthorization =
       _oauthAuthorizationOverride ??
@@ -85,7 +90,10 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   final LlmRoutingService _routingService;
   final LlmConnectorHttpClient _connectorClient;
   @override
-  late final AiGatewayExecutor executor = _LlmGatewayExecutor(_connectorClient);
+  late final AiGatewayExecutor executor = _LlmGatewayExecutor(
+    _connectorClient,
+    _devinCliAcp,
+  );
 
   LlmChatRoutingRuntime({
     required LlmAccountConnectorService accountService,
@@ -93,9 +101,11 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     LlmConnectorHttpClient? connectorClient,
     Dio? oauthDio,
     AiGatewayOAuthAuthorization? oauthAuthorization,
+    DevinCliAcpService? devinCliAcpService,
   })  : _accountService = accountService,
         _oauthDio = oauthDio,
         _oauthAuthorizationOverride = oauthAuthorization,
+        _devinCliAcp = devinCliAcpService ?? DevinCliAcpService(),
         accountManagement = _LlmGatewayAccountManagement(accountService),
         _routingService = routingService,
         _connectorClient = connectorClient ??
@@ -1626,6 +1636,7 @@ bool _hasRequiredModelCapabilities(
     LlmNativeProtocol.grokBuildResponses,
     LlmNativeProtocol.xaiOAuthResponses,
     LlmNativeProtocol.metaResponses,
+    LlmNativeProtocol.devinCliAcp,
   };
   for (final capability in required) {
     final explicitlyEnabled = capabilities[capability] == true;
@@ -1663,6 +1674,7 @@ bool _hasRequiredModelCapabilities(
               LlmNativeProtocol.grokBuildResponses,
               LlmNativeProtocol.xaiOAuthResponses,
               LlmNativeProtocol.metaResponses,
+              LlmNativeProtocol.devinCliAcp,
               LlmNativeProtocol.bedrockConverse,
             }.contains(protocol) ||
         capability == 'streaming' && streamingProtocols.contains(protocol);
@@ -1692,8 +1704,9 @@ bool _hasRequiredModelCapabilities(
 
 class _LlmGatewayExecutor implements AiGatewayExecutor {
   final LlmConnectorHttpClient _client;
+  final DevinCliAcpService _devinCliAcp;
 
-  const _LlmGatewayExecutor(this._client);
+  const _LlmGatewayExecutor(this._client, this._devinCliAcp);
 
   @override
   Future<AiGatewayResponse> request({
@@ -1709,6 +1722,24 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
     Duration? sendTimeout,
     Duration? receiveTimeout,
   }) async {
+    if (account.connectorType == 'devin-cli-agentic') {
+      try {
+        return await _devinCliAcp.request(
+          account: account,
+          modelId: modelId,
+          body: body,
+          stream: stream,
+          cancelToken: cancelToken,
+          onRequestSent: onRequestSent,
+        );
+      } on AiGatewayExecutionException {
+        rethrow;
+      } catch (_) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+        );
+      }
+    }
     try {
       final response = await _client.request(
         account: _legacyAccount(account),

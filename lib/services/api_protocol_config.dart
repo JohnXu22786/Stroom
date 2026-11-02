@@ -73,6 +73,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'gemini-interactions' => 'google.gemini.interactions',
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
+      'devin-cli-agentic' => 'devin.acp',
       'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
@@ -131,6 +132,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'antigravity' ||
     'devin' =>
       supplierProtocol,
+    'devin-cli-agentic' => 'devin.acp',
     _ => null,
   };
   if (nativeProtocol != null) return {nativeProtocol};
@@ -147,4 +149,5 @@ const apiProtocolLabels = <String, String>{
   'openai.responses': 'OpenAI Responses',
   'anthropic.messages': 'Anthropic Messages',
   'devin.connect_rpc': 'Devin Connect-RPC',
+  'devin.acp': 'Devin CLI ACP',
 };

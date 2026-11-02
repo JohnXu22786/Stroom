@@ -33,6 +33,7 @@ void main() {
           'grok-cli',
           'xai-oauth',
           'devin',
+          'devin-cli-agentic',
           'meta',
           'muse-code',
           'gemini',
@@ -44,6 +45,35 @@ void main() {
         }),
       );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
+      expect(LlmConnectorRegistry.find('devin-cli-agentic')!.authTypes, {
+        'cli_session',
+      });
+      expect(
+        LlmConnectorRegistry.find('devin-cli-agentic')!.protocol,
+        LlmNativeProtocol.devinCliAcp,
+      );
+      expect(LlmConnectorRegistry.find('devin-cli-agentic')!.modelCatalog, [
+        'devin-cli-default',
+      ]);
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('devin-cli-agentic'),
+        'devin.acp',
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'devin-cli-agentic',
+          'cli_session',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'devin',
+          'cli_session',
+        ),
+        isFalse,
+        reason: 'CLI login state must remain distinct from Devin OAuth',
+      );
       expect(LlmConnectorRegistry.find('kimi-coding')!.authTypes, {'oauth'});
       expect(LlmConnectorRegistry.find('meta')!.authTypes, {'api_key'});
       expect(LlmConnectorRegistry.find('muse-code')!.authTypes, {'oauth'});
@@ -109,6 +139,29 @@ void main() {
         );
       }
     });
+
+    test(
+      'Devin CLI catalog models advertise only chat and streaming',
+      () async {
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final models = await service.discoverModels(
+          LlmAccount(
+            id: 'devin-cli-catalog',
+            connectorType: 'devin-cli-agentic',
+            authType: 'cli_session',
+            displayName: 'Devin CLI',
+          ),
+        );
+
+        expect(models.map((model) => model.upstreamModelId), [
+          'devin-cli-default',
+        ]);
+        expect(models.single.capabilities, {'chat': true, 'streaming': true});
+      },
+    );
 
     test(
       'Muse OAuth catalog stays account-scoped and source-limited',
@@ -1146,6 +1199,25 @@ void main() {
         contains('claude-sonnet-4-6'),
       );
       expect(models, isNotEmpty);
+    });
+
+    test('Devin CLI default model identifies its ACP catalog source', () async {
+      final catalogService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+
+      final models = await catalogService.discoverModels(
+        _account(
+          'devin-cli-catalog',
+          'devin-cli-agentic',
+          authType: 'cli_session',
+        ),
+      );
+
+      expect(models, hasLength(1));
+      expect(models.single.upstreamModelId, 'devin-cli-default');
+      expect(models.single.config['catalogSource'], 'devin_cli_acp_default');
     });
 
     test(

@@ -43,6 +43,7 @@ enum LlmNativeProtocol {
   grokBuildResponses,
   xaiOAuthResponses,
   devinConnectRpc,
+  devinCliAcp,
   metaResponses,
   geminiGenerateContent,
   geminiInteractions,
@@ -201,6 +202,13 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.accountQuota,
     ),
     LlmConnectorDefinition(
+      id: 'devin-cli-agentic',
+      displayName: 'Devin CLI Agentic Bridge',
+      protocol: LlmNativeProtocol.devinCliAcp,
+      authTypes: {'cli_session'},
+      modelCatalog: kPinnedDevinCliModels,
+    ),
+    LlmConnectorDefinition(
       id: 'meta',
       displayName: 'Meta Muse Code',
       protocol: LlmNativeProtocol.metaResponses,
@@ -348,6 +356,7 @@ abstract final class LlmConnectorRegistry {
         'vertex' => 'google.gemini.generate_content',
         'ollama' => 'ollama.chat',
         'devin' => 'devin.connect_rpc',
+        'devin-cli-agentic' => 'devin.acp',
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
@@ -380,6 +389,7 @@ abstract final class LlmConnectorRegistry {
       'xai' || 'meta' => authType == 'api_key',
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
+      'devin-cli-agentic' => authType == 'cli_session',
       _ => true,
     };
   }
@@ -1155,23 +1165,28 @@ class LlmAccountConnectorService {
           id: '${account.id}:catalog:$index',
           upstreamModelId: connector.modelCatalog[index],
           displayName: connector.modelCatalog[index],
-          capabilities: connector.id == 'devin'
-              ? {
-                  // Stroom emits a completed SSE event for Devin's unary RPC so
-                  // Chat and Task Flow share the standard stream lifecycle.
-                  'chat': true,
-                  'streaming': true,
-                  if (!const {
-                    'devin/glm-5-2',
-                    'devin/glm-5-3',
-                    'devin/deepseek-v4-flash',
-                  }.contains(connector.modelCatalog[index]))
-                    'vision': true,
-                }
-              : const {},
-          config: const {
-            'catalogSource': 'CLIProxyAPI@$kLlmConnectorReferenceRevision',
+          capabilities: switch (connector.id) {
+            'devin-cli-agentic' => const {'chat': true, 'streaming': true},
+            'devin' => {
+                // Stroom emits a completed SSE event for Devin's unary RPC so
+                // Chat and Task Flow share the standard stream lifecycle.
+                'chat': true,
+                'streaming': true,
+                if (!const {
+                  'devin/glm-5-2',
+                  'devin/glm-5-3',
+                  'devin/deepseek-v4-flash',
+                }.contains(connector.modelCatalog[index]))
+                  'vision': true,
+              },
+            _ => const {},
           },
+          config: connector.id == 'devin-cli-agentic'
+              ? const {'catalogSource': 'devin_cli_acp_default'}
+              : const {
+                  'catalogSource':
+                      'CLIProxyAPI@$kLlmConnectorReferenceRevision',
+                },
         ),
     ]);
   }

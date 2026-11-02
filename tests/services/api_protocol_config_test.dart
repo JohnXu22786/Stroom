@@ -33,6 +33,31 @@ void main() {
       },
     );
 
+    test('Devin CLI ACP is separate from Devin Connect-RPC', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('devin-cli-agentic'),
+        'devin.acp',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'devin.acp',
+          connectorType: 'devin-cli-agentic',
+        ),
+        {'devin.acp'},
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('devin'),
+        'devin.connect_rpc',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'devin.connect_rpc',
+          connectorType: 'devin',
+        ),
+        {'devin.connect_rpc'},
+      );
+    });
+
     test(
       'Kimi Code OAuth uses supplier defaults and provider model overrides',
       () {

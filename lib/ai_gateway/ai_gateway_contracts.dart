@@ -84,16 +84,24 @@ class AiGatewayExecutionException implements Exception {
   }) : headers = Map.unmodifiable(headers);
 
   @override
-  String toString() => switch (kind) {
-        AiGatewayFailureKind.cancelled => 'AI Gateway request was cancelled.',
-        AiGatewayFailureKind.authenticationRequired =>
-          'AI Gateway authentication is required.',
-        AiGatewayFailureKind.transportUnavailable =>
-          'AI Gateway transport is unavailable.',
-        AiGatewayFailureKind.request => statusCode == null
-            ? 'AI Gateway request could not be completed.'
-            : 'AI Gateway request failed with status $statusCode.',
-      };
+  String toString() {
+    if (code == 'unsupported_capability') {
+      return 'This Devin CLI capability is not supported.';
+    }
+    if (code == 'unsupported_acp_protocol') {
+      return 'This Devin CLI ACP protocol version is not supported.';
+    }
+    return switch (kind) {
+      AiGatewayFailureKind.cancelled => 'AI Gateway request was cancelled.',
+      AiGatewayFailureKind.authenticationRequired =>
+        'AI Gateway authentication is required.',
+      AiGatewayFailureKind.transportUnavailable =>
+        'AI Gateway transport is unavailable.',
+      AiGatewayFailureKind.request => statusCode == null
+          ? 'AI Gateway request could not be completed.'
+          : 'AI Gateway request failed with status $statusCode.',
+    };
+  }
 }
 
 class AiGatewayMetricObservation {
@@ -456,6 +464,13 @@ abstract interface class AiGatewayAuthLifecycle {
   Future<void> revoke(AiGatewayAccount account);
 }
 
+/// Authentication actions owned by a local CLI rather than Stroom storage.
+abstract interface class AiGatewayLocalCliAuthentication {
+  Future<void> login(AiGatewayAccount account);
+  Future<bool> isAuthenticated(AiGatewayAccount account);
+  Future<void> logout(AiGatewayAccount account);
+}
+
 /// Performs provider browser OAuth without exposing token material through the
 /// public Gateway. Implementations commit tokens directly to secure storage.
 abstract interface class AiGatewayOAuthAuthorization {
@@ -566,6 +581,7 @@ abstract interface class AiGatewayRouting {
 abstract interface class AiGatewayFacade implements AiGatewayRouting {
   AiGatewayAccountManagement get accountManagement;
   AiGatewayOAuthAuthorization get oauthAuthorization;
+  AiGatewayLocalCliAuthentication get localCliAuthentication;
   AiGatewayProviderCatalog get providerCatalog;
   AiGatewayModelDiscovery get modelDiscovery;
   AiGatewayExecutor get executor;

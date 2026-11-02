@@ -42,6 +42,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
         },
       'google.gemini.interactions' => const {'gemini-interactions'},
       'devin.connect_rpc' => const {'devin'},
+      'devin.acp' => const {'devin-cli-agentic'},
       'ollama.chat' => const {'ollama'},
       _ => const {
           'openai-compatibility',
@@ -73,6 +74,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'google.gemini.interactions',
       'ollama.chat',
       'devin.connect_rpc',
+      'devin.acp',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
   };
@@ -260,11 +262,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           );
           _lastResponseStatusCode = response.statusCode;
           _lastResponseHeaders = response.headers;
-          final result = _readCompletion(response.body, protocolId);
+          final completionProtocol = protocolId == 'devin.acp'
+              ? 'openai.chat_completions'
+              : protocolId;
+          final result = _readCompletion(response.body, completionProtocol);
           _lastResponseData = result.data;
           _rememberReturnedReasoning(
             messages,
-            _completionReasoning(result.data, protocolId),
+            _completionReasoning(result.data, completionProtocol),
             accountId: candidate.account.id,
             providerId: candidate.account.connectorType,
             executorId: _executorReplayScopeId(runtime.executor),
@@ -273,21 +278,21 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             protocolId: protocolId,
             returnedResponsesOutputItems: _completionResponsesOutputItems(
               result.data,
-              protocolId,
+              completionProtocol,
             ),
             returnedAssistantTurn: _completionAssistantTurn(
               result.data,
               result.text,
-              protocolId,
+              completionProtocol,
             ),
             returnedToolSignatures: _completionReasoningSignatures(
               result.data,
-              protocolId,
+              completionProtocol,
             ),
           );
           _lastMediaAttachments = await _storeStreamMedia(
             result.data,
-            protocolId,
+            completionProtocol,
           );
           _lastUsage = result.usage;
           await _recordUsage(
@@ -438,7 +443,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 progress,
                 runtime: runtime,
                 accountId: candidate.account.id,
-                protocolId: protocolId,
+                protocolId: protocolId == 'devin.acp'
+                    ? 'openai.chat_completions'
+                    : protocolId,
                 returnedResponsesOutputItems: returnedResponsesOutputItems,
               );
               final returnedReasoning = StringBuffer();
@@ -690,9 +697,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String? system,
     Map<String, dynamic>? extraParams,
   }) async {
-    final requestProtocolId = protocolId == 'devin.connect_rpc'
-        ? 'openai.chat_completions'
-        : protocolId;
+    final requestProtocolId =
+        protocolId == 'devin.connect_rpc' || protocolId == 'devin.acp'
+            ? 'openai.chat_completions'
+            : protocolId;
     final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
     if (bridge == null) {
       throw StateError('No internal protocol bridge for $protocolId.');
