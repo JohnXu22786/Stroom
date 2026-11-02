@@ -5510,6 +5510,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         }
       }
       final images = data['images'];
+      if (images != null && images is! List) {
+        return true;
+      }
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
@@ -5520,6 +5523,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                     !sanitizedNonOwnershipFields.contains(key))) {
               return true;
             }
+          }
+          final storageRef = image['storageRef'];
+          if (storageRef != null && storageRef is! String) {
+            return true;
           }
         }
       }

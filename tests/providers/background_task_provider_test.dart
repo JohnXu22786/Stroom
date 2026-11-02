@@ -18959,58 +18959,80 @@ void main() {
     );
 
     test(
-      'OCR cache ownership stays unavailable for malformed image entries',
+      'OCR cache ownership stays unavailable for malformed image data',
       () async {
         final file = _tasksFileIn(testDir.path);
         await file.parent.create(recursive: true);
-        await file.writeAsString(
-          jsonEncode([
-            {
-              'id': 'ocr-malformed-image-entry-owner',
-              'type': 'ocr',
-              'title': 'OCR retry with a malformed image entry',
-              'status': 'failed',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'steps': <dynamic>[],
-              'retryData': {
+        Future<void> expectUnknownOwnership(
+            String taskId, dynamic images) async {
+          await file.writeAsString(
+            jsonEncode([
+              {
+                'id': taskId,
                 'type': 'ocr',
-                'version': OcrRetrySnapshot.currentVersion,
-                'modelRef': {'configId': null, 'modelId': null},
-                'images': [
-                  'ocr_retry_cache/7777777777777777777777777777777777777777777777777777777777777777.bin',
-                ],
-                'batchMode': 'joint',
-                'perImageConcurrency': 1,
-                'requestSizeBudgetBytes': 1024,
+                'title': 'OCR retry with malformed image data',
+                'status': 'failed',
+                'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+                'steps': <dynamic>[],
+                'retryData': {
+                  'type': 'ocr',
+                  'version': OcrRetrySnapshot.currentVersion,
+                  'modelRef': {'configId': null, 'modelId': null},
+                  'images': images,
+                  'batchMode': 'joint',
+                  'perImageConcurrency': 1,
+                  'requestSizeBudgetBytes': 1024,
+                },
+              },
+            ]),
+          );
+
+          final notifier = BackgroundTaskNotifier();
+          try {
+            await notifier.restoreFromPersistence();
+            expect(notifier.taskById(taskId), isNotNull);
+            expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+            final persistedRows =
+                jsonDecode(await file.readAsString()) as List<dynamic>;
+            expect(
+              persistedRows.whereType<Map<String, dynamic>>().any(
+                    (row) =>
+                        row['_unrestoredTaskRecord'] == true &&
+                        row['ocrCacheOwnershipKnown'] == false &&
+                        row['ocrCacheTaskId'] == taskId,
+                  ),
+              isTrue,
+            );
+          } finally {
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+
+        await expectUnknownOwnership(
+          'ocr-malformed-image-entry-owner',
+          [
+            'ocr_retry_cache/7777777777777777777777777777777777777777777777777777777777777777.bin',
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-malformed-image-container-owner',
+          {
+            'storageRef':
+                'ocr_retry_cache/8888888888888888888888888888888888888888888888888888888888888888.bin',
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-malformed-storage-ref-owner',
+          [
+            {
+              'storageRef': {
+                'nestedRef':
+                    'ocr_retry_cache/9999999999999999999999999999999999999999999999999999999999999999.bin',
               },
             },
-          ]),
+          ],
         );
-
-        final notifier = BackgroundTaskNotifier();
-        try {
-          await notifier.restoreFromPersistence();
-          expect(
-            notifier.taskById('ocr-malformed-image-entry-owner'),
-            isNotNull,
-          );
-          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
-          final persistedRows =
-              jsonDecode(await file.readAsString()) as List<dynamic>;
-          expect(
-            persistedRows.whereType<Map<String, dynamic>>().any(
-                  (row) =>
-                      row['_unrestoredTaskRecord'] == true &&
-                      row['ocrCacheOwnershipKnown'] == false &&
-                      row['ocrCacheTaskId'] ==
-                          'ocr-malformed-image-entry-owner',
-                ),
-            isTrue,
-          );
-        } finally {
-          notifier.dispose();
-          await notifier.pendingPersistence;
-        }
       },
     );
 
