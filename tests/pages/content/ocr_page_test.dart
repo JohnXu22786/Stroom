@@ -706,6 +706,86 @@ void main() {
       expect(find.text('GPT-4 Vision | OpenAI'), findsWidgets);
     });
 
+    testWidgets(
+      'keeps the initial model stable and requires reselection when it is ambiguous or missing',
+      (tester) async {
+        ProviderEntry entryWithModels(List<ModelConfig> models) => ProviderEntry(
+          id: 'selection-provider',
+          type: 'ocr',
+          name: 'Selection Provider',
+          configs: [
+            ProviderConfigItem(
+              id: 'selection-config',
+              providerName: 'Selection Provider',
+              host: 'https://provider.test/ocr',
+              key: 'test-key',
+              models: models,
+            ),
+          ],
+        );
+        ModelConfig selectedModel() => ModelConfig(
+          id: 'selected-model',
+          name: 'Selected Model',
+          modelId: 'selected-model-api',
+        );
+        final replacementModel = ModelConfig(
+          id: 'replacement-model',
+          name: 'Replacement Model',
+          modelId: 'replacement-model-api',
+        );
+        final providerNotifier = ProviderEntriesNotifier()
+          ..state = ProviderEntriesState(
+            entries: [
+              entryWithModels([selectedModel(), replacementModel]),
+            ],
+          );
+
+        await tester.pumpWidget(
+          _buildTestApp(testProviderEntriesNotifier: providerNotifier),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Selected Model | Selection Provider'), findsOneWidget);
+
+        providerNotifier.state = ProviderEntriesState(
+          entries: [
+            entryWithModels([replacementModel, selectedModel()]),
+          ],
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Selected Model | Selection Provider'), findsOneWidget);
+        expect(find.text('Replacement Model | Selection Provider'), findsNothing);
+
+        providerNotifier.state = ProviderEntriesState(
+          entries: [
+            entryWithModels([selectedModel(), selectedModel(), replacementModel]),
+          ],
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
+
+        providerNotifier.state = ProviderEntriesState(
+          entries: [
+            entryWithModels([replacementModel]),
+          ],
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
+        expect(find.text('Replacement Model | Selection Provider'), findsNothing);
+
+        await tester.tap(find.text('请选择模型'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text('Replacement Model | Selection Provider').last,
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Replacement Model | Selection Provider'),
+          findsOneWidget,
+        );
+        expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsNothing);
+      },
+    );
     testWidgets('locks the model during OCR processing and unlocks on failure',
         (
       tester,
