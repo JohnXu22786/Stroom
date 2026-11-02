@@ -34,6 +34,47 @@ const _grokBuildClientHeaders = <String, String>{
 
 const kLlmAntigravityRequestUserAgent = 'antigravity/hub/2.9.1 darwin/arm64';
 
+const _qwenCloudRegions = {
+  'ap-southeast-1',
+  'cn-beijing',
+  'eu-central-1',
+  'cn-hongkong',
+  'ap-northeast-1',
+  'us-east-1',
+};
+
+String _qwenCloudBaseUrl(Map<String, dynamic> config) {
+  final configured = config['baseUrl'];
+  if (configured is String && configured.trim().isNotEmpty) {
+    final parsed = Uri.tryParse(configured.trim());
+    if (parsed == null || parsed.host.isEmpty || parsed.userInfo.isNotEmpty) {
+      throw const LlmAccountConnectorException();
+    }
+    return parsed.replace(path: '/compatible-mode/v1', query: null).toString();
+  }
+  final rawRegion = config['region'];
+  final region = rawRegion is String && rawRegion.trim().isNotEmpty
+      ? rawRegion.trim()
+      : 'ap-southeast-1';
+  if (!_qwenCloudRegions.contains(region)) {
+    throw const LlmAccountConnectorException();
+  }
+  return 'https://$region.maas.qwencloudapi.com/compatible-mode/v1';
+}
+
+String _qwenCloudProtocolBaseUrl(
+  String connectorType,
+  Map<String, dynamic> config,
+  String? nativeFormat,
+) {
+  final host = connectorType == 'qwen-cloud-token-plan'
+      ? 'token-plan.maas.qwencloudapi.com'
+      : Uri.parse(_qwenCloudBaseUrl(config)).host;
+  final path =
+      nativeFormat == 'anthropic' ? '/apps/anthropic' : '/compatible-mode/v1';
+  return 'https://$host$path';
+}
+
 enum LlmNativeProtocol {
   openAIResponses,
   anthropicMessages,
@@ -257,6 +298,13 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'glm-cn',
+      displayName: 'GLM Coding (China)',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
       id: 'deepseek',
       displayName: 'DeepSeek API',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -271,8 +319,29 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'minimax-cn',
+      displayName: 'MiniMax (China)',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
       id: 'qwen',
       displayName: 'Qwen Cloud API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'qwen-cloud',
+      displayName: 'Qwen Cloud',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'qwen-cloud-token-plan',
+      displayName: 'Qwen Cloud Token Plan',
       protocol: LlmNativeProtocol.openAIChatCompletions,
       authTypes: {'api_key'},
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
@@ -342,6 +411,7 @@ abstract final class LlmConnectorRegistry {
   static String canonicalId(String id) => switch (id.trim()) {
         'anthropic' => 'claude',
         'openai' => 'openai-compatibility',
+        'glmt' => 'glm',
         final normalized => normalized,
       };
 
@@ -366,6 +436,10 @@ abstract final class LlmConnectorRegistry {
         'deepseek' ||
         'minimax' ||
         'qwen' ||
+        'glm-cn' ||
+        'minimax-cn' ||
+        'qwen-cloud' ||
+        'qwen-cloud-token-plan' ||
         'kimi' ||
         'kimi-ai' ||
         'kimi.ai' =>
@@ -1099,9 +1173,13 @@ class LlmAccountConnectorService {
       'gemini-interactions',
       'moonshot',
       'glm',
+      'glm-cn',
       'deepseek',
       'minimax',
+      'minimax-cn',
       'qwen',
+      'qwen-cloud',
+      'qwen-cloud-token-plan',
       'grok-cli',
       'xai-oauth',
       'muse-code',
@@ -1793,9 +1871,14 @@ class LlmAccountConnectorService {
         'https://generativelanguage.googleapis.com',
       'moonshot' => 'https://api.moonshot.ai/v1',
       'glm' => 'https://open.bigmodel.cn/api/paas/v4',
+      'glm-cn' => 'https://open.bigmodel.cn/api/paas/v4',
       'deepseek' => 'https://api.deepseek.com',
       'minimax' => 'https://api.minimax.io/v1',
+      'minimax-cn' => 'https://api.minimaxi.com/v1',
       'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      'qwen-cloud' => _qwenCloudBaseUrl(account.endpointConfig),
+      'qwen-cloud-token-plan' =>
+        'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1',
       'grok-cli' => 'https://cli-chat-proxy.grok.com/v1',
       'xai-oauth' => 'https://api.x.ai/v1',
       'muse-code' => 'https://api.meta.ai/v1',
@@ -2067,6 +2150,15 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if (const {
+                  'glm-cn',
+                  'minimax-cn',
+                  'qwen-cloud',
+                  'qwen-cloud-token-plan',
+                }.contains(account.connectorType)) ...{
+                  'chat': true,
+                  'streaming': true,
+                },
                 if (account.connectorType == 'muse-code') ...{
                   'chat': true,
                   'streaming': true,
@@ -3369,6 +3461,15 @@ class LlmNativeRequestBuilder {
         headers['anthropic-version'] = '2023-06-01';
         headers['X-App'] = 'cli';
         break;
+      case 'qwen-cloud' || 'qwen-cloud-token-plan':
+        if (nativeFormat == 'anthropic') {
+          headers.remove('Authorization');
+          headers['x-api-key'] = secret;
+          headers['anthropic-version'] = '2023-06-01';
+        } else {
+          headers['Authorization'] = 'Bearer $secret';
+        }
+        break;
       case 'codex':
         if (account.authType == 'oauth') {
           final accountId = _credentialBundleString(credential, const [
@@ -3843,14 +3944,19 @@ class LlmNativeRequestBuilder {
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
         path = '/chat/completions';
-      case 'glm':
+      case 'glm' || 'glm-cn':
         baseUrl = _baseUrl(config, 'https://open.bigmodel.cn/api/paas/v4');
         path = '/chat/completions';
       case 'deepseek':
         baseUrl = _baseUrl(config, 'https://api.deepseek.com');
         path = '/chat/completions';
-      case 'minimax':
-        baseUrl = _baseUrl(config, 'https://api.minimax.io/v1');
+      case 'minimax' || 'minimax-cn':
+        baseUrl = _baseUrl(
+          config,
+          account.connectorType == 'minimax-cn'
+              ? 'https://api.minimaxi.com/v1'
+              : 'https://api.minimax.io/v1',
+        );
         path = '/chat/completions';
       case 'qwen':
         baseUrl = _baseUrl(
@@ -3858,6 +3964,17 @@ class LlmNativeRequestBuilder {
           'https://dashscope.aliyuncs.com/compatible-mode/v1',
         );
         path = '/chat/completions';
+      case 'qwen-cloud' || 'qwen-cloud-token-plan':
+        baseUrl = _qwenCloudProtocolBaseUrl(
+          account.connectorType,
+          config,
+          nativeFormat,
+        );
+        path = switch (nativeFormat) {
+          'anthropic' => '/v1/messages',
+          'responses' => '/responses',
+          _ => '/chat/completions',
+        };
       case 'bedrock':
         final region = _configString(config, 'region');
         if (region == null || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
@@ -3959,7 +4076,11 @@ class LlmNativeRequestBuilder {
       default:
         throw const LlmAccountConnectorException();
     }
-    final base = account.connectorType == 'openai-compatibility'
+    final usesProtocolSpecificQwenBase =
+        account.connectorType == 'qwen-cloud' ||
+            account.connectorType == 'qwen-cloud-token-plan';
+    final base = account.connectorType == 'openai-compatibility' ||
+            usesProtocolSpecificQwenBase
         ? baseUrl
         : _baseUrl(config, baseUrl);
     final parsed = Uri.tryParse(base);
@@ -4119,7 +4240,13 @@ class LlmNativeRequestBuilder {
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',
       'minimax' => {'api.minimax.io', 'api.minimaxi.com'}.contains(host),
+      'minimax-cn' => host == 'api.minimaxi.com',
       'qwen' => host == 'dashscope.aliyuncs.com',
+      'qwen-cloud' => _qwenCloudRegions
+          .map((region) => '$region.maas.qwencloudapi.com')
+          .contains(host),
+      'qwen-cloud-token-plan' => host == 'token-plan.maas.qwencloudapi.com',
+      'glm-cn' => host == 'open.bigmodel.cn',
       'bedrock' => host == bedrockHost,
       'vertex' => host == 'aiplatform.googleapis.com' ||
           host == '$location-aiplatform.googleapis.com',

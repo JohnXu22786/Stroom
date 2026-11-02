@@ -1471,7 +1471,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               ? 'us-east-1'
               : account?.connectorType == 'vertex'
                   ? 'us-central1'
-                  : ''),
+                  : account?.connectorType == 'qwen-cloud'
+                      ? 'ap-southeast-1'
+                      : ''),
     );
     final projectId = account?.endpointConfig['projectId'];
     _projectId = TextEditingController(
@@ -1598,6 +1600,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     } else if (value == 'vertex' &&
                         previousConnectorType != 'vertex') {
                       _region.text = 'us-central1';
+                    } else if (value == 'qwen-cloud' &&
+                        previousConnectorType != 'qwen-cloud') {
+                      _region.text = 'ap-southeast-1';
+                    } else if (value != 'qwen-cloud' &&
+                        previousConnectorType == 'qwen-cloud') {
+                      _region.clear();
                     }
                     final available = widget.providerCatalog
                         .findProvider(value)!
@@ -1791,6 +1799,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
+              if (_connectorType == 'qwen-cloud') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _region,
+                  decoration: const InputDecoration(
+                    labelText: 'Qwen Cloud 区域 ID',
+                    hintText: 'ap-southeast-1',
+                    helperText:
+                        'API Key 与区域绑定；支持 ap-southeast-1、cn-beijing、eu-central-1、cn-hongkong、ap-northeast-1、us-east-1。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               if (_connectorType == 'vertex') ...[
                 const SizedBox(height: 8),
                 TextField(
@@ -1824,7 +1845,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                 ? '服务账号 JSON'
                                 : _authType == 'setup_token'
                                     ? 'Claude Setup Token'
-                                    : '凭据',
+                                    : _authType == 'api_key'
+                                        ? switch (_connectorType) {
+                                            'glm-cn' =>
+                                              'GLM Coding (China) API Key',
+                                            'minimax-cn' =>
+                                              'MiniMax (China) API Key',
+                                            'qwen-cloud' =>
+                                              'Qwen Cloud API Key',
+                                            'qwen-cloud-token-plan' =>
+                                              'Qwen Cloud Token Plan API Key',
+                                            _ => 'API Key',
+                                          }
+                                        : '凭据',
                     hintText: _authType == 'aws_credential_chain'
                         ? '使用运行环境的 AWS 默认凭据链'
                         : !widget.hasCredential
@@ -2164,6 +2197,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     } else if (_connectorType == 'vertex') {
       endpointConfig['location'] = _region.text.trim();
       endpointConfig.remove('region');
+    } else if (_connectorType == 'qwen-cloud') {
+      endpointConfig['region'] = _region.text.trim();
+      endpointConfig.remove('location');
     } else {
       endpointConfig.remove('region');
       endpointConfig.remove('location');
