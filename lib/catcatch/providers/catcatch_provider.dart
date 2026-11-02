@@ -514,9 +514,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final fileName = buildDownloadFileName(media, task.metadata);
     final downloadDir = p.join(appDir, 'catcatch', 'downloads');
     final convertDir = p.join(appDir, 'catcatch', 'converted');
-    final mergedName = '${p.basenameWithoutExtension(fileName)}_merged.ts';
+    final mergedBaseName = '${p.basenameWithoutExtension(fileName)}_merged';
     final convertBase = media.isPlaylist
-        ? p.basenameWithoutExtension(mergedName)
+        ? mergedBaseName
         : p.basenameWithoutExtension(fileName);
     // The downloader writes the non-dot temp file while the executor checks
     // the dot-prefixed variant when resuming.
@@ -525,9 +525,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       File(p.join(downloadDir, '$fileName$tempSuffix')),
       File(p.join(downloadDir, '.$fileName$tempSuffix')),
       File(p.join(downloadDir, fileName)),
-      File(p.join(downloadDir, mergedName)),
-      Directory(p.join(downloadDir, '.${mergedName}_parts')),
-      // Playlists convert the merged TS, so their output uses its basename.
+      for (final extension in ['ts', 'mp4']) ...[
+        File(p.join(downloadDir, '$mergedBaseName.$extension')),
+        Directory(p.join(downloadDir, '.$mergedBaseName.${extension}_parts')),
+      ],
+      // Playlist conversions use the merged file basename for the output.
       File(p.join(convertDir, '$convertBase.mp4')),
     ];
   }

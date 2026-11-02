@@ -32,20 +32,29 @@ class M3U8Parser {
 
   /// Parses playlist resources and reports the media-fragment count separately
   /// from initialization resources such as `#EXT-X-MAP`.
-  static Future<({List<String> resources, int mediaSegmentCount})>
-      parsePlaylistWithDetails(
+  static Future<
+      ({
+        List<String> resources,
+        int mediaSegmentCount,
+        bool hasInitializationMap,
+      })> parsePlaylistWithDetails(
     String content,
     String baseUrl,
   ) async {
     final lines = _normalizeLines(content);
     final segments = <String>[];
     var mediaSegmentCount = 0;
+    var hasInitializationMap = false;
 
     if (_hasStreamInf(lines)) {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
       final variants = _parseStreamInf(lines);
       if (variants.isEmpty) {
-        return (resources: <String>[], mediaSegmentCount: 0);
+        return (
+          resources: <String>[],
+          mediaSegmentCount: 0,
+          hasInitializationMap: false,
+        );
       }
       // 按带宽降序排序，选最高码率
       variants.sort((a, b) => (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0));
@@ -59,6 +68,7 @@ class M3U8Parser {
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.startsWith('#EXT-X-MAP:')) {
+        hasInitializationMap = true;
         final attributes = _parseTagParams(
           line.substring('#EXT-X-MAP:'.length),
         );
@@ -78,8 +88,16 @@ class M3U8Parser {
     }
 
     debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
-    return (resources: segments, mediaSegmentCount: mediaSegmentCount);
+    return (
+      resources: segments,
+      mediaSegmentCount: mediaSegmentCount,
+      hasInitializationMap: hasInitializationMap,
+    );
   }
+
+  /// Selects a container extension matching the concatenated HLS resources.
+  static String mergedFileExtension({required bool hasInitializationMap}) =>
+      hasInitializationMap ? 'mp4' : 'ts';
 
   /// 获取所有分段的时长信息（秒），用于 ±2s 时长筛选
   ///
