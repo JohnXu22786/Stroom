@@ -1861,8 +1861,8 @@ void main() {
   });
 
   group('BackgroundOptimizationPage - platform tutorial cards', () {
-    testWidgets(
-        'tutorial entry is below system environment detection', (tester) async {
+    testWidgets('tutorial entry is below system environment detection',
+        (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 5000);
       tester.view.devicePixelRatio = 1.0;
@@ -1874,10 +1874,12 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      final detectionCard = find.ancestor(
-        of: find.text('Android'),
-        matching: find.byType(Card),
-      ).first;
+      final detectionCard = find
+          .ancestor(
+            of: find.text('Android'),
+            matching: find.byType(Card),
+          )
+          .first;
       final tutorialCard = find.ancestor(
         of: find.text('查看各个平台的后台运行优化教程'),
         matching: find.byType(Card),
@@ -1889,8 +1891,8 @@ void main() {
       expect(find.text('Android 后台运行优化教程'), findsNothing);
     });
 
-    testWidgets(
-        'platform tutorial page lists supported platforms', (tester) async {
+    testWidgets('platform tutorial page lists supported platforms',
+        (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 5000);
       tester.view.devicePixelRatio = 1.0;
