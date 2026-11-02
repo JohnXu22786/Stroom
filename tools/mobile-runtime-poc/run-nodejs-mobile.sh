@@ -52,6 +52,9 @@ run_node() {
   local label=$1 nodeargs=$2 marker=$3 max_wait=${4:-120} log i
   adb shell am force-stop "$package" || true
   adb logcat -c
+  local expression=${nodeargs#-p }
+  local launch_marker="NODE_MOBILE_RUN_${RANDOM}_$RANDOM"
+  nodeargs="-p (console.log('$launch_marker'),$expression)"
   echo "===== Start $label ====="
   local start_output
   start_output=$(start_with_nodeargs "$nodeargs" 2>&1) || {
@@ -68,10 +71,15 @@ run_node() {
     echo "Activity start has not completed yet; waiting for $label output."
   fi
   for i in $(seq 1 "$max_wait"); do
-    # This stage starts with a cleared log buffer. Read the buffer rather than
-    # filtering by the app PID so markers remain observable after Node Mobile
-    # exits the Activity process (as npm does after its exit handler runs).
     log=$(adb logcat -d -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    local pid
+    pid=$(awk -v marker="$launch_marker" 'index($0, marker) { print $3; exit }' <<<"$log")
+    if [[ -n "$pid" ]]; then
+      # Capture this launch's logs even after npm exits the app process. The
+      # per-launch marker prevents an older process's generic RESULT line from
+      # being mistaken for this run.
+      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    fi
     if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
       break
     fi
