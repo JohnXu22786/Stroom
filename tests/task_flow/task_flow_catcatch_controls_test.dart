@@ -142,15 +142,15 @@ void main() {
 
     final details = find.textContaining('expanded task detail');
     await tester.ensureVisible(details);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.drag(details, const Offset(0, -500));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     final toggle = find.byKey(const Key('m3u8_segments_toggle'));
     expect(toggle.hitTestable(), findsOneWidget);
     final toggleRect = tester.getRect(toggle);
-    final viewportRect =
-        tester.getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
+    final viewportRect = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     expect(toggleRect.top, greaterThanOrEqualTo(viewportRect.top));
     expect(toggleRect.top, lessThan(viewportRect.top + 52));
     expect(toggleRect.bottom, lessThanOrEqualTo(viewportRect.bottom));

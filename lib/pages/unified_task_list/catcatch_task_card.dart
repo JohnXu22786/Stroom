@@ -264,8 +264,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   children: [
                     if (_expandedSegments.contains(task.id) &&
                         _getMediaSelectionData(task).selectableMedia.any(
-                          (media) => media.isPlaylistSegment,
-                        ))
+                              (media) => media.isPlaylistSegment,
+                            ))
                       _buildSegmentCollapseControl(task),
                     Expanded(
                       child: SingleChildScrollView(
