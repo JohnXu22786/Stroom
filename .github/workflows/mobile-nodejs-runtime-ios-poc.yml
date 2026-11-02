@@ -57,11 +57,10 @@ jobs:
             -target testnode \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/NodeMobileIOSDerivedData" \
+            SYMROOT="$RUNNER_TEMP/NodeMobileIOSBuild" \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Run Node, npm, TypeScript, and MCP API checks in iOS Simulator
         run: bash .github/ci/mobile-runtime-ios/run.sh \
-          "$RUNNER_TEMP/NodeMobileIOSDerivedData/Build/Products/Debug-iphonesimulator/testnode.app" \
+          "$RUNNER_TEMP/NodeMobileIOSBuild/Debug-iphonesimulator/testnode.app" \
           "$RUNNER_TEMP"
