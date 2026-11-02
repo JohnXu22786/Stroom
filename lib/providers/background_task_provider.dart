@@ -5518,7 +5518,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     while (pending.isNotEmpty) {
       final current = pending.removeLast();
       if (current is Map) {
-        pending.addAll(current.values);
+        for (final entry in current.entries) {
+          pending
+            ..add(entry.key)
+            ..add(entry.value);
+        }
       } else if (current is List) {
         pending.addAll(current);
       } else if (current is String) {
@@ -5612,16 +5616,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       for (final entry in data.entries) {
         final key = entry.key;
         if (key is! String) {
-          if (containsCacheReference(entry.value)) return true;
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
           continue;
         }
         if (snapshotFields.contains(key)) continue;
         if (!sanitizedNonOwnershipFields.contains(key) ||
             (entry.value != null && entry.value is! String)) {
-          if (containsCacheReference(entry.value)) return true;
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
           continue;
         }
-        if (containsCacheReference(entry.value)) {
+        if (containsCacheReference(key) ||
+            containsCacheReference(entry.value)) {
           return true;
         }
       }
@@ -5637,10 +5648,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           if (entry.key is! String ||
               !modelReferenceFields.contains(entry.key) ||
               (entry.value != null && entry.value is! String)) {
-            if (containsCacheReference(entry.value)) return true;
+            if (containsCacheReference(entry.key) ||
+                containsCacheReference(entry.value)) {
+              return true;
+            }
             continue;
           }
-          if (containsCacheReference(entry.value)) {
+          if (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value)) {
             return true;
           }
         }
@@ -5659,16 +5674,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           for (final entry in image.entries) {
             final key = entry.key;
             if (key is! String) {
-              if (containsCacheReference(entry.value)) return true;
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
               continue;
             }
             if (imageFields.contains(key)) continue;
             if (!sanitizedNonOwnershipFields.contains(key) ||
                 (entry.value != null && entry.value is! String)) {
-              if (containsCacheReference(entry.value)) return true;
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
               continue;
             }
-            if (containsCacheReference(entry.value)) {
+            if (containsCacheReference(key) ||
+                containsCacheReference(entry.value)) {
               return true;
             }
           }
@@ -5717,6 +5739,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool containsCacheReference(Object? value) =>
         _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
 
+    if (taskRow['type'] != BackgroundTaskType.ocr.name &&
+        containsCacheReference(taskRow['retryData'])) {
+      // ASR persistence rebuilds supported retryData from a whitelist; an OCR
+      // cache ref in that non-OCR payload may be dropped by the sanitizer.
+      return true;
+    }
+
     bool hasDroppedCollectionReferences(
       Object? rawEntries,
       Set<String> serializedFields,
@@ -5735,7 +5764,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         }
         for (final entry in rawEntry.entries) {
           if ((entry.key is! String || !serializedFields.contains(entry.key)) &&
-              containsCacheReference(entry.value)) {
+              (containsCacheReference(entry.key) ||
+                  containsCacheReference(entry.value))) {
             return true;
           }
         }
@@ -5796,7 +5826,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final isDiscardedOcrField =
           entry.key == 'rawRequest' || entry.key == 'rawResponse';
       if ((!serializedTaskFields.contains(entry.key) || isDiscardedOcrField) &&
-          _ocrCacheReferencesInPersistedValue(entry.value).isNotEmpty) {
+          (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value))) {
         return true;
       }
     }

@@ -18763,6 +18763,7 @@ void main() {
         const stepTaskId = 'ocr-unknown-step-cache-owner';
         const outcomeTaskId = 'ocr-unknown-outcome-cache-owner';
         const asrTaskId = 'asr-unknown-ocr-cache-owner';
+        const asrTaskLevelKeyTaskId = 'asr-task-level-ocr-cache-key-owner';
         await file.writeAsString(
           jsonEncode([
             {
@@ -18790,9 +18791,8 @@ void main() {
                 {
                   'label': 'failed',
                   'status': 'failed',
-                  'additionalCacheRefs': [
-                    'ocr_retry_cache/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.bin',
-                  ],
+                  'ocr_retry_cache/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.bin':
+                      true,
                 },
               ],
               'retryData': OcrRetryStorage.unavailableSnapshotForCount(
@@ -18827,10 +18827,33 @@ void main() {
               title: 'ASR row with an unknown OCR cache owner',
               status: TaskStatus.failed,
               createdAt: DateTime(2025, 1, 1),
+              retryData: {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': AsrAudioReference(
+                  id: 'ffffffffffffffffffffffffffffffff',
+                  name: 'source.wav',
+                  format: 'wav',
+                  byteLength: 0,
+                  sha256:
+                      '0000000000000000000000000000000000000000000000000000000000000000',
+                  requiresSourceReselection: true,
+                ).toMap(),
+                'additionalCacheRefs': {
+                  'ocr_retry_cache/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.bin':
+                      true,
+                },
+              },
+            ).toMap(),
+            BackgroundTask(
+              id: asrTaskLevelKeyTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR row with an OCR cache ref as a task field key',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
             ).toMap()
-              ..['additionalCacheRefs'] = [
-                'ocr_retry_cache/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.bin',
-              ],
+              ..['ocr_retry_cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin'] =
+                  true,
           ]),
         );
 
@@ -18850,6 +18873,7 @@ void main() {
             stepTaskId,
             outcomeTaskId,
             asrTaskId,
+            asrTaskLevelKeyTaskId,
           ]) {
             expect(
               persistedRows.whereType<Map<String, dynamic>>().any(
@@ -18920,11 +18944,16 @@ void main() {
                 'modelRef': {
                   'configId': 'saved-config',
                   'modelId': 'saved-model',
-                  'additionalCacheRefs': [
-                    'ocr_retry_cache/4444444444444444444444444444444444444444444444444444444444444444.bin',
-                  ],
+                  'ocr_retry_cache/4444444444444444444444444444444444444444444444444444444444444444.bin':
+                      true,
                 },
-                'images': <dynamic>[],
+                'images': [
+                  {
+                    'storageRef':
+                        'ocr_retry_cache/4444444444444444444444444444444444444444444444444444444444444444.bin',
+                    'format': 'png',
+                  },
+                ],
                 'batchMode': 'joint',
                 'perImageConcurrency': 1,
                 'requestSizeBudgetBytes': 1024,
