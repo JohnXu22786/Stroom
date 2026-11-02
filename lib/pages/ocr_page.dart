@@ -1145,21 +1145,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ),
                     ],
                     selected: {_batchMode},
-                    onSelectionChanged: _isProcessing || _hasReusablePageResults
-                        ? null
-                        : (selection) {
-                            if (selection.isEmpty) return;
-                            setState(() {
-                              _batchMode = selection.first;
-                              _errorMessage = null;
-                            });
-                          },
+                    onSelectionChanged:
+                        _ocrStarting || _isProcessing || _hasReusablePageResults
+                            ? null
+                            : (selection) {
+                                if (selection.isEmpty) return;
+                                setState(() {
+                                  _batchMode = selection.first;
+                                  _errorMessage = null;
+                                });
+                              },
                   ),
                 ),
                 if (_batchMode == OcrBatchMode.perImage)
                   PopupMenuButton<int>(
                     key: const Key('ocr_per_image_concurrency'),
-                    enabled: !_isProcessing,
+                    enabled: !_ocrStarting && !_isProcessing,
                     tooltip: '最多 2 张同时请求',
                     onSelected: (concurrency) =>
                         setState(() => _perImageConcurrency = concurrency),
