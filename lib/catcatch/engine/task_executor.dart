@@ -284,6 +284,7 @@ class TaskExecutor {
                 onUpdate(
                   task.copyWith(
                     steps: steps,
+                    downloadedFilePath: localPath,
                     metadata: {
                       ...task.metadata,
                       'pendingConfirm': 'special_format',
