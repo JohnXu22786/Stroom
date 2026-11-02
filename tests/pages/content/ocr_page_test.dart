@@ -2789,6 +2789,104 @@ void main() {
     });
   });
 
+  group('OcrPage - batch settings', () {
+    testWidgets(
+      'locks batch mode and concurrency while startup prepares images',
+      (tester) async {
+        final preparationStarted = Completer<void>();
+        final finishPreparation = Completer<OcrImagePayload>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        OcrRetrySnapshot? cachedSnapshot;
+        final imageBytes = _createValidOcrTestImage().bytes;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [
+              SelectedImage(bytes: imageBytes, format: 'png'),
+              SelectedImage(bytes: imageBytes, format: 'png'),
+            ],
+            backgroundTasksNotifier: notifier,
+            testImagePayloadPreparer: (_) {
+              if (!preparationStarted.isCompleted) {
+                preparationStarted.complete();
+              }
+              return finishPreparation.future;
+            },
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cachedSnapshot = snapshot;
+              return Future.value(
+                OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ),
+              );
+            },
+            testOcrServiceFactory: (config) => OcrService(
+              config: config,
+              dio: Dio()..httpClientAdapter = _CapturingOcrAdapter(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('逐张识别'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_per_image_concurrency')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('2 张同时请求'));
+        await tester.pumpAndSettle();
+        expect(find.text('并发 2'), findsOneWidget);
+
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preparationStarted.future;
+
+        var batchSelector = tester.widget<SegmentedButton<OcrBatchMode>>(
+          find.byKey(const Key('ocr_batch_mode')),
+        );
+        expect(batchSelector.onSelectionChanged, isNull);
+        await tester.tap(find.text('合并识别'), warnIfMissed: false);
+        await tester.pump();
+        batchSelector = tester.widget<SegmentedButton<OcrBatchMode>>(
+          find.byKey(const Key('ocr_batch_mode')),
+        );
+        expect(batchSelector.selected, {OcrBatchMode.perImage});
+
+        final concurrencyMenu = tester.widget<PopupMenuButton<int>>(
+          find.byKey(const Key('ocr_per_image_concurrency')),
+        );
+        expect(concurrencyMenu.enabled, isFalse);
+        await tester.tap(
+          find.byKey(const Key('ocr_per_image_concurrency')),
+          warnIfMissed: false,
+        );
+        await tester.pump();
+        expect(find.text('1 张同时请求'), findsNothing);
+
+        finishPreparation.complete(
+          OcrImagePayload(
+            bytes: imageBytes,
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        );
+        await tester.pump();
+        await _pumpUntil(tester, () => cachedSnapshot != null);
+
+        expect(cachedSnapshot!.batchMode, OcrBatchMode.perImage);
+        expect(cachedSnapshot!.perImageConcurrency, 2);
+        expect(notifier.tasksForTest, hasLength(1));
+        await _pumpUntil(
+          tester,
+          () => notifier.tasksForTest.single.status == TaskStatus.completed,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  });
+
   group('OcrPage - instruction selector', () {
     testWidgets(
       'locks instruction selection during image preparation and preflight',
