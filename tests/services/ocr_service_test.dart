@@ -191,6 +191,77 @@ void main() {
         expect(requests.single.headers['X-Client-Option'], 'kept');
       });
 
+      test('injected Dio request uses its configured send timeout', () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio(
+          BaseOptions(sendTimeout: const Duration(seconds: 5)),
+        )..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests.add(options);
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+
+        await OcrService(config: _testOcrConfig, dio: dio).recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(requests.single.sendTimeout, const Duration(seconds: 5));
+      });
+
+      test('explicit OCR send timeout overrides injected Dio timeout',
+          () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio(
+          BaseOptions(sendTimeout: const Duration(seconds: 5)),
+        )..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests.add(options);
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+
+        await OcrService(
+          config: _testOcrConfig,
+          dio: dio,
+          sendTimeout: const Duration(seconds: 9),
+        ).recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(requests.single.sendTimeout, const Duration(seconds: 9));
+      });
+
       test('injected Dio uses the key from each current OCR config', () async {
         final authorizationHeaders = <Object?>[];
         final dio = Dio()

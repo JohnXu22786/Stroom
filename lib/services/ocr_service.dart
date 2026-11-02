@@ -142,6 +142,7 @@ class OcrRequestTooLargeException implements Exception {
 class OcrService {
   final OcrConfig config;
   final Dio _dio;
+  final bool _usesInjectedDio;
   final Duration? _sendTimeoutOverride;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
@@ -214,6 +215,7 @@ class OcrService {
     Duration? sendTimeout,
     Duration? receiveTimeout,
   })  : _sendTimeoutOverride = sendTimeout,
+        _usesInjectedDio = dio != null,
         _dio = dio ??
             Dio(BaseOptions(
               headers: {
@@ -508,7 +510,8 @@ class OcrService {
 
   Options _requestOptions({required int encodedBytes}) => Options(
         headers: _requestAuthorizationHeaders,
-        sendTimeout: _sendTimeoutOverride ?? sendTimeoutForBytes(encodedBytes),
+        sendTimeout: _sendTimeoutOverride ??
+            (_usesInjectedDio ? null : sendTimeoutForBytes(encodedBytes)),
         receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
       );
 
