@@ -19,6 +19,7 @@ extension ChatServiceStreamingExt on ChatService {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
   }) {
     AppLogService.info(
         'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
@@ -41,6 +42,7 @@ extension ChatServiceStreamingExt on ChatService {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
 
     Future.microtask(() async {
@@ -130,6 +132,7 @@ extension ChatServiceStreamingExt on ChatService {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
   }) {
     AppLogService.info(
@@ -155,6 +158,7 @@ extension ChatServiceStreamingExt on ChatService {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
     final toolDefs = _protocol.toolDefsToJson(tools);
 

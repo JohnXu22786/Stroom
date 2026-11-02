@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart'
-    show ReasoningParam, findEffortParam;
+    show CustomParam, ReasoningParam, findEffortParam;
 import 'setting_panels_shared.dart';
 
 // ═══════════════════════════════════════════════════════════════
@@ -648,19 +648,49 @@ void showCustomReasoningParamsPanel({
       onReasoningParamChanged,
   required void Function(ReasoningParam param, bool enabled)
       onCustomParamToggle,
+  List<CustomParam> configuredCustomParams = const [],
+  Map<String, String> configuredCustomParamSelections = const {},
+  void Function(String paramName, String value)? onConfiguredCustomParamChanged,
+  void Function(CustomParam param, bool enabled)? onConfiguredCustomParamToggle,
 }) {
-  var localSelections = Map<String, String>.from(reasoningParamSelections);
+  var localReasoningSelections =
+      Map<String, String>.from(reasoningParamSelections);
+  var localConfiguredSelections =
+      Map<String, String>.from(configuredCustomParamSelections);
   var localReasoningEnabled = reasoningEnabled;
 
   // Non-toggle, non-effort params shown with switch + options.
   // 排除所有 isEffortParam：合并视图中若模型与供应商各有一个力度参数，
   // 未选中的旧力度参数不应出现在附加参数面板。
   final effortParam = findEffortParam(reasoningParams);
-  final displayParams = reasoningParams
+  final reasoningDisplayParams = reasoningParams
       .where(
         (p) => !p.isReasoningToggle && !p.isEffortParam && p != effortParam,
       )
       .toList();
+  final configuredByRow = <ReasoningParam, CustomParam>{};
+  final configuredDisplayParams = <ReasoningParam>[];
+  for (final param in configuredCustomParams) {
+    if (param.paramName.trim().isEmpty) continue;
+    final row = ReasoningParam(
+      paramName: param.paramName,
+      options: param.type == 'json'
+          ? param.defaultValue.trim().isNotEmpty
+              ? [param.defaultValue]
+              : const []
+          : param.optionOrder.isNotEmpty
+              ? param.optionOrder
+              : param.options.isNotEmpty
+                  ? param.options
+                  : param.defaultValue.trim().isNotEmpty
+                      ? [param.defaultValue]
+                      : const [],
+      type: param.type,
+    );
+    configuredByRow[row] = param;
+    configuredDisplayParams.add(row);
+  }
+  final displayParams = [...reasoningDisplayParams, ...configuredDisplayParams];
 
   showModalBottomSheet(
     context: context,
@@ -735,11 +765,16 @@ void showCustomReasoningParamsPanel({
                         itemCount: displayParams.length,
                         itemBuilder: (context, index) {
                           final param = displayParams[index];
-                          final currentValue =
-                              localSelections[param.paramName] ??
-                                  (param.options.isNotEmpty
-                                      ? param.options.first
-                                      : '');
+                          final configuredParam = configuredByRow[param];
+                          final canEdit =
+                              configuredParam != null || localReasoningEnabled;
+                          final selections = configuredParam != null
+                              ? localConfiguredSelections
+                              : localReasoningSelections;
+                          final currentValue = selections[param.paramName] ??
+                              (param.options.isNotEmpty
+                                  ? param.options.first
+                                  : '');
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Column(
@@ -786,36 +821,48 @@ void showCustomReasoningParamsPanel({
                                           // 不依赖参数对象上可变的 enabled 标记。
                                           // boolean 类型参数：开 = 'true'，
                                           // 关 = 'false'（无选项也提供开关）。
-                                          value:
-                                              (localSelections[param.paramName]
-                                                          ?.isNotEmpty ??
-                                                      false) &&
-                                                  localReasoningEnabled,
+                                          value: (selections[param.paramName]
+                                                      ?.isNotEmpty ??
+                                                  false) &&
+                                              canEdit,
                                           activeThumbColor: cs.primary,
-                                          onChanged: localReasoningEnabled
+                                          onChanged: canEdit
                                               ? (value) {
                                                   setState(() {
                                                     if (value) {
                                                       if (param
                                                           .options.isNotEmpty) {
-                                                        localSelections
-                                                            .putIfAbsent(
-                                                                param.paramName,
-                                                                () => param
-                                                                    .options
-                                                                    .first);
+                                                        final selected =
+                                                            selections[param
+                                                                .paramName];
+                                                        if (configuredParam !=
+                                                                null &&
+                                                            !param.options
+                                                                .contains(
+                                                                    selected)) {
+                                                          selections[param
+                                                                  .paramName] =
+                                                              param.options
+                                                                  .first;
+                                                        } else {
+                                                          selections.putIfAbsent(
+                                                              param.paramName,
+                                                              () => param
+                                                                  .options
+                                                                  .first);
+                                                        }
                                                       } else if (param.type ==
                                                           'boolean') {
                                                         // 布尔参数：开 →
                                                         // 'true'（直接写入，
                                                         // 不走 putIfAbsent
                                                         // 避免被旧值挡住）
-                                                        localSelections[param
+                                                        selections[param
                                                                 .paramName] =
                                                             'true';
                                                       }
                                                     } else {
-                                                      localSelections.remove(
+                                                      selections.remove(
                                                           param.paramName);
                                                     }
                                                   });
@@ -823,8 +870,14 @@ void showCustomReasoningParamsPanel({
                                                   // so the chip color and the
                                                   // API request follow the
                                                   // switch state.
-                                                  onCustomParamToggle(
-                                                      param, value);
+                                                  if (configuredParam != null) {
+                                                    onConfiguredCustomParamToggle
+                                                        ?.call(configuredParam,
+                                                            value);
+                                                  } else {
+                                                    onCustomParamToggle(
+                                                        param, value);
+                                                  }
                                                 }
                                               : null,
                                         ),
@@ -833,10 +886,9 @@ void showCustomReasoningParamsPanel({
                                 ),
                                 // Options (only shown when the param is
                                 // active — 与开关同一判定：已选值存在)
-                                if ((localSelections[param.paramName]
-                                            ?.isNotEmpty ??
+                                if ((selections[param.paramName]?.isNotEmpty ??
                                         false) &&
-                                    localReasoningEnabled &&
+                                    canEdit &&
                                     param.options.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   Wrap(
@@ -849,11 +901,16 @@ void showCustomReasoningParamsPanel({
                                         selected: isSelected,
                                         onTap: () {
                                           setState(() {
-                                            localSelections[param.paramName] =
+                                            selections[param.paramName] =
                                                 option;
                                           });
-                                          onReasoningParamChanged(
-                                              param.paramName, option);
+                                          if (configuredParam != null) {
+                                            onConfiguredCustomParamChanged
+                                                ?.call(param.paramName, option);
+                                          } else {
+                                            onReasoningParamChanged(
+                                                param.paramName, option);
+                                          }
                                         },
                                       );
                                     }).toList(),

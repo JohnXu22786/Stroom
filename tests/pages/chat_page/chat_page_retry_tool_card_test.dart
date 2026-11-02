@@ -69,6 +69,7 @@ class _LiveStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     lastStreamingMsgId = streamingMsgId;
@@ -132,6 +133,7 @@ class _ImmediateStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     final assistantMsg = ChatMessage(

@@ -105,6 +105,15 @@ class ChatAdapter {
   /// 当前缓存的模型配置（供上下文管理估算用）。
   ModelConfig? get modelConfig => _cachedModelConfig;
 
+  /// Custom parameters visible to the chat composer, with model entries
+  /// inheriting provider type/default values unless explicitly overridden.
+  List<CustomParam> get customParams {
+    return mergeCustomParams(
+      _cachedProviderConfig?.customParams ?? const [],
+      _cachedModelConfig?.customParams ?? const [],
+    );
+  }
+
   /// Stable identity of the endpoint used for an unbound assistant's next
   /// request. Flow launches capture it before their execution is queued.
   Map<String, String>? get selectedProviderModelReference {
@@ -781,6 +790,7 @@ class ChatAdapter {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     String convId = '',
   }) {
     final svc =
@@ -794,6 +804,7 @@ class ChatAdapter {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
   }
 
@@ -806,6 +817,7 @@ class ChatAdapter {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     String convId = '',
     Assistant? assistant,
@@ -824,6 +836,7 @@ class ChatAdapter {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
       tools: tools,
     );
   }
