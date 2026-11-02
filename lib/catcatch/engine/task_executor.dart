@@ -691,7 +691,11 @@ class TaskExecutor {
           continue;
         }
         if (!existingUrls.add(resource.url)) continue;
-        enrichedMedia.add(resource);
+        enrichedMedia.add(
+          playlistSegmentUrls.contains(resource.url)
+              ? resource.copyWith(initiator: pl.url, isPlayable: false)
+              : resource,
+        );
       }
       final selectedPlaylistResources = pl.isM3U8
           ? playlistResources
