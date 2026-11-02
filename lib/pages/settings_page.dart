@@ -37,11 +37,43 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('设置'), centerTitle: true),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: AnimatedBuilder(
+          animation: _scrollController,
+          builder: (context, child) {
+            final scrollProgress = _scrollController.hasClients
+                ? (_scrollController.offset / 160).clamp(0.0, 1.0).toDouble()
+                : 0.0;
+            final colorScheme = Theme.of(context).colorScheme;
+            return AppBar(
+              title: child,
+              centerTitle: true,
+              backgroundColor: Color.lerp(
+                colorScheme.surface,
+                colorScheme.surfaceContainerHigh,
+                scrollProgress,
+              ),
+              surfaceTintColor: Colors.transparent,
+              scrolledUnderElevation: 0,
+            );
+          },
+          child: const Text('设置'),
+        ),
+      ),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
           _buildSectionHeader('常规设置'),
