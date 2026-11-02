@@ -117,15 +117,18 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
   generator: (e, config, visitor) => UNode(),
 );
 
-/// Custom [m.InlineSyntax] that parses LaTeX math expressions written
-/// as `$...$` (inline) or `$$...$$` (block/display).
+/// Custom [m.InlineSyntax] that parses dollar, parenthesized, bracketed, and
+/// common equation-environment math expressions in Markdown text.
 ///
-/// Block syntax (`$$...$$`) is checked first so it takes priority over
-/// inline syntax when both `$$` delimiters are present.
+/// Dollar display syntax (`$$...$$`) is checked before inline dollar syntax.
 class LatexSyntax extends m.InlineSyntax {
-  /// The regex pattern used to match LaTeX expressions.
-  /// Matches `$$...$$` (block) or `$...$` (inline).
-  static const String latexPattern = r'(\$\$[\s\S]+?\$\$)|(\$.+?\$)';
+  /// Matches existing dollar forms and the common LaTeX display/inline
+  /// delimiters. Markdown handles code spans and fences before this syntax.
+  static const String latexPattern =
+      r'(\$\$[\s\S]+?\$\$)|(\\\([\s\S]+?\\\))|'
+      r'(\\\[[\s\S]+?\\\])|'
+      r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
+      r'(\$(?!\$)[^\n$]+?\$(?!\$))';
 
   LatexSyntax()
       : super(
@@ -137,6 +140,8 @@ class LatexSyntax extends m.InlineSyntax {
     final input = match.input;
     final matchValue = input.substring(match.start, match.end);
 
+    if (_hasEscapedBackslash(input, match.start)) return false;
+
     String content = '';
     bool isInline = true;
 
@@ -147,6 +152,16 @@ class LatexSyntax extends m.InlineSyntax {
         matchValue.endsWith(blockSyntax) &&
         matchValue != blockSyntax) {
       content = matchValue.substring(2, matchValue.length - 2);
+      isInline = false;
+    } else if (matchValue.startsWith(r'\(') &&
+        matchValue.endsWith(r'\)')) {
+      content = matchValue.substring(2, matchValue.length - 2);
+    } else if (matchValue.startsWith(r'\[') &&
+        matchValue.endsWith(r'\]')) {
+      content = matchValue.substring(2, matchValue.length - 2);
+      isInline = false;
+    } else if (matchValue.startsWith(r'\begin{')) {
+      content = matchValue;
       isInline = false;
     } else if (matchValue.startsWith(inlineSyntax) &&
         matchValue.endsWith(inlineSyntax) &&
@@ -162,10 +177,47 @@ class LatexSyntax extends m.InlineSyntax {
   }
 }
 
+bool _hasEscapedBackslash(String input, int index) {
+  var count = 0;
+  for (var i = index - 1; i >= 0 && input[i] == r'\'; i--) {
+    count++;
+  }
+  return count.isOdd;
+}
+
+String _prepareMathEnvironment(String content) {
+  const equationStart = r'\begin{equation}';
+  const equationEnd = r'\end{equation}';
+  if (content.startsWith(equationStart) && content.endsWith(equationEnd)) {
+    return content.substring(
+      equationStart.length,
+      content.length - equationEnd.length,
+    ).trim();
+  }
+  const alignStart = r'\begin{align}';
+  const alignEnd = r'\end{align}';
+  if (content.startsWith(alignStart) && content.endsWith(alignEnd)) {
+    return r'\begin{aligned}' +
+        content.substring(alignStart.length, content.length - alignEnd.length) +
+        r'\end{aligned}';
+  }
+  const gatherStart = r'\begin{gather}';
+  const gatherEnd = r'\end{gather}';
+  if (content.startsWith(gatherStart) && content.endsWith(gatherEnd)) {
+    return r'\begin{gathered}' +
+        content.substring(
+          gatherStart.length,
+          content.length - gatherEnd.length,
+        ) +
+        r'\end{gathered}';
+  }
+  return content;
+}
+
 /// A [SpanNode] that renders LaTeX math content using [flutter_math_fork].
 ///
-/// Inline math (`$...$`) is rendered as an inline [WidgetSpan] with
-/// [PlaceholderAlignment.middle]. Block math (`$$...$$`) is rendered
+/// Inline math is rendered as an inline [WidgetSpan] with
+/// [PlaceholderAlignment.middle]. Display math is rendered
 /// centered in a full-width container with vertical margin.
 class LatexNode extends SpanNode {
   final Map<String, String> attributes;
@@ -203,14 +255,33 @@ class LatexNode extends SpanNode {
     // mhchem (`\ce{...}`, `\pu{...}`) is expanded to plain KaTeX first;
     // flutter_math_fork does not load the mhchem extension.
     final latex = Math.tex(
-      preprocessMhchem(content),
+      preprocessMhchem(_prepareMathEnvironment(content)),
       textStyle: mathTextStyle,
       textScaleFactor: 1,
       mathStyle: MathStyle.text,
       onErrorFallback: (error) {
-        return Text(
-          textContent,
-          style: style.copyWith(color: Colors.red),
+        return Builder(
+          builder: (context) => InkWell(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Math parse error'),
+                content: SingleChildScrollView(
+                  child: SelectableText(error.toString()),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+            child: Text(
+              textContent,
+              style: style.copyWith(color: Colors.red),
+            ),
+          ),
         );
       },
     );
@@ -345,6 +416,18 @@ Widget _buildCodeBlock(
   int? mermaidFenceIndex,
   _MermaidFenceInfo? fenceInfo,
 }) {
+  if (const {'math', 'latex', 'tex'}.contains(language.trim().toLowerCase())) {
+    final node = LatexNode(
+      {'content': code, 'isInline': 'false'},
+      code,
+      MarkdownConfig.defaultConfig,
+    )..style = preConfig.textStyle;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(child: RichText(text: node.build())),
+    );
+  }
+
   if (language.toLowerCase() == 'mermaid') {
     // During streaming, show a loading animation only while the block's
     // fence is still open. The markdown parser strips backtick fences from
