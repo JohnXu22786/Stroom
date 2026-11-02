@@ -14998,7 +14998,11 @@ void main() {
     test(
       'legacy OCR instruction migration redacts whitespace-split documentation echoes and preserves safe text',
       () {
-        BackgroundTask taskFor(String id, String instruction) =>
+        BackgroundTask taskFor(
+          String id,
+          String instruction, {
+          Map<String, String> extraHeaders = const {},
+        }) =>
             BackgroundTask.fromMap({
               'id': id,
               'type': 'ocr',
@@ -15009,6 +15013,7 @@ void main() {
                 'url': 'https://api.example.com/v1/chat/completions',
                 'headers': {
                   'Authorization': 'Bearer documentation…',
+                  ...extraHeaders,
                 },
                 'body': {
                   'model': 'vision-model',
@@ -15027,8 +15032,8 @@ void main() {
         for (final testCase in [
           (
             'single-line-echo',
-            'The note says documentation foobarxyz.',
-            'The note says [redacted].',
+            'The image contains documentation foobarxyz.',
+            'The image contains [redacted].',
             'foobarxyz',
           ),
           (
@@ -15039,27 +15044,27 @@ void main() {
           ),
           (
             'adjacent-fragment-echo',
-            'The note says documentation ABCDEF GHIJK.',
-            'The note says [redacted].',
+            'The image contains documentation ABCDEF GHIJK.',
+            'The image contains [redacted].',
             'GHIJK',
           ),
           (
             'lowercase-fragment-echo',
-            'The note says documentation foobar xyz.',
-            'The note says [redacted].',
-            'xyz',
+            'The image contains documentation foobar xyz.',
+            'The image contains [redacted] xyz.',
+            'foobar',
           ),
           (
             'low-entropy-fragment-echo',
-            'The note says documentation foobar banana.',
-            'The note says [redacted].',
-            'banana',
+            'The image contains documentation foobar banana.',
+            'The image contains [redacted] banana.',
+            'foobar',
           ),
           (
             'short-fragment-echo',
-            'The note says documentation ABCDEF ab.',
-            'The note says [redacted].',
-            'ab',
+            'The image contains documentation ABCDEF ab.',
+            'The image contains [redacted] ab.',
+            'ABCDEF',
           ),
           (
             'safe-ocr-tail',
@@ -15075,20 +15080,26 @@ void main() {
           ),
           (
             'six-fragment-echo',
-            'The note says documentation ABCDEF GHIJK LMNOP QRSTU VWXYZ BCDF.',
-            'The note says [redacted].',
+            'The image contains documentation ABCDEF GHIJK LMNOP QRSTU VWXYZ BCDF.',
+            'The image contains [redacted].',
             'BCDF',
           ),
           (
             'echo-with-safe-following-instruction',
-            'The note says documentation foobarxyz. Please read the receipt total carefully.',
-            'The note says [redacted]. Please read the receipt total carefully.',
+            'The image contains documentation foobarxyz. Please read the receipt total carefully.',
+            'The image contains [redacted]. Please read the receipt total carefully.',
             'foobarxyz',
           ),
           (
             'echo-with-safe-prepositional-tail',
-            'The note says documentation foobarxyz in the title.',
-            'The note says [redacted] in the title.',
+            'The image contains documentation foobarxyz in the title.',
+            'The image contains [redacted] in the title.',
+            'foobarxyz',
+          ),
+          (
+            'echo-with-safe-natural-tail',
+            'The image contains documentation foobarxyz receipt.',
+            'The image contains [redacted] receipt.',
             'foobarxyz',
           ),
         ]) {
@@ -15119,6 +15130,19 @@ void main() {
           safeInstruction,
         );
         expect(safeRetryData['instructionContent'], safeInstruction);
+
+        const residualCredential = 'sk-testkey123456';
+        final unsafeTask = taskFor(
+          'legacy-ocr-documentation-echo-with-residual-credential',
+          'The image contains documentation foobarxyz. Continue with $residualCredential.',
+          extraHeaders: {'X-Api-Key': residualCredential},
+        );
+        final unsafePersisted = jsonEncode(unsafeTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(unsafeTask.retryData!).instructionContent,
+          isEmpty,
+        );
+        expect(unsafePersisted, isNot(contains(residualCredential)));
       },
     );
 

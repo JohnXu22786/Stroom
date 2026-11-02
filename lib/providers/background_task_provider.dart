@@ -666,8 +666,17 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
         ).hasMatch(token);
     if (isNaturalContinuation) break;
     if (credentialEnd > 0) {
+      final hasStrongContinuationShape = hasExplicitMarker ||
+          _legacyOcrHasHighAlphabeticEntropy(
+            token.toLowerCase(),
+            minimumLength: 4,
+            minimumEntropy: 2,
+            maximumVowelRatio: 0.3,
+          ) ||
+          _legacyOcrHasLongConsonantRun(token);
+      if (!hasStrongContinuationShape) break;
       compactSuffix += token;
-      credentialEnd = chunk.end;
+      credentialEnd = chunk.start + token.length;
       continue;
     }
     final canBeSplitCredentialFragment =
@@ -2288,26 +2297,47 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       }
       return text.contains(candidate);
     });
-    if (containsUnmaskedExactCredential ||
-        _legacyOcrTextContainsCredential(
-          textWithoutNaturalPlural,
+    if (containsUnmaskedExactCredential) return false;
+    if (text.contains('[redacted]')) {
+      // Validate the complete sanitized prompt while treating our literal
+      // replacement marker as neutral text. This preserves safe context around
+      // a redacted echo without allowing a second credential to survive.
+      final neutralizedText = text.replaceAll('[redacted]', 'placeholder');
+      if (_legacyOcrTextContainsCredential(
+            neutralizedText,
+            credentialValues,
+          ) ||
+          _legacyOcrTextContainsMaskedCredential(
+            neutralizedText,
+            credentialValues,
+          )) {
+        return false;
+      }
+      return _legacyOcrHasSafeRedactedInstruction(
+        text,
+        allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(sourceText),
+        allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+          sourceText,
           credentialValues,
-        )) {
+        ),
+      );
+    }
+    if (_legacyOcrTextContainsCredential(
+      textWithoutNaturalPlural,
+      credentialValues,
+    )) {
       return false;
     }
     if (preservesNaturalPlural) return true;
     if (!hadCredential) return true;
-    return text.contains('[redacted]') &&
-        _legacyOcrHasSafeRedactedInstruction(
-          text,
-          allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
-            sourceText,
-          ),
-          allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
-            sourceText,
-            credentialValues,
-          ),
-        );
+    return _legacyOcrHasSafeRedactedInstruction(
+      text,
+      allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(sourceText),
+      allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+        sourceText,
+        credentialValues,
+      ),
+    );
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
