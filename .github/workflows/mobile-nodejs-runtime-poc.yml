@@ -60,9 +60,11 @@ jobs:
           printf '%s  %s\n' \
             bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af \
             "$RUNNER_TEMP/nodejs-mobile-android.zip" | sha256sum --check
-          mkdir -p nodejs-mobile/out_android/x86_64
-          unzip -p "$RUNNER_TEMP/nodejs-mobile-android.zip" bin/x86_64/libnode.so \
-            > nodejs-mobile/out_android/x86_64/libnode.so
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p "nodejs-mobile/out_android/$abi"
+            unzip -p "$RUNNER_TEMP/nodejs-mobile-android.zip" "bin/$abi/libnode.so" \
+              > "nodejs-mobile/out_android/$abi/libnode.so"
+          done
           cp tools/mobile-runtime-poc/runtime-check.cjs nodejs-mobile/test/runtime-check.cjs
           cp tools/mobile-runtime-poc/mcp-stdio-roundtrip.cjs nodejs-mobile/test/mcp-stdio-roundtrip.cjs
 
