@@ -145,7 +145,7 @@ class LatexSyntax extends m.InlineSyntax {
     if (_hasEscapedBackslash(input, match.start)) return false;
     if (matchValue.startsWith(inlineSyntax) &&
         !matchValue.startsWith(blockSyntax) &&
-        _followsEscapedInlineDollar(input, match.start)) {
+        _isCrossPairedInlineDollar(input, match.start, matchValue)) {
       return false;
     }
 
@@ -187,13 +187,20 @@ bool _hasEscapedBackslash(String input, int index) {
   return count.isOdd;
 }
 
-bool _followsEscapedInlineDollar(String input, int index) {
+bool _isCrossPairedInlineDollar(
+  String input,
+  int index,
+  String matchValue,
+) {
   final previousDollar = input.lastIndexOf(r'$', index - 1);
   if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
     return false;
   }
-  final content = input.substring(previousDollar + 1, index);
-  return content.isNotEmpty && content.trim() == content;
+  final precedingContent = input.substring(previousDollar + 1, index);
+  final formulaContent = matchValue.substring(1, matchValue.length - 1);
+  return precedingContent.isNotEmpty &&
+      precedingContent.trim() == precedingContent &&
+      formulaContent.trimLeft() != formulaContent;
 }
 
 String _prepareMathEnvironment(String content) {
