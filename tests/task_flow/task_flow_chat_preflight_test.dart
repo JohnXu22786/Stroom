@@ -601,6 +601,77 @@ void main() {
   );
 
   test(
+    'Qwen Cloud accounts preflight with inherited and model protocols',
+    () async {
+      for (final (connectorType, protocol) in [
+        ('qwen-cloud', null),
+        ('qwen-cloud-token-plan', 'anthropic.messages'),
+      ]) {
+        final account = LlmAccount(
+          id: '$connectorType-account',
+          connectorType: connectorType,
+          authType: 'api_key',
+          displayName: connectorType,
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: '$connectorType-model',
+              upstreamModelId: 'qwen3.7-plus',
+              displayName: 'Qwen 3.7 Plus',
+              capabilities: const {'chat': true, 'streaming': true},
+              config: {'apiProtocolOverride': protocol},
+            ),
+          ],
+        );
+        final group = LlmModelGroup(
+          id: '$connectorType-group',
+          displayName: connectorType,
+          members: [
+            LlmModelGroupMember(
+              accountId: account.id,
+              localModelId: '$connectorType-model',
+              upstreamModelId: 'qwen3.7-plus',
+            ),
+          ],
+        );
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: [account],
+          groups: [group],
+        ).single;
+        final providers = ProviderEntriesState(
+          entries: [
+            ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+          ],
+        );
+        final assistant = Assistant(
+          id: 'assistant',
+          name: connectorType,
+          prompt: 'Help',
+          defaultModelId: config.models.single.modelId,
+          defaultProviderName: config.providerName,
+        );
+
+        expect(
+          config.apiProtocol,
+          'openai.chat_completions',
+          reason: 'account type does not choose the protocol',
+        );
+        expect(
+          flowChatEndpointType(assistant, providers),
+          protocol ?? 'openai.chat_completions',
+          reason: connectorType,
+        );
+        await validateTaskFlow(
+          chatFlow(IOType.text),
+          [FlowRunInput(text: 'hello')],
+          providers: providers,
+          assistants: [assistant],
+        );
+      }
+    },
+  );
+
+  test(
     'Anthropic rejects a later DOCX batch input before submission',
     () async {
       final pdf = await File(

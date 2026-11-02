@@ -90,6 +90,55 @@ void main() {
       },
     );
 
+    test('Qwen Cloud formats are service-owned and model overrides win', () {
+      for (final connector in ['qwen-cloud', 'qwen-cloud-token-plan']) {
+        expect(
+          builtinDefaultApiProtocolForConnector(connector),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: connector,
+          ),
+          {'openai.chat_completions', 'openai.responses', 'anthropic.messages'},
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          resolveConnectorProtocol('anthropic.messages', connector),
+          'anthropic.messages',
+          reason: 'account key type cannot replace upstream protocol',
+        );
+      }
+    });
+
+    test(
+      'GLM and MiniMax regional account IDs keep Chat protocol defaults',
+      () {
+        for (final connector in ['glm-cn', 'minimax-cn']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.chat_completions',
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              'anthropic.messages',
+              connectorType: connector,
+            ),
+            {'openai.chat_completions'},
+            reason: 'the account type cannot enable another upstream format',
+          );
+        }
+      },
+    );
+
     test(
       'xAI and Meta API keys default to their native Responses contract',
       () {

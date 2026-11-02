@@ -103,9 +103,15 @@ Set<String> supportedApiProtocolsForSupplier(
 }) {
   final builtinProtocols = switch (connectorType) {
     'openai-api' => const {'openai.chat_completions', 'openai.responses'},
+    'qwen-cloud' || 'qwen-cloud-token-plan' => const {
+        'openai.chat_completions',
+        'openai.responses',
+        'anthropic.messages',
+      },
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },
+    'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||
     'kimi.ai' ||

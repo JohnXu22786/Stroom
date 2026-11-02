@@ -381,6 +381,31 @@ void main() {
     );
   });
 
+  test('Qwen Cloud account IDs route only through documented formats', () {
+    const qwenAccounts = {'qwen-cloud', 'qwen-cloud-token-plan'};
+    for (final protocol in [
+      'openai.chat_completions',
+      'openai.responses',
+      'anthropic.messages',
+    ]) {
+      expect(
+        llmRoutedChatSupportedConnectorTypes(protocol),
+        containsAll(qwenAccounts),
+        reason: protocol,
+      );
+    }
+    for (final connector in ['glm-cn', 'minimax-cn']) {
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains(connector),
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.responses'),
+        isNot(contains(connector)),
+      );
+    }
+  });
+
   test('Codex OAuth is routable only through the Responses protocol', () {
     expect(
       llmRoutedChatSupportedConnectorTypes('openai.responses'),
@@ -2238,11 +2263,16 @@ void main() {
         'deepseek',
         'minimax',
         'qwen',
+        'glm-cn',
+        'minimax-cn',
+        'qwen-cloud',
+        'qwen-cloud-token-plan',
       ]) {
         final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentialStore();
         final accounts = LlmAccountConnectorService(
           preferences: preferences,
-          credentialStore: _MemoryCredentialStore(),
+          credentialStore: credentials,
         );
         final accountId = 'account-$connectorType';
         const localModelId = 'local-compatible-model';
@@ -2262,7 +2292,7 @@ void main() {
               ),
             ],
           ),
-          secret: 'provider-key',
+          secret: '$connectorType-private-key',
         );
         await accounts.saveModelGroup(
           LlmModelGroup(
@@ -2317,6 +2347,17 @@ void main() {
               accountId,
             ],
             reason: connectorType);
+        expect(
+            connector.requestedModelIds,
+            [
+              upstreamModelId,
+            ],
+            reason: connectorType);
+        expect(
+          await accounts.readCredential(accountId),
+          '$connectorType-private-key',
+          reason: connectorType,
+        );
       }
     },
   );

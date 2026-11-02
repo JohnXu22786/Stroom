@@ -42,9 +42,35 @@ void main() {
           'vertex',
           'openai-compatibility',
           'ollama',
+          'glm-cn',
+          'minimax-cn',
+          'qwen-cloud',
+          'qwen-cloud-token-plan',
         }),
       );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
+      expect(LlmConnectorRegistry.find('glmt'), isNull);
+      expect(LlmConnectorRegistry.canonicalId('glmt'), 'glm');
+      for (final (id, label) in [
+        ('glm-cn', 'GLM Coding (China)'),
+        ('minimax-cn', 'MiniMax (China)'),
+        ('qwen-cloud', 'Qwen Cloud'),
+        ('qwen-cloud-token-plan', 'Qwen Cloud Token Plan'),
+      ]) {
+        final connector = LlmConnectorRegistry.find(id)!;
+        expect(connector.displayName, label, reason: id);
+        expect(connector.authTypes, {'api_key'}, reason: id);
+        expect(
+          LlmConnectorRegistry.chatAdapterEndpointType(id),
+          'openai',
+          reason: id,
+        );
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(id, 'api_key'),
+          isTrue,
+          reason: id,
+        );
+      }
       expect(LlmConnectorRegistry.find('devin-cli-agentic')!.authTypes, {
         'cli_session',
       });
@@ -1936,6 +1962,187 @@ void main() {
       },
     );
 
+    test('discovers regional Qwen Cloud and Token Plan chat models', () async {
+      final requestedUris = <Uri>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestedUris.add(options.uri);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'qwen3.7-plus'},
+                {'id': 'text-embedding-v4'},
+                {'id': 'qwen-reranker'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+
+      for (final (connectorType, region, expectedUrl) in [
+        (
+          'qwen-cloud',
+          'cn-beijing',
+          'https://cn-beijing.maas.qwencloudapi.com/compatible-mode/v1/models',
+        ),
+        (
+          'qwen-cloud-token-plan',
+          '',
+          'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1/models',
+        ),
+      ]) {
+        final account = await discoveryService.saveAccount(
+          LlmAccount(
+            id: '$connectorType-discovery',
+            connectorType: connectorType,
+            authType: 'api_key',
+            displayName: connectorType,
+            endpointConfig: {if (region.isNotEmpty) 'region': region},
+          ),
+          secret: '$connectorType-discovery-key',
+        );
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(requestedUris.last.toString(), expectedUrl);
+        expect(
+            models.map((model) => model.upstreamModelId),
+            [
+              'qwen3.7-plus',
+            ],
+            reason: connectorType);
+        expect(
+          models.single.capabilities,
+          {'chat': true, 'streaming': true},
+          reason:
+              'the service supports text chat streams, not unreported media/tools',
+        );
+      }
+    });
+
+    test('rejects nested Qwen Cloud hosts before sending the API key',
+        () async {
+      var requestSent = false;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestSent = true;
+          return ResponseBody.fromString('{}', 200);
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'qwen-cloud-untrusted-host',
+          connectorType: 'qwen-cloud',
+          authType: 'api_key',
+          displayName: 'Qwen Cloud untrusted host',
+          endpointConfig: const {
+            'baseUrl':
+                'https://cn-beijing.attacker.maas.qwencloudapi.com/compatible-mode/v1',
+          },
+        ),
+        secret: 'qwen-cloud-private-key',
+      );
+
+      await expectLater(
+        discoveryService.discoverModels(account, refreshRemote: true),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      expect(requestSent, isFalse);
+    });
+
+    test('discovers regional GLM and MiniMax chat models', () async {
+      final requestedUris = <Uri>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestedUris.add(options.uri);
+          final modelId =
+              options.uri.host == 'api.minimaxi.com' ? 'minimax-m2' : 'glm-5';
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': modelId},
+                {'id': 'text-embedding'},
+                {'id': 'reranker-v2'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+
+      for (final (connectorType, expectedUrl, expectedModel) in [
+        (
+          'glm-cn',
+          'https://open.bigmodel.cn/api/coding/paas/v4/models',
+          'glm-5',
+        ),
+        ('minimax-cn', 'https://api.minimaxi.com/v1/models', 'minimax-m2'),
+      ]) {
+        final account = await discoveryService.saveAccount(
+          _account('$connectorType-discovery', connectorType),
+          secret: '$connectorType-discovery-key',
+        );
+        final models = await discoveryService.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(requestedUris.last.toString(), expectedUrl);
+        expect(models.map((model) => model.upstreamModelId), [expectedModel]);
+        expect(models.single.capabilities, {'chat': true, 'streaming': true});
+      }
+    });
+
+    test('GLM Thinking model preset uses the GLM API-key account', () async {
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'glm-thinking-preset',
+          connectorType: 'glmt',
+          authType: 'api_key',
+          displayName: 'GLM account for Thinking model',
+        ),
+        secret: 'glm-thinking-private-key',
+      );
+      final request = LlmNativeRequestBuilder().build(
+        account: account,
+        credential: 'glm-thinking-private-key',
+        modelId: 'glm-5',
+        body: const {'model': 'glm-5', 'messages': []},
+      );
+
+      expect(account.connectorType, 'glm');
+      expect(request.uri.toString(),
+          'https://open.bigmodel.cn/api/paas/v4/chat/completions');
+      expect(
+          request.headers['Authorization'], 'Bearer glm-thinking-private-key');
+      expect((request.body as Map)['model'], 'glm-5');
+    });
+
     test(
       'signs Bedrock model discovery and excludes non-text models',
       () async {
@@ -3330,6 +3537,126 @@ void main() {
         'https://api.example.test/v1/chat/completions',
       );
     });
+
+    test(
+      'routes regional GLM and MiniMax API-key accounts to service hosts',
+      () {
+        for (final (connectorType, expectedUri) in [
+          (
+            'glm-cn',
+            'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions',
+          ),
+          ('minimax-cn', 'https://api.minimaxi.com/v1/chat/completions'),
+        ]) {
+          final request = builder.build(
+            account: _account('regional-$connectorType', connectorType),
+            credential: 'regional-provider-key',
+            modelId: 'service-model',
+            body: const {'model': 'service-model', 'messages': []},
+          );
+
+          expect(request.uri.toString(), expectedUri, reason: connectorType);
+          expect(
+            request.headers['Authorization'],
+            'Bearer regional-provider-key',
+            reason: connectorType,
+          );
+        }
+      },
+    );
+
+    test('routes Qwen Cloud key types and API protocols independently', () {
+      final paygChat = builder.build(
+        account: _account('qwen-cloud-payg', 'qwen-cloud'),
+        credential: 'qwen-cloud-key',
+        modelId: 'qwen3.7-plus',
+        body: const {'model': 'qwen3.7-plus', 'messages': []},
+      );
+      final planChat = builder.build(
+        account: _account('qwen-cloud-plan', 'qwen-cloud-token-plan'),
+        credential: 'qwen-cloud-plan-key',
+        modelId: 'qwen3.7-plus',
+        body: const {'model': 'qwen3.7-plus', 'messages': []},
+      );
+      final planResponses = builder.build(
+        account: _account('qwen-cloud-plan', 'qwen-cloud-token-plan'),
+        credential: 'qwen-cloud-plan-key',
+        modelId: 'qwen3.7-plus',
+        body: const {'model': 'qwen3.7-plus', 'input': []},
+        nativeFormat: 'responses',
+      );
+      final planAnthropic = builder.build(
+        account: _account('qwen-cloud-plan', 'qwen-cloud-token-plan'),
+        credential: 'qwen-cloud-plan-key',
+        modelId: 'qwen3.7-plus',
+        body: const {'model': 'qwen3.7-plus', 'messages': []},
+        nativeFormat: 'anthropic',
+      );
+
+      expect(
+        paygChat.uri.toString(),
+        'https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1/chat/completions',
+      );
+      expect(
+        planChat.uri.toString(),
+        'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1/chat/completions',
+      );
+      expect(
+        planResponses.uri.toString(),
+        'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1/responses',
+      );
+      expect(
+        planAnthropic.uri.toString(),
+        'https://token-plan.maas.qwencloudapi.com/apps/anthropic/v1/messages',
+      );
+      expect(paygChat.headers['Authorization'], 'Bearer qwen-cloud-key');
+      for (final request in [planChat, planResponses]) {
+        expect(request.headers['Authorization'], 'Bearer qwen-cloud-plan-key');
+      }
+      expect(planAnthropic.headers['x-api-key'], 'qwen-cloud-plan-key');
+      expect(planAnthropic.headers, isNot(contains('Authorization')));
+      expect(planAnthropic.headers['anthropic-version'], '2023-06-01');
+    });
+
+    test(
+      'regional Qwen account persists key separately from account JSON',
+      () async {
+        final preferences = _MemoryPreferences();
+        final credentialStore = _MemoryCredentials();
+        final service = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentialStore,
+        );
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'qwen-cloud-cn',
+            connectorType: 'qwen-cloud',
+            authType: 'api_key',
+            displayName: 'Qwen Cloud Beijing',
+            endpointConfig: const {'region': 'cn-beijing'},
+          ),
+          secret: 'qwen-cloud-private-key',
+        );
+
+        expect(account.endpointConfig['region'], 'cn-beijing');
+        expect(
+          jsonEncode(account.toMap()),
+          isNot(contains('qwen-cloud-private-key')),
+        );
+        expect(
+          preferences.values.values.join('\n'),
+          isNot(contains('qwen-cloud-private-key')),
+        );
+        expect(
+          await service.readCredential(account.id),
+          'qwen-cloud-private-key',
+        );
+        expect(
+          credentialStore.values.values,
+          contains('qwen-cloud-private-key'),
+        );
+      },
+    );
 
     test('uses the Anthropic Messages path on a custom connector', () {
       final request = builder.build(
