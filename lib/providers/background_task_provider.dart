@@ -5458,7 +5458,21 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
       data['type'] ??= BackgroundTaskType.ocr.name;
       final snapshot = OcrRetrySnapshot.fromMap(data);
-      return !snapshot.hasUnknownFields && !snapshot.hasInvalidImages;
+      final supportedVersion = snapshot.isLegacy ||
+          snapshot.version == 1 ||
+          snapshot.version == 2 ||
+          snapshot.version == OcrRetrySnapshot.currentVersion;
+      if (!supportedVersion) {
+        // A future version makes image execution unsupported, but its
+        // recognized image references still have known ownership. Unknown
+        // fields and malformed image metadata remain fail-closed.
+        return !snapshot.hasUnknownFields &&
+            !snapshot.hasInvalidImageMetadata &&
+            snapshot.imageEntryCount == snapshot.images.length;
+      }
+      return !snapshot.hasUnknownFields &&
+          !snapshot.hasInvalidImages &&
+          !snapshot.hasInvalidImageMetadata;
     } catch (_) {
       return false;
     }
@@ -5494,36 +5508,55 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     try {
       final data = Map<String, dynamic>.from(retryData);
       final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
+      bool containsCacheReference(Object? value) =>
+          _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
       if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
-        return true;
+        return rawCacheReferences.isNotEmpty;
       }
       final modelIndex = data['modelIndex'];
-      if (modelIndex != null && modelIndex is! int) return true;
+      if (modelIndex != null &&
+          modelIndex is! int &&
+          containsCacheReference(modelIndex)) {
+        return true;
+      }
       final instructionIndex = data['instructionIndex'];
-      if (instructionIndex != null && instructionIndex is! int) return true;
+      if (instructionIndex != null &&
+          instructionIndex is! int &&
+          containsCacheReference(instructionIndex)) {
+        return true;
+      }
       final instructionContent = data['instructionContent'];
-      if (instructionContent != null && instructionContent is! String) {
+      if (instructionContent != null &&
+          instructionContent is! String &&
+          containsCacheReference(instructionContent)) {
         return true;
       }
       final saveFolder = data['saveFolder'];
-      if (saveFolder != null && saveFolder is! String) return true;
+      if (saveFolder != null &&
+          saveFolder is! String &&
+          containsCacheReference(saveFolder)) {
+        return true;
+      }
       final batchMode = data['batchMode'];
       if (batchMode != null &&
           (batchMode is! String ||
               (batchMode != OcrBatchMode.joint.name &&
-                  batchMode != OcrBatchMode.perImage.name))) {
+                  batchMode != OcrBatchMode.perImage.name)) &&
+          containsCacheReference(batchMode)) {
         return true;
       }
       final perImageConcurrency = data['perImageConcurrency'];
       if (perImageConcurrency != null &&
           (perImageConcurrency is! int ||
               perImageConcurrency < 1 ||
-              perImageConcurrency > 2)) {
+              perImageConcurrency > 2) &&
+          containsCacheReference(perImageConcurrency)) {
         return true;
       }
       final requestSizeBudgetBytes = data['requestSizeBudgetBytes'];
       if (requestSizeBudgetBytes != null &&
-          (requestSizeBudgetBytes is! int || requestSizeBudgetBytes <= 0)) {
+          (requestSizeBudgetBytes is! int || requestSizeBudgetBytes <= 0) &&
+          containsCacheReference(requestSizeBudgetBytes)) {
         return true;
       }
 
@@ -5546,20 +5579,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       for (final entry in data.entries) {
         final key = entry.key;
         if (key is! String) {
-          return true;
+          if (containsCacheReference(entry.value)) return true;
+          continue;
         }
         if (snapshotFields.contains(key)) continue;
         if (!sanitizedNonOwnershipFields.contains(key) ||
             (entry.value != null && entry.value is! String)) {
-          return true;
+          if (containsCacheReference(entry.value)) return true;
+          continue;
         }
-        if (entry.value is String &&
-            OcrRetryImage.isValidStorageReference(entry.value as String)) {
+        if (containsCacheReference(entry.value)) {
           return true;
         }
       }
       final modelRef = data['modelRef'];
-      if (modelRef != null && modelRef is! Map) {
+      if (modelRef != null &&
+          modelRef is! Map &&
+          containsCacheReference(modelRef)) {
         return true;
       }
       if (modelRef is Map) {
@@ -5568,30 +5604,38 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           if (entry.key is! String ||
               !modelReferenceFields.contains(entry.key) ||
               (entry.value != null && entry.value is! String)) {
+            if (containsCacheReference(entry.value)) return true;
+            continue;
+          }
+          if (containsCacheReference(entry.value)) {
             return true;
           }
         }
       }
       final images = data['images'];
-      if (images != null && images is! List) {
+      if (images != null && images is! List && containsCacheReference(images)) {
         return true;
       }
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
-          if (image is! Map) return true;
+          if (image is! Map) {
+            if (containsCacheReference(image)) return true;
+            continue;
+          }
           for (final entry in image.entries) {
             final key = entry.key;
             if (key is! String) {
-              return true;
+              if (containsCacheReference(entry.value)) return true;
+              continue;
             }
             if (imageFields.contains(key)) continue;
             if (!sanitizedNonOwnershipFields.contains(key) ||
                 (entry.value != null && entry.value is! String)) {
-              return true;
+              if (containsCacheReference(entry.value)) return true;
+              continue;
             }
-            if (entry.value is String &&
-                OcrRetryImage.isValidStorageReference(entry.value as String)) {
+            if (containsCacheReference(entry.value)) {
               return true;
             }
           }
@@ -5599,29 +5643,30 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           if (storageRef != null &&
               (storageRef is! String ||
                   !OcrRetryImage.isValidStorageReference(storageRef))) {
+            // An invalid explicit reference is malformed ownership even when
+            // it does not match a deletable cache path.
             return true;
           }
           final format = image['format'];
-          if (format != null && format is! String) {
+          if (format != null &&
+              format is! String &&
+              containsCacheReference(format)) {
             return true;
           }
           final name = image['name'];
-          if (name != null && name is! String) {
+          if (name != null && name is! String && containsCacheReference(name)) {
             return true;
           }
           final bytes = image['bytes'];
-          if (bytes != null && bytes is! String) {
+          if (bytes != null &&
+              bytes is! String &&
+              containsCacheReference(bytes)) {
             return true;
           }
         }
       }
       if (rawCacheReferences.isNotEmpty) {
         final snapshot = OcrRetrySnapshot.fromMap(data);
-        final supportedVersion = snapshot.isLegacy ||
-            snapshot.version == 1 ||
-            snapshot.version == 2 ||
-            snapshot.version == OcrRetrySnapshot.currentVersion;
-        if (!supportedVersion) return true;
         final retainedReferences = {
           for (final image in snapshot.images)
             if (image.storageRef != null) image.storageRef!,
