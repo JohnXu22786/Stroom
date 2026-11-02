@@ -124,10 +124,11 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
 class LatexSyntax extends m.InlineSyntax {
   /// Matches existing dollar forms and the common LaTeX display/inline
   /// delimiters. Markdown handles code spans and fences before this syntax.
-  static const String latexPattern = r'(\$\$[\s\S]+?\$\$)|(\\\([\s\S]+?\\\))|'
-      r'(\\\[[\s\S]+?\\\])|'
+  static const String latexPattern = r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
+      r'(\\\((?:(?:\\.)|[^\\])+?\\\))|'
+      r'(\\\[(?:(?:\\.)|[^\\])+?\\\])|'
       r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
-      r'(\$(?!\$)[^\n$]+?\$(?!\$))';
+      r'(\$(?!\$)(?:(?:\\.)|[^\\$\n])+?\$(?!\$))';
 
   LatexSyntax()
       : super(

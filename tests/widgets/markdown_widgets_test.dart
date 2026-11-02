@@ -278,6 +278,13 @@ void main() {
       expect(_collectPlainText(nodes).join(), source);
     });
 
+    test('escaped dollar inside math does not end the formula', () {
+      final nodes = _parseWithLatex(r'$a\$b$');
+      final formula = _findElement(nodes, 'latex');
+      expect(formula, isNotNull);
+      expect(formula!.attributes['content'], r'a\$b');
+    });
+
     test('math-like content in inline and fenced code stays code', () {
       final nodes = _parseLikeMarkdownGenerator(
         r'`$x$`' '\n\n````\n' r'\(y\)' '\n````',
