@@ -184,6 +184,20 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('mutating bytes read from images does not change the submitted image',
+      () async {
+    runner.images[0].$1[0] = 99;
+
+    final running = runner.run();
+    final request = await adapter.requested.future;
+    final body = request.data as Map;
+    final content = (body['messages'] as List)[1]['content'] as List;
+    expect(content[0]['image_url']['url'], 'data:image/png;base64,AQID');
+
+    adapter.succeed();
+    await running;
+  });
+
   test('owned runner snapshots input and duplicate run submits only once',
       () async {
     input[0] = 99;
