@@ -13,6 +13,103 @@ class PlatformTutorialConfig {
   });
 }
 
+/// A platform list page that routes to the detailed tutorial for each OS.
+class PlatformTutorialSelectionPage extends StatelessWidget {
+  const PlatformTutorialSelectionPage({super.key});
+
+  static const platforms = [
+    PlatformTutorialConfig(
+      platformName: 'Android',
+      icon: Icons.android,
+      color: Colors.green,
+    ),
+    PlatformTutorialConfig(
+      platformName: 'iOS',
+      icon: Icons.phone_iphone,
+      color: Colors.grey,
+    ),
+    PlatformTutorialConfig(
+      platformName: 'Windows',
+      icon: Icons.desktop_windows,
+      color: Colors.blue,
+    ),
+    PlatformTutorialConfig(
+      platformName: 'macOS',
+      icon: Icons.desktop_mac,
+      color: Colors.blueGrey,
+    ),
+    PlatformTutorialConfig(
+      platformName: 'Linux',
+      icon: Icons.terminal,
+      color: Colors.orange,
+    ),
+    PlatformTutorialConfig(
+      platformName: 'Web',
+      icon: Icons.language,
+      color: Colors.purple,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('平台教程'), centerTitle: true),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            '选择您的操作系统查看详细的后台运行优化教程。',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...platforms.map((config) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: config.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(config.icon, color: config.color, size: 24),
+                  ),
+                  title: Text(
+                    config.platformName,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    '${config.platformName} 后台运行优化教程',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PlatformTutorialPage(config: config),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 /// A detail page showing background running tutorial for a specific platform.
 class PlatformTutorialPage extends StatelessWidget {
   final PlatformTutorialConfig config;
