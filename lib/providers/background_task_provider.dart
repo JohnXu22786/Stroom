@@ -1377,11 +1377,18 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
 bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
   String text,
   String prefix,
-) =>
-    prefix.toLowerCase() == 'documentation' &&
-    RegExp(
-      r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
-    ).hasMatch(text);
+) {
+  if (prefix.toLowerCase() != 'documentation' ||
+      RegExp(
+        r'^\s*please\s+review\s+the\s+documentation[\r\n]+\s*carefully[.!?]?\s*$',
+        caseSensitive: false,
+      ).hasMatch(text)) {
+    return false;
+  }
+  return RegExp(
+    r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
+  ).hasMatch(text);
+}
 
 const _legacyOcrNaturalCarefulInstructionActions = {
   'add',
