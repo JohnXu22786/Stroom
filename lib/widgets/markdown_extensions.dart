@@ -142,11 +142,15 @@ class LatexSyntax extends m.InlineSyntax {
     const blockSyntax = r'$$';
     const inlineSyntax = r'$';
 
-    if (_hasEscapedBackslash(input, match.start)) return false;
+    if (_hasEscapedBackslash(input, match.start)) {
+      parser.addNode(m.Text(matchValue));
+      return true;
+    }
     if (matchValue.startsWith(inlineSyntax) &&
         !matchValue.startsWith(blockSyntax) &&
         _isCrossPairedInlineDollar(input, match.start, matchValue)) {
-      return false;
+      parser.addNode(m.Text(matchValue));
+      return true;
     }
 
     String content = '';
