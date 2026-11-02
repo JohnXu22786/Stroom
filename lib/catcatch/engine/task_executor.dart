@@ -660,6 +660,7 @@ class TaskExecutor {
         dio.close();
       }
       List<String> segments;
+      List<M3U8PlaylistResource> playlistResources = [];
       var mediaSegmentCount = 0;
       String? mergedExtension;
       if (pl.isM3U8) {
@@ -668,12 +669,16 @@ class TaskExecutor {
           pl.url,
         );
         segments = parsed.resources;
+        playlistResources = parsed.playlistResources;
         mediaSegmentCount = parsed.mediaSegmentCount;
         mergedExtension = M3U8Parser.mergedFileExtension(
           hasInitializationMap: parsed.hasInitializationMap,
         );
       } else if (pl.isMPD) {
         segments = await MPDParser.parseManifest(content, pl.url);
+        playlistResources = segments
+            .map((url) => (url: url, rangeStart: null, rangeLength: null))
+            .toList();
         mediaSegmentCount = segments.length;
       } else {
         continue;
@@ -682,6 +687,9 @@ class TaskExecutor {
       final existingUrls = <String>{};
       final enrichedMedia = <MediaResource>[];
       for (final resource in media) {
+        if (pl.isM3U8 && playlistSegmentUrls.contains(resource.url)) {
+          continue;
+        }
         if (!existingUrls.add(resource.url)) continue;
         enrichedMedia.add(
           playlistSegmentUrls.contains(resource.url)
@@ -689,17 +697,22 @@ class TaskExecutor {
               : resource,
         );
       }
-      final uniqueSegments =
-          segments.where((segmentUrl) => existingUrls.add(segmentUrl)).toList();
-      final segmentMedia = uniqueSegments.map((segUrl) {
-        final (name, ext) = SniffingEngine.parseFileName(segUrl);
+      final selectedPlaylistResources = pl.isM3U8
+          ? playlistResources
+          : playlistResources
+              .where((resource) => existingUrls.add(resource.url))
+              .toList();
+      final segmentMedia = selectedPlaylistResources.map((resource) {
+        final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
-          url: segUrl,
+          url: resource.url,
           name: name,
           ext: ext.isEmpty ? 'ts' : ext,
           initiator: pl.url,
           isPlayable: false,
           isPlaylist: false,
+          byteRangeStart: resource.rangeStart,
+          byteRangeLength: resource.rangeLength,
         );
       }).toList();
       final totalCount = enrichedMedia.length + segmentMedia.length;
@@ -741,17 +754,25 @@ class TaskExecutor {
         final appDirPath = await AppStorage.directory;
         final downloadDir = p.join(appDirPath, 'catcatch', 'downloads');
         if (media.isPlaylist) {
-          final segments = detectedMedia
+          final segmentResources = detectedMedia
               .where((m) => !m.isPlaylist && m.initiator == media.url)
-              .map((m) => m.url)
               .toList();
-          if (segments.isEmpty) throw Exception('播放列表没有可下载的分段');
+          if (segmentResources.isEmpty) throw Exception('播放列表没有可下载的分段');
+          final segments = segmentResources.map((m) => m.url).toList();
+          final segmentRanges = segmentResources.map((m) {
+            final start = m.byteRangeStart;
+            final length = m.byteRangeLength;
+            return start == null || length == null
+                ? null
+                : (start: start, length: length);
+          }).toList();
           // 使用网页标题命名播放列表合并文件
           final playlistBaseName = p.basenameWithoutExtension(
             buildDownloadFileName(media, task.metadata),
           );
           final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
             segmentUrls: segments,
+            segmentRanges: segmentRanges,
             outputPath: p.join(
               downloadDir,
               '${playlistBaseName}_merged.${task.metadata['playlistMergedExtension'] == 'mp4' ? 'mp4' : 'ts'}',

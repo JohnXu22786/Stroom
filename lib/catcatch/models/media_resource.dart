@@ -41,6 +41,10 @@ class MediaResource {
   /// 视频高度（像素），通过探针获取
   final int? height;
 
+  /// HLS fragment byte range, when multiple fragments share one resource.
+  final int? byteRangeStart;
+  final int? byteRangeLength;
+
   const MediaResource({
     required this.url,
     required this.name,
@@ -55,6 +59,8 @@ class MediaResource {
     this.isLikelySplitTrack = false,
     this.width,
     this.height,
+    this.byteRangeStart,
+    this.byteRangeLength,
   });
 
   // ---------------------------------------------------------------------------
@@ -124,6 +130,8 @@ class MediaResource {
         'isLikelySplitTrack': isLikelySplitTrack,
         'width': width,
         'height': height,
+        'byteRangeStart': byteRangeStart,
+        'byteRangeLength': byteRangeLength,
       };
 
   factory MediaResource.fromMap(Map<String, dynamic> map) => MediaResource(
@@ -140,6 +148,8 @@ class MediaResource {
         isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
         width: map['width'] as int?,
         height: map['height'] as int?,
+        byteRangeStart: map['byteRangeStart'] as int?,
+        byteRangeLength: map['byteRangeLength'] as int?,
       );
 
   MediaResource copyWith({
@@ -156,6 +166,8 @@ class MediaResource {
     bool? isLikelySplitTrack,
     int? width,
     int? height,
+    int? byteRangeStart,
+    int? byteRangeLength,
     bool clearGroupId = false,
     bool clearIsLikelySplitTrack = false,
   }) =>
@@ -175,6 +187,8 @@ class MediaResource {
             : (isLikelySplitTrack ?? this.isLikelySplitTrack),
         width: width ?? this.width,
         height: height ?? this.height,
+        byteRangeStart: byteRangeStart ?? this.byteRangeStart,
+        byteRangeLength: byteRangeLength ?? this.byteRangeLength,
       );
 
   @override
@@ -190,8 +204,18 @@ class MediaResource {
           name == other.name &&
           ext == other.ext &&
           groupId == other.groupId &&
-          isLikelySplitTrack == other.isLikelySplitTrack;
+          isLikelySplitTrack == other.isLikelySplitTrack &&
+          byteRangeStart == other.byteRangeStart &&
+          byteRangeLength == other.byteRangeLength;
 
   @override
-  int get hashCode => Object.hash(url, name, ext, groupId, isLikelySplitTrack);
+  int get hashCode => Object.hash(
+        url,
+        name,
+        ext,
+        groupId,
+        isLikelySplitTrack,
+        byteRangeStart,
+        byteRangeLength,
+      );
 }

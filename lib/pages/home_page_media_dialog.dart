@@ -65,14 +65,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                         itemBuilder: (_, i) {
                           final media = visibleResources[i];
                           final isSel = selectedUrls.contains(media.url);
-                          final isAudio = [
-                            'mp3',
-                            'wav',
-                            'm4a',
-                            'aac',
-                            'opus',
-                            'weba',
-                          ].contains(media.ext.toLowerCase());
+                          final isAudio = isAudioPreviewResource(media);
                           return Card(
                             elevation: 0,
                             margin: const EdgeInsets.only(bottom: 6),
