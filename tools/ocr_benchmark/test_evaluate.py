@@ -185,6 +185,21 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(blank_report["metrics"]["page_omission_rate"]["value"], 0)
 
+    def test_nonempty_gold_is_rejected_for_blank_fixture(self):
+        manifest = {
+            "fixtures": [
+                {"id": "blank", "gold_text": "text", "categories": ["blank"]}
+            ]
+        }
+
+        with self.assertRaisesRegex(
+            EvaluationError, "blank fixture needs empty gold_text"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "blank", "text": "text"}]),
+            )
+
     def test_cli_reports_invalid_utf8_prediction_without_traceback(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

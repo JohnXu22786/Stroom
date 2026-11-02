@@ -219,6 +219,10 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         normalized_gold = normalize_text(fixture["gold_text"])
         if not normalized_gold and "blank" not in categories:
             raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
+        if normalized_gold and "blank" in categories:
+            raise EvaluationError(
+                f"{fixture_id}: blank fixture needs empty gold_text"
+            )
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
                 f"{fixture_id}: every reading_order anchor must occur in gold_text"
