@@ -186,3 +186,8 @@ const kPinnedDevinModels = <String>[
   'devin/deepseek-v4-flash',
   'devin/deepseek-v4-1-flash',
 ];
+
+// Devin CLI does not expose a stable account model catalog through ACP; this
+// account selects the CLI's configured default model without forwarding an
+// arbitrary model name to the subprocess.
+const kPinnedDevinCliModels = <String>['devin-cli-default'];

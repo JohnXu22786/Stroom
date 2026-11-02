@@ -125,6 +125,16 @@ void main() {
     );
   });
 
+  test('routes the Devin CLI account only through local ACP', () {
+    expect(llmRoutedChatSupportedConnectorTypes('devin.acp'), {
+      'devin-cli-agentic',
+    });
+    expect(
+      llmRoutedChatSupportedConnectorTypes('devin.connect_rpc'),
+      isNot(contains('devin-cli-agentic')),
+    );
+  });
+
   test('invokes a verified Devin OAuth model through routed Chat', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
@@ -793,8 +803,11 @@ void main() {
             'modelId': modelConfig.id,
           },
         );
+        // Task Flow must preserve its routed provider when resolving the CLI.
+        // ignore: invalid_use_of_visible_for_testing_member
         expect(taskFlowService?.provider, isA<LlmRoutedChatProvider>());
         expect(
+          // ignore: invalid_use_of_visible_for_testing_member
           await taskFlowService!.provider!.chat(const [
             {'role': 'user', 'content': 'Task Flow prompt'},
           ]),
@@ -1182,8 +1195,9 @@ void main() {
       final events = await provider.chatStream(const [
         {'role': 'user', 'content': 'make audio'},
       ]).toList();
-      final attachments =
-          events.expand((event) => event.mediaAttachments ?? const []).toList();
+      final attachments = events
+          .expand((event) => event.mediaAttachments ?? const [])
+          .toList();
 
       final beforeImageIndex = events.indexWhere(
         (event) => event.text == 'before image',
@@ -1239,18 +1253,18 @@ void main() {
         'audio/mpeg',
       ]);
       expect(
-        attachments[2].extraFields['stroom.mediaSource']['metadata']
-            ['choiceIndex'],
+        attachments[2]
+            .extraFields['stroom.mediaSource']['metadata']['choiceIndex'],
         0,
       );
       expect(
-        attachments[3].extraFields['stroom.mediaSource']['metadata']
-            ['choiceIndex'],
+        attachments[3]
+            .extraFields['stroom.mediaSource']['metadata']['choiceIndex'],
         1,
       );
       expect(
-        attachments[0].extraFields['stroom.mediaSource']['metadata']
-            ['revised_prompt'],
+        attachments[0]
+            .extraFields['stroom.mediaSource']['metadata']['revised_prompt'],
         'A small blue circle',
       );
     },
@@ -1415,8 +1429,9 @@ void main() {
       'audio-item-2',
     );
     expect(
-      attachments.first.extraFields['stroom.mediaSource']['metadata']
-          ['partial_image_index'],
+      attachments
+          .first
+          .extraFields['stroom.mediaSource']['metadata']['partial_image_index'],
       0,
     );
     expect(audioSaveAttempts, 2);
@@ -1516,97 +1531,98 @@ void main() {
         expectedRequestField,
         expectedResponse,
         endpointConfig,
-      ) in [
-    (
-      'openai-compatibility',
-      'openai',
-      'gpt-routed',
-      'messages',
-      {
-        'choices': [
+      )
+      in [
+        (
+          'openai-compatibility',
+          'openai',
+          'gpt-routed',
+          'messages',
           {
-            'message': {'content': 'ok'},
+            'choices': [
+              {
+                'message': {'content': 'ok'},
+              },
+            ],
           },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'claude',
-      'anthropic',
-      'claude-routed',
-      'messages',
-      {
-        'content': [
-          {'type': 'text', 'text': 'ok'},
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'gemini',
-      'google.gemini.generate_content',
-      'gemini-routed',
-      'contents',
-      {
-        'candidates': [
+          const <String, dynamic>{},
+        ),
+        (
+          'claude',
+          'anthropic',
+          'claude-routed',
+          'messages',
           {
-            'content': {
-              'parts': [
-                {'text': 'private reasoning', 'thought': true},
-                {'text': 'ok'},
-              ],
-            },
-          },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'gemini-interactions',
-      'google.gemini.interactions',
-      'interaction-routed',
-      'input',
-      {
-        'outputs': [
-          {
-            'type': 'model_output',
             'content': [
               {'type': 'text', 'text': 'ok'},
             ],
           },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'ollama',
-      'ollama.chat',
-      'llama-routed',
-      'messages',
-      {
-        'message': {'content': 'ok'},
-      },
-      const <String, dynamic>{'baseUrl': 'http://localhost:11434'},
-    ),
-    (
-      'openai-api',
-      'openai',
-      'gpt-response-routed',
-      'input',
-      {
-        'output': [
+          const <String, dynamic>{},
+        ),
+        (
+          'gemini',
+          'google.gemini.generate_content',
+          'gemini-routed',
+          'contents',
           {
-            'type': 'message',
-            'content': [
-              {'type': 'output_text', 'text': 'ok'},
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': 'private reasoning', 'thought': true},
+                    {'text': 'ok'},
+                  ],
+                },
+              },
             ],
           },
-        ],
-      },
-      const <String, dynamic>{'chatProtocol': 'openai.responses'},
-    ),
-  ]) {
+          const <String, dynamic>{},
+        ),
+        (
+          'gemini-interactions',
+          'google.gemini.interactions',
+          'interaction-routed',
+          'input',
+          {
+            'outputs': [
+              {
+                'type': 'model_output',
+                'content': [
+                  {'type': 'text', 'text': 'ok'},
+                ],
+              },
+            ],
+          },
+          const <String, dynamic>{},
+        ),
+        (
+          'ollama',
+          'ollama.chat',
+          'llama-routed',
+          'messages',
+          {
+            'message': {'content': 'ok'},
+          },
+          const <String, dynamic>{'baseUrl': 'http://localhost:11434'},
+        ),
+        (
+          'openai-api',
+          'openai',
+          'gpt-response-routed',
+          'input',
+          {
+            'output': [
+              {
+                'type': 'message',
+                'content': [
+                  {'type': 'output_text', 'text': 'ok'},
+                ],
+              },
+            ],
+          },
+          const <String, dynamic>{'chatProtocol': 'openai.responses'},
+        ),
+      ]) {
     test(
       '$endpointType request keeps the routed model over extraParams',
       () async {
@@ -1619,12 +1635,13 @@ void main() {
           LlmAccount(
             id: 'account-$endpointType',
             connectorType: connectorType,
-            authType: const {
-              'claude',
-              'gemini',
-              'gemini-interactions',
-              'openai-api',
-            }.contains(connectorType)
+            authType:
+                const {
+                  'claude',
+                  'gemini',
+                  'gemini-interactions',
+                  'openai-api',
+                }.contains(connectorType)
                 ? 'api_key'
                 : 'none',
             displayName: 'Test account',
@@ -1638,12 +1655,13 @@ void main() {
               ),
             ],
           ),
-          secret: const {
-            'claude',
-            'gemini',
-            'gemini-interactions',
-            'openai-api',
-          }.contains(connectorType)
+          secret:
+              const {
+                'claude',
+                'gemini',
+                'gemini-interactions',
+                'openai-api',
+              }.contains(connectorType)
               ? 'test-api-key'
               : null,
         );
@@ -2298,12 +2316,9 @@ void main() {
           'ok',
           reason: connectorType,
         );
-        expect(
-            connector.requestedAccountIds,
-            [
-              accountId,
-            ],
-            reason: connectorType);
+        expect(connector.requestedAccountIds, [
+          accountId,
+        ], reason: connectorType);
       }
     },
   );
@@ -2691,9 +2706,9 @@ void main() {
         );
         final successStream = endpointType == 'anthropic'
             ? 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback"}}\n\n'
-                'data: {"type":"message_stop"}\n\n'
+                  'data: {"type":"message_stop"}\n\n'
             : 'data: {"choices":[{"delta":{"content":"fallback"},"finish_reason":null}]}\n\n'
-                'data: [DONE]\n\n';
+                  'data: [DONE]\n\n';
         final connector = _FakeConnectorClient(
           accounts,
           streamBodies: [
@@ -3132,9 +3147,11 @@ void main() {
         endpointType: 'openai',
       );
 
-      final subscription = provider.chatStream(const [
-        {'role': 'user', 'content': 'hello'},
-      ]).listen((_) {});
+      final subscription = provider
+          .chatStream(const [
+            {'role': 'user', 'content': 'hello'},
+          ])
+          .listen((_) {});
       await connector.requestStarted.future;
       await subscription.cancel();
 
@@ -3513,8 +3530,7 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-unknown');
   });
 
-  test('streaming chat only selects members with streaming capability',
-      () async {
+  test('streaming chat only selects members with streaming capability', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -3594,8 +3610,7 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-stream');
   });
 
-  test('replays upstream reasoning for a matching routed conversation',
-      () async {
+  test('replays upstream reasoning for a matching routed conversation', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -3881,8 +3896,8 @@ void main() {
 
       final input = connector.requestBody!['input'] as List;
       final reasoningItem = input.whereType<Map>().firstWhere(
-            (item) => item['type'] == 'reasoning',
-          );
+        (item) => item['type'] == 'reasoning',
+      );
       expect(reasoningItem['id'], 'rs_source_1');
       expect(reasoningItem['encrypted_content'], 'opaque-source-payload');
       final reasoningIndex = input.indexOf(reasoningItem);
@@ -4163,8 +4178,8 @@ void main() {
       ]);
       final nonstreamFollowUpParts =
           (connector.requestBody!['contents'] as List).expand(
-        (message) => (message['parts'] as List).whereType<Map>(),
-      );
+            (message) => (message['parts'] as List).whereType<Map>(),
+          );
       final replayedThought = nonstreamFollowUpParts.firstWhere(
         (part) => part['thought'] == true,
       );
@@ -4390,8 +4405,9 @@ void main() {
     expect(events.map((event) => event.text).where((text) => text.isNotEmpty), [
       'primary answer',
     ]);
-    final attachment =
-        events.expand((event) => event.mediaAttachments ?? const []).single;
+    final attachment = events
+        .expand((event) => event.mediaAttachments ?? const [])
+        .single;
     expect(attachment.fileType, 'video');
     expect(attachment.mimeType, 'video/mp4');
     expect(attachment.storagePath, 'gs://bucket/generated-clip.mp4');
@@ -4480,75 +4496,76 @@ void main() {
         endpointType,
         contentBlock,
         requiredCapability,
-      ) in [
-    (
-      'input_image',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'input_image',
-        'image_url': 'https://example.test/input.png',
-      },
-      'vision',
-    ),
-    (
-      'output_image',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'output_image',
-        'image_url': 'https://example.test/output.png',
-      },
-      'vision',
-    ),
-    (
-      'video_url',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'video_url',
-        'video_url': {'url': 'https://example.test/video.mp4'},
-      },
-      'vision',
-    ),
-    (
-      'file',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'file',
-        'file': {
-          'filename': 'report.pdf',
-          'file_data': 'data:application/pdf;base64,cGRm',
-        },
-      },
-      'vision',
-    ),
-    (
-      'document',
-      'claude',
-      'anthropic',
-      <String, dynamic>{
-        'type': 'document',
-        'source': {
-          'type': 'base64',
-          'media_type': 'application/pdf',
-          'data': 'cGRm',
-        },
-      },
-      'vision',
-    ),
-    (
-      'output_audio',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'output_audio',
-        'output_audio': {'data': 'AQID', 'format': 'pcm16'},
-      },
-      'audio',
-    ),
-  ]) {
+      )
+      in [
+        (
+          'input_image',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'input_image',
+            'image_url': 'https://example.test/input.png',
+          },
+          'vision',
+        ),
+        (
+          'output_image',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'output_image',
+            'image_url': 'https://example.test/output.png',
+          },
+          'vision',
+        ),
+        (
+          'video_url',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'video_url',
+            'video_url': {'url': 'https://example.test/video.mp4'},
+          },
+          'vision',
+        ),
+        (
+          'file',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'file',
+            'file': {
+              'filename': 'report.pdf',
+              'file_data': 'data:application/pdf;base64,cGRm',
+            },
+          },
+          'vision',
+        ),
+        (
+          'document',
+          'claude',
+          'anthropic',
+          <String, dynamic>{
+            'type': 'document',
+            'source': {
+              'type': 'base64',
+              'media_type': 'application/pdf',
+              'data': 'cGRm',
+            },
+          },
+          'vision',
+        ),
+        (
+          'output_audio',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'output_audio',
+            'output_audio': {'data': 'AQID', 'format': 'pcm16'},
+          },
+          'audio',
+        ),
+      ]) {
     test(
       '$contentType content routes to a $requiredCapability-capable member',
       () async {
@@ -4629,8 +4646,7 @@ void main() {
     );
   }
 
-  test('records response cost alongside connector token observations',
-      () async {
+  test('records response cost alongside connector token observations', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -4732,9 +4748,12 @@ void main() {
     expect(measurements.where((item) => item.unit == 'usd').single.value, 0.03);
 
     Map<String, dynamic> storedAccountRecord() {
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       return Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -4850,9 +4869,12 @@ void main() {
         {'role': 'user', 'content': 'hello'},
       ]).toList();
 
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -4967,9 +4989,12 @@ void main() {
         ),
       );
 
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -4998,8 +5023,8 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     this.completionObservation,
     this.failFirstRequestBeforeSend = false,
     this.firstRequestError,
-  })  : observation = observation ?? LlmConnectorObservation(),
-        super(accountService: accountService);
+  }) : observation = observation ?? LlmConnectorObservation(),
+       super(accountService: accountService);
 
   final Object? responseBody;
   final List<Object?>? responseBodies;
@@ -5049,19 +5074,19 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
         : streamBodies![requestedAccountIds.length - 1];
     final response = responseBodies == null
         ? responseBody ??
-            (account.connectorType == 'claude'
-                ? {
-                    'content': [
-                      {'type': 'text', 'text': 'ok'},
-                    ],
-                  }
-                : {
-                    'choices': [
-                      {
-                        'message': {'content': 'ok'},
-                      },
-                    ],
-                  })
+              (account.connectorType == 'claude'
+                  ? {
+                      'content': [
+                        {'type': 'text', 'text': 'ok'},
+                      ],
+                    }
+                  : {
+                      'choices': [
+                        {
+                          'message': {'content': 'ok'},
+                        },
+                      ],
+                    })
         : responseBodies![requestedAccountIds.length - 1];
     return LlmConnectorResponse(
       statusCode: 200,
