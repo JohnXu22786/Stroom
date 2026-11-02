@@ -641,18 +641,31 @@ extension _ChatPageUiExt on _ChatPageState {
               child: titleText,
             ),
           );
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-            width: 0.5,
+    return AnimatedBuilder(
+      animation: _chatScrollController,
+      builder: (context, child) {
+        final scrollProgress = _chatScrollController.hasClients
+            ? (_chatScrollController.offset / 160).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+        return Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Color.lerp(
+              cs.surface,
+              cs.surfaceContainerHigh,
+              scrollProgress,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: cs.outlineVariant,
+                width: 0.5,
+              ),
+            ),
           ),
-        ),
-      ),
+          child: child,
+        );
+      },
       child: Row(
         children: [
           // Back button when inside nested navigator and not first route
