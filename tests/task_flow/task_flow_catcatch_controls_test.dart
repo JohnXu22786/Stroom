@@ -115,6 +115,48 @@ void main() {
   });
 
   testWidgets(
+      'expanded segment collapse control stays pinned while task details scroll',
+      (tester) async {
+    final segments = List.generate(
+      40,
+      (index) => MediaResource(
+        url: 'https://x/$index.ts',
+        name: 'segment-$index',
+        ext: 'ts',
+        initiator: 'https://x/playlist.m3u8',
+      ),
+    );
+    final task = _task(segments).copyWith(steps: [
+      StepStatus.done(
+        StepType.fetching,
+        detail: List.filled(100, 'expanded task detail').join(' '),
+      ),
+      StepStatus.running(StepType.userSelecting),
+    ]);
+    await _pump(tester, task);
+    await tester.tap(find.text(StepType.fetching.label));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.pump();
+
+    final details = find.textContaining('expanded task detail');
+    await tester.ensureVisible(details);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.drag(details, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final toggle = find.byKey(const Key('m3u8_segments_toggle'));
+    expect(toggle.hitTestable(), findsOneWidget);
+    final toggleRect = tester.getRect(toggle);
+    final viewportRect = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
+    expect(toggleRect.top, greaterThanOrEqualTo(viewportRect.top));
+    expect(toggleRect.top, lessThan(viewportRect.top + 52));
+    expect(toggleRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+  });
+
+  testWidgets(
       'media action stays reachable while the resource list scrolls within its cap',
       (tester) async {
     final media = List.generate(
