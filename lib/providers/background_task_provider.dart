@@ -26,10 +26,14 @@ Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
   Set<String> retryAudioIds = const {},
   bool retireAfterSnapshot = false,
+  bool ocrCacheOwnershipKnown = true,
+  String? ocrCacheTaskId,
 }) =>
     {
       '_unrestoredTaskRecord': true,
       'retryAudioOwnershipKnown': retryAudioOwnershipKnown,
+      if (!ocrCacheOwnershipKnown) 'ocrCacheOwnershipKnown': false,
+      if (ocrCacheTaskId != null) 'ocrCacheTaskId': ocrCacheTaskId,
       if (retryAudioIds.isNotEmpty)
         'retryAudioIds': retryAudioIds.toList()..sort(),
       if (retireAfterSnapshot) 'retireAfterSnapshot': true,
@@ -5098,7 +5102,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         (record) =>
             !retireUnrestoredRecords ||
             record is! Map ||
-            record['retireAfterSnapshot'] != true,
+            (record['retireAfterSnapshot'] != true &&
+                !(record['ocrCacheOwnershipKnown'] == false &&
+                    record['ocrCacheTaskId'] is String &&
+                    !currentSnapshot.any(
+                      (task) => task.id == record['ocrCacheTaskId'],
+                    ))),
       ),
     );
     final preservedEntries = [...skippedEntries, ...unrestoredRecords];
@@ -5897,6 +5906,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             'retryAudioOwnershipKnown',
             'retryAudioIds',
             'retireAfterSnapshot',
+            'ocrCacheOwnershipKnown',
+            'ocrCacheTaskId',
           };
           final hasUnsafeMarkerFields = m.entries.any(
             (entry) =>
@@ -5911,7 +5922,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               ) &&
               (rawIds == null || rawIds is List) &&
               (m['retireAfterSnapshot'] == null ||
-                  m['retireAfterSnapshot'] is bool);
+                  m['retireAfterSnapshot'] is bool) &&
+              (m['ocrCacheOwnershipKnown'] == null ||
+                  m['ocrCacheOwnershipKnown'] is bool) &&
+              (m['ocrCacheTaskId'] == null ||
+                  (m['ocrCacheTaskId'] is String &&
+                      (m['ocrCacheTaskId'] as String).isNotEmpty));
           if (rawIds is List) {
             for (final id in rawIds) {
               if (id is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
@@ -5921,12 +5937,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               retryAudioIds.add(id);
             }
           }
-          if (!markerValid || !ownershipKnown) cleanupSafe = false;
+          final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] != false;
+          if (!markerValid || !ownershipKnown || !ocrCacheOwnershipKnown) {
+            cleanupSafe = false;
+          }
           unrestoredRecords.add(
             _unrestoredTaskRecord(
               retryAudioOwnershipKnown: markerValid && ownershipKnown,
               retryAudioIds: markerValid ? retryAudioIds : const {},
               retireAfterSnapshot: markerValid && retireAfterSnapshot,
+              ocrCacheOwnershipKnown: markerValid && ocrCacheOwnershipKnown,
+              ocrCacheTaskId: markerValid && m['ocrCacheTaskId'] is String
+                  ? m['ocrCacheTaskId'] as String
+                  : null,
             ),
           );
           continue;
@@ -5958,6 +5981,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             cleanupSafe = false;
             isComplete = false;
             isCompleteExceptLegacyAsr = false;
+            unrestoredRecords.add(
+              _unrestoredTaskRecord(
+                retryAudioOwnershipKnown: true,
+                ocrCacheOwnershipKnown: false,
+                ocrCacheTaskId: task.id,
+              ),
+            );
           }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];

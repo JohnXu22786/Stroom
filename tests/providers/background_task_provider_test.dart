@@ -18618,6 +18618,30 @@ void main() {
           expect(persistedRetryData['additionalCacheRefs'], [
             'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
           ]);
+
+          notifier.setSteps('future-ocr-retry-owner', [
+            const BgTaskStep(
+                label: 'still present', status: BgStepStatus.pending),
+          ]);
+          await notifier.pendingPersistence;
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedAfterMutation =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedAfterMutation.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == 'future-ocr-retry-owner',
+                ),
+            isTrue,
+          );
+
+          expect(
+            await notifier.removeTasksPersisted(['future-ocr-retry-owner']),
+            isTrue,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isEmpty);
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
