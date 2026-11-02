@@ -13,6 +13,11 @@ adb wait-for-device
 
 start_with_nodeargs() {
   local nodeargs=$1 remote_nodeargs
+  local expression=${nodeargs#-p }
+  if [[ "$nodeargs" != -p\ * || "$expression" == *[[:space:]]* ]]; then
+    echo 'Node Mobile sample splits its nodeargs string on spaces; use a whitespace-free -p expression.' >&2
+    return 1
+  fi
   remote_nodeargs=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "$nodeargs")
   adb shell "am start -W -n $component --es nodeargs $remote_nodeargs"
 }
@@ -106,13 +111,13 @@ run_expected_raw_failure() {
   echo 'RAW_NODE_MOBILE_REQUIRE_FAILURE_CONFIRMED'
 }
 
-runtime_args="-p (()=>{const fs=require('node:fs');const p='$files/node-runtime-check.txt';fs.writeFileSync(p,'node-fs-ok');const bytes=fs.readFileSync(p);if(bytes.length!==10)throw Error('private-file-bytes-mismatch');if(Buffer.from('mobile').toString('utf8')!=='mobile')throw Error('Buffer_UTF8_mismatch');fs.unlinkSync(p);console.log('NODE_RUNTIME_PASS_'+process.version);console.log('RESULT:PASS')})()"
+runtime_args="-p (()=>{require('node:fs').writeFileSync('$files/node-runtime-check.txt','node-fs-ok');if(require('node:fs').readFileSync('$files/node-runtime-check.txt').length===10&&Buffer.from('mobile').toString('utf8')==='mobile'){require('node:fs').unlinkSync('$files/node-runtime-check.txt');console.log('NODE_RUNTIME_PASS_'+process.version);console.log('RESULT:PASS')}else{console.log('RESULT:FAIL')}})()"
 run_node 'Node runtime + app-private fs' "$runtime_args" 'NODE_RUNTIME_PASS_v18.20.4'
 run_expected_raw_failure
 
 adb shell run-as "$package" rm -rf "$fixture/node_modules" "$fixture/.npm" "$files/.npm-cache"
 bootstrap_b64=$(base64 -w0 "$script_root/compatibility-shim.cjs")
-npm_args="-p (()=>{eval(new TextDecoder().decode(Buffer.from('$bootstrap_b64','base64')));const npm='$npm';process.argv=['node',npm,'ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return require(npm)})()"
+npm_args="-p (()=>{eval(new TextDecoder().decode(Buffer.from('$bootstrap_b64','base64')));process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return require('$npm')})()"
 run_node 'Clean npm ci with committed lock and fast-uri override' "$npm_args" 'NPM_CI_PROCESS_EXIT:0' 300
 
 verify_args="-p (eval(new TextDecoder().decode(Buffer.from('$bootstrap_b64','base64'))),require('$fixture/verify-install.cjs'))"
