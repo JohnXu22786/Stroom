@@ -14,15 +14,17 @@ class _FlowActions extends Fake implements TaskFlowExecutionService {
   _FlowActions(this.downloads);
   final _Downloads Function() downloads;
   final calls = <(String, bool)>[];
-  final selectedUrls = <String?>[];
+  final selectedIdentities = <String?>[];
   Future<bool> Function(String, bool, void Function(CatCatchNotifier))? run;
 
   @override
   Future<bool> performManualCatCatchAction(
       String taskId, bool selecting, void Function(CatCatchNotifier) action,
-      {String? selectedMediaUrl}) async {
+      {String? selectedMediaIdentity,
+      String? selectedMediaUrl,
+      bool selectedMediaHasByteRange = false}) async {
     calls.add((taskId, selecting));
-    selectedUrls.add(selectedMediaUrl);
+    selectedIdentities.add(selectedMediaIdentity ?? selectedMediaUrl);
     if (run != null) return run!(taskId, selecting, action);
     action(downloads());
     return true;
@@ -83,6 +85,37 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
   return downloads;
 }
 
+Future<void> _pumpInShortTaskListViewport(
+    WidgetTester tester, CatCatchTask task) async {
+  await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        catcatchTasksProvider.overrideWith((ref) {
+          return _Downloads(ref)..state = [task];
+        }),
+      ],
+      child: MaterialApp(
+          home: Scaffold(
+              body: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          key: const Key('task_list_main_viewport'),
+          height: 300,
+          child: LayoutBuilder(
+            builder: (context, constraints) => ListView(
+              children: [
+                CatCatchTaskCard(
+                  task: task,
+                  taskListViewportHeight: constraints.maxHeight,
+                ),
+              ],
+            ),
+          ),
+        ),
+      )))));
+  await tester.pump();
+}
+
 CatCatchTask _task(List<MediaResource> media, {bool confirmation = false}) =>
     CatCatchTask(
       id: 'download',
@@ -112,6 +145,205 @@ void main() {
     expect(downloads.selected, [two]);
     expect(downloads.flowActions.calls, [('download', true)]);
     expect(downloads.batches, isEmpty);
+  });
+
+  testWidgets(
+      'selecting one byte range does not select another range at the same URL',
+      (tester) async {
+    const firstRange = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'first-range',
+      ext: 'ts',
+      initiator: 'https://x/playlist.m3u8',
+      byteRangeStart: 0,
+      byteRangeLength: 100,
+    );
+    const secondRange = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'second-range',
+      ext: 'ts',
+      initiator: 'https://x/playlist.m3u8',
+      byteRangeStart: 100,
+      byteRangeLength: 100,
+    );
+    final downloads = await _pump(
+      tester,
+      _task([firstRange, secondRange]),
+      flowManaged: false,
+    );
+
+    await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.pump();
+    await tester.tap(find.text('first-range.ts'));
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.batches, [
+      [firstRange]
+    ]);
+  });
+
+  testWidgets('same-URL non-range candidates keep URL-based selection',
+      (tester) async {
+    const first =
+        MediaResource(url: 'https://x/media.mp4', name: 'first', ext: 'mp4');
+    const duplicate = MediaResource(
+        url: 'https://x/media.mp4', name: 'duplicate', ext: 'mp4');
+    final downloads = await _pump(
+      tester,
+      _task([first, duplicate]),
+      flowManaged: false,
+    );
+
+    await tester.tap(find.text('first.mp4'));
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.batches, [
+      [first, duplicate]
+    ]);
+  });
+
+  testWidgets('flow candidate filtering and handoff distinguish byte ranges',
+      (tester) async {
+    const firstRange = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'first-range',
+      ext: 'ts',
+      initiator: 'https://x/playlist.m3u8',
+      byteRangeStart: 0,
+      byteRangeLength: 100,
+    );
+    const secondRange = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'second-range',
+      ext: 'ts',
+      initiator: 'https://x/playlist.m3u8',
+      byteRangeStart: 100,
+      byteRangeLength: 100,
+    );
+    final task = _task([firstRange, secondRange]).copyWith(metadata: {
+      CatCatchTask.flowManagedSelectionKey: 'true',
+      CatCatchTask.flowSelectionCandidatesIdentityVersionKey:
+          CatCatchTask.flowSelectionCandidatesIdentityVersion,
+      CatCatchTask.flowSelectionCandidatesKey:
+          jsonEncode([secondRange.selectionIdentity]),
+    });
+    final downloads = await _pump(tester, task);
+
+    await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.pump();
+    expect(find.text('first-range.ts'), findsNothing);
+    await tester.tap(find.text('second-range.ts'));
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.selected, [secondRange]);
+    expect(downloads.flowActions.selectedIdentities,
+        [secondRange.selectionIdentity]);
+  });
+
+  testWidgets('versioned URL candidate does not admit a range sharing the URL',
+      (tester) async {
+    const wholeFile = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'whole-file',
+      ext: 'ts',
+    );
+    const range = MediaResource(
+      url: 'https://x/media.ts',
+      name: 'range',
+      ext: 'ts',
+      initiator: 'https://x/playlist.m3u8',
+      byteRangeStart: 0,
+      byteRangeLength: 100,
+    );
+    final task = _task([wholeFile, range]).copyWith(metadata: {
+      CatCatchTask.flowManagedSelectionKey: 'true',
+      CatCatchTask.flowSelectionCandidatesIdentityVersionKey:
+          CatCatchTask.flowSelectionCandidatesIdentityVersion,
+      CatCatchTask.flowSelectionCandidatesKey:
+          jsonEncode([wholeFile.selectionIdentity]),
+    });
+    await _pump(tester, task);
+
+    expect(find.text('whole-file.ts'), findsOneWidget);
+    expect(find.text('range.ts'), findsNothing);
+  });
+
+  testWidgets(
+      'expanded segment collapse control stays pinned while task details scroll',
+      (tester) async {
+    final segments = List.generate(
+      40,
+      (index) => MediaResource(
+        url: 'https://x/$index.ts',
+        name: 'segment-$index',
+        ext: 'ts',
+        initiator: 'https://x/playlist.m3u8',
+      ),
+    );
+    final task = _task(segments).copyWith(steps: [
+      StepStatus.done(
+        StepType.fetching,
+        detail: List.filled(100, 'expanded task detail').join(' '),
+      ),
+      StepStatus.running(StepType.userSelecting),
+    ]);
+    await _pump(tester, task);
+    await tester.tap(find.text(StepType.fetching.label));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.pump();
+
+    final details = find.textContaining('expanded task detail');
+    await tester.ensureVisible(details);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.drag(details, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final toggle = find.byKey(const Key('m3u8_segments_toggle'));
+    expect(toggle.hitTestable(), findsOneWidget);
+    final toggleRect = tester.getRect(toggle);
+    final viewportRect = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
+    expect(toggleRect.top, greaterThanOrEqualTo(viewportRect.top));
+    expect(toggleRect.top, lessThan(viewportRect.top + 52));
+    expect(toggleRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+  });
+
+  testWidgets(
+      'resource viewport is capped by a short task-list viewport, not the screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpInShortTaskListViewport(
+      tester,
+      _task([one])
+          .copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
+    );
+
+    final taskListViewport =
+        tester.getRect(find.byKey(const Key('task_list_main_viewport')));
+    final resourceViewport = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
+    expect(
+      resourceViewport.height,
+      lessThanOrEqualTo(taskListViewport.height * 2 / 3),
+    );
   });
 
   testWidgets(
@@ -173,7 +405,7 @@ void main() {
     await tester.pump();
 
     expect(downloads.selected, [audioB]);
-    expect(downloads.flowActions.selectedUrls, [audioB.url]);
+    expect(downloads.flowActions.selectedIdentities, [audioB.url]);
     expect(downloads.state.single.detectedMedia, [audioA, audioB, video]);
   });
 

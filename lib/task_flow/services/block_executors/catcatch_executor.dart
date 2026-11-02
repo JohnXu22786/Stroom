@@ -490,7 +490,7 @@ String _progressSignatureOf(catcatch.CatCatchTask? task) {
       )
       .join('|');
   return '${task.status.name}|${task.downloadedBytes}|'
-      '${task.selectedMedia?.url}|${task.metadata['pendingConfirm']}|$steps';
+      '${task.selectedMedia?.selectionIdentity}|${task.metadata['pendingConfirm']}|$steps';
 }
 
 /// Discovery order depends on network timing. Choose a complete video before
@@ -557,7 +557,8 @@ List<MediaResource> catCatchPromptResourceCandidates(
     resources,
     desiredType: desiredType,
   );
-  final safeCandidateUrls = safeCandidates.map((media) => media.url).toSet();
+  final safeCandidateIdentities =
+      safeCandidates.map((media) => media.selectionIdentity).toSet();
   bool matchesResolvedType(MediaResource media) {
     if (desiredType == null) return true;
     final hint = catCatchResourceKindHint(media);
@@ -569,18 +570,19 @@ List<MediaResource> catCatchPromptResourceCandidates(
         ? hint == CatCatchMediaKind.audio
         : hint == CatCatchMediaKind.video;
     return matchesHint ||
-        (safeCandidateUrls.contains(media.url) &&
+        (safeCandidateIdentities.contains(media.selectionIdentity) &&
             catCatchIsSharedContainerExtension(media.ext));
   }
 
   final candidates = safeCandidates.where(matchesResolvedType).toList();
-  final included = candidates.map((media) => media.url).toSet();
+  final included = candidates.map((media) => media.selectionIdentity).toSet();
   for (final media in resources) {
-    if (included.contains(media.url)) continue;
+    final identity = media.selectionIdentity;
+    if (included.contains(identity)) continue;
     final matches = matchesResolvedType(media);
     if (matches) {
       candidates.add(media);
-      included.add(media.url);
+      included.add(identity);
     }
   }
   return candidates;

@@ -154,8 +154,22 @@ class CatCatchTask {
   /// closed while the task-flow card presents its scoped choices.
   static const flowManagedSelectionKey = 'flowManagedSelection';
 
-  /// JSON URL allow-list for the current flow-owned resource prompt.
+  /// JSON selection-identity allow-list for the current flow-owned prompt.
+  /// Legacy URL-only entries remain accepted for already-persisted tasks.
   static const flowSelectionCandidatesKey = 'flowSelectionCandidates';
+  static const flowSelectionCandidatesIdentityVersionKey =
+      'flowSelectionCandidatesIdentityVersion';
+  static const flowSelectionCandidatesIdentityVersion = '2';
+
+  static bool flowSelectionCandidateAllowed({
+    required Set<String> candidates,
+    required String identity,
+    required String url,
+    required bool hasByteRange,
+    required bool identityVersioned,
+  }) =>
+      candidates.contains(identity) ||
+      (!identityVersioned && hasByteRange && candidates.contains(url));
 
   /// Written only after native save registered this exact completed file.
   /// Legacy task records require the task-flow registration fallback.

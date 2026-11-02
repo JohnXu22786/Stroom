@@ -605,9 +605,20 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final encodedCandidates =
         state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
     if (encodedCandidates != null) {
-      final allowedUrls =
-          (jsonDecode(encodedCandidates) as List).cast<String>();
-      if (!allowedUrls.contains(media.url)) return;
+      final candidates =
+          (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
+      final identityVersioned = state[index].metadata.containsKey(
+            CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+          );
+      if (!CatCatchTask.flowSelectionCandidateAllowed(
+        candidates: candidates,
+        identity: media.selectionIdentity,
+        url: media.url,
+        hasByteRange: media.hasByteRange,
+        identityVersioned: identityVersioned,
+      )) {
+        return;
+      }
     }
 
     // 标记 userSelecting 步骤为已完成
@@ -621,6 +632,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // 如果传入了合并音频 URL，存入任务元数据
     Map<String, String> metadata = Map.from(state[index].metadata);
     metadata.remove(CatCatchTask.flowSelectionCandidatesKey);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesIdentityVersionKey);
     if (mergeAudioUrl != null && mergeAudioUrl.isNotEmpty) {
       metadata['mergeAudioUrl'] = mergeAudioUrl;
       metadata['mergeMode'] = 'audio_video';
@@ -653,8 +665,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final task = state[index];
     final metadata = Map<String, String>.from(task.metadata)
       ..[CatCatchTask.flowManagedSelectionKey] = 'true'
-      ..[CatCatchTask.flowSelectionCandidatesKey] =
-          jsonEncode(candidates.map((media) => media.url).toList());
+      ..[CatCatchTask.flowSelectionCandidatesIdentityVersionKey] =
+          CatCatchTask.flowSelectionCandidatesIdentityVersion
+      ..[CatCatchTask.flowSelectionCandidatesKey] = jsonEncode(
+          candidates.map((media) => media.selectionIdentity).toList());
     final updated = task.copyWith(metadata: metadata);
     state = [
       for (int i = 0; i < state.length; i++)

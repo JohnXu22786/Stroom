@@ -25,11 +25,13 @@ import 'task_utils.dart';
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
+  final double? taskListViewportHeight;
 
   const TaskFlowCard({
     super.key,
     required this.execution,
     this.isUnread = false,
+    this.taskListViewportHeight,
   });
 
   @override
@@ -197,6 +199,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               subTasks: subTasks,
               executionId: execution.id,
               executionStatus: execution.status,
+              taskListViewportHeight: widget.taskListViewportHeight,
             ),
             if (execution.error != null)
               Padding(
@@ -267,11 +270,13 @@ class _ExpandedContent extends ConsumerWidget {
   final List<FlowSubTask> subTasks;
   final String executionId;
   final FlowExecutionStatus executionStatus;
+  final double? taskListViewportHeight;
 
   const _ExpandedContent({
     required this.subTasks,
     required this.executionId,
     required this.executionStatus,
+    required this.taskListViewportHeight,
   });
 
   @override
@@ -603,6 +608,7 @@ class _ExpandedContent extends ConsumerWidget {
         task: task,
         isUnread: false,
         isFlowManaged: true,
+        taskListViewportHeight: taskListViewportHeight,
       );
     }
     return _buildFallbackCard(subTask, cs);
