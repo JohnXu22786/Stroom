@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
@@ -75,11 +77,14 @@ Future<void> showMediaPreview(
 class MediaPreviewSheet extends ConsumerStatefulWidget {
   final MediaResource resource;
   final String taskTitle;
+  @visibleForTesting
+  final AudioPlayer Function()? audioPlayerFactory;
 
   const MediaPreviewSheet({
     super.key,
     required this.resource,
     required this.taskTitle,
+    this.audioPlayerFactory,
   });
 
   @override
@@ -93,6 +98,11 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   String? _error;
   File? _tempFile;
   bool _isAudioFormat = false;
+  AudioPlayer? _audioPlayer;
+  final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
+  bool _isAudioPlaying = false;
+  Duration _audioPosition = Duration.zero;
+  Duration _audioDuration = Duration.zero;
 
   @override
   void initState() {
@@ -147,6 +157,11 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
       _isAudioFormat = isAudioFormat;
 
+      if (isAudioFormat) {
+        await _initializeAudioPreview(resource);
+        return;
+      }
+
       final tempDir = await getTemporaryDirectory();
       final safeName = widget.resource.name.replaceAll(
         RegExp(r'[^\w\-.]'),
@@ -178,19 +193,119 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
         if (!mounted) return;
         setState(() => _loading = false);
-      } else {
-        setState(() => _loading = false);
       }
     } catch (e) {
       // Dispose controller to prevent resource leak on init failure
       _videoPlayerController?.dispose();
       _videoPlayerController = null;
+      _disposeAudioPlayer();
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = '加载失败: $e';
       });
     }
+  }
+
+  Future<void> _initializeAudioPreview(MediaResource resource) async {
+    final player = widget.audioPlayerFactory?.call() ?? AudioPlayer();
+    _audioPlayer = player;
+
+    _audioSubscriptions.add(
+      player.positionStream.listen((position) {
+        if (mounted) setState(() => _audioPosition = position);
+      }, onError: _handleAudioError),
+    );
+    _audioSubscriptions.add(
+      player.durationStream.listen((duration) {
+        if (mounted && duration != null) {
+          setState(() => _audioDuration = duration);
+        }
+      }, onError: _handleAudioError),
+    );
+    _audioSubscriptions.add(
+      player.playerStateStream.listen((state) {
+        if (mounted) setState(() => _isAudioPlaying = state.playing);
+      }, onError: _handleAudioError),
+    );
+    _audioSubscriptions.add(
+      player.processingStateStream.listen((state) {
+        if (state == ProcessingState.completed && mounted) {
+          unawaited(_rewindAudio(player));
+        }
+      }, onError: _handleAudioError),
+    );
+    _audioSubscriptions.add(
+      player.errorStream.listen((error) => _handleAudioError(error)),
+    );
+
+    final headers = <String, String>{
+      'User-Agent': DefaultRules.defaultHeaders['User-Agent']!,
+      if (resource.initiator != null) 'Referer': resource.initiator!,
+    };
+    final duration = await player.setAudioSource(
+      AudioSource.uri(Uri.parse(resource.url), headers: headers),
+    );
+    if (!mounted) return;
+    setState(() {
+      _audioDuration = duration ?? player.duration ?? Duration.zero;
+      _loading = false;
+    });
+  }
+
+  void _handleAudioError(Object error, [StackTrace? stackTrace]) {
+    if (!mounted) return;
+    _disposeAudioPlayer();
+    setState(() {
+      _loading = false;
+      _error = '播放失败: $error';
+    });
+  }
+
+  Future<void> _rewindAudio(AudioPlayer player) async {
+    try {
+      await player.seek(Duration.zero);
+      if (mounted) {
+        setState(() {
+          _isAudioPlaying = false;
+          _audioPosition = Duration.zero;
+        });
+      }
+    } catch (e) {
+      _handleAudioError(e);
+    }
+  }
+
+  Future<void> _seekAudio(Duration position) async {
+    try {
+      await _audioPlayer?.seek(position);
+    } catch (e) {
+      _handleAudioError(e);
+    }
+  }
+
+  Future<void> _toggleAudioPlayback() async {
+    final player = _audioPlayer;
+    if (player == null) return;
+    try {
+      if (_isAudioPlaying) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+    } catch (e) {
+      _handleAudioError(e);
+    }
+  }
+
+  void _disposeAudioPlayer() {
+    for (final subscription in _audioSubscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _audioSubscriptions.clear();
+    final player = _audioPlayer;
+    _audioPlayer = null;
+    if (player != null) unawaited(player.dispose());
   }
 
   Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
@@ -238,6 +353,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   @override
   void dispose() {
+    _disposeAudioPlayer();
     _chewieController?.dispose();
     _videoPlayerController?.dispose();
     try {
@@ -340,6 +456,40 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
                     ),
               ),
             ],
+            const SizedBox(height: 20),
+            Slider(
+              value: _audioDuration.inMilliseconds > 0
+                  ? (_audioPosition.inMilliseconds /
+                          _audioDuration.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                      .toDouble()
+                  : 0.0,
+              onChanged: _audioDuration > Duration.zero
+                  ? (value) {
+                      final position = Duration(
+                        milliseconds:
+                            (value * _audioDuration.inMilliseconds).round(),
+                      );
+                      _seekAudio(position);
+                    }
+                  : null,
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_formatDuration(_audioPosition)),
+                Text(_formatDuration(_audioDuration)),
+              ],
+            ),
+            IconButton(
+              tooltip: _isAudioPlaying ? 'Pause audio' : 'Play audio',
+              iconSize: 48,
+              onPressed: _toggleAudioPlayback,
+              icon: Icon(
+                _isAudioPlaying ? Icons.pause_circle : Icons.play_circle,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
           ],
         ),
       );
@@ -363,5 +513,11 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }
