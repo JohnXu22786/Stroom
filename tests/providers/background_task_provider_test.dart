@@ -18613,18 +18613,18 @@ void main() {
         WebFileStore.enableTestMode();
         const asrTaskId = 'runtime-asr-diagnostic-ocr-owner';
         final bytes = Uint8List.fromList([35, 36, 37, 38]);
-        final retryData = await OcrRetryStorage.cacheSnapshot(
-          taskId: 'runtime-asr-diagnostic-cache-source',
-          snapshot: OcrRetrySnapshot.capture(
-            images: [OcrRetryImage(bytes: bytes, format: 'png')],
-          ),
-        );
-        final cacheReference = ((retryData['images'] as List).single
-            as Map)['storageRef'] as String;
         final file = _tasksFileIn(testDir.path);
         final notifier = BackgroundTaskNotifier();
         try {
           expect(await notifier.restoreFromPersistence(), isTrue);
+          final retryData = await OcrRetryStorage.cacheSnapshot(
+            taskId: 'runtime-asr-diagnostic-cache-source',
+            snapshot: OcrRetrySnapshot.capture(
+              images: [OcrRetryImage(bytes: bytes, format: 'png')],
+            ),
+          );
+          final cacheReference = ((retryData['images'] as List).single
+              as Map)['storageRef'] as String;
           notifier.addTask(
             type: BackgroundTaskType.asr,
             title: 'Runtime ASR diagnostics with OCR cache reference',
@@ -18718,6 +18718,53 @@ void main() {
             reason:
                 'an ASR row retained in the snapshot still owns hidden OCR refs',
           );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'unknown ASR audio ownership does not block known OCR cache cleanup',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'asr-unknown-audio-only',
+              'type': 'asr',
+              'title': 'ASR row with unsupported audio references',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'version': 99,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'cccccccccccccccccccccccccccccccc',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 4,
+                  'sha256': 'c' * 64,
+                },
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isEmpty,
+            reason:
+                'unknown ASR audio ownership does not imply unknown OCR cache ownership',
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isEmpty);
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;

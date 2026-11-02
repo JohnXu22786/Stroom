@@ -1369,6 +1369,7 @@ void main() {
         final migrationStarted = Completer<void>();
         final finishMigration = Completer<void>();
         final notifier = _InspectableBackgroundTaskNotifier();
+        var notifierOwnedByWidget = false;
         var taskSnapshotReads = 0;
         BackgroundTaskNotifier.debugStorageDirectoryOverride = storageDir.path;
         BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = () async {
@@ -1458,7 +1459,7 @@ void main() {
                   snapshot: snapshot,
                 );
                 unreferencedCandidateReference =
-                    OcrRetryStorage.referencesFromSnapshot(result).singleWhere(
+                    OcrRetryStorage.referencesFromSnapshot(result).firstWhere(
                         (reference) => reference != sharedReference);
                 migrationStarted.complete();
                 await finishMigration.future;
@@ -1466,6 +1467,7 @@ void main() {
               },
             ),
           );
+          notifierOwnedByWidget = true;
           // Migration is deliberately paused by [finishMigration], so a
           // settle wait can never finish while its loading animation runs.
           await _pumpUntil(tester, () => migrationStarted.isCompleted);
@@ -1493,7 +1495,7 @@ void main() {
         } finally {
           if (!finishMigration.isCompleted) finishMigration.complete();
           await tester.pumpWidget(const SizedBox.shrink());
-          notifier.dispose();
+          if (!notifierOwnedByWidget) notifier.dispose();
           BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = null;
           BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
           WebFileStore.disableTestMode();

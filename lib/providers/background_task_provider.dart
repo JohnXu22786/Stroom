@@ -5508,7 +5508,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
     final persisted = await _loadPersistedTasks();
-    if (!persisted.isReadable || !persisted.cleanupSafe) return null;
+    if (!persisted.isReadable || !persisted.ocrCacheCleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return _ocrCacheReferencesFromTasksAndEntries(
       [...tasks, ...persisted.tasks],
@@ -5583,18 +5583,39 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final data = Map<String, dynamic>.from(retryData);
       final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
       final version = data['version'];
-      if (version is int &&
-          version > OcrRetrySnapshot.currentVersion &&
-          rawCacheReferences.isNotEmpty) {
-        // Future schemas are rewritten to unavailable placeholders, which do
-        // not retain even recognized image refs. Keep their owner marker until
-        // the task itself is durably removed.
-        return true;
-      }
       bool containsCacheReference(Object? value) =>
           _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
       if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
         return rawCacheReferences.isNotEmpty;
+      }
+      if (version is int &&
+          version > OcrRetrySnapshot.currentVersion &&
+          rawCacheReferences.isNotEmpty) {
+        final futureData = {...data, 'type': BackgroundTaskType.ocr.name};
+        final snapshot = OcrRetrySnapshot.fromMap(futureData);
+        final rawImages = futureData['images'];
+        final referencesOutsideStorageRefs = <String>{
+          ..._ocrCacheReferencesInPersistedValue(
+            Map<String, dynamic>.from(futureData)..remove('images'),
+          ),
+          if (futureData.containsKey('images') && rawImages is! List)
+            ..._ocrCacheReferencesInPersistedValue(rawImages),
+          if (rawImages is List)
+            for (final image in rawImages)
+              ..._ocrCacheReferencesInPersistedValue(
+                image is Map
+                    ? (Map<dynamic, dynamic>.of(image)..remove('storageRef'))
+                    : image,
+              ),
+        };
+        // The unsupported-version migration discards every input image. Once
+        // that transformed snapshot is durable, its recognized storageRefs
+        // can be collected. Refs in unknown fields or malformed image shapes
+        // still require a durable owner marker until the task is removed.
+        return snapshot.hasUnknownFields ||
+            snapshot.hasInvalidImageMetadata ||
+            snapshot.imageEntryCount != snapshot.images.length ||
+            referencesOutsideStorageRefs.isNotEmpty;
       }
       final modelIndex = data['modelIndex'];
       if (modelIndex != null &&
@@ -6299,6 +6320,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         bool isReadable,
         List<dynamic> skippedEntries,
         bool cleanupSafe,
+        bool ocrCacheCleanupSafe,
         List<dynamic> unrestoredRecords,
         bool hasUnsafeSkippedAsrData,
       })> _loadPersistedTasks({
@@ -6315,6 +6337,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: true,
           skippedEntries: <dynamic>[],
           cleanupSafe: true,
+          ocrCacheCleanupSafe: true,
           unrestoredRecords: <dynamic>[],
           hasUnsafeSkippedAsrData: false,
         );
@@ -6330,6 +6353,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -6346,6 +6370,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -6358,6 +6383,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -6369,6 +6395,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       var isComplete = true;
       var isCompleteExceptLegacyAsr = true;
       var cleanupSafe = true;
+      var ocrCacheCleanupSafe = true;
       var hasUnsafeSkippedAsrData = false;
       for (final m in list) {
         if (m is Map && m['_unrestoredTaskRecord'] == true) {
@@ -6415,8 +6442,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             }
           }
           final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] == true;
-          if (!markerValid || !ownershipKnown || !ocrCacheOwnershipKnown) {
-            cleanupSafe = false;
+          if (!markerValid || !ownershipKnown) cleanupSafe = false;
+          if (!markerValid || !ocrCacheOwnershipKnown) {
+            ocrCacheCleanupSafe = false;
           }
           unrestoredRecords.add(
             _unrestoredTaskRecord(
@@ -6433,6 +6461,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         }
         final rawMap = m is Map ? m : null;
         final rawRetryData = rawMap?['retryData'];
+        final hasNonOcrRetryCacheReferences = rawMap != null &&
+            rawMap['type'] != BackgroundTaskType.ocr.name &&
+            _ocrCacheReferencesInPersistedValue(rawRetryData).isNotEmpty;
         final hasAsrReferenceShape = rawRetryData is Map &&
             (rawRetryData.containsKey('audioReference') ||
                 rawRetryData.containsKey('audioReferences'));
@@ -6442,8 +6473,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             BackgroundTaskType.values.any(
               (type) => type.name == rawMap?['type'],
             );
-        final hasUnserializedOcrCacheReferences =
-            rawMap != null && _hasUnserializedTaskOcrCacheReferences(rawMap);
+        final hasUnserializedOcrCacheReferences = rawMap != null &&
+            (_hasUnserializedTaskOcrCacheReferences(rawMap) ||
+                hasNonOcrRetryCacheReferences);
         var ocrCacheOwnershipMarkerRecorded = false;
         void recordUnknownOcrCacheOwnership() {
           if (ocrCacheOwnershipMarkerRecorded || rawMap == null) return;
@@ -6458,7 +6490,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           ocrCacheOwnershipMarkerRecorded = true;
         }
 
-        if (hasUnserializedOcrCacheReferences) cleanupSafe = false;
+        if (hasUnserializedOcrCacheReferences) {
+          ocrCacheCleanupSafe = false;
+        }
         try {
           if (rawMap == null) {
             throw const FormatException('Task row is not an object');
@@ -6469,7 +6503,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           if (task.type == BackgroundTaskType.ocr &&
               !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
             // Keep cleanup fail-closed until retry data has been normalized.
-            cleanupSafe = false;
+            ocrCacheCleanupSafe = false;
           }
           if (hasUnserializedOcrCacheReferences ||
               (task.type == BackgroundTaskType.ocr &&
@@ -6613,11 +6647,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             }
             if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
                 !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
-              cleanupSafe = false;
+              ocrCacheCleanupSafe = false;
             }
             skippedEntries.add(m);
           } else {
             cleanupSafe = false;
+            ocrCacheCleanupSafe = false;
             unrestoredRecords.add(
               _unrestoredTaskRecord(
                 retryAudioOwnershipKnown: false,
@@ -6639,6 +6674,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: true,
         skippedEntries: skippedEntries,
         cleanupSafe: cleanupSafe,
+        ocrCacheCleanupSafe: ocrCacheCleanupSafe,
         unrestoredRecords: unrestoredRecords,
         hasUnsafeSkippedAsrData: hasUnsafeSkippedAsrData,
       );
@@ -6651,6 +6687,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: false,
         skippedEntries: <dynamic>[],
         cleanupSafe: false,
+        ocrCacheCleanupSafe: false,
         unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
         hasUnsafeSkippedAsrData: false,
       );
@@ -6698,7 +6735,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<bool> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
     _ocrCacheOwnershipLoaded = loaded.isReadable;
-    _ocrCacheCleanupSafe = loaded.isReadable && loaded.cleanupSafe;
+    _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
     _persistedOcrCacheReferences
       ..clear()
       ..addAll(
@@ -6818,7 +6855,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         await _cleanupOrphanedOcrCache();
       }
       _ocrCacheOwnershipLoaded = loaded.isReadable;
-      _ocrCacheCleanupSafe = loaded.isReadable && loaded.cleanupSafe;
+      _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
       return snapshotComplete;
     }
     final restored = <BackgroundTask>[];
@@ -6919,7 +6956,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             mounted ? state : (_disposedSnapshot ?? restored),
             [..._skippedTaskEntries, ..._unrestoredTaskRecords],
           )
-        : loaded.isReadable && loaded.cleanupSafe;
+        : loaded.isReadable && loaded.ocrCacheCleanupSafe;
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
     if (snapshotComplete && snapshotSaved) {
