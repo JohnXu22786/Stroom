@@ -113,8 +113,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   Widget build(BuildContext context) {
     final task = widget.task;
     final colorScheme = Theme.of(context).colorScheme;
-    final isSelectingMedia =
-        task.status == catcatch.TaskStatus.running &&
+    final isSelectingMedia = task.status == catcatch.TaskStatus.running &&
         task.steps.any(
           (s) => s.type == catcatch.StepType.userSelecting && s.running,
         ) &&
