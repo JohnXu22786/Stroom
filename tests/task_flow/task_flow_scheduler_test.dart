@@ -7,11 +7,14 @@ import 'package:stroom/task_flow/services/task_flow_scheduler.dart';
 
 void main() {
   group('TaskFlowScheduler weights', () {
-    test('CPU-heavy blocks cost 2, network-only blocks cost 1', () {
+    test(
+        'CPU-heavy and preprocessing blocks cost 2, network-only blocks cost 1',
+        () {
       expect(TaskFlowScheduler.weightFor(BlockType.catcatch), 2);
       expect(TaskFlowScheduler.weightFor(BlockType.audioSeparation), 2);
       expect(TaskFlowScheduler.weightFor(BlockType.asr), 1);
-      expect(TaskFlowScheduler.weightFor(BlockType.ocr), 1);
+      expect(TaskFlowScheduler.weightFor(BlockType.custom), 1);
+      expect(TaskFlowScheduler.weightFor(BlockType.ocr), 2);
       expect(TaskFlowScheduler.weightFor(BlockType.tts), 1);
       expect(TaskFlowScheduler.weightFor(BlockType.chat), 1);
     });
@@ -35,6 +38,21 @@ void main() {
         coreCount: 4,
         rssBytes: () => 100 * 1024 * 1024,
       );
+    });
+
+    test('OCR work queues when another OCR uses the two-unit budget', () async {
+      final firstOcr = TaskFlowScheduler.weightFor(BlockType.ocr);
+      final secondOcr = TaskFlowScheduler.weightFor(BlockType.ocr);
+
+      await scheduler.acquire('ocr-1', firstOcr);
+      final second = scheduler.acquire('ocr-2', secondOcr);
+
+      expect(scheduler.activeWeight, 2);
+      expect(scheduler.queuedCount, 1);
+      scheduler.release('ocr-1');
+      await second;
+      expect(scheduler.activeWeight, 2);
+      scheduler.release('ocr-2');
     });
 
     test('acquires immediately while budget allows', () async {
