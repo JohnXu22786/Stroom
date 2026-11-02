@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../pages/assistant_selection_page.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../providers/chat_stream_provider.dart';
 import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
@@ -279,6 +280,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   Widget build(BuildContext context) {
     final selectedAssistant = ref.watch(selectedAssistantProvider);
     final conversations = ref.watch(conversationsProvider);
+    final streamingConversations = ref.watch(streamingConversationsProvider);
+    final activeConversationId = ref.watch(activeConversationIdProvider);
     final cs = Theme.of(context).colorScheme;
 
     final assistantTopics = _getAssistantTopics(conversations);
@@ -440,13 +443,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           ),
                           itemBuilder: (context, index) {
                             final topic = sorted[index];
+                            final isRunning =
+                                streamingConversations.contains(topic.id);
+                            final latestMessage = topic.messages.isEmpty
+                                ? null
+                                : topic.messages.last;
                             final itemWidget = TopicItem(
                               key: ValueKey('topic_${topic.id}'),
                               topic: topic,
                               selectionMode: _selectionMode,
                               isSelected: _selectedIds.contains(topic.id),
-                              isActive: topic.id ==
-                                  ref.watch(activeConversationIdProvider),
+                              isActive: topic.id == activeConversationId,
+                              isRunning: isRunning,
+                              isUnread: !isRunning &&
+                                  topic.id != activeConversationId &&
+                                  latestMessage?.role == 'assistant' &&
+                                  latestMessage?.isStreaming == false &&
+                                  latestMessage?.isError == false &&
+                                  latestMessage?.id != topic.lastReadMessageId,
                               onTap: () {
                                 if (_selectionMode) {
                                   _toggleSelection(topic.id);
