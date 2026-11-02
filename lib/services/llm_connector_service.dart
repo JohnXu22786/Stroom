@@ -1871,7 +1871,7 @@ class LlmAccountConnectorService {
         'https://generativelanguage.googleapis.com',
       'moonshot' => 'https://api.moonshot.ai/v1',
       'glm' => 'https://open.bigmodel.cn/api/paas/v4',
-      'glm-cn' => 'https://open.bigmodel.cn/api/paas/v4',
+      'glm-cn' => 'https://open.bigmodel.cn/api/coding/paas/v4',
       'deepseek' => 'https://api.deepseek.com',
       'minimax' => 'https://api.minimax.io/v1',
       'minimax-cn' => 'https://api.minimaxi.com/v1',
@@ -3944,8 +3944,14 @@ class LlmNativeRequestBuilder {
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
         path = '/chat/completions';
-      case 'glm' || 'glm-cn':
+      case 'glm':
         baseUrl = _baseUrl(config, 'https://open.bigmodel.cn/api/paas/v4');
+        path = '/chat/completions';
+      case 'glm-cn':
+        baseUrl = _baseUrl(
+          config,
+          'https://open.bigmodel.cn/api/coding/paas/v4',
+        );
         path = '/chat/completions';
       case 'deepseek':
         baseUrl = _baseUrl(config, 'https://api.deepseek.com');

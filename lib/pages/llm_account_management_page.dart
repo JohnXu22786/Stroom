@@ -1855,7 +1855,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                               'Qwen Cloud API Key',
                                             'qwen-cloud-token-plan' =>
                                               'Qwen Cloud Token Plan API Key',
-                                            _ => 'API Key',
+                                            _ => '凭据',
                                           }
                                         : '凭据',
                     hintText: _authType == 'aws_credential_chain'

@@ -2092,7 +2092,11 @@ void main() {
       );
 
       for (final (connectorType, expectedUrl, expectedModel) in [
-        ('glm-cn', 'https://open.bigmodel.cn/api/paas/v4/models', 'glm-5'),
+        (
+          'glm-cn',
+          'https://open.bigmodel.cn/api/coding/paas/v4/models',
+          'glm-5',
+        ),
         ('minimax-cn', 'https://api.minimaxi.com/v1/models', 'minimax-m2'),
       ]) {
         final account = await discoveryService.saveAccount(
@@ -3538,7 +3542,10 @@ void main() {
       'routes regional GLM and MiniMax API-key accounts to service hosts',
       () {
         for (final (connectorType, expectedUri) in [
-          ('glm-cn', 'https://open.bigmodel.cn/api/paas/v4/chat/completions'),
+          (
+            'glm-cn',
+            'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions',
+          ),
           ('minimax-cn', 'https://api.minimaxi.com/v1/chat/completions'),
         ]) {
           final request = builder.build(
