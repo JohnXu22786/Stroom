@@ -99,8 +99,15 @@ Future<void> _pumpInShortTaskListViewport(
         child: SizedBox(
           key: const Key('task_list_main_viewport'),
           height: 300,
-          child: ListView(
-            children: [CatCatchTaskCard(task: task)],
+          child: LayoutBuilder(
+            builder: (context, constraints) => ListView(
+              children: [
+                CatCatchTaskCard(
+                  task: task,
+                  taskListViewportHeight: constraints.maxHeight,
+                ),
+              ],
+            ),
           ),
         ),
       )))));

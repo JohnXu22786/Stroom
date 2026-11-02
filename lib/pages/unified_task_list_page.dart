@@ -479,9 +479,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
               children: [
                 // 任务列表
                 Expanded(
-                  child: filteredTasks.isEmpty
-                      ? _buildEmptyState(context)
-                      : _buildTaskList(filteredTasks),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => filteredTasks.isEmpty
+                        ? _buildEmptyState(context)
+                        : _buildTaskList(filteredTasks, constraints.maxHeight),
+                  ),
                 ),
               ],
             ),
@@ -520,7 +522,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     );
   }
 
-  Widget _buildTaskList(List<UnifiedTaskItem> tasks) {
+  Widget _buildTaskList(List<UnifiedTaskItem> tasks, double viewportHeight) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
       itemCount: tasks.length,
@@ -533,6 +535,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             key: ValueKey(item.id),
             execution: exec,
             isUnread: exec.createdAt.isAfter(lastRead),
+            taskListViewportHeight: viewportHeight,
           );
         }
         if (item.isCatCatch) {
@@ -542,6 +545,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             key: ValueKey(item.id),
             task: t,
             isUnread: isUnread,
+            taskListViewportHeight: viewportHeight,
           );
         }
         if (item.isBackground) {
