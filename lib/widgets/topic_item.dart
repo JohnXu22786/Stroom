@@ -9,6 +9,8 @@ class TopicItem extends StatelessWidget {
   final bool selectionMode;
   final bool isSelected;
   final bool isActive;
+  final bool isRunning;
+  final bool isUnread;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onPinToggle;
@@ -22,6 +24,8 @@ class TopicItem extends StatelessWidget {
     required this.selectionMode,
     required this.isSelected,
     required this.isActive,
+    this.isRunning = false,
+    this.isUnread = false,
     required this.onTap,
     required this.onDelete,
     required this.onPinToggle,
@@ -34,6 +38,17 @@ class TopicItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusColor = isRunning
+        ? ColorScheme.fromSeed(
+            seedColor: const Color(0xFFC58C00),
+            brightness: Theme.of(context).brightness,
+          ).primary
+        : isUnread
+            ? ColorScheme.fromSeed(
+                seedColor: Colors.green,
+                brightness: Theme.of(context).brightness,
+              ).primary
+            : null;
 
     final title = topic.title.isEmpty ? '新话题' : topic.title;
     final subtitle = formatDate(topic.updatedAt);
@@ -61,27 +76,55 @@ class TopicItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              if (selectionMode)
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => onSelectionToggle(),
-                )
-              else
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selectionMode) ...[
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (_) => onSelectionToggle(),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: statusColor != null
+                          ? statusColor.withValues(alpha: 0.12)
+                          : cs.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: statusColor == null
+                          ? null
+                          : Border.all(
+                              color: statusColor.withValues(alpha: 0.45),
+                              width: 1,
+                            ),
+                    ),
+                    child: Center(
+                      child: isRunning
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: statusColor,
+                              ),
+                            )
+                          : Icon(
+                              topic.isPinned
+                                  ? Icons.push_pin
+                                  : Icons.chat_bubble_outline_rounded,
+                              size: 20,
+                              color: statusColor ??
+                                  (topic.isPinned
+                                      ? cs.primary
+                                      : cs.onSurfaceVariant),
+                            ),
+                    ),
                   ),
-                  child: Icon(
-                    topic.isPinned
-                        ? Icons.push_pin
-                        : Icons.chat_bubble_outline_rounded,
-                    size: 20,
-                    color: topic.isPinned ? cs.primary : cs.onSurfaceVariant,
-                  ),
-                ),
+                ],
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
