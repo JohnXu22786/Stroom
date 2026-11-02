@@ -134,7 +134,7 @@ void main() {
     ]);
     await _pump(tester, task);
     await tester.tap(find.text(StepType.fetching.label));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     final action = find.text('请选择要下载的资源');
     final actionRect = tester.getRect(action);
