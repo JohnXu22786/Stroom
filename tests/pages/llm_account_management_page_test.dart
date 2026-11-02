@@ -669,9 +669,8 @@ void main() {
         provider.supportedAuthTypes,
         containsAll({'oauth', 'session_token'}),
       );
-      final connectorDropdown = find
-          .byType(DropdownButtonFormField<String>)
-          .at(0);
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
       final connectorButton = find.descendant(
         of: connectorDropdown,
         matching: find.byType(DropdownButton<String>),
@@ -722,9 +721,8 @@ void main() {
     final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
     expect(provider.displayName, 'Kimi Code CLI');
     expect(provider.supportedAuthTypes, {'oauth'});
-    final connectorDropdown = find
-        .byType(DropdownButtonFormField<String>)
-        .at(0);
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
     final connectorButton = find.descendant(
       of: connectorDropdown,
       matching: find.byType(DropdownButton<String>),
@@ -812,9 +810,7 @@ void main() {
     );
     expect(
       oauthAuthorization
-          .metaMuseDeviceAuthorizationAccounts
-          .single
-          .connectorType,
+          .metaMuseDeviceAuthorizationAccounts.single.connectorType,
       'muse-code',
     );
     expect(find.text('META-1234'), findsOneWidget);
@@ -950,9 +946,8 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
     final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
-    final connectorDropdown = find
-        .byType(DropdownButtonFormField<String>)
-        .at(0);
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
     final connectorButton = find.descendant(
       of: connectorDropdown,
       matching: find.byType(DropdownButton<String>),
@@ -1004,15 +999,15 @@ void main() {
         credentialStore: credentials,
       );
       final gateway = _testGateway(service, oauthDio: dio);
-      final flow = await gateway.oauthAuthorization
-          .beginKimiCodeDeviceAuthorization(
-            AiGatewayAccount(
-              id: 'kimi-code-secure',
-              connectorType: 'kimi-coding',
-              authType: 'oauth',
-              displayName: 'Kimi Code',
-            ),
-          );
+      final flow =
+          await gateway.oauthAuthorization.beginKimiCodeDeviceAuthorization(
+        AiGatewayAccount(
+          id: 'kimi-code-secure',
+          connectorType: 'kimi-coding',
+          authType: 'oauth',
+          displayName: 'Kimi Code',
+        ),
+      );
 
       expect(await service.listAccounts(), isEmpty);
       tokenResponse.complete(
@@ -1042,7 +1037,8 @@ void main() {
       expect(
         (await gateway.modelDiscovery.discoverModels(
           saved,
-        )).map((model) => model.upstreamModelId),
+        ))
+            .map((model) => model.upstreamModelId),
         ['kimi-for-coding', 'kimi-for-coding-highspeed'],
       );
       expect(storedCredential['access_token'], 'fixture-access-token');
@@ -1088,9 +1084,8 @@ void main() {
       service,
     ).providerCatalog.findProvider('claude')!;
     expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
-    final connectorDropdown = find
-        .byType(DropdownButtonFormField<String>)
-        .at(0);
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
     final connectorButton = find.descendant(
       of: connectorDropdown,
@@ -1438,15 +1433,15 @@ void main() {
           );
         });
       final gateway = _testGateway(service, oauthDio: oauthDio);
-      final authorization = await gateway.oauthAuthorization
-          .beginTencentDeviceAuthorization(
-            AiGatewayAccount(
-              id: 'workbuddy-cancel-discovery',
-              connectorType: 'workbuddy',
-              authType: 'oauth',
-              displayName: 'WorkBuddy',
-            ),
-          );
+      final authorization =
+          await gateway.oauthAuthorization.beginTencentDeviceAuthorization(
+        AiGatewayAccount(
+          id: 'workbuddy-cancel-discovery',
+          connectorType: 'workbuddy',
+          authType: 'oauth',
+          displayName: 'WorkBuddy',
+        ),
+      );
 
       await discoveryStarted.future;
       authorization.cancel();
@@ -1810,12 +1805,9 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope =
-        jsonDecode(
-              preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey]!,
-            )
-            as Map;
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -1905,9 +1897,8 @@ void main() {
 
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
-    final connectorDropdown = find
-        .byType(DropdownButtonFormField<String>)
-        .at(0);
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -1985,9 +1976,8 @@ void main() {
         find.byType(TextField).at(0),
         'Production Bedrock',
       );
-      final connectorDropdown = find
-          .byType(DropdownButtonFormField<String>)
-          .at(0);
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -2030,9 +2020,8 @@ void main() {
       await tester.tap(find.byTooltip('添加账号'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
-      final connectorDropdown = find
-          .byType(DropdownButtonFormField<String>)
-          .at(0);
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
       await tester.ensureVisible(connectorDropdown);
       await tester.tap(connectorDropdown);
       await tester.pumpAndSettle();
@@ -2086,9 +2075,8 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth policy');
-    final connectorDropdown = find
-        .byType(DropdownButtonFormField<String>)
-        .at(0);
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
     await tester.ensureVisible(connectorDropdown);
     await tester.tap(connectorDropdown);
     await tester.pumpAndSettle();
@@ -2125,12 +2113,9 @@ void main() {
       ),
       secret: 'legacy-vertex-oauth-token',
     );
-    final accountsEnvelope =
-        jsonDecode(
-              preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey]!,
-            )
-            as Map<String, dynamic>;
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -2210,12 +2195,9 @@ void main() {
       ),
       secret: 'vertex-api-key',
     );
-    final accountsEnvelope =
-        jsonDecode(
-              preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey]!,
-            )
-            as Map<String, dynamic>;
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -2832,12 +2814,8 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata =
-        selectorConfig
-                .models
-                .single
-                .legacyFields[kLlmModelCapabilitiesConfigField]
-            as Map;
+    final capabilityMetadata = selectorConfig
+        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 
@@ -3457,13 +3435,14 @@ LlmChatRoutingRuntime _testGateway(
   Dio? oauthDio,
   AiGatewayOAuthAuthorization? oauthAuthorization,
   DevinCliAcpService? devinCliAcpService,
-}) => LlmChatRoutingRuntime(
-  accountService: service,
-  routingService: LlmRoutingService(accountService: service),
-  oauthDio: oauthDio,
-  oauthAuthorization: oauthAuthorization,
-  devinCliAcpService: devinCliAcpService,
-);
+}) =>
+    LlmChatRoutingRuntime(
+      accountService: service,
+      routingService: LlmRoutingService(accountService: service),
+      oauthDio: oauthDio,
+      oauthAuthorization: oauthAuthorization,
+      devinCliAcpService: devinCliAcpService,
+    );
 
 class _RecordingDevinCliAcpService extends DevinCliAcpService {
   final loginAccounts = <AiGatewayAccount>[];
@@ -3557,9 +3536,9 @@ class _PendingOAuthDeviceAuthorization
   var cancelled = false;
 
   _PendingOAuthDeviceAuthorization({Uri? verificationUri, String? userCode})
-    : _verificationUri =
-          verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
-      _userCode = userCode ?? 'ABCD-EFGH';
+      : _verificationUri =
+            verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
+        _userCode = userCode ?? 'ABCD-EFGH';
 
   @override
   Uri get verificationUri => _verificationUri;
@@ -3592,7 +3571,8 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}

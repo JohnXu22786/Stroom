@@ -20,12 +20,13 @@ String resolveApiProtocol({
   String? modelOverride,
   String? supplierProtocol,
   String? builtinDefault,
-}) => firstNonEmptyProtocol([
-  modelOverride,
-  supplierProtocol,
-  builtinDefault,
-  'openai.chat_completions',
-]);
+}) =>
+    firstNonEmptyProtocol([
+      modelOverride,
+      supplierProtocol,
+      builtinDefault,
+      'openai.chat_completions',
+    ]);
 
 /// Resolves persisted settings, including direct in-memory configs created by
 /// older call sites that still populate only endpointType.
@@ -34,22 +35,22 @@ String configuredApiProtocol({
   required String? modelLegacyEndpointType,
   required String? supplierProtocol,
   required String? supplierLegacyEndpointType,
-}) => resolveApiProtocol(
-  modelOverride:
-      modelOverride ??
-      (modelLegacyEndpointType == null
-          ? null
-          : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
-  supplierProtocol:
-      supplierProtocol ??
-      apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
-);
+}) =>
+    resolveApiProtocol(
+      modelOverride: modelOverride ??
+          (modelLegacyEndpointType == null
+              ? null
+              : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
+      supplierProtocol: supplierProtocol ??
+          apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
+    );
 
 /// Authentication connector identity is deliberately ignored here.
 String resolveConnectorProtocol(
   String configuredProtocol,
   String connectorType,
-) => configuredProtocol;
+) =>
+    configuredProtocol;
 
 String firstNonEmptyProtocol(Iterable<String?> values) {
   for (final value in values) {
@@ -65,7 +66,8 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'grok-cli' ||
       'xai-oauth' ||
       'meta' ||
-      'muse-code' => 'openai.responses',
+      'muse-code' =>
+        'openai.responses',
       'claude' => 'anthropic.messages',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
@@ -102,23 +104,22 @@ Set<String> supportedApiProtocolsForSupplier(
   final builtinProtocols = switch (connectorType) {
     'openai-api' => const {'openai.chat_completions', 'openai.responses'},
     'qwen-cloud' || 'qwen-cloud-token-plan' => const {
-      'openai.chat_completions',
-      'openai.responses',
-      'anthropic.messages',
-    },
-    'moonshot' ||
-    'glm' ||
-    'deepseek' ||
-    'minimax' ||
-    'qwen' => const {'openai.chat_completions'},
-    'codebuddy-cn' ||
-    'codebuddy-intl' ||
-    'workbuddy' => const {'openai.chat_completions'},
+        'openai.chat_completions',
+        'openai.responses',
+        'anthropic.messages',
+      },
+    'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
+        'openai.chat_completions'
+      },
+    'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' => const {
+        'openai.chat_completions'
+      },
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||
     'kimi.ai' ||
-    'kimi-coding' => kCustomHttpApiProtocols,
+    'kimi-coding' =>
+      kCustomHttpApiProtocols,
     _ => null,
   };
   if (builtinProtocols != null) return builtinProtocols;
@@ -132,12 +133,14 @@ Set<String> supportedApiProtocolsForSupplier(
     'grok-cli' ||
     'xai-oauth' ||
     'meta' ||
-    'muse-code' => 'openai.responses',
+    'muse-code' =>
+      'openai.responses',
     'bedrock' ||
     'vertex' ||
     'codex' ||
     'antigravity' ||
-    'devin' => supplierProtocol,
+    'devin' =>
+      supplierProtocol,
     'devin-cli-agentic' => 'devin.acp',
     _ => null,
   };

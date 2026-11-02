@@ -34,14 +34,13 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-            ),
-          );
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            );
 
   Future<LlmTencentDeviceCode> startTencentDeviceAuthorization({
     required String connectorType,
@@ -163,8 +162,8 @@ class LlmOAuthTokenClient {
         final expiresIn = token['expiresIn'] is num
             ? (token['expiresIn'] as num).toInt()
             : connectorType == 'workbuddy'
-            ? 31_104_000
-            : 86_400;
+                ? 31104000
+                : 86400;
         if (expiresIn <= 0) throw const LlmOAuthFlowException();
         return {
           'access_token': accessToken,
@@ -185,11 +184,11 @@ class LlmOAuthTokenClient {
   }
 
   static String _tencentHost(String connectorType) => switch (connectorType) {
-    'codebuddy-cn' => _tencentCodeBuddyCnHost,
-    'codebuddy-intl' => _tencentCodeBuddyIntlHost,
-    'workbuddy' => _tencentWorkBuddyHost,
-    _ => throw const LlmOAuthFlowException(),
-  };
+        'codebuddy-cn' => _tencentCodeBuddyCnHost,
+        'codebuddy-intl' => _tencentCodeBuddyIntlHost,
+        'workbuddy' => _tencentWorkBuddyHost,
+        _ => throw const LlmOAuthFlowException(),
+      };
 
   static Future<void> _waitForTencentPollingInterval(
     Duration interval,
@@ -529,7 +528,8 @@ class LlmOAuthTokenClient {
   static Uint8List? _firstBytesField(
     List<_DevinProtoField> fields,
     int number,
-  ) => fields.where((field) => field.number == number).firstOrNull?.bytes;
+  ) =>
+      fields.where((field) => field.number == number).firstOrNull?.bytes;
 
   static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
       fields.where((field) => field.number == number).firstOrNull?.value;
@@ -602,13 +602,13 @@ class LlmOAuthTokenClient {
   }
 
   static String _devinOsName(TargetPlatform platform) => switch (platform) {
-    TargetPlatform.android => 'android',
-    TargetPlatform.iOS => 'ios',
-    TargetPlatform.linux => 'linux',
-    TargetPlatform.macOS => 'darwin',
-    TargetPlatform.windows => 'windows',
-    TargetPlatform.fuchsia => 'fuchsia',
-  };
+        TargetPlatform.android => 'android',
+        TargetPlatform.iOS => 'ios',
+        TargetPlatform.linux => 'linux',
+        TargetPlatform.macOS => 'darwin',
+        TargetPlatform.windows => 'windows',
+        TargetPlatform.fuchsia => 'fuchsia',
+      };
 
   static String _devenFingerprint(String seed) {
     final value = StringBuffer();
@@ -641,8 +641,7 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _kimiVerificationUri(
+      final complete = _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -753,8 +752,7 @@ class LlmOAuthTokenClient {
       final verification = _metaMuseVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _metaMuseVerificationUri(
+      final complete = _metaMuseVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -930,8 +928,7 @@ class LlmOAuthTokenClient {
       final deviceCode = _nonEmptyString(data['device_code']);
       final userCode = _nonEmptyString(data['user_code']);
       final verification = _xaiVerificationUri(data['verification_uri']);
-      final complete =
-          _xaiVerificationUri(data['verification_uri_complete']) ??
+      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
           verification;
       final expiresIn = _seconds(data['expires_in']);
       final interval = _seconds(data['interval']);
@@ -1064,12 +1061,12 @@ class LlmOAuthTokenClient {
   }
 
   static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
-    'X-Msh-Platform': 'CLIProxyAPI',
-    'X-Msh-Version': 'stroom',
-    'X-Msh-Device-Name': 'Stroom',
-    'X-Msh-Device-Model': 'Stroom',
-    'X-Msh-Device-Id': deviceId,
-  };
+        'X-Msh-Platform': 'CLIProxyAPI',
+        'X-Msh-Version': 'stroom',
+        'X-Msh-Device-Name': 'Stroom',
+        'X-Msh-Device-Model': 'Stroom',
+        'X-Msh-Device-Id': deviceId,
+      };
 
   static Future<void> _waitForXaiPollingInterval(
     Duration interval,
@@ -1243,8 +1240,8 @@ class LlmOAuthTokenClient {
   static int _seconds(Object? value) => value is num
       ? value.toInt()
       : value is String
-      ? int.tryParse(value) ?? 0
-      : 0;
+          ? int.tryParse(value) ?? 0
+          : 0;
 
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
@@ -1316,8 +1313,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-        ? int.tryParse(expiresIn)
-        : null;
+            ? int.tryParse(expiresIn)
+            : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,
