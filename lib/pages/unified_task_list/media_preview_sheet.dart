@@ -452,22 +452,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
             const SizedBox(height: 20),
             Slider(
               value: _audioDuration.inMilliseconds > 0
                   ? (_audioPosition.inMilliseconds /
-                            _audioDuration.inMilliseconds)
-                        .clamp(0.0, 1.0)
+                          _audioDuration.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                      .toDouble()
                   : 0.0,
               onChanged: _audioDuration > Duration.zero
                   ? (value) {
                       final position = Duration(
-                        milliseconds: (value * _audioDuration.inMilliseconds)
-                            .round(),
+                        milliseconds:
+                            (value * _audioDuration.inMilliseconds).round(),
                       );
                       _seekAudio(position);
                     }
@@ -515,7 +516,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   }
 
   String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }

@@ -44,7 +44,7 @@ void main() {
           .thenAnswer((_) => processingStateController.stream);
       when(() => player.errorStream).thenAnswer((_) => errorController.stream);
       when(() => player.setAudioSource(any<AudioSource>()))
-          .thenAnswer((_) async => const Duration(seconds: 12));
+          .thenAnswer((_) async => const Duration(hours: 1, minutes: 2));
       when(() => player.play()).thenAnswer((_) async {});
       when(() => player.pause()).thenAnswer((_) async {});
       when(() => player.dispose()).thenAnswer((_) async {});
@@ -69,6 +69,7 @@ void main() {
 
       expect(httpOverrides.requested, isFalse);
       expect(find.byTooltip('Play audio'), findsOneWidget);
+      expect(find.text('62:00'), findsOneWidget);
       verify(() => player.setAudioSource(any<AudioSource>())).called(1);
 
       await tester.tap(find.byTooltip('Play audio'));
