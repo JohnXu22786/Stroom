@@ -516,6 +516,87 @@ void main() {
     );
 
     test(
+      'failed OCR removal restores a canceled running task as retryable',
+      () async {
+        const taskId = 'ocr-running-removal-write-failure';
+        final retryData = OcrRetrySnapshot.capture(images: []).toMap();
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR retry task',
+          retryData: retryData,
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final cancellationHandled = Completer<void>();
+        var cancellationHandledWhileAbsent = false;
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.taskById(taskId)?.status, TaskStatus.waiting);
+          expect(notifier.startTaskIfWaiting(taskId), isTrue);
+          await notifier.pendingPersistence;
+          notifier.updateStep(taskId, 0, running: true);
+          await notifier.pendingPersistence;
+          final runningTask = notifier.taskById(taskId)!;
+          expect(runningTask.status, TaskStatus.running);
+          expect(runningTask.steps.first.status, BgStepStatus.running);
+          notifier.registerCancellation(taskId, () {
+            // The callback may synchronously mark the task failed before
+            // removeTask removes it from state.
+            notifier.failTask(taskId, error: 'Canceled by removal');
+            expect(notifier.taskById(taskId)?.status, TaskStatus.running);
+            scheduleMicrotask(() {
+              cancellationHandledWhileAbsent =
+                  notifier.taskById(taskId) == null;
+              cancellationHandled.complete();
+            });
+          });
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeAttempts++;
+            throw StateError('simulated OCR task removal write failure');
+          };
+
+          notifier.removeTask(taskId);
+          await cancellationHandled.future;
+          await notifier.pendingPersistence;
+          // The canceled runner may report after rollback has already
+          // restored the waiting task.
+          notifier.failTask(taskId, error: 'Canceled by removal');
+          await notifier.pendingPersistence;
+
+          final restored = notifier.taskById(taskId)!;
+          expect(cancellationHandledWhileAbsent, isTrue);
+          expect(writeAttempts, greaterThanOrEqualTo(4));
+          expect(restored.id, taskId);
+          expect(restored.title, 'OCR retry task');
+          expect(restored.status, TaskStatus.waiting);
+          expect(restored.status, isNot(TaskStatus.running));
+          expect(restored.error, '已取消');
+          expect(restored.steps.first.status, BgStepStatus.failed);
+          expect(
+            restored.steps.every(
+              (step) =>
+                  step.status == BgStepStatus.failed ||
+                  step.status == BgStepStatus.skipped,
+            ),
+            isTrue,
+          );
+          expect(restored.retryData, retryData);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'repeated removeTask keeps pending OCR rollback ownership',
       () async {
         const taskId = 'ocr-repeated-removal-write-failure';
