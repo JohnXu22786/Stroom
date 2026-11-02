@@ -71,7 +71,7 @@ run_node() {
     # Scope output to this launch's process: logcat buffers can retain a previous
     # stage's RESULT:FAIL even after `adb logcat -c` on slower emulator boots.
     local pid
-    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}')
+    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}') || true
     if [[ -n "$pid" ]]; then
       # MainActivity writes its input args at verbose level. Exclude those lines
       # so a marker embedded in the command cannot be mistaken for output.
@@ -100,7 +100,7 @@ run_expected_raw_failure() {
   echo '===== Confirm unpatched UTF-8 module read failure ====='
   local output log i
   output=$(start_with_nodeargs \
-    "-p (console.log('RAW_REQUIRE_BEGIN_mobile_runtime_poc'),require('$fixture/verify-install.cjs'))" 2>&1) || {
+    "-p (console.log('RAW_REQUIRE_BEGIN_mobile_runtime_poc'),(()=>{try{return require('$fixture/verify-install.cjs')}catch(error){console.log('RAW_REQUIRE_ERROR:'+error.name+': '+error.message)}})())" 2>&1) || {
     printf '%s\n' "$output"
     adb logcat -d -v threadtime -t 400 2>&1 || true
     return 1
@@ -108,7 +108,7 @@ run_expected_raw_failure() {
   printf '%s\n' "$output"
   for i in $(seq 1 45); do
     local pid
-    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}')
+    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}') || true
     if [[ -n "$pid" ]]; then
       log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
     else
@@ -134,7 +134,7 @@ adb shell run-as "$package" rm -rf "$fixture/node_modules" "$fixture/.npm" "$fil
 shim_args="-p (()=>{console.log('SHIM_BOOTSTRAP_BEGIN');let/**/source=new/**/TextDecoder().decode(require('node:fs').readFileSync('$shim'));console.log('SHIM_SOURCE_READ:'+source.length);eval(source);console.log('SHIM_BOOTSTRAP_EVAL_DONE');console.log('RESULT:PASS')})()"
 run_node 'Load committed UTF-8 shim from app-private storage' "$shim_args" 'SHIM_BOOTSTRAP_EVAL_DONE' 120
 
-npm_args="-p (()=>{console.log('NPM_BOOTSTRAP_BEGIN');let/**/source=new/**/TextDecoder().decode(require('node:fs').readFileSync('$shim'));console.log('NPM_SHIM_SOURCE_READ:'+source.length);eval(source);console.log('NPM_BOOTSTRAP_EVAL_DONE');process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return/**/require('$npm')})()"
+npm_args="-p (()=>{console.log('NPM_BOOTSTRAP_BEGIN');let/**/source=new/**/TextDecoder().decode(require('node:fs').readFileSync('$shim'));console.log('NPM_SHIM_SOURCE_READ:'+source.length);eval(source);console.log('NPM_BOOTSTRAP_EVAL_DONE');process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return/**/require('$npm')})()"
 run_node 'Clean npm ci with committed lock and fast-uri override' "$npm_args" 'NPM_CI_PROCESS_EXIT:0' 300
 
 verify_args="-p (eval(new/**/TextDecoder().decode(require('node:fs').readFileSync('$shim'))),require('$fixture/verify-install.cjs'))"

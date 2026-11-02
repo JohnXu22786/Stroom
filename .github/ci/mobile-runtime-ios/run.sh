@@ -81,7 +81,7 @@ run_node() {
 raw_expression="(()=>{console.log('IOS_NODE_RUNTIME_'+process.version);let fs=require('node:fs');try{fs.readFileSync('$shim','utf8');Buffer.from('Stroom 学习 🙂','utf8').toString('utf8');console.log('IOS_RAW_UTF8_PASS')}catch(error){console.log('IOS_RAW_UTF8_FAILURE:'+error.name+':'+error.message)}console.log('RESULT:PASS')})()"
 run_node raw-runtime RESULT:PASS 60 -p "$raw_expression"
 
-npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('IOS_NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>console.log('IOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)));return require('$npm')})()"
+npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>console.log('IOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)));return require('$npm')})()"
 run_node npm-ci IOS_NPM_CI_PROCESS_EXIT:0 360 -p "$npm_expression"
 
 verify_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);return require('$fixture/verify-install.cjs')})()"
