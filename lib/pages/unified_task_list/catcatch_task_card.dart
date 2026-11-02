@@ -22,12 +22,14 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
   final catcatch.CatCatchTask task;
   final bool isUnread;
   final bool isFlowManaged;
+  final double? taskListViewportHeight;
 
   const CatCatchTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
     this.isFlowManaged = false,
+    this.taskListViewportHeight,
   });
 
   @override
@@ -118,7 +120,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           (s) => s.type == catcatch.StepType.userSelecting && s.running,
         ) &&
         task.detectedMedia.isNotEmpty;
-
+    final viewportHeight = widget.taskListViewportHeight;
+    final resourceViewportHeight =
+        viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
+            ? viewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height * (2 / 3);
     Color statusColor;
     IconData statusIcon;
     switch (task.status) {
@@ -259,7 +265,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             if (isSelectingMedia)
               SizedBox(
                 key: const Key('catcatch_task_resource_viewport'),
-                height: MediaQuery.sizeOf(context).height * (2 / 3),
+                height: resourceViewportHeight,
                 child: Column(
                   children: [
                     if (_expandedSegments.contains(task.id) &&

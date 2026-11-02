@@ -50,15 +50,20 @@ class TaskFlowRunPage extends ConsumerWidget {
                   : '任务流记录读取失败，任务操作已暂停'))
           : executions.isEmpty
               ? const Center(child: Text('本次运行记录已清除'))
-              : ListView(children: [
-                  Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('$finished/${executionIds.length} 个运行已结束'
-                          '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
-                  for (final execution in executions)
-                    TaskFlowCard(
-                        key: ValueKey(execution.id), execution: execution),
-                ]),
+              : LayoutBuilder(
+                  builder: (context, constraints) => ListView(children: [
+                    Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text('$finished/${executionIds.length} 个运行已结束'
+                            '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
+                    for (final execution in executions)
+                      TaskFlowCard(
+                        key: ValueKey(execution.id),
+                        execution: execution,
+                        taskListViewportHeight: constraints.maxHeight,
+                      ),
+                  ]),
+                ),
     );
   }
 }
