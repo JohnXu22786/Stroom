@@ -4,9 +4,9 @@ This isolated prototype exercises the upstream `nodejs-mobile` v18.20.4 Android 
 
 The CI workflow checks, on a hosted Android 29 emulator:
 
-1. Node version and app-private file read/write.
+1. Node runtime version on the hosted Android emulator.
 2. The unmodified Node Mobile UTF-8 module-loading failure (`RangeError: Index out of range`).
-3. A separately loaded, committed UTF-8 compatibility shim, followed by a clean `npm ci` from the checked-in manifest and lockfile. The manifest uses a real npm `overrides` entry pinning transitive `fast-uri` to 3.1.0.
+3. A separately loaded, committed UTF-8 compatibility shim, followed by a clean `npm ci` into an app-private fixture directory from the checked-in manifest and lockfile. The manifest uses a real npm `overrides` entry pinning transitive `fast-uri` to 3.1.0.
 4. Runtime verification of the installed override, TypeScript-to-JavaScript transpilation with Sucrase, and execution of the result.
 5. MCP `initialize`, `tools/list`, and `tools/call` using the SDK's linked in-memory client/server transport.
 
