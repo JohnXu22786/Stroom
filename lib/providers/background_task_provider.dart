@@ -5464,6 +5464,57 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
+  bool _requiresDurableOcrCacheOwnershipMarker(Object? retryData) {
+    if (retryData is! Map) return false;
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
+        return true;
+      }
+
+      const snapshotFields = {
+        'type',
+        'version',
+        'modelRef',
+        'images',
+        'modelIndex',
+        'instructionContent',
+        'instructionIndex',
+        'saveFolder',
+        'batchMode',
+        'perImageConcurrency',
+        'requestSizeBudgetBytes',
+      };
+      // These historical extensions are known credential/inline-body fields;
+      // sanitizing them cannot discard another cache reference.
+      const sanitizedNonOwnershipFields = {'apiKey', 'imageData'};
+      for (final key in data.keys) {
+        if (key is! String ||
+            (!snapshotFields.contains(key) &&
+                !sanitizedNonOwnershipFields.contains(key))) {
+          return true;
+        }
+      }
+      final images = data['images'];
+      if (images is List) {
+        const imageFields = {'storageRef', 'format', 'name', 'bytes'};
+        for (final image in images) {
+          if (image is! Map) continue;
+          for (final key in image.keys) {
+            if (key is! String ||
+                (!imageFields.contains(key) &&
+                    !sanitizedNonOwnershipFields.contains(key))) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
@@ -5974,13 +6025,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           );
           if (task.type == BackgroundTaskType.ocr &&
               !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
-            // A parsed task can still carry a future or ambiguous retry shape
-            // whose cache owners this version cannot enumerate. Keep the raw
-            // persisted row authoritative until a version that understands
-            // its ownership can safely rewrite it.
+            // Keep cleanup fail-closed until retry data has been normalized.
             cleanupSafe = false;
-            isComplete = false;
-            isCompleteExceptLegacyAsr = false;
+          }
+          if (task.type == BackgroundTaskType.ocr &&
+              _requiresDurableOcrCacheOwnershipMarker(rawRetryData)) {
+            // Unknown fields can contain cache owners outside the images list.
+            // Persist the sanitized task together with this marker so future
+            // writes cannot accidentally authorize cleanup; removing the task
+            // retires its marker in the same durable snapshot.
             unrestoredRecords.add(
               _unrestoredTaskRecord(
                 retryAudioOwnershipKnown: true,

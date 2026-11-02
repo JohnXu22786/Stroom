@@ -18607,17 +18607,28 @@ void main() {
 
         final notifier = BackgroundTaskNotifier();
         try {
-          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(await notifier.restoreFromPersistence(), isTrue);
           expect(notifier.taskById('future-ocr-retry-owner'), isNotNull);
           expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
           final persistedRows =
               jsonDecode(await file.readAsString()) as List<dynamic>;
-          final persistedRetryData = (persistedRows.single
-              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
-          expect(persistedRetryData['version'], 99);
-          expect(persistedRetryData['additionalCacheRefs'], [
-            'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
-          ]);
+          final persistedTask = persistedRows
+              .whereType<Map<String, dynamic>>()
+              .singleWhere((row) => row['id'] == 'future-ocr-retry-owner');
+          final persistedRetryData =
+              persistedTask['retryData'] as Map<String, dynamic>;
+          expect(
+              persistedRetryData['version'], OcrRetrySnapshot.currentVersion);
+          expect(persistedRetryData, isNot(contains('additionalCacheRefs')));
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == 'future-ocr-retry-owner',
+                ),
+            isTrue,
+          );
 
           notifier.setSteps('future-ocr-retry-owner', [
             const BgTaskStep(
