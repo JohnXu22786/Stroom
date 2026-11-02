@@ -5836,11 +5836,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     for (final entry in taskRow.entries) {
       final isRawDiagnosticField =
           entry.key == 'rawRequest' || entry.key == 'rawResponse';
+      final rawDiagnosticsAreSanitized =
+          taskRow['type'] == BackgroundTaskType.ocr.name ||
+              taskRow['type'] == BackgroundTaskType.asr.name;
       final isDiscardedField = (!serializedTaskFields.contains(entry.key) &&
-              !(taskRow['type'] != BackgroundTaskType.ocr.name &&
-                  isRawDiagnosticField)) ||
-          (taskRow['type'] == BackgroundTaskType.ocr.name &&
-              isRawDiagnosticField);
+              !(!rawDiagnosticsAreSanitized && isRawDiagnosticField)) ||
+          (rawDiagnosticsAreSanitized && isRawDiagnosticField);
       if (isDiscardedField &&
           (containsCacheReference(entry.key) ||
               containsCacheReference(entry.value))) {

@@ -18525,7 +18525,7 @@ void main() {
     );
 
     test(
-      'serialized ASR diagnostics retain OCR cache references for cleanup',
+      'ASR diagnostic sanitization retains OCR cache ownership until removal',
       () async {
         WebFileStore.enableTestMode();
         const asrTaskId = 'asr-request-ocr-cache-owner';
@@ -18571,15 +18571,34 @@ void main() {
         final notifier = BackgroundTaskNotifier();
         try {
           expect(await notifier.restoreFromPersistence(), isTrue);
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          final asrRow = persistedRows.whereType<Map>().singleWhere(
+                (row) => row['id'] == asrTaskId,
+              );
+          expect(asrRow.containsKey('rawRequest'), isFalse);
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == asrTaskId,
+                ),
+            isTrue,
+          );
           expect(
             notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
-            contains(cacheReference),
+            isNull,
           );
           expect(
             await notifier.ocrCacheReferencesForCleanup(),
-            contains(cacheReference),
+            isNull,
           );
-          expect(await OcrRetryStorage.read(cacheReference), bytes);
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason:
+                'the discarded diagnostic owner must stay protected until task removal',
+          );
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
