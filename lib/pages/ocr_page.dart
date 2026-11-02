@@ -653,6 +653,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _selectedModelIndex >= modelOptions.length) {
       return null;
     }
+    if (!_legacyModelConfirmationPending) {
+      // Give the default first-option selection a stable reference before
+      // provider updates can reorder or remove its position.
+      final initiallySelectedOption = modelOptions[_selectedModelIndex];
+      _selectedConfigId = initiallySelectedOption.configId;
+      _selectedModelRecordId = initiallySelectedOption.modelRecordId;
+      return _selectedModelOptionIndex(modelOptions);
+    }
     return _selectedModelIndex;
   }
 
