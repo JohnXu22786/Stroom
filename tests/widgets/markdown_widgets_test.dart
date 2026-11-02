@@ -285,6 +285,21 @@ void main() {
       expect(formula!.attributes['content'], r'a\$b');
     });
 
+    test('escaped dollar-like text does not consume the next formula', () {
+      final nodes = _parseWithLatex(r'\$x$ plus $y$');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(1));
+      expect(elements.single.attributes['content'], 'y');
+    });
+
     test('math-like content in inline and fenced code stays code', () {
       final nodes = _parseLikeMarkdownGenerator(
         r'`$x$`' '\n\n````\n' r'\(y\)' '\n````',

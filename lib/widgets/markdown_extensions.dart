@@ -139,14 +139,18 @@ class LatexSyntax extends m.InlineSyntax {
   bool onMatch(m.InlineParser parser, Match match) {
     final input = match.input;
     final matchValue = input.substring(match.start, match.end);
+    const blockSyntax = r'$$';
+    const inlineSyntax = r'$';
 
     if (_hasEscapedBackslash(input, match.start)) return false;
+    if (matchValue.startsWith(inlineSyntax) &&
+        !matchValue.startsWith(blockSyntax) &&
+        _followsEscapedInlineDollar(input, match.start)) {
+      return false;
+    }
 
     String content = '';
     bool isInline = true;
-
-    const blockSyntax = r'$$';
-    const inlineSyntax = r'$';
 
     if (matchValue.startsWith(blockSyntax) &&
         matchValue.endsWith(blockSyntax) &&
@@ -181,6 +185,15 @@ bool _hasEscapedBackslash(String input, int index) {
     count++;
   }
   return count.isOdd;
+}
+
+bool _followsEscapedInlineDollar(String input, int index) {
+  final previousDollar = input.lastIndexOf(r'$', index - 1);
+  if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
+    return false;
+  }
+  final content = input.substring(previousDollar + 1, index);
+  return content.isNotEmpty && content.trim() == content;
 }
 
 String _prepareMathEnvironment(String content) {
