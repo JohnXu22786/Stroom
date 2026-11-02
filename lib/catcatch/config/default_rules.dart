@@ -44,6 +44,8 @@ class DefaultRules {
     'wav',
     'm4a',
     'aac',
+    'opus',
+    'weba',
     'mov',
     'mkv',
   };
