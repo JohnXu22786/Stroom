@@ -4556,6 +4556,16 @@ void main() {
   });
 
   group('OcrPage - request size budget', () {
+    test('displays a one-byte overage near 1 MiB distinctly', () {
+      const budgetBytes = 1024 * 1024;
+
+      expect(
+        ocrRequestSizeBudgetOverageMib(budgetBytes + 1, budgetBytes),
+        '1.000001',
+      );
+      expect(ocrRequestSizeBudgetMib(20 * 1024 * 1024), '20.00');
+    });
+
     testWidgets('shows distinct sub-0.005 MiB request and limit sizes', (
       tester,
     ) async {
