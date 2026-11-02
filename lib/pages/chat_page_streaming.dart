@@ -251,6 +251,20 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final reasoning = ref.read(reasoningEnabledProvider);
     final reasoningEffort = ref.read(reasoningEffortProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
+    final storedCustomParamValues = ref.read(customParamValuesProvider);
+    final customParamValues = storedCustomParamValues == null
+        ? null
+        : Map<String, String>.from(storedCustomParamValues);
+    if (customParamValues != null) {
+      for (final param in _adapter.customParams.where((p) => p.type == 'json')) {
+        if (!customParamValues.containsKey(param.paramName)) continue;
+        if (param.defaultValue.trim().isEmpty) {
+          customParamValues.remove(param.paramName);
+        } else {
+          customParamValues[param.paramName] = param.defaultValue;
+        }
+      }
+    }
     final histBefore = historyOverride ?? List<ChatMessage>.from(_history);
     // Guard: only block if THIS conversation is streaming, not another.
     if (ref.read(streamingConversationsProvider).contains(effectiveConvId)) {
@@ -313,6 +327,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
       streamingMsgId: aiMsgId,
     );
 

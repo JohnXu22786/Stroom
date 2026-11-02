@@ -90,30 +90,52 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         noToolsEnabled ? null : visibleEnabledTools.length;
 
     // ═══════════════════════════════════════════════════════════
-    // Custom params chip: independent color state driven by the session.
-    // A custom param (non-toggle, non-effort) counts as ACTIVE when its
-    // name is non-empty and a value has been selected for it — and
-    // reasoning is on (matching what the request actually sends). The
-    // selected-value map is the runtime on/off state (the panel writes/
-    // removes values on switch toggle), so param.enabled is not consulted
-    // here. The chip shows the accent color + badge with the active count;
-    // otherwise grey with no badge.
+    // Custom params chip reflects both configured CustomParam values and
+    // reasoning extras, which remain available in this same panel.
     // ═══════════════════════════════════════════════════════════
-    final int activeCustomParamsCount = reasoningEnabled
+    final customParamValues = ref.watch(customParamValuesProvider);
+    final activeConfiguredCustomParamsCount = widget.customParams
+        .where((param) {
+          final selected = customParamValues != null
+              ? customParamValues.containsKey(param.paramName)
+                  ? param.type == 'json'
+                      ? param.defaultValue
+                      : customParamValues[param.paramName] ?? ''
+                  : ''
+              : param.type == 'json'
+                  ? param.defaultValue
+                  : param.options.isNotEmpty
+                  ? param.options.first
+                  : param.optionOrder.isEmpty &&
+                          param.defaultValue.trim().isNotEmpty
+                      ? param.defaultValue
+                      : param.type == 'boolean'
+                          ? 'true'
+                          : '';
+          final isSelectable = param.options.isNotEmpty ||
+              param.optionOrder.isNotEmpty ||
+              param.type == 'boolean' ||
+              (param.optionOrder.isEmpty &&
+                  param.defaultValue.trim().isNotEmpty);
+          return param.paramName.trim().isNotEmpty &&
+              isSelectable &&
+              selected.isNotEmpty;
+        })
+        .length;
+    final activeReasoningCustomParamsCount = reasoningEnabled
         ? widget.reasoningParams
             .where(
-              (p) =>
-                  p != effortParam &&
-                  !p.isReasoningToggle &&
-                  !p.isEffortParam &&
-                  p.paramName.trim().isNotEmpty &&
-                  // 不可用参数（仅参数名、无选项值、非布尔）不计入：
-                  // 面板无开关可选，残留值不会被请求发送。
-                  p.isUsable &&
-                  (reasoningParamValues[p.paramName]?.isNotEmpty ?? false),
+              (param) =>
+                  !param.isReasoningToggle &&
+                  !param.isEffortParam &&
+                  param.paramName.trim().isNotEmpty &&
+                  param.isUsable &&
+                  (reasoningParamValues[param.paramName]?.isNotEmpty ?? false),
             )
             .length
         : 0;
+    final activeCustomParamsCount = activeConfiguredCustomParamsCount +
+        activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
     final Color customParamsColor =
         hasActiveCustomParams ? toolAccentColor : Colors.grey;

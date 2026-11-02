@@ -86,6 +86,7 @@ extension _ChatServiceParamsExt on ChatService {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
   }) {
     final result = <String, dynamic>{};
     final providerFlatJsonMaps = <String>{};
@@ -151,6 +152,7 @@ extension _ChatServiceParamsExt on ChatService {
         flatJsonMapNames: providerFlatJsonMaps,
         jsonMapNames: providerJsonMaps,
         preserveNestedParamNames: providerNestedParamNames,
+        customParamValues: customParamValues,
       );
       providerNestedParamNames.addAll(
         _providerConfig!.customParams
@@ -265,6 +267,7 @@ extension _ChatServiceParamsExt on ChatService {
       replaceFlatJsonMapNames: providerFlatJsonMaps,
       jsonMapNames: providerJsonMaps,
       preserveNestedParamNames: providerNestedParamNames,
+      customParamValues: customParamValues,
     );
 
     // Model-level reasoning params:
@@ -384,6 +387,7 @@ extension _ChatServiceParamsExt on ChatService {
     Set<String>? replaceFlatJsonMapNames,
     Set<String>? jsonMapNames,
     required Set<String> preserveNestedParamNames,
+    Map<String, String>? customParamValues,
   }) {
     if (source == 'model') {
       preserveNestedParamNames.addAll(
@@ -410,10 +414,27 @@ extension _ChatServiceParamsExt on ChatService {
       ...customParams.where((param) => !isJsonParent(param)),
     ];
     for (final cp in orderedParams) {
+      // A null map preserves the historic config-default behavior. Once the
+      // user changes a custom parameter in the composer, the map becomes the
+      // complete enabled/value set and absent names are intentionally off.
+      if (customParamValues != null &&
+          !customParamValues.containsKey(cp.paramName)) {
+        // Mask a dotted path from an already-applied JSON parent (or a
+        // provider default) so an off switch really removes it from the body.
+        setNestedParam(
+          result,
+          cp.paramName,
+          const _OmittedSentinel(),
+          replaceExistingMap: cp.type == 'json' &&
+              !cp.paramName.contains('.'),
+        );
+        continue;
+      }
       if (source == 'model' &&
           cp.options.isEmpty &&
           cp.optionOrder.isNotEmpty &&
-          (cp.type == 'string' || cp.type == 'number')) {
+          (cp.type == 'string' || cp.type == 'number') &&
+          customParamValues == null) {
         // An explicit saved option order distinguishes an intentional
         // all-unchecked selection from legacy params that have no options.
         // Replace any provider-layer value with an omission marker so the
@@ -434,7 +455,7 @@ extension _ChatServiceParamsExt on ChatService {
       final value = ChatService._coerceCustomParam(
         cp.paramName,
         cp.type,
-        _customParamEffectiveValue(cp),
+        customParamValues?[cp.paramName] ?? _customParamEffectiveValue(cp),
         source: source,
       );
       final hasEmptyJsonParent = emptyJsonParents.any(

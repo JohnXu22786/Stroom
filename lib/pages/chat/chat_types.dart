@@ -243,6 +243,12 @@ final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 final reasoningParamValuesProvider =
     StateProvider<Map<String, String>>((ref) => {});
 
+/// Runtime selections for configured provider/model custom parameters. `null`
+/// means the composer has not customized them yet, preserving configured
+/// defaults; a map is the complete enabled/value set after first interaction.
+final customParamValuesProvider =
+    StateProvider<Map<String, String>?>((ref) => null);
+
 // ── Block converters ─────────────────────────────────────────────────
 
 List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
