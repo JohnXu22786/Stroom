@@ -14996,6 +14996,127 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts whitespace-split documentation echoes and preserves safe text',
+      () {
+        BackgroundTask taskFor(
+          String id,
+          String instruction, {
+          Map<String, String> extraHeaders = const {},
+        }) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {
+                  'Authorization': 'Bearer documentation…',
+                  ...extraHeaders,
+                },
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        for (final testCase in [
+          (
+            'single-line-echo',
+            'The image contains documentation foobarxyz.',
+            'The image contains [redacted].',
+            'foobarxyz',
+          ),
+          (
+            'line-break-echo',
+            'The image contains documentation\nABCDEF.',
+            'The image contains [redacted].',
+            'ABCDEF',
+          ),
+          (
+            'adjacent-fragment-echo',
+            'The image contains documentation ABCDEF GHIJK.',
+            'The image contains [redacted].',
+            'GHIJK',
+          ),
+          (
+            'line-break-between-credential-fragments',
+            'The image contains documentation ABCDEF\nGHIJK.',
+            'The image contains [redacted].',
+            'GHIJK',
+          ),
+          (
+            'short-line-split-lowercase-credential-echo',
+            'The image contains documentation foo\r\nbarxyz.',
+            'The image contains [redacted].',
+            'barxyz',
+          ),
+          (
+            'echo-with-safe-following-instruction',
+            'The image contains documentation foobarxyz. Please read the receipt total carefully.',
+            'The image contains [redacted]. Please read the receipt total carefully.',
+            'foobarxyz',
+          ),
+          (
+            'echo-with-safe-uppercase-instruction',
+            'The image contains documentation foobarxyz PRINT the receipt total carefully.',
+            'The image contains [redacted] PRINT the receipt total carefully.',
+            'foobarxyz',
+          ),
+        ]) {
+          final task =
+              taskFor('legacy-ocr-documentation-${testCase.$1}', testCase.$2);
+          final expected = testCase.$3;
+          final persisted = jsonEncode(task.toMap());
+          final retryData = (jsonDecode(persisted)
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+          expect(
+            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+            expected,
+          );
+          expect(retryData['instructionContent'], expected);
+          expect(persisted, isNot(contains(testCase.$4)));
+        }
+
+        const safeInstruction =
+            'Please read the documentation instructions very carefully.';
+        final safeTask =
+            taskFor('legacy-ocr-safe-documentation-prompt', safeInstruction);
+        final safePersisted = jsonEncode(safeTask.toMap());
+        final safeRetryData = (jsonDecode(safePersisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          safeInstruction,
+        );
+        expect(safeRetryData['instructionContent'], safeInstruction);
+
+        const residualCredential = 'sk-testkey123456';
+        final unsafeTask = taskFor(
+          'legacy-ocr-documentation-echo-with-residual-credential',
+          'The image contains documentation foobarxyz. Continue with $residualCredential.',
+          extraHeaders: {'X-Api-Key': residualCredential},
+        );
+        final unsafePersisted = jsonEncode(unsafeTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(unsafeTask.retryData!).instructionContent,
+          isEmpty,
+        );
+        expect(unsafePersisted, isNot(contains(residualCredential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves prompts with short masked keys',
       () {
         final task = BackgroundTask.fromMap({
