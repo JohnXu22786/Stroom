@@ -151,7 +151,17 @@ class TaskExecutor {
               media: detectedMedia,
               cancelToken: cancelToken,
             );
-            if (result != null) detectedMedia = result;
+            if (result != null) {
+              detectedMedia = result.media;
+              if (result.mergedExtension != null) {
+                task = task.copyWith(
+                  metadata: {
+                    ...task.metadata,
+                    'playlistMergedExtension': result.mergedExtension!,
+                  },
+                );
+              }
+            }
             onUpdate(task.copyWith(steps: steps, detectedMedia: detectedMedia));
             break;
           case StepType.filtering:
@@ -617,7 +627,8 @@ class TaskExecutor {
   }
 
   /// Step 2: 解析播放列表
-  static Future<List<MediaResource>?> _executeParsePlaylist({
+  static Future<({List<MediaResource> media, String? mergedExtension})?>
+      _executeParsePlaylist({
     required CatCatchTask task,
     required List<StepStatus> steps,
     required List<MediaResource> media,
@@ -650,6 +661,7 @@ class TaskExecutor {
       }
       List<String> segments;
       var mediaSegmentCount = 0;
+      String? mergedExtension;
       if (pl.isM3U8) {
         final parsed = await M3U8Parser.parsePlaylistWithDetails(
           content,
@@ -657,6 +669,9 @@ class TaskExecutor {
         );
         segments = parsed.resources;
         mediaSegmentCount = parsed.mediaSegmentCount;
+        mergedExtension = M3U8Parser.mergedFileExtension(
+          hasInitializationMap: parsed.hasInitializationMap,
+        );
       } else if (pl.isMPD) {
         segments = await MPDParser.parseManifest(content, pl.url);
         mediaSegmentCount = segments.length;
@@ -694,7 +709,10 @@ class TaskExecutor {
         done: true,
         detail: '获取到$totalCount个资源（播放列表$mediaSegmentCount个分段）',
       );
-      return [...enrichedMedia, ...segmentMedia];
+      return (
+        media: [...enrichedMedia, ...segmentMedia],
+        mergedExtension: mergedExtension,
+      );
     }
     markExecutorStep(steps, 2, done: true);
     return null;
@@ -734,7 +752,10 @@ class TaskExecutor {
           );
           final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
             segmentUrls: segments,
-            outputPath: p.join(downloadDir, '${playlistBaseName}_merged.ts'),
+            outputPath: p.join(
+              downloadDir,
+              '${playlistBaseName}_merged.${task.metadata['playlistMergedExtension'] == 'mp4' ? 'mp4' : 'ts'}',
+            ),
             headers: browserHeaders,
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
