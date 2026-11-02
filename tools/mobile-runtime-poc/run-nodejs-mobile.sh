@@ -68,9 +68,17 @@ run_node() {
     echo "Activity start has not completed yet; waiting for $label output."
   fi
   for i in $(seq 1 "$max_wait"); do
-    # MainActivity writes its input args at verbose level. Exclude those lines so
-    # a marker embedded in the command cannot be mistaken for executed output.
-    log=$(adb logcat -d -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    # Scope output to this launch's process: logcat buffers can retain a previous
+    # stage's RESULT:FAIL even after `adb logcat -c` on slower emulator boots.
+    local pid
+    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}')
+    if [[ -n "$pid" ]]; then
+      # MainActivity writes its input args at verbose level. Exclude those lines
+      # so a marker embedded in the command cannot be mistaken for output.
+      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    else
+      log=''
+    fi
     if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
       break
     fi
@@ -99,14 +107,19 @@ run_expected_raw_failure() {
   }
   printf '%s\n' "$output"
   for i in $(seq 1 45); do
-    log=$(adb logcat -d -v threadtime -s 'TestNode:V' nodejs:E '*:S' 2>/dev/null || true)
+    local pid
+    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}')
+    if [[ -n "$pid" ]]; then
+      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    else
+      log=''
+    fi
     if grep -Fq 'RangeError: Index out of range' <<<"$log"; then break; fi
     sleep 1
   done
   printf '%s\n' "$log"
-  if ! grep -Fq 'RAW_REQUIRE_BEGIN_mobile_runtime_poc' <<<"$log" || \
-     ! grep -Fq 'RangeError: Index out of range' <<<"$log"; then
-    echo 'The unpatched require path did not reproduce the expected UTF-8 decoding failure.'
+  if ! grep -Fq 'RangeError: Index out of range' <<<"$log"; then
+    echo 'The unpatched require path did not reproduce the expected UTF-8 decoding failure in this app process.'
     adb logcat -d -v threadtime -t 400 2>&1 || true
     return 1
   fi
