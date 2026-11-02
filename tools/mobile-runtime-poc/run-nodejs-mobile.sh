@@ -68,7 +68,9 @@ run_node() {
     echo "Activity start has not completed yet; waiting for $label output."
   fi
   for i in $(seq 1 "$max_wait"); do
-    log=$(adb logcat -d -v threadtime -s 'TestNode:V' nodejs:I '*:S' 2>/dev/null || true)
+    # MainActivity writes its input args at verbose level. Exclude those lines so
+    # a marker embedded in the command cannot be mistaken for executed output.
+    log=$(adb logcat -d -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
     if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
       break
     fi
