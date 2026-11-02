@@ -5100,19 +5100,38 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
-    final unrestoredRecords = List<dynamic>.unmodifiable(
-      _unrestoredTaskRecords.where(
-        (record) =>
-            !retireUnrestoredRecords ||
+    // A durable replacement snapshot removes an unknown task row and all of
+    // its discarded fields. Keep its credential-free diagnostic marker while
+    // resolving OCR ownership; conservatively retain unknown audio ownership.
+    final unrestoredRecords = List<dynamic>.unmodifiable([
+      for (final record in _unrestoredTaskRecords)
+        if (!retireUnrestoredRecords ||
             record is! Map ||
-            (record['retireAfterSnapshot'] != true &&
-                !(record['ocrCacheOwnershipKnown'] == false &&
-                    record['ocrCacheTaskId'] is String &&
-                    !currentSnapshot.any(
-                      (task) => task.id == record['ocrCacheTaskId'],
-                    ))),
-      ),
-    );
+            record['retireAfterSnapshot'] != true)
+          if (retireUnrestoredRecords &&
+              record is Map &&
+              record['ocrCacheOwnershipKnown'] == false &&
+              record['ocrCacheTaskId'] is String &&
+              !currentSnapshot.any(
+                (task) => task.id == record['ocrCacheTaskId'],
+              ) &&
+              !skippedEntries.any(
+                (entry) =>
+                    entry is Map && entry['id'] == record['ocrCacheTaskId'],
+              ))
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown:
+                  record['retryAudioOwnershipKnown'] == true,
+              retryAudioIds: {
+                if (record['retryAudioIds'] is List)
+                  for (final id in record['retryAudioIds'] as List)
+                    if (id is String) id,
+              },
+              ocrCacheOwnershipKnown: true,
+            )
+          else
+            record,
+    ]);
     final preservedEntries = [...skippedEntries, ...unrestoredRecords];
     final saved = _hasCacheMigrations(currentSnapshot)
         ? await OcrRetryStorage.withCacheMaintenanceLock(
@@ -5147,6 +5166,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }
     if (saved) {
+      if (retireUnrestoredRecords) {
+        _unrestoredTaskRecords = List<dynamic>.of(unrestoredRecords);
+      }
       _persistedRetryAudioIds
         ..clear()
         ..addAll(_retryAudioIdsInSnapshot(currentSnapshot, preservedEntries));
@@ -5154,9 +5176,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _pendingSanitizedAsrRetryAudioIds.clear();
       _pendingReplacedRestoreAsrRetryAudioIds.clear();
       if (retireUnrestoredRecords) {
-        _unrestoredTaskRecords.removeWhere(
-          (record) => record is Map && record['retireAfterSnapshot'] == true,
-        );
         _retryAudioCleanupSafe = _pendingCompletedLegacyAsrRetryAudioIds
                 .isEmpty &&
             !_hasUntrackedSkippedAsrAudioOwnership(_skippedTaskEntries) &&
