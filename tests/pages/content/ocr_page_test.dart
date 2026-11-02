@@ -709,25 +709,26 @@ void main() {
     testWidgets(
       'keeps the initial model stable and requires reselection when it is ambiguous or missing',
       (tester) async {
-        ProviderEntry entryWithModels(List<ModelConfig> models) => ProviderEntry(
-          id: 'selection-provider',
-          type: 'ocr',
-          name: 'Selection Provider',
-          configs: [
-            ProviderConfigItem(
-              id: 'selection-config',
-              providerName: 'Selection Provider',
-              host: 'https://provider.test/ocr',
-              key: 'test-key',
-              models: models,
-            ),
-          ],
-        );
+        ProviderEntry entryWithModels(List<ModelConfig> models) =>
+            ProviderEntry(
+              id: 'selection-provider',
+              type: 'ocr',
+              name: 'Selection Provider',
+              configs: [
+                ProviderConfigItem(
+                  id: 'selection-config',
+                  providerName: 'Selection Provider',
+                  host: 'https://provider.test/ocr',
+                  key: 'test-key',
+                  models: models,
+                ),
+              ],
+            );
         ModelConfig selectedModel() => ModelConfig(
-          id: 'selected-model',
-          name: 'Selected Model',
-          modelId: 'selected-model-api',
-        );
+              id: 'selected-model',
+              name: 'Selected Model',
+              modelId: 'selected-model-api',
+            );
         final replacementModel = ModelConfig(
           id: 'replacement-model',
           name: 'Replacement Model',
@@ -744,7 +745,8 @@ void main() {
           _buildTestApp(testProviderEntriesNotifier: providerNotifier),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Selected Model | Selection Provider'), findsOneWidget);
+        expect(
+            find.text('Selected Model | Selection Provider'), findsOneWidget);
 
         providerNotifier.state = ProviderEntriesState(
           entries: [
@@ -752,12 +754,15 @@ void main() {
           ],
         );
         await tester.pumpAndSettle();
-        expect(find.text('Selected Model | Selection Provider'), findsOneWidget);
-        expect(find.text('Replacement Model | Selection Provider'), findsNothing);
+        expect(
+            find.text('Selected Model | Selection Provider'), findsOneWidget);
+        expect(
+            find.text('Replacement Model | Selection Provider'), findsNothing);
 
         providerNotifier.state = ProviderEntriesState(
           entries: [
-            entryWithModels([selectedModel(), selectedModel(), replacementModel]),
+            entryWithModels(
+                [selectedModel(), selectedModel(), replacementModel]),
           ],
         );
         await tester.pumpAndSettle();
@@ -770,7 +775,8 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
-        expect(find.text('Replacement Model | Selection Provider'), findsNothing);
+        expect(
+            find.text('Replacement Model | Selection Provider'), findsNothing);
 
         await tester.tap(find.text('请选择模型'));
         await tester.pumpAndSettle();
