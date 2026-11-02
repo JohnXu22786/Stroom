@@ -19119,6 +19119,12 @@ void main() {
             'instructionContent': {'storageRef': validReference},
           },
         );
+        await expectUnknownOwnership(
+          'ocr-cache-reference-in-inline-bytes-owner',
+          [
+            {'bytes': validReference, 'format': 'png'},
+          ],
+        );
       },
     );
 

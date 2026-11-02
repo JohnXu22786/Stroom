@@ -5464,10 +5464,34 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
+  Set<String> _ocrCacheReferencesInPersistedValue(Object? value) {
+    final references = <String>{};
+    final pending = <Object?>[value];
+    final referencePattern = RegExp(r'ocr_retry_cache/[0-9a-f]{64}\.bin');
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (current is Map) {
+        pending.addAll(current.values);
+      } else if (current is List) {
+        pending.addAll(current);
+      } else if (current is String) {
+        for (final match in referencePattern.allMatches(current)) {
+          final reference = match.group(0);
+          if (reference != null &&
+              OcrRetryImage.isValidStorageReference(reference)) {
+            references.add(reference);
+          }
+        }
+      }
+    }
+    return references;
+  }
+
   bool _requiresDurableOcrCacheOwnershipMarker(Object? retryData) {
     if (retryData is! Map) return false;
     try {
       final data = Map<String, dynamic>.from(retryData);
+      final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
       if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
         return true;
       }
@@ -5527,6 +5551,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             (entry.value != null && entry.value is! String)) {
           return true;
         }
+        if (entry.value is String &&
+            OcrRetryImage.isValidStorageReference(entry.value as String)) {
+          return true;
+        }
       }
       final modelRef = data['modelRef'];
       if (modelRef != null && modelRef is! Map) {
@@ -5546,7 +5574,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (images != null && images is! List) {
         return true;
       }
-      var hasValidImageCacheReference = false;
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
@@ -5561,6 +5588,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 (entry.value != null && entry.value is! String)) {
               return true;
             }
+            if (entry.value is String &&
+                OcrRetryImage.isValidStorageReference(entry.value as String)) {
+              return true;
+            }
           }
           final storageRef = image['storageRef'];
           if (storageRef != null &&
@@ -5568,8 +5599,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                   !OcrRetryImage.isValidStorageReference(storageRef))) {
             return true;
           }
-          hasValidImageCacheReference |= storageRef is String &&
-              OcrRetryImage.isValidStorageReference(storageRef);
           final format = image['format'];
           if (format != null && format is! String) {
             return true;
@@ -5584,12 +5613,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           }
         }
       }
-      const supportedVersions = {1, 2, OcrRetrySnapshot.currentVersion};
-      final version = data['version'];
-      if (hasValidImageCacheReference &&
-          version != null &&
-          (version is! int || !supportedVersions.contains(version))) {
-        return true;
+      if (rawCacheReferences.isNotEmpty) {
+        final snapshot = OcrRetrySnapshot.fromMap(data);
+        final supportedVersion = snapshot.isLegacy ||
+            snapshot.version == 1 ||
+            snapshot.version == 2 ||
+            snapshot.version == OcrRetrySnapshot.currentVersion;
+        if (!supportedVersion) return true;
+        final retainedReferences = {
+          for (final image in snapshot.images)
+            if (image.storageRef != null) image.storageRef!,
+        };
+        if (!retainedReferences.containsAll(rawCacheReferences)) {
+          return true;
+        }
       }
       return false;
     } catch (_) {
