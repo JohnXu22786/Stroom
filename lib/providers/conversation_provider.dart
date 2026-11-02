@@ -277,8 +277,7 @@ class Conversation {
           'lastUsedModelId': lastUsedModelId,
         if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
           'lastUsedProviderName': lastUsedProviderName,
-        if (lastReadMessageId != null)
-          'lastReadMessageId': lastReadMessageId,
+        if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
         if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
         if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
         if (totalCost > 0) 'totalCost': totalCost,

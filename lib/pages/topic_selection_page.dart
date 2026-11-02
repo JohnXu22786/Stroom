@@ -460,8 +460,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   latestMessage?.role == 'assistant' &&
                                   latestMessage?.isStreaming == false &&
                                   latestMessage?.isError == false &&
-                                  latestMessage?.id !=
-                                      topic.lastReadMessageId,
+                                  latestMessage?.id != topic.lastReadMessageId,
                               onTap: () {
                                 if (_selectionMode) {
                                   _toggleSelection(topic.id);
