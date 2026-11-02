@@ -1079,7 +1079,12 @@ bool _legacyOcrHasCredentialUseContext(
   }.contains(actionVerb?.group(1)?.toLowerCase());
   final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
       useVerb &&
-      requestTargetAfterConsumedConnector;
+      requestTargetAfterConsumedConnector &&
+      RegExp(
+        r'^\s*authorization\s*:\s*token\b',
+        caseSensitive: false,
+        multiLine: true,
+      ).hasMatch(text);
   final bareSecretBasedUseContext = useVerb &&
       prefix.toLowerCase() == 'secret' &&
       suffix.toLowerCase() == '-based' &&
