@@ -18672,21 +18672,18 @@ void main() {
             'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin';
         final file = _tasksFileIn(testDir.path);
         await file.parent.create(recursive: true);
-        await file.writeAsString(
-          jsonEncode([
-            {
-              'id': taskId,
-              'type': 'asr',
-              'title': 'Malformed legacy ASR owner',
-              'status': 'unknown-status',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'steps': <dynamic>[],
-              // This legacy row is safely preserved, but the task model drops
-              // this OCR cache reference when it tries to parse the row.
-              'retryData': {'legacyContext': cacheReference},
-            },
-          ]),
-        );
+        final rawRow = {
+          'id': taskId,
+          'type': 'asr',
+          'title': 'Malformed legacy ASR owner',
+          'status': 'unknown-status',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          // This legacy row is safely preserved, but the task model drops
+          // this OCR cache reference when it tries to parse the row.
+          'retryData': {'legacyContext': cacheReference},
+        };
+        await file.writeAsString(jsonEncode([rawRow]));
 
         final notifier = BackgroundTaskNotifier();
         try {
@@ -18704,11 +18701,17 @@ void main() {
 
           final persistedRows = jsonDecode(await file.readAsString()) as List;
           expect(
+            persistedRows.whereType<Map>().firstWhere(
+                  (row) => row['id'] == taskId,
+                ),
+            equals(rawRow),
+          );
+          expect(
             persistedRows.whereType<Map>().any(
                   (row) =>
-                      row['id'] == taskId &&
-                      ((row['retryData'] as Map)['legacyContext'] ==
-                          cacheReference),
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == taskId,
                 ),
             isTrue,
           );
