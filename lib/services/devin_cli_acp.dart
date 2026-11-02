@@ -234,8 +234,14 @@ class DevinCliAcpHome {
       permissions.restrictDirectory(path);
 
   static Future<Directory> createTemporaryDirectory(String homePath) async {
-    final directory = Directory(p.join(homePath, 'tmp'));
-    await directory.create(recursive: true);
+    final canonicalHome = await Directory(homePath).resolveSymbolicLinks();
+    final temporaryPath = p.join(canonicalHome, 'tmp');
+    await _rejectSymlink(temporaryPath);
+    final directory = Directory(temporaryPath);
+    await directory.create();
+    if (await directory.resolveSymbolicLinks() != temporaryPath) {
+      throw const DevinCliAcpUnsafeHomePathException();
+    }
     await permissions.restrictDirectory(directory.path);
     return directory;
   }
@@ -247,16 +253,53 @@ class DevinCliAcpHome {
       );
     }
     final support = await getApplicationSupportDirectory();
-    final path = pathForAccount(
+    return createForAccountAt(
       supportDirectory: support.path,
       accountId: accountId,
     );
+  }
+
+  static Future<Directory> createForAccountAt({
+    required String supportDirectory,
+    required String accountId,
+  }) async {
+    final supportRoot = Directory(supportDirectory);
+    await supportRoot.create(recursive: true);
+    final canonicalRoot = await supportRoot.resolveSymbolicLinks();
+    final accountRootPath = p.join(canonicalRoot, 'devin_cli_acp');
+    await _rejectSymlink(accountRootPath);
+    final accountRoot = Directory(accountRootPath);
+    await accountRoot.create();
+    if (await accountRoot.resolveSymbolicLinks() != accountRootPath) {
+      throw const DevinCliAcpUnsafeHomePathException();
+    }
+
+    final path = pathForAccount(
+      supportDirectory: canonicalRoot,
+      accountId: accountId,
+    );
     final directory = Directory(path);
-    await directory.create(recursive: true);
+    await _rejectSymlink(path);
+    await directory.create();
+    if (await directory.resolveSymbolicLinks() != path) {
+      throw const DevinCliAcpUnsafeHomePathException();
+    }
+    await permissions.restrictDirectory(accountRoot.path);
     await permissions.restrictDirectory(directory.path);
     await createTemporaryDirectory(directory.path);
     return directory;
   }
+
+  static Future<void> _rejectSymlink(String path) async {
+    if (await FileSystemEntity.type(path, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw const DevinCliAcpUnsafeHomePathException();
+    }
+  }
+}
+
+class DevinCliAcpUnsafeHomePathException implements Exception {
+  const DevinCliAcpUnsafeHomePathException();
 }
 
 /// Strict JSON-RPC helpers for ACP's newline-delimited stdio transport.

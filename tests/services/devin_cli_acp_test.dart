@@ -432,6 +432,81 @@ void main() {
     );
 
     test(
+      'rejects a symlinked account-home parent before creating auth state',
+      () async {
+        final externalDirectory = await Directory.systemTemp.createTemp(
+          'stroom-acp-external-',
+        );
+        addTearDown(() => externalDirectory.delete(recursive: true));
+        final accountRootLink = Link(
+          '${supportDirectory.path}${Platform.pathSeparator}devin_cli_acp',
+        );
+        await accountRootLink.create(externalDirectory.path);
+
+        final service = DevinCliAcpService(
+          launcher: launcher,
+          supportDirectory: () async => supportDirectory.path,
+          parentEnvironment: () => const {'PATH': '/usr/bin'},
+        );
+
+        await expectLater(
+          service.isAuthenticated(_account),
+          throwsA(
+            predicate<AiGatewayExecutionException>(
+              (error) =>
+                  error.kind == AiGatewayFailureKind.transportUnavailable &&
+                  error.code == 'unsafe_account_home',
+            ),
+          ),
+        );
+        expect(launcher.launches, isEmpty);
+        expect(await externalDirectory.list().isEmpty, isTrue);
+      },
+      skip:
+          Platform.isWindows ? 'Symlink creation requires privileges.' : false,
+    );
+
+    test(
+      'rejects a symlinked account temporary directory',
+      () async {
+        final externalDirectory = await Directory.systemTemp.createTemp(
+          'stroom-acp-temp-external-',
+        );
+        addTearDown(() => externalDirectory.delete(recursive: true));
+        final accountHomePath = DevinCliAcpHome.pathForAccount(
+          supportDirectory: supportDirectory.path,
+          accountId: _account.id,
+        );
+        await Directory(accountHomePath).create(recursive: true);
+        final temporaryLink = Link(
+          '$accountHomePath${Platform.pathSeparator}tmp',
+        );
+        await temporaryLink.create(externalDirectory.path);
+
+        final service = DevinCliAcpService(
+          launcher: launcher,
+          supportDirectory: () async => supportDirectory.path,
+          parentEnvironment: () => const {'PATH': '/usr/bin'},
+        );
+
+        await expectLater(
+          service.isAuthenticated(_account),
+          throwsA(
+            predicate<AiGatewayExecutionException>(
+              (error) =>
+                  error.kind == AiGatewayFailureKind.transportUnavailable &&
+                  error.code == 'unsafe_account_home',
+            ),
+          ),
+        );
+        expect(launcher.launches, isEmpty);
+        expect(await externalDirectory.list().isEmpty, isTrue);
+      },
+      skip:
+          Platform.isWindows ? 'Symlink creation requires privileges.' : false,
+    );
+
+    test(
       'discards auth CLI stdout errors without leaking stream failures',
       () async {
         launcher.authStdoutError = const FormatException(
@@ -458,6 +533,38 @@ void main() {
           ['auth', 'status'],
           ['acp'],
         ]);
+      },
+    );
+
+    test(
+      'continues draining auth stdout after invalid oversized frames',
+      () async {
+        launcher.authStdoutChunks = List<List<int>>.generate(
+          DevinCliAcpJsonRpc.maxFrameBytes ~/ 1024 + 8,
+          (_) => List<int>.filled(1024, 0x61),
+        );
+        final expectedBytes = launcher.authStdoutChunks!.fold<int>(
+          0,
+          (total, chunk) => total + chunk.length,
+        );
+        final service = DevinCliAcpService(
+          launcher: launcher,
+          supportDirectory: () async => supportDirectory.path,
+          parentEnvironment: () => const {'PATH': '/usr/bin'},
+        );
+
+        final response = await service.request(
+          account: _account,
+          modelId: 'devin-cli-default',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'Continue safely'},
+            ],
+          },
+        );
+
+        expect(response.statusCode, 200);
+        expect(launcher.processes.first.stdoutBytesRead, expectedBytes);
       },
     );
 
@@ -565,6 +672,46 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+      'cancellation terminates the CLI when it stops reading notifications',
+      () async {
+        launcher.onMethod = (method) async {
+          if (method == 'session/cancel' || method == 'session/close') {
+            await Completer<void>().future;
+          }
+        };
+        final requestSent = Completer<void>();
+        final service = DevinCliAcpService(
+          launcher: launcher,
+          supportDirectory: () async => supportDirectory.path,
+          parentEnvironment: () => const {'PATH': '/usr/bin'},
+        );
+        final response = await service.request(
+          account: _account,
+          modelId: 'devin-cli-default',
+          stream: true,
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'Cancel the blocked request'},
+            ],
+          },
+          onRequestSent: () async => requestSent.complete(),
+        );
+        final subscription = (response.body as Stream<List<int>>).listen(
+          (_) {},
+        );
+        await requestSent.future;
+
+        await subscription.cancel().timeout(const Duration(seconds: 5));
+
+        expect(launcher.processes.last.terminated, isTrue);
+        expect(
+          await Directory(launcher.workingDirectories.last).exists(),
+          isFalse,
+        );
+      },
+    );
 
     test(
       'requires CLI authentication before starting an ACP request',
@@ -1015,6 +1162,7 @@ class _FakeAcpLauncher implements DevinCliAcpProcessLauncher {
   Object? exitError;
   Object? authStdoutError;
   bool unsupportedAgentMessageChunk = false;
+  List<List<int>>? authStdoutChunks;
   int authStatusExitCode = 0;
 
   @override
@@ -1044,6 +1192,8 @@ class _FakeAcpLauncher implements DevinCliAcpProcessLauncher {
                       : null,
       stdoutError:
           launch.arguments.join(' ') == 'auth status' ? authStdoutError : null,
+      initialStdoutChunks:
+          launch.arguments.join(' ') == 'auth status' ? authStdoutChunks : null,
       unsupportedAgentMessageChunk: unsupportedAgentMessageChunk,
     );
     processes.add(process);
@@ -1053,14 +1203,17 @@ class _FakeAcpLauncher implements DevinCliAcpProcessLauncher {
 
 class _FakeAcpProcess implements DevinCliAcpProcess {
   final _stdout = StreamController<String>();
+  final _stdoutBytes = StreamController<List<int>>();
   final _exitCode = Completer<int>();
   final Future<void> Function(String method)? onMethod;
   final Object? exitError;
   final int? immediateExitCode;
   final bool holdPrompt;
   final Object? stdoutError;
+  final List<List<int>>? initialStdoutChunks;
   final bool unsupportedAgentMessageChunk;
   final methods = <String>[];
+  var stdoutBytesRead = 0;
   var terminated = false;
 
   _FakeAcpProcess({
@@ -1069,11 +1222,21 @@ class _FakeAcpProcess implements DevinCliAcpProcess {
     this.immediateExitCode,
     this.holdPrompt = false,
     this.stdoutError,
+    this.initialStdoutChunks,
     this.unsupportedAgentMessageChunk = false,
   }) {
-    if (stdoutError != null) _stdout.addError(stdoutError!);
+    if (stdoutError != null) _stdoutBytes.addError(stdoutError!);
+    for (final chunk in initialStdoutChunks ?? const <List<int>>[]) {
+      _stdoutBytes.add(chunk);
+    }
     if (immediateExitCode != null) _exitCode.complete(immediateExitCode);
   }
+
+  @override
+  Stream<List<int>> get stdoutBytes => _stdoutBytes.stream.map((chunk) {
+        stdoutBytesRead += chunk.length;
+        return chunk;
+      });
 
   @override
   Stream<String> get stdoutLines => _stdout.stream;
@@ -1099,7 +1262,7 @@ class _FakeAcpProcess implements DevinCliAcpProcess {
       _ => <String, Object?>{},
     };
     if (method == 'session/prompt') {
-      _stdout.add(
+      _addLine(
         jsonEncode({
           'jsonrpc': '2.0',
           'method': 'session/update',
@@ -1112,7 +1275,7 @@ class _FakeAcpProcess implements DevinCliAcpProcess {
           },
         }),
       );
-      _stdout.add(
+      _addLine(
         jsonEncode({
           'jsonrpc': '2.0',
           'method': 'session/update',
@@ -1129,14 +1292,17 @@ class _FakeAcpProcess implements DevinCliAcpProcess {
       );
     }
     if (method == 'session/prompt' && holdPrompt) return;
-    _stdout.add(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
+    _addLine(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
   }
+
+  void _addLine(String line) => _stdout.add(line);
 
   @override
   Future<void> terminate() async {
     if (terminated) return;
     terminated = true;
     if (!_exitCode.isCompleted) _exitCode.complete(0);
-    _stdout.close();
+    unawaited(_stdout.close());
+    unawaited(_stdoutBytes.close());
   }
 }

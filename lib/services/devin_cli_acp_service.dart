@@ -10,6 +10,7 @@ import '../ai_gateway/ai_gateway_contracts.dart';
 import 'devin_cli_acp.dart';
 
 abstract interface class DevinCliAcpProcess {
+  Stream<List<int>> get stdoutBytes;
   Stream<String> get stdoutLines;
   Future<void> writeLine(String line);
   Future<int> get exitCode;
@@ -46,6 +47,8 @@ typedef _StartedDevinCliAcpSession = ({
   _DevinCliAcpRpc rpc,
   String sessionId,
 });
+
+const _notificationWriteTimeout = Duration(seconds: 1);
 
 class IoDevinCliAcpProcessLauncher implements DevinCliAcpProcessLauncher {
   @override
@@ -95,7 +98,7 @@ class _IoDevinCliAcpProcess implements DevinCliAcpProcess {
   final Directory _executableDirectory;
   late final Future<int> _exitCode;
   late final Stream<String> _stdoutLines = DevinCliAcpJsonRpc.decodeLines(
-    _process.stdout,
+    stdoutBytes,
   );
 
   _IoDevinCliAcpProcess(this._process, this._executableDirectory) {
@@ -107,6 +110,9 @@ class _IoDevinCliAcpProcess implements DevinCliAcpProcess {
       await _executableDirectory.delete(recursive: true);
     } catch (_) {}
   }
+
+  @override
+  Stream<List<int>> get stdoutBytes => _process.stdout;
 
   @override
   Stream<String> get stdoutLines => _stdoutLines;
@@ -661,7 +667,7 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
   }
 
   void _discardStdout(DevinCliAcpProcess process) {
-    process.stdoutLines.listen((_) {}, onError: (Object _, StackTrace _) {});
+    process.stdoutBytes.listen((_) {}, onError: (Object _, StackTrace _) {});
   }
 
   static bool _hasExecutableApproval(AiGatewayAccount account) =>
@@ -685,18 +691,21 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
         code: 'unsupported_capability',
       );
     }
-    final root = await _supportDirectory();
-    final home = Directory(
-      DevinCliAcpHome.pathForAccount(
-        supportDirectory: root,
+    try {
+      return await DevinCliAcpHome.createForAccountAt(
+        supportDirectory: await _supportDirectory(),
         accountId: accountId,
-      ),
-    );
-    await home.create(recursive: true);
-    await permissionsForDirectory(home.path);
-    await DevinCliAcpHome.createTemporaryDirectory(home.path);
-    return home;
+      );
+    } on DevinCliAcpUnsafeHomePathException {
+      throw _unsafeAccountHome();
+    }
   }
+
+  static AiGatewayExecutionException _unsafeAccountHome() =>
+      AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.transportUnavailable,
+        code: 'unsafe_account_home',
+      );
 
   static Future<void> permissionsForDirectory(String path) =>
       DevinCliAcpHome.restrictDirectory(path);
@@ -1012,9 +1021,14 @@ class _DevinCliAcpRpc {
   Future<void> notify(String method, Map<String, Object?> params) async {
     if (_disposed) return;
     try {
-      await _process.writeLine(
-        DevinCliAcpJsonRpc.encodeNotification(method: method, params: params),
-      );
+      await _process
+          .writeLine(
+            DevinCliAcpJsonRpc.encodeNotification(
+              method: method,
+              params: params,
+            ),
+          )
+          .timeout(_notificationWriteTimeout);
     } catch (_) {
       // A closed process is handled by the outstanding request/stream.
     }
