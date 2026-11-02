@@ -5899,6 +5899,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         if (entry['ocrCacheOwnershipKnown'] != true) return false;
         continue;
       }
+      // Non-OCR rows may still carry cache owners in fields their task model
+      // would discard; preserved raw rows remain authoritative until removed.
+      if (_hasUnserializedTaskOcrCacheReferences(entry)) return false;
       if (entry['type'] != BackgroundTaskType.ocr.name) continue;
       final retryData = entry['retryData'];
       if (!_canSafelyCollectSkippedOcrCacheReferences(retryData) ||
@@ -6545,6 +6548,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 _unrestoredTaskRecord(
                   retryAudioOwnershipKnown: retryAudioIds != null,
                   retryAudioIds: retryAudioIds ?? const {},
+                  ocrCacheOwnershipKnown: !hasUnserializedOcrCacheReferences,
+                  ocrCacheTaskId: hasUnserializedOcrCacheReferences &&
+                          rawMap['id'] is String
+                      ? rawMap['id'] as String
+                      : null,
                   retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
                     rawMap,
                     rawRetryData,

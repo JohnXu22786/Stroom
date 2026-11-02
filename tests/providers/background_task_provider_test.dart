@@ -18525,6 +18525,67 @@ void main() {
     );
 
     test(
+      'OCR cleanup stays fail-closed for preserved malformed ASR cache refs',
+      () async {
+        const taskId = 'malformed-asr-row-with-ocr-cache-ref';
+        const cacheReference =
+            'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'Malformed legacy ASR owner',
+              'status': 'unknown-status',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              // This legacy row is safely preserved, but the task model drops
+              // this OCR cache reference when it tries to parse the row.
+              'retryData': {'legacyContext': cacheReference},
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Triggers a snapshot while the malformed row is retained',
+          );
+          await notifier.pendingPersistence;
+
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['id'] == taskId &&
+                      ((row['retryData'] as Map)['legacyContext'] ==
+                          cacheReference),
+                ),
+            isTrue,
+          );
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+            reason:
+                'an ASR row retained in the snapshot still owns hidden OCR refs',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'OCR cache ownership is unavailable when a skipped row is ambiguous',
       () async {
         final file = _tasksFileIn(testDir.path);
