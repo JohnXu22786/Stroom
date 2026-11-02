@@ -6,7 +6,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
     BuildContext context,
     catcatch_task.CatCatchTask task,
   ) {
-    final selectedUrls = <String>{};
+    final selectedIdentities = <String>{};
     var segmentsExpanded = false;
     showDialog(
       context: context,
@@ -25,8 +25,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
           final resourceViewportHeight = contentViewportHeight * (2 / 3);
           return AlertDialog(
             title: Text(
-              selectedUrls.isNotEmpty
-                  ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
+              selectedIdentities.isNotEmpty
+                  ? '已选 ${selectedIdentities.length}/${mediaList.length} 个资源'
                   : '选择要下载的资源',
             ),
             content: SizedBox(
@@ -64,7 +64,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                         itemCount: visibleResources.length,
                         itemBuilder: (_, i) {
                           final media = visibleResources[i];
-                          final isSel = selectedUrls.contains(media.url);
+                          final identity = media.selectionIdentity;
+                          final isSel = selectedIdentities.contains(identity);
                           final isAudio = isAudioPreviewResource(media);
                           return Card(
                             elevation: 0,
@@ -83,9 +84,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                               onTap: () {
                                 setDlgState(() {
                                   if (isSel) {
-                                    selectedUrls.remove(media.url);
+                                    selectedIdentities.remove(identity);
                                   } else {
-                                    selectedUrls.add(media.url);
+                                    selectedIdentities.add(identity);
                                   }
                                 });
                               },
@@ -263,13 +264,14 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 child: const Text('取消'),
               ),
               FilledButton(
-                onPressed: selectedUrls.isNotEmpty ||
+                onPressed: selectedIdentities.isNotEmpty ||
                         (mediaList.length == 1 && visibleResources.length == 1)
                     ? () {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
                             : mediaList
-                                .where((m) => selectedUrls.contains(m.url))
+                                .where((m) => selectedIdentities
+                                    .contains(m.selectionIdentity))
                                 .toList();
                         Navigator.pop(ctx);
                         ref
@@ -278,8 +280,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                       }
                     : null,
                 child: Text(
-                  selectedUrls.isNotEmpty
-                      ? '下载选中的 ${selectedUrls.length} 个资源'
+                  selectedIdentities.isNotEmpty
+                      ? '下载选中的 ${selectedIdentities.length} 个资源'
                       : '确认下载',
                 ),
               ),

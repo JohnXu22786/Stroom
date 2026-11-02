@@ -405,6 +405,84 @@ void main() {
     );
   });
 
+  test('video prompt retains distinct byte ranges sharing one URL', () {
+    const firstRange = MediaResource(
+      url: 'https://x/video.ts',
+      name: 'first range',
+      ext: 'ts',
+      byteRangeStart: 0,
+      byteRangeLength: 100,
+    );
+    const secondRange = MediaResource(
+      url: 'https://x/video.ts',
+      name: 'second range',
+      ext: 'ts',
+      byteRangeStart: 100,
+      byteRangeLength: 100,
+    );
+
+    expect(
+      catCatchPromptResourceCandidates(
+        [firstRange, secondRange],
+        desiredType: IOType.video,
+      ),
+      [firstRange, secondRange],
+    );
+  });
+
+  test('video prompt preserves duplicate URL candidates without ranges', () {
+    const first = MediaResource(
+      url: 'https://x/video.mp4',
+      name: 'first',
+      ext: 'mp4',
+    );
+    const duplicate = MediaResource(
+      url: 'https://x/video.mp4',
+      name: 'duplicate',
+      ext: 'mp4',
+    );
+
+    expect(
+      catCatchPromptResourceCandidates(
+        [first, duplicate],
+        desiredType: IOType.video,
+      ),
+      [first, duplicate],
+    );
+  });
+
+  test('versioned allow-lists do not use URL fallback for byte ranges', () {
+    const range = MediaResource(
+      url: 'https://x/video.ts',
+      name: 'range',
+      ext: 'ts',
+      byteRangeStart: 100,
+      byteRangeLength: 100,
+    );
+    final candidate = catcatch.CatCatchTask.flowSelectionCandidateAllowed;
+
+    expect(
+      candidate(
+        candidates: {range.url},
+        identity: range.selectionIdentity,
+        url: range.url,
+        hasByteRange: true,
+        identityVersioned: true,
+      ),
+      isFalse,
+    );
+    expect(
+      candidate(
+        candidates: {range.url},
+        identity: range.selectionIdentity,
+        url: range.url,
+        hasByteRange: true,
+        identityVersioned: false,
+      ),
+      isTrue,
+    );
+  });
+
   test('automatic with prompt includes compatible split-track choices',
       () async {
     const audioSplit = MediaResource(

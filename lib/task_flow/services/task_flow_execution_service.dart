@@ -234,7 +234,9 @@ class TaskFlowExecutionService {
   /// Only one tap per task may wait in the scheduler queue at a time.
   Future<bool> performManualCatCatchAction(
       String taskId, bool selecting, void Function(CatCatchNotifier) action,
-      {String? selectedMediaUrl}) async {
+      {String? selectedMediaUrl,
+      String? selectedMediaIdentity,
+      bool selectedMediaHasByteRange = false}) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
     if (execution == null || _manualCatCatchActions.contains(taskId))
       return false;
@@ -246,9 +248,25 @@ class TaskFlowExecutionService {
       final encoded =
           task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
       if (encoded != null) {
-        final candidates = (jsonDecode(encoded) as List).cast<String>();
-        if (selectedMediaUrl == null ||
-            !candidates.contains(selectedMediaUrl)) {
+        final candidates =
+            (jsonDecode(encoded) as List).cast<String>().toSet();
+        final identityVersioned = task?.metadata.containsKey(
+              catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+            ) ??
+            false;
+        final allowed = selectedMediaIdentity == null
+            ? !identityVersioned &&
+                selectedMediaUrl != null &&
+                candidates.contains(selectedMediaUrl)
+            : selectedMediaUrl != null &&
+                catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                  candidates: candidates,
+                  identity: selectedMediaIdentity,
+                  url: selectedMediaUrl,
+                  hasByteRange: selectedMediaHasByteRange,
+                  identityVersioned: identityVersioned,
+                );
+        if (!allowed) {
           return false;
         }
       }

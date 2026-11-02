@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 媒体资源模型
 ///
 /// 表示从 URL 分析或页面嗅探中发现的单个媒体资源。
@@ -44,6 +46,15 @@ class MediaResource {
   /// HLS fragment byte range, when multiple fragments share one resource.
   final int? byteRangeStart;
   final int? byteRangeLength;
+
+  bool get hasByteRange => byteRangeStart != null || byteRangeLength != null;
+
+  /// Stable key for selection/counting, retaining URL identity except for
+  /// separate HLS byte ranges that share a URL.
+  String get selectionIdentity {
+    if (!hasByteRange) return url;
+    return '\u0000hls-range:${jsonEncode([url, byteRangeStart, byteRangeLength])}';
+  }
 
   const MediaResource({
     required this.url,
