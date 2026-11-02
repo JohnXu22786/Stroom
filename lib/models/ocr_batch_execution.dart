@@ -28,11 +28,25 @@ int? ocrRequestSizeBudgetBytesFromMib(String value) {
   return bytes > 0 ? bytes : null;
 }
 
-String ocrRequestSizeBudgetMib(int bytes) {
+String ocrRequestSizeBudgetMib(int bytes, {int decimalPlaces = 2}) {
   final mebibytes = bytes / (1024 * 1024);
   return mebibytes < 0.005
       ? mebibytes.toStringAsFixed(8)
-      : mebibytes.toStringAsFixed(2);
+      : mebibytes.toStringAsFixed(decimalPlaces);
+}
+
+String ocrRequestSizeBudgetOverageMib(int requestBytes, int budgetBytes) {
+  var decimalPlaces = 2;
+  var requestSize = ocrRequestSizeBudgetMib(requestBytes);
+  while (requestSize ==
+          ocrRequestSizeBudgetMib(budgetBytes, decimalPlaces: decimalPlaces) &&
+      decimalPlaces < 20) {
+    requestSize = ocrRequestSizeBudgetMib(
+      requestBytes,
+      decimalPlaces: ++decimalPlaces,
+    );
+  }
+  return requestSize;
 }
 
 /// How a selected set of images is submitted to the OCR model.

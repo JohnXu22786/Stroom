@@ -2426,11 +2426,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '当前 JSON 请求约为 ' +
-                  ocrRequestSizeBudgetMib(encodedBytes) +
-                  ' MiB，超过 ' +
-                  ocrRequestSizeBudgetMib(budgetBytes) +
-                  ' MiB 配置值。',
+              '当前 JSON 请求约为 '
+              '${ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes)} MiB，'
+              '超过 ${ocrRequestSizeBudgetMib(budgetBytes)} MiB 配置值。',
             ),
             const SizedBox(height: 12),
             const Text(
