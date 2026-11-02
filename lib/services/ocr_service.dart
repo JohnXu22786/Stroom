@@ -511,7 +511,8 @@ class OcrService {
   Options _requestOptions({required int encodedBytes}) => Options(
         headers: _requestAuthorizationHeaders,
         sendTimeout: _sendTimeoutOverride ??
-            (_usesInjectedDio ? null : sendTimeoutForBytes(encodedBytes)),
+            (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
+            sendTimeoutForBytes(encodedBytes),
         receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
       );
 
