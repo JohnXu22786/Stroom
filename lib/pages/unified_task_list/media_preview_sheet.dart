@@ -12,6 +12,23 @@ import 'package:chewie/chewie.dart';
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
 
+const _audioPreviewExtensions = {
+  'oga',
+  'mp3',
+  'wav',
+  'm4a',
+  'aac',
+  'wma',
+  'opus',
+  'weba',
+};
+
+const _videoPreviewExtensions = {'mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'};
+
+/// Whether the preview flow treats this resource as audio.
+bool isAudioPreviewResource(MediaResource resource) =>
+    _audioPreviewExtensions.contains(previewExtensionForResource(resource));
+
 String previewExtensionForResource(MediaResource resource) {
   final ext = resource.ext.toLowerCase().replaceFirst(RegExp(r'^\.'), '');
   final mime = (resource.mimeType ?? '').split(';').first.trim().toLowerCase();
@@ -19,22 +36,7 @@ String previewExtensionForResource(MediaResource resource) {
   if (mime == 'video/ogg') return 'ogg';
   if (mime == 'video/x-theora+ogg') return 'ogv';
 
-  const supported = {
-    'mp4',
-    'webm',
-    'ogg',
-    'oga',
-    'mov',
-    'mkv',
-    'ogv',
-    'mp3',
-    'wav',
-    'm4a',
-    'aac',
-    'wma',
-    'opus',
-    'weba',
-  };
+  const supported = {..._videoPreviewExtensions, ..._audioPreviewExtensions};
   if (supported.contains(ext)) return ext;
   const mimeExtensions = {
     'video/mp4': 'mp4',
@@ -128,24 +130,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       }
 
       final ext = previewExtensionForResource(resource);
-      final isVideoFormat = [
-        'mp4',
-        'webm',
-        'ogg',
-        'mov',
-        'mkv',
-        'ogv',
-      ].contains(ext);
-      final isAudioFormat = [
-        'oga',
-        'mp3',
-        'wav',
-        'm4a',
-        'aac',
-        'wma',
-        'opus',
-        'weba',
-      ].contains(ext);
+      final isVideoFormat = _videoPreviewExtensions.contains(ext);
+      final isAudioFormat = _audioPreviewExtensions.contains(ext);
 
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {

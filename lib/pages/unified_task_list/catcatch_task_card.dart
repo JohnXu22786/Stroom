@@ -1072,15 +1072,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     ColorScheme colorScheme,
   ) {
     final isSelected = _isSelected(task.id, media.url);
-    final ext = media.ext.toLowerCase();
-    final isAudioType = [
-      'mp3',
-      'wav',
-      'm4a',
-      'aac',
-      'opus',
-      'weba',
-    ].contains(ext);
+    final isAudioType = isAudioPreviewResource(media);
 
     return Card(
       elevation: 0,
