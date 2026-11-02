@@ -72,6 +72,12 @@ jobs:
         working-directory: nodejs-mobile/tools/mobile-test/android/testnode
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Set up Java 17 for emulator SDK tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Run npm and MCP runtime checks on Android
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
