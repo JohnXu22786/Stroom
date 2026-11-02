@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'm3u8_parser.dart';
+
 /// Stores the merged container choice for each HLS playlist on a task.
 ///
 /// Task metadata is persisted as string values, so the playlist-to-extension
@@ -11,6 +13,16 @@ abstract final class PlaylistMergedExtensions {
 
   static String encode(Map<String, String> extensionsByPlaylist) =>
       jsonEncode(extensionsByPlaylist);
+
+  static Map<String, String> fromPlaylists(
+    Iterable<({String url, bool hasInitializationMap})> playlists,
+  ) =>
+      {
+        for (final playlist in playlists)
+          playlist.url: M3U8Parser.mergedFileExtension(
+            hasInitializationMap: playlist.hasInitializationMap,
+          ),
+      };
 
   static Map<String, String> decode(String? encoded) {
     if (encoded == null) return const {};

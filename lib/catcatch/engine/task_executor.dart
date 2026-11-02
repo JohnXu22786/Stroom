@@ -31,12 +31,14 @@ class TaskExecutor {
     required CatCatchTask task,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
   }) async {
     return _executeSteps(
       task: task,
       startFromIndex: 0,
       onUpdate: onUpdate,
       cancelToken: cancelToken,
+      playlistDioFactory: playlistDioFactory,
     );
   }
 
@@ -46,6 +48,7 @@ class TaskExecutor {
     required StepType fromStep,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
   }) async {
     try {
       var stepIndex = StepType.values.indexOf(fromStep);
@@ -75,6 +78,7 @@ class TaskExecutor {
         startFromIndex: stepIndex,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        playlistDioFactory: playlistDioFactory,
       );
     } catch (e) {
       if (e is UnsupportedError) {
@@ -90,12 +94,14 @@ class TaskExecutor {
     required int startFromIndex,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
   }) async {
     return _executeStepsInternal(
       task: task,
       startFromIndex: startFromIndex,
       onUpdate: onUpdate,
       cancelToken: cancelToken,
+      playlistDioFactory: playlistDioFactory,
     );
   }
 
@@ -105,6 +111,7 @@ class TaskExecutor {
     required int startFromIndex,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
   }) async {
     final steps = List<StepStatus>.from(task.steps);
     ensureExecutorSteps(steps);
@@ -151,6 +158,7 @@ class TaskExecutor {
               steps: steps,
               media: detectedMedia,
               cancelToken: cancelToken,
+              playlistDioFactory: playlistDioFactory,
             );
             if (result != null) {
               detectedMedia = result.media;
@@ -638,6 +646,7 @@ class TaskExecutor {
     required List<StepStatus> steps,
     required List<MediaResource> media,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
   }) async {
     final playlist = media.where((m) => m.isPlaylist).toList();
     if (playlist.isEmpty) {
@@ -645,9 +654,9 @@ class TaskExecutor {
       return null;
     }
     var parsedMedia = List<MediaResource>.from(media);
-    final mergedExtensions = <String, String>{};
+    final parsedM3u8Playlists = <({String url, bool hasInitializationMap})>[];
     for (final pl in playlist) {
-      final dio = Dio();
+      final dio = playlistDioFactory?.call() ?? Dio();
       cancelToken?.whenCancel.then((_) {
         dio.close();
       });
@@ -677,9 +686,10 @@ class TaskExecutor {
         segments = parsed.resources;
         playlistResources = parsed.playlistResources;
         mediaSegmentCount = parsed.mediaSegmentCount;
-        mergedExtensions[pl.url] = M3U8Parser.mergedFileExtension(
+        parsedM3u8Playlists.add((
+          url: pl.url,
           hasInitializationMap: parsed.hasInitializationMap,
-        );
+        ));
       } else if (pl.isMPD) {
         segments = await MPDParser.parseManifest(content, pl.url);
         playlistResources = segments
@@ -731,6 +741,8 @@ class TaskExecutor {
       parsedMedia = [...enrichedMedia, ...segmentMedia];
     }
     markExecutorStep(steps, 2, done: true);
+    final mergedExtensions =
+        PlaylistMergedExtensions.fromPlaylists(parsedM3u8Playlists);
     if (mergedExtensions.isEmpty && parsedMedia.length == media.length) {
       return null;
     }

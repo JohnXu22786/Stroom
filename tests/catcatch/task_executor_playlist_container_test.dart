@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,50 +7,75 @@ import 'package:stroom/catcatch/engine/task_executor.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 
+class _PlaylistAdapter implements HttpClientAdapter {
+  _PlaylistAdapter(this.playlists);
+
+  final Map<String, String> playlists;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final content = playlists[options.uri.toString()];
+    if (content == null) {
+      return ResponseBody.fromString(
+        'Playlist not found',
+        404,
+        headers: {
+          Headers.contentTypeHeader: ['text/plain'],
+        },
+      );
+    }
+    return ResponseBody.fromString(
+      content,
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/vnd.apple.mpegurl'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('keeps the merged container extension for each playlist', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final baseUrl = 'http://${server.address.address}:${server.port}';
-    final serving = server.forEach((request) async {
-      request.response.headers.contentType = ContentType(
-        'application',
-        'vnd.apple.mpegurl',
-      );
-      request.response.write(switch (request.uri.path) {
-        '/transport.m3u8' => '''
+    const transportUrl = 'https://example.com/transport.m3u8';
+    const fragmentedUrl = 'https://example.com/fragmented.m3u8';
+    final playlists = {
+      transportUrl: '''
 #EXTM3U
 #EXTINF:4.0,
 transport.ts
 #EXT-X-ENDLIST
 ''',
-        '/fragmented.m3u8' => '''
+      fragmentedUrl: '''
 #EXTM3U
 #EXT-X-MAP:URI="init.mp4"
 #EXTINF:4.0,
 fragment.m4s
 #EXT-X-ENDLIST
 ''',
-        _ => throw StateError('Unexpected request: ${request.uri.path}'),
-      });
-      await request.response.close();
-    });
-
+    };
     final task = CatCatchTask(
       id: 'mixed-playlists',
-      url: baseUrl,
+      url: 'https://example.com',
       expectedDurationSec: 0,
       createdAt: DateTime(2026),
       detectedMedia: [
         MediaResource(
-          url: '$baseUrl/transport.m3u8',
+          url: transportUrl,
           name: 'transport',
           ext: 'm3u8',
           isPlaylist: true,
         ),
         MediaResource(
-          url: '$baseUrl/fragmented.m3u8',
+          url: fragmentedUrl,
           name: 'fragmented',
           ext: 'm3u8',
           isPlaylist: true,
@@ -72,6 +96,8 @@ fragment.m4s
         task: task,
         fromStep: StepType.parsingPlaylist,
         cancelToken: cancelToken,
+        playlistDioFactory: () =>
+            Dio()..httpClientAdapter = _PlaylistAdapter(playlists),
         onUpdate: (updated) {
           final parsing = updated.steps.firstWhere(
             (step) => step.type == StepType.parsingPlaylist,
@@ -84,28 +110,22 @@ fragment.m4s
       );
     } finally {
       cancelToken.cancel();
-      await server.close(force: true);
-      await serving;
     }
 
-    final playlistExtensions = jsonDecode(
-      parsedTask!.metadata['playlistMergedExtensions']!,
-    ) as Map<String, dynamic>;
-    expect(playlistExtensions, {
-      '$baseUrl/transport.m3u8': 'ts',
-      '$baseUrl/fragmented.m3u8': 'mp4',
-    });
+    final playlistExtensions =
+        parsedTask!.metadata['playlistMergedExtensions']!;
     expect(
-      PlaylistMergedExtensions.forPlaylist(
-        parsedTask!.metadata,
-        '$baseUrl/transport.m3u8',
-      ),
+      PlaylistMergedExtensions.decode(playlistExtensions),
+      {transportUrl: 'ts', fragmentedUrl: 'mp4'},
+    );
+    expect(
+      PlaylistMergedExtensions.forPlaylist(parsedTask!.metadata, transportUrl),
       'ts',
     );
     expect(
       PlaylistMergedExtensions.forPlaylist(
         parsedTask!.metadata,
-        '$baseUrl/fragmented.m3u8',
+        fragmentedUrl,
       ),
       'mp4',
     );
@@ -113,13 +133,23 @@ fragment.m4s
       parsedTask!.detectedMedia
           .where((resource) => resource.isPlaylistSegment)
           .map((resource) => resource.url),
-      containsAll(['$baseUrl/transport.ts', '$baseUrl/fragment.m4s']),
+      containsAll([
+        'https://example.com/transport.ts',
+        'https://example.com/fragment.m4s',
+      ]),
     );
 
     final restoredTask = CatCatchTask.fromMap(parsedTask!.toMap());
     expect(
-      jsonDecode(restoredTask.metadata['playlistMergedExtensions']!),
-      playlistExtensions,
+      PlaylistMergedExtensions.forPlaylist(restoredTask.metadata, transportUrl),
+      'ts',
+    );
+    expect(
+      PlaylistMergedExtensions.forPlaylist(
+        restoredTask.metadata,
+        fragmentedUrl,
+      ),
+      'mp4',
     );
   });
 }
