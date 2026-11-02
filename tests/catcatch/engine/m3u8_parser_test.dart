@@ -8,6 +8,7 @@ void main() {
 #EXTM3U
 #EXT-X-VERSION:7
 #EXT-X-MAP:URI="init.mp4",BYTERANGE="2@3"
+#EXT-X-MAP:URI="init.mp4",BYTERANGE="3"
 #EXTINF:4.0,
 segment-1.m4s
 #EXT-X-ENDLIST
@@ -28,13 +29,21 @@ segment-1.m4s
     );
     expect(parsed.resources, [
       'https://example.com/hls/init.mp4',
+      'https://example.com/hls/init.mp4',
       'https://example.com/hls/segment-1.m4s',
     ]);
-    expect(parsed.playlistResources.first, (
-      url: 'https://example.com/hls/init.mp4',
-      rangeStart: 3,
-      rangeLength: 2,
-    ));
+    expect(parsed.playlistResources.take(2), [
+      (
+        url: 'https://example.com/hls/init.mp4',
+        rangeStart: 3,
+        rangeLength: 2,
+      ),
+      (
+        url: 'https://example.com/hls/init.mp4',
+        rangeStart: 5,
+        rangeLength: 3,
+      ),
+    ]);
   });
 
   test('keeps MPEG-TS extension when playlist has no initialization map',

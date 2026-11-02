@@ -56,6 +56,8 @@ class M3U8Parser {
     ({int length, int? offset})? pendingByteRange;
     String? previousRangeUri;
     int? previousRangeEnd;
+    String? previousMapRangeUri;
+    int? previousMapRangeEnd;
 
     if (_hasStreamInf(lines)) {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
@@ -87,9 +89,25 @@ class M3U8Parser {
         final initializationUrl = attributes['URI'];
         if (initializationUrl != null) {
           final range = _parseByteRange(attributes['BYTERANGE']);
+          final resolvedUrl = _resolveUrl(initializationUrl, baseUrl);
+          int? rangeStart;
+          if (range != null) {
+            rangeStart = range.offset ??
+                (previousMapRangeUri == resolvedUrl ? previousMapRangeEnd : null);
+            if (rangeStart == null) {
+              throw FormatException(
+                'Implicit EXT-X-MAP byte-range offset has no preceding range for $resolvedUrl',
+              );
+            }
+            previousMapRangeUri = resolvedUrl;
+            previousMapRangeEnd = rangeStart + range.length;
+          } else {
+            previousMapRangeUri = null;
+            previousMapRangeEnd = null;
+          }
           segments.add((
-            url: _resolveUrl(initializationUrl, baseUrl),
-            rangeStart: range == null ? null : (range.offset ?? 0),
+            url: resolvedUrl,
+            rangeStart: rangeStart,
             rangeLength: range?.length,
           ));
         }
