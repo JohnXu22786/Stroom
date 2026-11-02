@@ -5488,10 +5488,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       // These historical extensions are known credential/inline-body fields;
       // sanitizing them cannot discard another cache reference.
       const sanitizedNonOwnershipFields = {'apiKey', 'imageData'};
-      for (final key in data.keys) {
-        if (key is! String ||
-            (!snapshotFields.contains(key) &&
-                !sanitizedNonOwnershipFields.contains(key))) {
+      for (final entry in data.entries) {
+        final key = entry.key;
+        if (key is! String) {
+          return true;
+        }
+        if (snapshotFields.contains(key)) continue;
+        if (!sanitizedNonOwnershipFields.contains(key) ||
+            (entry.value != null && entry.value is! String)) {
           return true;
         }
       }
@@ -5517,10 +5521,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
           if (image is! Map) return true;
-          for (final key in image.keys) {
-            if (key is! String ||
-                (!imageFields.contains(key) &&
-                    !sanitizedNonOwnershipFields.contains(key))) {
+          for (final entry in image.entries) {
+            final key = entry.key;
+            if (key is! String) {
+              return true;
+            }
+            if (imageFields.contains(key)) continue;
+            if (!sanitizedNonOwnershipFields.contains(key) ||
+                (entry.value != null && entry.value is! String)) {
               return true;
             }
           }

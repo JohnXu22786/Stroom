@@ -18964,7 +18964,10 @@ void main() {
         final file = _tasksFileIn(testDir.path);
         await file.parent.create(recursive: true);
         Future<void> expectUnknownOwnership(
-            String taskId, dynamic images) async {
+          String taskId,
+          dynamic images, {
+          Map<String, dynamic> retryFields = const {},
+        }) async {
           await file.writeAsString(
             jsonEncode([
               {
@@ -18982,6 +18985,7 @@ void main() {
                   'batchMode': 'joint',
                   'perImageConcurrency': 1,
                   'requestSizeBudgetBytes': 1024,
+                  ...retryFields,
                 },
               },
             ]),
@@ -19069,6 +19073,31 @@ void main() {
               'format': 'png',
               'name': 'image.png',
               'bytes': {'storageRef': validReference},
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-api-key-owner',
+          <dynamic>[],
+          retryFields: {
+            'apiKey': {'storageRef': validReference},
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-data-owner',
+          <dynamic>[],
+          retryFields: {
+            'imageData': {'storageRef': validReference},
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-entry-data-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+              'imageData': {'storageRef': validReference},
             },
           ],
         );
