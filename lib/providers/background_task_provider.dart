@@ -4194,6 +4194,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
   }) {
+    final task = taskById(taskId);
+    if (task != null &&
+        task.type == BackgroundTaskType.ocr &&
+        task.retryData != null &&
+        (_pendingTaskRemovalReconciliations.containsKey(taskId) ||
+            (task.status == TaskStatus.waiting && task.error == '已取消'))) {
+      // Cancellation callbacks and stale runners can report failure while
+      // removal is in progress or after rollback. Keep the retry task's
+      // cancellation outcome instead of notifying for a stale failure.
+      return;
+    }
     _updateTask(
       taskId,
       TaskStatus.failed,
@@ -4365,8 +4376,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       // retry audio remains owned until its removal is durable.
       _pendingRestoreTaskRemovalOwnershipIds.add(taskId);
     }
-    _cancellations.remove(taskId)?.cancel();
     final originalSnapshot = List<BackgroundTask>.of(state);
+    _cancellations.remove(taskId)?.cancel();
     final removedTasks = state.where((task) => task.id == taskId).toList();
     for (final task in removedTasks) {
       _queueTaskCleanupAfterRemoval(taskId, task);
@@ -4637,7 +4648,33 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
       // Tasks added while the removal was pending are newer and belong ahead
       // of the restored generation when no original neighbor survives.
-      restored.insert(restoreIndex ?? restored.length, task);
+      final wasRunningBeforeCancellation = originalSnapshot.any(
+        (original) =>
+            original.id == taskId &&
+            original.hasSameGenerationAs(task) &&
+            original.status == TaskStatus.running,
+      );
+      final canceledWhileRunning = task.status == TaskStatus.running ||
+          (wasRunningBeforeCancellation && task.status == TaskStatus.failed);
+      final taskToRestore = canceledWhileRunning
+          ? task.copyWith(
+              status: TaskStatus.waiting,
+              clearCompletedAt: true,
+              error: '已取消',
+              steps: task.steps
+                  .map(
+                    (step) => step.copyWith(
+                      status: step.running
+                          ? BgStepStatus.failed
+                          : step.status == BgStepStatus.pending
+                              ? BgStepStatus.skipped
+                              : step.status,
+                    ),
+                  )
+                  .toList(),
+            )
+          : task;
+      restored.insert(restoreIndex ?? restored.length, taskToRestore);
       _taskSnapshotEpoch++;
       restoredTask = true;
       if (mounted) {
