@@ -5471,14 +5471,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
       for (final task in tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        ..._ocrCacheReferencesInPersistedValue(task.toMap()),
       ..._persistedOcrCacheReferences,
       ..._referencesFromSkippedTaskEntries(),
       for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
         for (final task in removedTasks)
-          if (task.type == BackgroundTaskType.ocr)
-            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+          ..._ocrCacheReferencesInPersistedValue(task.toMap()),
     };
   }
 
@@ -5486,16 +5484,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final persisted = await _loadPersistedTasks();
     if (!persisted.isReadable || !persisted.cleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
-    return {
-      for (final task in tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      for (final task in persisted.tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      ..._referencesFromSkippedTaskEntries(),
-      ..._referencesFromSkippedTaskEntries(persisted.skippedEntries),
-    };
+    return _ocrCacheReferencesFromTasksAndEntries(
+      [...tasks, ...persisted.tasks],
+      [..._skippedTaskEntries, ...persisted.skippedEntries],
+    );
   }
 
   bool _canSafelyCollectSkippedOcrCacheReferences(Object? retryData) {
@@ -5842,9 +5834,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       'ocrPageOutcomes',
     };
     for (final entry in taskRow.entries) {
-      final isDiscardedOcrField =
+      final isRawDiagnosticField =
           entry.key == 'rawRequest' || entry.key == 'rawResponse';
-      if ((!serializedTaskFields.contains(entry.key) || isDiscardedOcrField) &&
+      final isDiscardedField = (!serializedTaskFields.contains(entry.key) &&
+              !(taskRow['type'] != BackgroundTaskType.ocr.name &&
+                  isRawDiagnosticField)) ||
+          (taskRow['type'] == BackgroundTaskType.ocr.name &&
+              isRawDiagnosticField);
+      if (isDiscardedField &&
           (containsCacheReference(entry.key) ||
               containsCacheReference(entry.value))) {
         return true;
@@ -5857,14 +5854,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
       if (entry is! Map) continue;
+      final serializedFields = Map<dynamic, dynamic>.of(entry)
+        ..remove('retryData');
+      references.addAll(_ocrCacheReferencesInPersistedValue(serializedFields));
       final retryData = entry['retryData'];
       if (retryData is! Map) continue;
       try {
         final data = Map<String, dynamic>.from(retryData);
         if (entry['type'] == BackgroundTaskType.ocr.name) {
           data['type'] ??= BackgroundTaskType.ocr.name;
+          references.addAll(OcrRetryStorage.referencesFromSnapshot(data));
         }
-        references.addAll(OcrRetryStorage.referencesFromSnapshot(data));
       } catch (_) {
         // Unknown persisted data must never expand the set of deletable paths.
       }
@@ -5875,13 +5875,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Set<String> _ocrCacheReferencesFromTasksAndEntries(
     Iterable<BackgroundTask> tasks,
     Iterable<dynamic> entries,
-  ) =>
-      {
-        for (final task in tasks)
-          if (task.type == BackgroundTaskType.ocr)
-            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-        ..._referencesFromSkippedTaskEntries(entries),
-      };
+  ) {
+    final references = <String>{};
+    for (final task in tasks) {
+      final serialized = task.toMap();
+      if (task.type == BackgroundTaskType.ocr) {
+        references.addAll(
+          OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        );
+        // OCR images can carry large legacy Base64 payloads; recognized cache
+        // references are collected above, so scan only its other serialized
+        // fields recursively.
+        serialized.remove('retryData');
+      }
+      references.addAll(_ocrCacheReferencesInPersistedValue(serialized));
+    }
+    references.addAll(_referencesFromSkippedTaskEntries(entries));
+    return references;
+  }
 
   bool _hasKnownOcrCacheOwnership(
     Iterable<BackgroundTask> tasks,

@@ -18525,6 +18525,70 @@ void main() {
     );
 
     test(
+      'serialized ASR diagnostics retain OCR cache references for cleanup',
+      () async {
+        WebFileStore.enableTestMode();
+        const asrTaskId = 'asr-request-ocr-cache-owner';
+        final bytes = Uint8List.fromList([31, 32, 33, 34]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'asr-request-cache-source',
+          snapshot: OcrRetrySnapshot.capture(
+            configId: 'config-1',
+            modelId: 'model-1',
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            BackgroundTask(
+              id: asrTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR diagnostics with a serialized OCR cache owner',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
+              rawRequest: {'cacheReference': cacheReference},
+              retryData: {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': '11111111111111111111111111111111',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 0,
+                  'sha256': '1' * 64,
+                  'requiresSourceReselection': true,
+                },
+              },
+            ).toMap(),
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            contains(cacheReference),
+          );
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            contains(cacheReference),
+          );
+          expect(await OcrRetryStorage.read(cacheReference), bytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'OCR cleanup stays fail-closed for preserved malformed ASR cache refs',
       () async {
         const taskId = 'malformed-asr-row-with-ocr-cache-ref';
