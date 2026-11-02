@@ -1405,7 +1405,12 @@ void main() {
             await tasksFile.parent.create(recursive: true);
             await tasksFile.writeAsString(jsonEncode([skippedRow]));
           });
-          expect(await notifier.restoreFromPersistence(), isFalse);
+          // Restore performs dart:io reads and must run outside the widget
+          // test's fake async zone, like the task-file write above.
+          expect(
+            await tester.runAsync(() => notifier.restoreFromPersistence()),
+            isFalse,
+          );
           expect(taskSnapshotReads, 1);
           expect(notifier.tasksForTest, isEmpty);
           notifier.setTasksForTest([
