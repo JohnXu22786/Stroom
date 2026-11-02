@@ -117,7 +117,7 @@ run_expected_raw_failure
 
 adb shell run-as "$package" rm -rf "$fixture/node_modules" "$fixture/.npm" "$files/.npm-cache"
 bootstrap_b64=$(base64 -w0 "$script_root/compatibility-shim.cjs")
-npm_args="-p (()=>{eval(new/**/TextDecoder().decode(Buffer.from('$bootstrap_b64','base64')));process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return/**/require('$npm')})()"
+npm_args="-p (()=>{console.log('NPM_BOOTSTRAP_BEGIN');let/**/shim=new/**/TextDecoder().decode(Buffer.from('$bootstrap_b64','base64'));console.log('NPM_BOOTSTRAP_DECODED:'+shim.length);eval(shim);console.log('NPM_BOOTSTRAP_EVAL_DONE');process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$files/.npm-cache','--no-audit','--no-fund','--registry=$registry','--replace-registry-host=always','--fetch-retries=0'];process.exit=function(code){process.exitCode=code||0;console.log('NPM_CI_EXIT:'+process.exitCode)};process.on('exit',()=>{console.log('NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0));console.log('RESULT:PASS')});return/**/require('$npm')})()"
 run_node 'Clean npm ci with committed lock and fast-uri override' "$npm_args" 'NPM_CI_PROCESS_EXIT:0' 300
 
 verify_args="-p (eval(new/**/TextDecoder().decode(Buffer.from('$bootstrap_b64','base64'))),require('$fixture/verify-install.cjs'))"
