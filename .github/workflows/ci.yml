@@ -30,6 +30,19 @@ jobs:
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
       - run: node --test tests/catcatch/js_hook_script_test.cjs
 
+  ocr-benchmark:
+    name: "OCR Benchmark Validation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify OCR benchmark fixtures
+        run: python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
+      - name: Test OCR benchmark evaluator
+        run: python3 -m unittest discover -s tools/ocr_benchmark -p 'test_*.py' -v
+
   format:
     name: "Format Check"
     runs-on: ubuntu-latest
