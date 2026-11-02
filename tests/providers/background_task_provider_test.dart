@@ -18900,6 +18900,65 @@ void main() {
     );
 
     test(
+      'OCR cache ownership stays unavailable for malformed model references',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'ocr-malformed-model-reference-owner',
+              'type': 'ocr',
+              'title': 'OCR retry with a malformed model reference',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'modelRef': [
+                  {
+                    'storageRef':
+                        'ocr_retry_cache/6666666666666666666666666666666666666666666666666666666666666666.bin',
+                  },
+                ],
+                'images': <dynamic>[],
+                'batchMode': 'joint',
+                'perImageConcurrency': 1,
+                'requestSizeBudgetBytes': 1024,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(
+            notifier.taskById('ocr-malformed-model-reference-owner'),
+            isNotNull,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] ==
+                          'ocr-malformed-model-reference-owner',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'startup cleanup preserves skipped task refs while later writes persist',
       () async {
         WebFileStore.enableTestMode();

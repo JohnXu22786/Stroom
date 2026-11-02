@@ -5496,6 +5496,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         }
       }
       final modelRef = data['modelRef'];
+      if (modelRef != null && modelRef is! Map) {
+        return true;
+      }
       if (modelRef is Map) {
         const modelReferenceFields = {'configId', 'modelId'};
         for (final entry in modelRef.entries) {
