@@ -588,7 +588,6 @@ bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
 ) {
-  if (_legacyOcrIsSafeNaturalDocumentationInstruction(text)) return false;
   if (OcrDiagnosticSnapshot.containsCredential(
     text,
     excludedValues: credentialValues.where(
@@ -620,7 +619,7 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
       r'(^|[^a-zA-Z0-9])'
       r'[dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN]'
       r'[ \t\r\n]+'
-      r'([a-zA-Z0-9_./+~-]+(?:[ \t]+[a-zA-Z0-9_./+~-]+)*)'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t]+[a-zA-Z0-9_./+=~-]+)*)'
       r'(?=$|[^a-zA-Z0-9_])',
       caseSensitive: true,
     );
@@ -641,20 +640,16 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
   String suffix,
   String maskedValue,
 ) {
-  final chunks = RegExp(r'[^ \t]+').allMatches(suffix).toList();
+  final chunks = RegExp(r'\S+').allMatches(suffix).toList();
   var compactSuffix = '';
   var credentialEnd = 0;
   for (final chunk in chunks) {
     final token = chunk.group(0)!.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
     if (token.isEmpty) break;
-    final hasExplicitMarker = RegExp(r'[-_./+~0-9]').hasMatch(token);
-    final hasOpaqueAlphaShape = _legacyOcrHasHighAlphabeticEntropy(
-          token.toLowerCase(),
-          minimumLength: 4,
-          minimumEntropy: 2,
-          maximumVowelRatio: 0.45,
-        ) ||
-        _legacyOcrHasUncommonAlphaContinuation(token);
+    final alphaCount = RegExp(r'[a-zA-Z]').allMatches(token).length;
+    final hasExplicitMarker = alphaCount >= 4 &&
+        (RegExp(r'[-_./+=~]').hasMatch(token) ||
+            (token.length >= 8 && RegExp(r'[0-9]').hasMatch(token)));
     final normalizedToken = token.toLowerCase();
     final isNaturalContinuation = RegExp(
           r'(?:ly|ing|ed|er|est|able|ary|aries|ation|ize|ise|ization|istic|based)$',
@@ -666,43 +661,56 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
         ).hasMatch(token);
     if (isNaturalContinuation) break;
     if (credentialEnd > 0) {
+      final hasNumericCredentialContinuation =
+          RegExp(r'^\d{3,}$').hasMatch(token) &&
+              RegExp(r'[0-9]').hasMatch(compactSuffix);
       final hasStrongContinuationShape = hasExplicitMarker ||
-          _legacyOcrHasHighAlphabeticEntropy(
-            token.toLowerCase(),
-            minimumLength: 4,
-            minimumEntropy: 2,
-            maximumVowelRatio: 0.3,
-          ) ||
-          _legacyOcrHasLongConsonantRun(token);
+          hasNumericCredentialContinuation ||
+          (RegExp(r'^[A-Z]{5,}$').hasMatch(token) &&
+              _legacyOcrHasHighAlphabeticEntropy(
+                token.toLowerCase(),
+                minimumLength: 5,
+                minimumEntropy: 2,
+                maximumVowelRatio: 0.2,
+              )) ||
+          (RegExp(r'^[a-z]{7,}$').hasMatch(token) &&
+              _legacyOcrHasHighAlphabeticEntropy(
+                token,
+                minimumLength: 7,
+                minimumEntropy: 2.8,
+                maximumVowelRatio: 0.3,
+              ));
       if (!hasStrongContinuationShape) break;
       compactSuffix += token;
       credentialEnd = chunk.start + token.length;
       continue;
     }
-    final canBeSplitCredentialFragment =
-        token.length <= 8 || hasExplicitMarker || hasOpaqueAlphaShape;
-    if (!canBeSplitCredentialFragment && credentialEnd == 0) break;
-    if (credentialEnd > 0 && !hasExplicitMarker && !hasOpaqueAlphaShape) {
-      break;
-    }
+    final hasStrongInitialCredentialShape = hasExplicitMarker ||
+        (RegExp(r'^[a-z]{8,}$').hasMatch(token) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              token,
+              minimumLength: 8,
+              minimumEntropy: 3,
+              maximumVowelRatio: 0.34,
+            )) ||
+        (RegExp(r'^[A-Z]{6,}$').hasMatch(token) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              token.toLowerCase(),
+              minimumLength: 6,
+              minimumEntropy: 2,
+              maximumVowelRatio: 0.4,
+            ));
+    if (!hasStrongInitialCredentialShape) break;
     compactSuffix += token;
     if (_legacyOcrTextContainsMaskedCredential(
       'documentation$compactSuffix',
       [maskedValue],
     )) {
       credentialEnd = chunk.start + token.length;
-    } else if (credentialEnd == 0 && !canBeSplitCredentialFragment) {
-      break;
     }
   }
   return credentialEnd;
 }
-
-bool _legacyOcrIsSafeNaturalDocumentationInstruction(String text) => RegExp(
-      r'^\s*(?:please\s+)?read\s+(?:the\s+)?documentation\s+'
-      r'(?:instructions?\s+)?(?:very\s+)?carefully[.!?]?\s*$',
-      caseSensitive: false,
-    ).hasMatch(text);
 
 bool _legacyOcrHasAscendingAlphabetRun(String value) {
   final normalized = value.toLowerCase();
@@ -2298,10 +2306,14 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       return text.contains(candidate);
     });
     if (containsUnmaskedExactCredential) return false;
-    if (text.contains('[redacted]')) {
+    if (text.contains('[redacted]') &&
+        _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
+          sourceText,
+          credentialValues,
+        )) {
       // Validate the complete sanitized prompt while treating our literal
       // replacement marker as neutral text. This preserves safe context around
-      // a redacted echo without allowing a second credential to survive.
+      // this scoped echo without allowing a second credential to survive.
       final neutralizedText = text.replaceAll('[redacted]', 'placeholder');
       if (_legacyOcrTextContainsCredential(
             neutralizedText,
@@ -2585,7 +2597,6 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
   String text,
   Iterable<String> credentialValues,
 ) {
-  if (_legacyOcrIsSafeNaturalDocumentationInstruction(text)) return text;
   var sanitized = text;
   for (final value in credentialValues) {
     final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
@@ -2597,7 +2608,7 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
       r'(^|[^a-zA-Z0-9])'
       r'([dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN])'
       r'([ \t\r\n]+)'
-      r'([a-zA-Z0-9_./+~-]+(?:[ \t]+[a-zA-Z0-9_./+~-]+)*)'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t]+[a-zA-Z0-9_./+=~-]+)*)'
       r'(?=$|[^a-zA-Z0-9_])',
       caseSensitive: true,
     );

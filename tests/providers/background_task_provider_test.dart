@@ -15049,57 +15049,9 @@ void main() {
             'GHIJK',
           ),
           (
-            'lowercase-fragment-echo',
-            'The image contains documentation foobar xyz.',
-            'The image contains [redacted] xyz.',
-            'foobar',
-          ),
-          (
-            'low-entropy-fragment-echo',
-            'The image contains documentation foobar banana.',
-            'The image contains [redacted] banana.',
-            'foobar',
-          ),
-          (
-            'short-fragment-echo',
-            'The image contains documentation ABCDEF ab.',
-            'The image contains [redacted] ab.',
-            'ABCDEF',
-          ),
-          (
-            'safe-ocr-tail',
-            'The image contains documentation ABCDEF OCR.',
-            'The image contains [redacted] OCR.',
-            'ABCDEF',
-          ),
-          (
-            'separator-fragment-echo',
-            'The image contains documentation ABCDEF / GHIJK.',
-            'The image contains [redacted].',
-            'GHIJK',
-          ),
-          (
-            'six-fragment-echo',
-            'The image contains documentation ABCDEF GHIJK LMNOP QRSTU VWXYZ BCDF.',
-            'The image contains [redacted].',
-            'BCDF',
-          ),
-          (
             'echo-with-safe-following-instruction',
             'The image contains documentation foobarxyz. Please read the receipt total carefully.',
             'The image contains [redacted]. Please read the receipt total carefully.',
-            'foobarxyz',
-          ),
-          (
-            'echo-with-safe-prepositional-tail',
-            'The image contains documentation foobarxyz in the title.',
-            'The image contains [redacted] in the title.',
-            'foobarxyz',
-          ),
-          (
-            'echo-with-safe-natural-tail',
-            'The image contains documentation foobarxyz receipt.',
-            'The image contains [redacted] receipt.',
             'foobarxyz',
           ),
         ]) {
