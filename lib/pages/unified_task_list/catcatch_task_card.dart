@@ -118,14 +118,6 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           (s) => s.type == catcatch.StepType.userSelecting && s.running,
         ) &&
         task.detectedMedia.isNotEmpty;
-    final taskListViewportHeight =
-        Scrollable.maybeOf(context)?.position.viewportDimension;
-    final resourceViewportHeight = taskListViewportHeight != null &&
-            taskListViewportHeight.isFinite &&
-            taskListViewportHeight > 0
-        ? taskListViewportHeight * (2 / 3)
-        : MediaQuery.sizeOf(context).height * (2 / 3);
-
     Color statusColor;
     IconData statusIcon;
     switch (task.status) {
@@ -264,35 +256,48 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           if (_expanded) ...[
             const Divider(height: 1, indent: 12, endIndent: 12),
             if (isSelectingMedia)
-              SizedBox(
-                key: const Key('catcatch_task_resource_viewport'),
-                height: resourceViewportHeight,
-                child: Column(
-                  children: [
-                    if (_expandedSegments.contains(task.id) &&
-                        _getMediaSelectionData(task).selectableMedia.any(
-                              (media) => media.isPlaylistSegment,
-                            ))
-                      _buildSegmentCollapseControl(task),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: _buildStepTimeline(task, colorScheme),
+              LayoutBuilder(
+                builder: (context, _) {
+                  final taskListViewportHeight =
+                      Scrollable.maybeOf(context)?.position.viewportDimension;
+                  final resourceViewportHeight =
+                      taskListViewportHeight != null &&
+                              taskListViewportHeight.isFinite &&
+                              taskListViewportHeight > 0
+                          ? taskListViewportHeight * (2 / 3)
+                          : MediaQuery.sizeOf(context).height * (2 / 3);
+                  return SizedBox(
+                    key: const Key('catcatch_task_resource_viewport'),
+                    height: resourceViewportHeight,
+                    child: Column(
+                      children: [
+                        if (_expandedSegments.contains(task.id) &&
+                            _getMediaSelectionData(task).selectableMedia.any(
+                                  (media) => media.isPlaylistSegment,
+                                ))
+                          _buildSegmentCollapseControl(task),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
+                                  child: _buildStepTimeline(task, colorScheme),
+                                ),
+                                if (task.metadata['pendingConfirm'] ==
+                                    'special_format')
+                                  _buildSpecialFormatConfirm(task, colorScheme),
+                                _buildMediaSelection(task, colorScheme),
+                              ],
                             ),
-                            if (task.metadata['pendingConfirm'] ==
-                                'special_format')
-                              _buildSpecialFormatConfirm(task, colorScheme),
-                            _buildMediaSelection(task, colorScheme),
-                          ],
+                          ),
                         ),
-                      ),
+                        _buildMediaSelectionAction(task),
+                      ],
                     ),
-                    _buildMediaSelectionAction(task),
-                  ],
-                ),
+                  );
+                },
               )
             else ...[
               Padding(
