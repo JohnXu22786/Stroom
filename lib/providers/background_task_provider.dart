@@ -5488,7 +5488,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   bool _requiresDurableOcrCacheOwnershipMarker(Object? retryData) {
-    if (retryData is! Map) return false;
+    if (retryData is! Map) {
+      return _ocrCacheReferencesInPersistedValue(retryData).isNotEmpty;
+    }
     try {
       final data = Map<String, dynamic>.from(retryData);
       final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
