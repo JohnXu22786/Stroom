@@ -5471,6 +5471,35 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
         return true;
       }
+      final modelIndex = data['modelIndex'];
+      if (modelIndex != null && modelIndex is! int) return true;
+      final instructionIndex = data['instructionIndex'];
+      if (instructionIndex != null && instructionIndex is! int) return true;
+      final instructionContent = data['instructionContent'];
+      if (instructionContent != null && instructionContent is! String) {
+        return true;
+      }
+      final saveFolder = data['saveFolder'];
+      if (saveFolder != null && saveFolder is! String) return true;
+      final batchMode = data['batchMode'];
+      if (batchMode != null &&
+          (batchMode is! String ||
+              (batchMode != OcrBatchMode.joint.name &&
+                  batchMode != OcrBatchMode.perImage.name))) {
+        return true;
+      }
+      final perImageConcurrency = data['perImageConcurrency'];
+      if (perImageConcurrency != null &&
+          (perImageConcurrency is! int ||
+              perImageConcurrency < 1 ||
+              perImageConcurrency > 2)) {
+        return true;
+      }
+      final requestSizeBudgetBytes = data['requestSizeBudgetBytes'];
+      if (requestSizeBudgetBytes != null &&
+          (requestSizeBudgetBytes is! int || requestSizeBudgetBytes <= 0)) {
+        return true;
+      }
 
       const snapshotFields = {
         'type',

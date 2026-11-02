@@ -19112,6 +19112,13 @@ void main() {
           ],
           retryFields: {'version': 99},
         );
+        await expectUnknownOwnership(
+          'ocr-invalid-instruction-content-owner',
+          <dynamic>[],
+          retryFields: {
+            'instructionContent': {'storageRef': validReference},
+          },
+        );
       },
     );
 
