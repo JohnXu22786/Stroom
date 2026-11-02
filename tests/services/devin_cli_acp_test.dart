@@ -286,8 +286,7 @@ void main() {
       const suffix = '"}}';
       final fillLength =
           DevinCliAcpJsonRpc.maxFrameBytes - prefix.length - suffix.length;
-      final payload =
-          prefix +
+      final payload = prefix +
           String.fromCharCodes(List<int>.filled(fillLength, 0x61)) +
           suffix;
       expect(utf8.encode(payload), hasLength(DevinCliAcpJsonRpc.maxFrameBytes));
@@ -1037,15 +1036,14 @@ class _FakeAcpLauncher implements DevinCliAcpProcessLauncher {
       holdPrompt: holdPrompt,
       immediateExitCode:
           launch.arguments.join(' ') == 'auth status' && !holdAuthStatus
-          ? authStatusExitCode
-          : launch.arguments.join(' ') == 'auth login' && !holdLogin
-          ? 0
-          : launch.arguments.join(' ') == 'auth logout'
-          ? 0
-          : null,
-      stdoutError: launch.arguments.join(' ') == 'auth status'
-          ? authStdoutError
-          : null,
+              ? authStatusExitCode
+              : launch.arguments.join(' ') == 'auth login' && !holdLogin
+                  ? 0
+                  : launch.arguments.join(' ') == 'auth logout'
+                      ? 0
+                      : null,
+      stdoutError:
+          launch.arguments.join(' ') == 'auth status' ? authStdoutError : null,
       unsupportedAgentMessageChunk: unsupportedAgentMessageChunk,
     );
     processes.add(process);

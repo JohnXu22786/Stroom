@@ -152,9 +152,9 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
     DevinCliAcpProcessLauncher? launcher,
     Future<String> Function()? supportDirectory,
     Map<String, String> Function()? parentEnvironment,
-  }) : _launcher = launcher ?? IoDevinCliAcpProcessLauncher(),
-       _supportDirectory = supportDirectory ?? _defaultSupportDirectory,
-       _parentEnvironment = parentEnvironment ?? (() => Platform.environment);
+  })  : _launcher = launcher ?? IoDevinCliAcpProcessLauncher(),
+        _supportDirectory = supportDirectory ?? _defaultSupportDirectory,
+        _parentEnvironment = parentEnvironment ?? (() => Platform.environment);
 
   static Future<String> _defaultSupportDirectory() async =>
       (await getApplicationSupportDirectory()).path;
@@ -222,19 +222,18 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
     }
     final existing = _logoutInFlight[account.id];
     if (existing != null) return existing;
-    final logout =
-        _withAccountLifecycle(account.id, () async {
-          _loggedOutAccounts.add(account.id);
-          final active =
-              _activeProcesses.remove(account.id) ?? <DevinCliAcpProcess>{};
-          await Future.wait([
-            for (final process in active) process.terminate(),
-          ]);
-          final home = await _home(account.id);
-          await _logoutAndDelete(home, account);
-        }).whenComplete(() {
-          _logoutInFlight.remove(account.id);
-        });
+    final logout = _withAccountLifecycle(account.id, () async {
+      _loggedOutAccounts.add(account.id);
+      final active =
+          _activeProcesses.remove(account.id) ?? <DevinCliAcpProcess>{};
+      await Future.wait([
+        for (final process in active) process.terminate(),
+      ]);
+      final home = await _home(account.id);
+      await _logoutAndDelete(home, account);
+    }).whenComplete(() {
+      _logoutInFlight.remove(account.id);
+    });
     _logoutInFlight[account.id] = logout;
     return logout;
   }
@@ -590,21 +589,20 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
               await _disposeStartedSession(account.id, session);
               return;
             }
-            responseSubscription =
-                _streamPrompt(
-                  rpc: session.rpc,
-                  process: session.process,
-                  accountId: account.id,
-                  workspace: session.workspace,
-                  sessionId: session.sessionId,
-                  prompt: prompt,
-                  cancelToken: streamCancelToken,
-                  onRequestSent: onRequestSent,
-                ).listen(
-                  output.add,
-                  onError: output.addError,
-                  onDone: output.close,
-                );
+            responseSubscription = _streamPrompt(
+              rpc: session.rpc,
+              process: session.process,
+              accountId: account.id,
+              workspace: session.workspace,
+              sessionId: session.sessionId,
+              prompt: prompt,
+              cancelToken: streamCancelToken,
+              onRequestSent: onRequestSent,
+            ).listen(
+              output.add,
+              onError: output.addError,
+              onDone: output.close,
+            );
           } catch (error, stackTrace) {
             if (!setupComplete.isCompleted) setupComplete.complete();
             if (output.hasListener) {
@@ -866,10 +864,14 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
               ..add(
                 utf8.encode(
                   'data: ${jsonEncode({
-                    'choices': [
-                      {'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'},
-                    ],
-                  })}\n\n',
+                        'choices': [
+                          {
+                            'index': 0,
+                            'delta': <String, Object?>{},
+                            'finish_reason': 'stop'
+                          },
+                        ],
+                      })}\n\n',
                 ),
               )
               ..add(utf8.encode('data: [DONE]\n\n'));
@@ -913,16 +915,16 @@ class DevinCliAcpService implements AiGatewayLocalCliAuthentication {
   }
 
   static List<int> _sseContent(String text) => utf8.encode(
-    'data: ${jsonEncode({
-      'choices': [
-        {
-          'index': 0,
-          'delta': {'content': text},
-          'finish_reason': null,
-        },
-      ],
-    })}\n\n',
-  );
+        'data: ${jsonEncode({
+              'choices': [
+                {
+                  'index': 0,
+                  'delta': {'content': text},
+                  'finish_reason': null,
+                },
+              ],
+            })}\n\n',
+      );
 
   static String _safeToolTitle(String value) {
     final sanitized = value

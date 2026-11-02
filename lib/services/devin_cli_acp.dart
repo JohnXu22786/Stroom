@@ -7,8 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'devin_cli_acp_permissions_stub.dart'
-    if (dart.library.ffi) 'devin_cli_acp_permissions_ffi.dart'
-    as permissions;
+    if (dart.library.ffi) 'devin_cli_acp_permissions_ffi.dart' as permissions;
 
 /// The only Devin CLI commands Stroom starts for this account mode.
 ///
@@ -44,52 +43,56 @@ class DevinCliAcpLaunch {
     required String executableSha256,
     required Map<String, String> parentEnvironment,
     String? temporaryDirectory,
-  }) => DevinCliAcpLaunch._(
-    executablePath,
-    executableSha256,
-    List.unmodifiable(acpArguments),
-    _isolatedEnvironment(
-      homePath,
-      parentEnvironment,
-      temporaryDirectory: temporaryDirectory,
-    ),
-  );
+  }) =>
+      DevinCliAcpLaunch._(
+        executablePath,
+        executableSha256,
+        List.unmodifiable(acpArguments),
+        _isolatedEnvironment(
+          homePath,
+          parentEnvironment,
+          temporaryDirectory: temporaryDirectory,
+        ),
+      );
 
   factory DevinCliAcpLaunch.forLogin({
     required String homePath,
     required String executablePath,
     required String executableSha256,
     required Map<String, String> parentEnvironment,
-  }) => DevinCliAcpLaunch._(
-    executablePath,
-    executableSha256,
-    List.unmodifiable(loginArguments),
-    _isolatedEnvironment(homePath, parentEnvironment),
-  );
+  }) =>
+      DevinCliAcpLaunch._(
+        executablePath,
+        executableSha256,
+        List.unmodifiable(loginArguments),
+        _isolatedEnvironment(homePath, parentEnvironment),
+      );
 
   factory DevinCliAcpLaunch.forLogout({
     required String homePath,
     required String executablePath,
     required String executableSha256,
     required Map<String, String> parentEnvironment,
-  }) => DevinCliAcpLaunch._(
-    executablePath,
-    executableSha256,
-    List.unmodifiable(logoutArguments),
-    _isolatedEnvironment(homePath, parentEnvironment),
-  );
+  }) =>
+      DevinCliAcpLaunch._(
+        executablePath,
+        executableSha256,
+        List.unmodifiable(logoutArguments),
+        _isolatedEnvironment(homePath, parentEnvironment),
+      );
 
   factory DevinCliAcpLaunch.forStatus({
     required String homePath,
     required String executablePath,
     required String executableSha256,
     required Map<String, String> parentEnvironment,
-  }) => DevinCliAcpLaunch._(
-    executablePath,
-    executableSha256,
-    List.unmodifiable(statusArguments),
-    _isolatedEnvironment(homePath, parentEnvironment),
-  );
+  }) =>
+      DevinCliAcpLaunch._(
+        executablePath,
+        executableSha256,
+        List.unmodifiable(statusArguments),
+        _isolatedEnvironment(homePath, parentEnvironment),
+      );
 
   static Map<String, String> _isolatedEnvironment(
     String homePath,
@@ -117,7 +120,11 @@ class DevinCliAcpLaunch {
         'USERPROFILE': home,
         'APPDATA': p.join(home, 'AppData', 'Roaming'),
         'LOCALAPPDATA': p.join(home, 'AppData', 'Local'),
-        'SystemRoot': ?parentEnvironment['SystemRoot'],
+        // Keep Dart 3.0 formatter compatibility; newer null-aware map entries
+        // are preferred by the analyzer but cannot be parsed by CI formatting.
+        // ignore: use_null_aware_elements
+        if (parentEnvironment['SystemRoot'] case final systemRoot?)
+          'SystemRoot': systemRoot,
       },
     });
   }
@@ -125,7 +132,7 @@ class DevinCliAcpLaunch {
   /// Copies the approved CLI into a private directory and verifies the copy
   /// itself before it is launched, closing the verify-then-open path race.
   Future<({Directory directory, String executablePath})>
-  prepareApprovedExecutableCopy() async {
+      prepareApprovedExecutableCopy() async {
     final currentApproval = await approveExecutablePath(executablePath);
     if (currentApproval.path != executablePath ||
         currentApproval.sha256 != executableSha256.toLowerCase()) {
@@ -166,9 +173,8 @@ class DevinCliAcpLaunch {
     }
     final file = File(trimmedPath);
     final canonicalPath = await file.resolveSymbolicLinks();
-    final expectedFileName = Platform.isWindows
-        ? '$fixedExecutable.exe'
-        : fixedExecutable;
+    final expectedFileName =
+        Platform.isWindows ? '$fixedExecutable.exe' : fixedExecutable;
     if (p.basename(canonicalPath).toLowerCase() !=
         expectedFileName.toLowerCase()) {
       throw const FileSystemException(
@@ -273,7 +279,8 @@ abstract final class DevinCliAcpJsonRpc {
       'jsonrpc': '2.0',
       'id': id,
       'method': method,
-      'params': ?params,
+      // ignore: use_null_aware_elements
+      if (params != null) 'params': params,
     });
   }
 
@@ -287,7 +294,8 @@ abstract final class DevinCliAcpJsonRpc {
     return _encodeFrame({
       'jsonrpc': '2.0',
       'method': method,
-      'params': ?params,
+      // ignore: use_null_aware_elements
+      if (params != null) 'params': params,
     });
   }
 
@@ -295,11 +303,12 @@ abstract final class DevinCliAcpJsonRpc {
     required Object id,
     required int code,
     required String message,
-  }) => _encodeFrame({
-    'jsonrpc': '2.0',
-    'id': id,
-    'error': {'code': code, 'message': message},
-  });
+  }) =>
+      _encodeFrame({
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': {'code': code, 'message': message},
+      });
 
   static String _encodeFrame(Map<String, Object?> message) {
     final encoded = jsonEncode(message);
@@ -377,5 +386,5 @@ abstract final class DevinCliAcpJsonRpc {
 
 class DevinCliAcpUnsupportedProtocolVersion extends UnsupportedError {
   DevinCliAcpUnsupportedProtocolVersion()
-    : super('The Devin CLI ACP version is not supported.');
+      : super('The Devin CLI ACP version is not supported.');
 }

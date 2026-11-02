@@ -15,11 +15,8 @@ Future<void> restrictDirectory(String path) async {
     );
   }
   final library = DynamicLibrary.process();
-  final chmod = library
-      .lookupFunction<
-        Int32 Function(Pointer<Utf8>, Uint32),
-        int Function(Pointer<Utf8>, int)
-      >('chmod');
+  final chmod = library.lookupFunction<Int32 Function(Pointer<Utf8>, Uint32),
+      int Function(Pointer<Utf8>, int)>('chmod');
   final nativePath = path.toNativeUtf8();
   try {
     if (chmod(nativePath, 0x1c0) != 0) {
@@ -38,11 +35,8 @@ Future<void> restrictExecutable(String path) async {
     );
   }
   final library = DynamicLibrary.process();
-  final chmod = library
-      .lookupFunction<
-        Int32 Function(Pointer<Utf8>, Uint32),
-        int Function(Pointer<Utf8>, int)
-      >('chmod');
+  final chmod = library.lookupFunction<Int32 Function(Pointer<Utf8>, Uint32),
+      int Function(Pointer<Utf8>, int)>('chmod');
   final nativePath = path.toNativeUtf8();
   try {
     if (chmod(nativePath, 0x140) != 0) {
