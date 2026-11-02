@@ -15022,8 +15022,7 @@ void main() {
           },
         });
         final persisted = jsonEncode(task.toMap());
-        final serializedTask =
-            jsonDecode(persisted) as Map<String, dynamic>;
+        final serializedTask = jsonDecode(persisted) as Map<String, dynamic>;
         final serializedRetryData =
             serializedTask['retryData'] as Map<String, dynamic>;
 
