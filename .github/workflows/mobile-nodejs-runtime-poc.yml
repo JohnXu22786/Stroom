@@ -60,6 +60,15 @@ jobs:
           printf '%s  %s\n' \
             bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af \
             "$RUNNER_TEMP/nodejs-mobile-android.zip" | sha256sum --check
+          curl --fail --location --retry 2 \
+            https://registry.npmjs.org/npm/-/npm-10.8.2.tgz \
+            --output "$RUNNER_TEMP/npm-10.8.2.tgz"
+          expected_npm_integrity='sha512-x/AIjFIKRllrhcb48dqUNAAZl0ig9+qMuN91RpZo3Cb2+zuibfh+KISl6+kVVyktDz230JKc208UkQwwMqyB+w=='
+          actual_npm_integrity="sha512-$(openssl dgst -sha512 -binary "$RUNNER_TEMP/npm-10.8.2.tgz" | openssl base64 -A)"
+          test "$actual_npm_integrity" = "$expected_npm_integrity"
+          mkdir -p nodejs-mobile/test/npm/package
+          tar -xzf "$RUNNER_TEMP/npm-10.8.2.tgz" --strip-components=1 \
+            -C nodejs-mobile/test/npm/package
           for abi in arm64-v8a armeabi-v7a x86_64; do
             mkdir -p "nodejs-mobile/out_android/$abi"
             unzip -p "$RUNNER_TEMP/nodejs-mobile-android.zip" "bin/$abi/libnode.so" \
