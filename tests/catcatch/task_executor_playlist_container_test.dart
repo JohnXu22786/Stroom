@@ -20,15 +20,13 @@ void main() {
         'vnd.apple.mpegurl',
       );
       request.response.write(switch (request.uri.path) {
-        '/transport.m3u8' =>
-          '''
+        '/transport.m3u8' => '''
 #EXTM3U
 #EXTINF:4.0,
 transport.ts
 #EXT-X-ENDLIST
 ''',
-        '/fragmented.m3u8' =>
-          '''
+        '/fragmented.m3u8' => '''
 #EXTM3U
 #EXT-X-MAP:URI="init.mp4"
 #EXTINF:4.0,

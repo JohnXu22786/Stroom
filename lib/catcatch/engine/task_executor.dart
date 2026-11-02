@@ -160,8 +160,8 @@ class TaskExecutor {
                     ...task.metadata,
                     PlaylistMergedExtensions.metadataKey:
                         PlaylistMergedExtensions.encode(
-                          result.mergedExtensions,
-                        ),
+                      result.mergedExtensions,
+                    ),
                   },
                 );
               }
@@ -632,9 +632,8 @@ class TaskExecutor {
 
   /// Step 2: 解析播放列表
   static Future<
-    ({List<MediaResource> media, Map<String, String> mergedExtensions})?
-  >
-  _executeParsePlaylist({
+          ({List<MediaResource> media, Map<String, String> mergedExtensions})?>
+      _executeParsePlaylist({
     required CatCatchTask task,
     required List<StepStatus> steps,
     required List<MediaResource> media,
@@ -707,8 +706,8 @@ class TaskExecutor {
       final selectedPlaylistResources = pl.isM3U8
           ? playlistResources
           : playlistResources
-                .where((resource) => existingUrls.add(resource.url))
-                .toList();
+              .where((resource) => existingUrls.add(resource.url))
+              .toList();
       final segmentMedia = selectedPlaylistResources.map((resource) {
         final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
