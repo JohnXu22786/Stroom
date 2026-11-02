@@ -10,6 +10,13 @@ registry=${MOBILE_RUNTIME_NPM_REGISTRY:-https://registry.npmjs.org}
 script_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 adb wait-for-device
+
+start_with_nodeargs() {
+  local nodeargs=$1 remote_nodeargs
+  remote_nodeargs=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "$nodeargs")
+  adb shell "am start -W -n $component --es nodeargs $remote_nodeargs"
+}
+
 echo '===== Prepare app-private test assets ====='
 prepare_output=$(adb shell am start -W -n "$component" 2>&1) || {
   printf '%s\n' "$prepare_output"
@@ -42,7 +49,7 @@ run_node() {
   adb logcat -c >/dev/null 2>&1 || true
   echo "===== Start $label ====="
   local start_output
-  start_output=$(adb shell am start -W -n "$component" --es nodeargs "$nodeargs" 2>&1) || {
+  start_output=$(start_with_nodeargs "$nodeargs" 2>&1) || {
     printf '%s\n' "$start_output"
     adb logcat -d -v threadtime -t 400 2>&1 || true
     return 1
@@ -77,7 +84,7 @@ run_expected_raw_failure() {
   adb logcat -c >/dev/null 2>&1 || true
   echo '===== Confirm unpatched UTF-8 module read failure ====='
   local output log i
-  output=$(adb shell am start -W -n "$component" --es nodeargs \
+  output=$(start_with_nodeargs \
     "-p (console.log('RAW_REQUIRE_BEGIN_mobile_runtime_poc'),require('$fixture/verify-install.cjs'))" 2>&1) || {
     printf '%s\n' "$output"
     adb logcat -d -v threadtime -t 400 2>&1 || true
