@@ -16,7 +16,7 @@ class M3U8Parser {
   // 公共 API
   // ===========================================================================
 
-  /// 解析 m3u8 内容，返回所有 TS 分段 URL 列表
+  /// 解析 m3u8 内容，返回初始化资源和媒体分段 URL 列表
   ///
   /// [content] M3U8 文本内容
   /// [baseUrl] 用于将相对路径拼装为绝对 URL
@@ -44,7 +44,15 @@ class M3U8Parser {
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
+      if (line.startsWith('#EXT-X-MAP:')) {
+        final attributes = _parseTagParams(
+          line.substring('#EXT-X-MAP:'.length),
+        );
+        final initializationUrl = attributes['URI'];
+        if (initializationUrl != null) {
+          segments.add(_resolveUrl(initializationUrl, baseUrl));
+        }
+      } else if (line.startsWith('#EXTINF:')) {
         if (i + 1 < lines.length) {
           final urlLine = lines[i + 1].trim();
           if (!urlLine.startsWith('#')) {
@@ -54,7 +62,7 @@ class M3U8Parser {
       }
     }
 
-    debugPrint('[M3U8Parser] Parsed ${segments.length} segments');
+    debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
     return segments;
   }
 
