@@ -26,20 +26,34 @@ class M3U8Parser {
     String content,
     String baseUrl,
   ) async {
+    final parsed = await parsePlaylistWithDetails(content, baseUrl);
+    return parsed.resources;
+  }
+
+  /// Parses playlist resources and reports the media-fragment count separately
+  /// from initialization resources such as `#EXT-X-MAP`.
+  static Future<({List<String> resources, int mediaSegmentCount})>
+      parsePlaylistWithDetails(
+    String content,
+    String baseUrl,
+  ) async {
     final lines = _normalizeLines(content);
     final segments = <String>[];
+    var mediaSegmentCount = 0;
 
     if (_hasStreamInf(lines)) {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
       final variants = _parseStreamInf(lines);
-      if (variants.isEmpty) return [];
+      if (variants.isEmpty) {
+        return (resources: <String>[], mediaSegmentCount: 0);
+      }
       // 按带宽降序排序，选最高码率
       variants.sort((a, b) => (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0));
       final selectedUrl = _resolveUrl(variants.first.url, baseUrl);
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
       final subContent = await _fetchUrl(selectedUrl);
-      return parsePlaylist(subContent, selectedUrl);
+      return parsePlaylistWithDetails(subContent, selectedUrl);
     }
 
     for (int i = 0; i < lines.length; i++) {
@@ -57,13 +71,14 @@ class M3U8Parser {
           final urlLine = lines[i + 1].trim();
           if (!urlLine.startsWith('#')) {
             segments.add(_resolveUrl(urlLine, baseUrl));
+            mediaSegmentCount++;
           }
         }
       }
     }
 
     debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
-    return segments;
+    return (resources: segments, mediaSegmentCount: mediaSegmentCount);
   }
 
   /// 获取所有分段的时长信息（秒），用于 ±2s 时长筛选

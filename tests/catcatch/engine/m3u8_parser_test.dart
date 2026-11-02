@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/m3u8_parser.dart';
 
 void main() {
-  test('includes the resolved initialization map before media segments',
+  test('counts media fragments without counting the initialization map',
       () async {
     const playlist = '''
 #EXTM3U
@@ -13,12 +13,13 @@ segment-1.m4s
 #EXT-X-ENDLIST
 ''';
 
-    final resources = await M3U8Parser.parsePlaylist(
+    final parsed = await M3U8Parser.parsePlaylistWithDetails(
       playlist,
       'https://example.com/hls/playlist.m3u8',
     );
 
-    expect(resources, [
+    expect(parsed.mediaSegmentCount, 1);
+    expect(parsed.resources, [
       'https://example.com/hls/init.mp4',
       'https://example.com/hls/segment-1.m4s',
     ]);

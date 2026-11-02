@@ -649,10 +649,17 @@ class TaskExecutor {
         dio.close();
       }
       List<String> segments;
+      var mediaSegmentCount = 0;
       if (pl.isM3U8) {
-        segments = await M3U8Parser.parsePlaylist(content, pl.url);
+        final parsed = await M3U8Parser.parsePlaylistWithDetails(
+          content,
+          pl.url,
+        );
+        segments = parsed.resources;
+        mediaSegmentCount = parsed.mediaSegmentCount;
       } else if (pl.isMPD) {
         segments = await MPDParser.parseManifest(content, pl.url);
+        mediaSegmentCount = segments.length;
       } else {
         continue;
       }
@@ -685,7 +692,7 @@ class TaskExecutor {
         steps,
         2,
         done: true,
-        detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）',
+        detail: '获取到$totalCount个资源（播放列表$mediaSegmentCount个分段）',
       );
       return [...enrichedMedia, ...segmentMedia];
     }
