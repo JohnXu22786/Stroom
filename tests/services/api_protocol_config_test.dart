@@ -119,6 +119,35 @@ void main() {
       }
     });
 
+    test('OpenCode account mode does not select supplier or model protocol', () {
+      for (final connector in ['opencode-go', 'opencode-zen']) {
+        expect(
+          builtinDefaultApiProtocolForConnector(connector),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: connector,
+          ),
+          {'openai.chat_completions', 'openai.responses', 'anthropic.messages'},
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+          ),
+          'anthropic.messages',
+          reason: 'the model override wins without changing connector identity',
+        );
+        expect(
+          resolveConnectorProtocol('openai.responses', connector),
+          'openai.responses',
+        );
+      }
+    });
+
     test(
       'GLM and MiniMax regional account IDs keep Chat protocol defaults',
       () {

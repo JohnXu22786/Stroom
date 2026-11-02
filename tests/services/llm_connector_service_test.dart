@@ -44,6 +44,8 @@ void main() {
           'aistudio',
           'vertex',
           'openai-compatibility',
+          'opencode-go',
+          'opencode-zen',
           'ollama',
           'glm-cn',
           'minimax-cn',
@@ -105,6 +107,19 @@ void main() {
       );
       expect(LlmConnectorRegistry.find('kimi-coding')!.authTypes, {'oauth'});
       expect(LlmConnectorRegistry.find('meta')!.authTypes, {'api_key'});
+      for (final (id, label) in [
+        ('opencode-go', 'OpenCode Go'),
+        ('opencode-zen', 'OpenCode Zen'),
+      ]) {
+        final connector = LlmConnectorRegistry.find(id)!;
+        expect(connector.displayName, label, reason: id);
+        expect(connector.authTypes, {'api_key'}, reason: id);
+        expect(LlmConnectorRegistry.chatAdapterEndpointType(id), 'openai');
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(id, 'api_key'),
+          isTrue,
+        );
+      }
       expect(LlmConnectorRegistry.find('muse-code')!.authTypes, {'oauth'});
       expect(LlmConnectorRegistry.find('muse-code')!.modelCatalog.toSet(), {
         'muse-spark-1.3',
@@ -449,6 +464,196 @@ void main() {
       );
       expect(vertex.modelCatalog, contains('imagen-4.0-generate-001'));
     });
+  });
+
+  group('OpenCode Go and Zen account modes', () {
+    test('discovers each account catalog with its own endpoint and key', () async {
+      for (final (connectorType, expectedUrl) in [
+        ('opencode-go', 'https://opencode.ai/zen/go/v1/models'),
+        ('opencode-zen', 'https://opencode.ai/zen/v1/models'),
+      ]) {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'catalog-model',
+                    'capabilities': {'chat': true, 'streaming': true},
+                  },
+                  {
+                    'id': 'vision-model',
+                    'capabilities': {'vision': true},
+                  },
+                  {'id': 'model-with-unknown-capabilities'},
+                  {'id': 'gemini-3.1-pro'},
+                  {'id': 'jev-score-model'},
+                  {'id': 'text-embedding-v4'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final preferences = _MemoryPreferences();
+        final service = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account('catalog-$connectorType', connectorType),
+          secret: 'private-$connectorType-key',
+        );
+
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(captured?.uri.toString(), expectedUrl);
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer private-$connectorType-key',
+        );
+        expect(
+          await service.readCredential(account.id),
+          'private-$connectorType-key',
+        );
+        expect(
+          jsonEncode(account.toMap()),
+          isNot(contains('private-$connectorType-key')),
+        );
+        expect(
+          preferences.values.values.join(),
+          isNot(contains('private-$connectorType-key')),
+        );
+        expect(models.map((model) => model.upstreamModelId), [
+          'catalog-model',
+          'vision-model',
+          'model-with-unknown-capabilities',
+        ]);
+        expect(models[0].capabilities, {'chat': true, 'streaming': true});
+        expect(models[1].capabilities, {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+        });
+        expect(models[2].capabilities, {'chat': true, 'streaming': true});
+      }
+    });
+
+    test('builds all verified protocol requests on each provider endpoint', () {
+      const cases = [
+        (
+          'opencode-go',
+          'openai.chat_completions',
+          'https://opencode.ai/zen/go/v1/chat/completions',
+        ),
+        (
+          'opencode-go',
+          'openai.responses',
+          'https://opencode.ai/zen/go/v1/responses',
+        ),
+        (
+          'opencode-go',
+          'anthropic.messages',
+          'https://opencode.ai/zen/go/v1/messages',
+        ),
+        (
+          'opencode-zen',
+          'openai.chat_completions',
+          'https://opencode.ai/zen/v1/chat/completions',
+        ),
+        (
+          'opencode-zen',
+          'openai.responses',
+          'https://opencode.ai/zen/v1/responses',
+        ),
+        (
+          'opencode-zen',
+          'anthropic.messages',
+          'https://opencode.ai/zen/v1/messages',
+        ),
+      ];
+      for (final (connectorType, protocol, expectedUrl) in cases) {
+        final account = _account('request-$connectorType', connectorType);
+        final request = LlmNativeRequestBuilder().build(
+          account: account,
+          credential: 'private-$connectorType-key',
+          modelId: 'catalog-model',
+          body: const {'model': 'catalog-model', 'messages': []},
+          stream: true,
+          nativeFormat: switch (protocol) {
+            'openai.responses' => 'responses',
+            'anthropic.messages' => 'anthropic',
+            _ => null,
+          },
+        );
+        expect(request.uri.toString(), expectedUrl, reason: protocol);
+        expect((request.body as Map)['stream'], isTrue, reason: protocol);
+        expect(
+          protocol == 'anthropic.messages'
+              ? request.headers['x-api-key']
+              : request.headers['Authorization'],
+          protocol == 'anthropic.messages'
+              ? 'private-$connectorType-key'
+              : 'Bearer private-$connectorType-key',
+        );
+      }
+    });
+
+    test('blocks models that require a separate provider-specific API', () {
+      for (final connectorType in ['opencode-go', 'opencode-zen']) {
+        for (final modelId in ['gemini-3.1-pro', 'jev-score-model']) {
+          expect(
+            () => LlmNativeRequestBuilder().build(
+              account: _account('unsupported-$connectorType', connectorType),
+              credential: 'private-$connectorType-key',
+              modelId: modelId,
+              body: {'model': modelId, 'messages': []},
+            ),
+            throwsA(isA<LlmAccountConnectorException>()),
+          );
+        }
+      }
+    });
+
+    test(
+      'rejects a failed catalog request without exposing key material',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString(
+              '{"error":"private-opencode-key is invalid"}',
+              401,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account('failed-opencode', 'opencode-go'),
+          secret: 'private-opencode-key',
+        );
+
+        try {
+          await service.discoverModels(account, refreshRemote: true);
+          fail('Expected the rejected catalog request to fail.');
+        } on LlmAccountConnectorException catch (error) {
+          expect(error.toString(), isNot(contains('private-opencode-key')));
+        }
+      },
+    );
   });
 
   group('LlmAccountConnectorService', () {
@@ -5875,6 +6080,8 @@ void main() {
           ('glm', 'https://open.bigmodel.cn/api/paas/v4/chat/completions'),
           ('deepseek', 'https://api.deepseek.com/chat/completions'),
           ('minimax', 'https://api.minimax.io/v1/chat/completions'),
+          ('opencode-go', 'https://opencode.ai/zen/go/v1/chat/completions'),
+          ('opencode-zen', 'https://opencode.ai/zen/v1/chat/completions'),
           (
             'qwen',
             'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -5926,6 +6133,16 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
+      for (final provider in ['opencode-go', 'opencode-zen']) {
+        final request = requests.singleWhere(
+          (request) => request.uri.host == 'opencode.ai' &&
+              request.uri.path.startsWith(
+                provider == 'opencode-go' ? '/zen/go/' : '/zen/v1/',
+              ) &&
+              request.uri.path.endsWith('/chat/completions'),
+        );
+        expect(request.headers['Authorization'], 'Bearer $provider-test-key');
+      }
       final museRequest = requests.firstWhere(
         (request) =>
             request.uri.host == 'api.meta.ai' &&
