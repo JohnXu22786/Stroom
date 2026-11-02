@@ -5952,8 +5952,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           if (task.type == BackgroundTaskType.ocr &&
               !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
             // A parsed task can still carry a future or ambiguous retry shape
-            // whose cache owners this version cannot enumerate.
+            // whose cache owners this version cannot enumerate. Keep the raw
+            // persisted row authoritative until a version that understands
+            // its ownership can safely rewrite it.
             cleanupSafe = false;
+            isComplete = false;
+            isCompleteExceptLegacyAsr = false;
           }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];

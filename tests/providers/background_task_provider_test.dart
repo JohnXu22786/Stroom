@@ -18607,9 +18607,17 @@ void main() {
 
         final notifier = BackgroundTaskNotifier();
         try {
-          await notifier.restoreFromPersistence();
+          expect(await notifier.restoreFromPersistence(), isFalse);
           expect(notifier.taskById('future-ocr-retry-owner'), isNotNull);
           expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          final persistedRetryData = (persistedRows.single
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+          expect(persistedRetryData['version'], 99);
+          expect(persistedRetryData['additionalCacheRefs'], [
+            'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
+          ]);
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
