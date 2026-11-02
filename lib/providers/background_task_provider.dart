@@ -5517,6 +5517,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (images != null && images is! List) {
         return true;
       }
+      var hasValidImageCacheReference = false;
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
@@ -5538,6 +5539,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                   !OcrRetryImage.isValidStorageReference(storageRef))) {
             return true;
           }
+          hasValidImageCacheReference |= storageRef is String &&
+              OcrRetryImage.isValidStorageReference(storageRef);
           final format = image['format'];
           if (format != null && format is! String) {
             return true;
@@ -5551,6 +5554,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             return true;
           }
         }
+      }
+      const supportedVersions = {1, 2, OcrRetrySnapshot.currentVersion};
+      final version = data['version'];
+      if (hasValidImageCacheReference &&
+          version != null &&
+          (version is! int || !supportedVersions.contains(version))) {
+        return true;
       }
       return false;
     } catch (_) {

@@ -19101,6 +19101,17 @@ void main() {
             },
           ],
         );
+        await expectUnknownOwnership(
+          'ocr-unsupported-version-reference-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+            },
+          ],
+          retryFields: {'version': 99},
+        );
       },
     );
 
