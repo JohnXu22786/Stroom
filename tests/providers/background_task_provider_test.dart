@@ -473,7 +473,7 @@ void main() {
         try {
           expect(await notifier.restoreFromPersistence(), isTrue);
           expect(notifier.taskById(taskId)?.status, TaskStatus.waiting);
-          expect(notifier.startTask(taskId), isTrue);
+          expect(notifier.startTaskIfWaiting(taskId), isTrue);
           await notifier.pendingPersistence;
           final runningTask = notifier.taskById(taskId)!;
           expect(runningTask.status, TaskStatus.running);
