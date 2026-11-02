@@ -115,6 +115,38 @@ void main() {
   });
 
   testWidgets(
+      'media action stays reachable while the resource list scrolls within its cap',
+      (tester) async {
+    final media = List.generate(
+      60,
+      (index) => MediaResource(
+        url: 'https://x/$index.mp4',
+        name: 'resource-$index',
+        ext: 'mp4',
+      ),
+    );
+    final task = _task(media).copyWith(steps: [
+      StepStatus.done(
+        StepType.fetching,
+        detail: List.filled(80, 'expanded task detail').join(' '),
+      ),
+      StepStatus.running(StepType.userSelecting),
+    ]);
+    await _pump(tester, task);
+    await tester.tap(find.text(StepType.fetching.label));
+    await tester.pumpAndSettle();
+
+    final action = find.text('请选择要下载的资源');
+    final actionRect = tester.getRect(action);
+    final listRect =
+        tester.getRect(find.byKey(const Key('catcatch_resource_list')));
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
+    expect(listRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
+  });
+
+  testWidgets(
       'downstream-filtered prompt hides incompatible resource and submits allowed item',
       (tester) async {
     const audioA =

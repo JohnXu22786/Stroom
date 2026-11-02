@@ -113,6 +113,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   Widget build(BuildContext context) {
     final task = widget.task;
     final colorScheme = Theme.of(context).colorScheme;
+    final isSelectingMedia =
+        task.status == catcatch.TaskStatus.running &&
+        task.steps.any(
+          (s) => s.type == catcatch.StepType.userSelecting && s.running,
+        ) &&
+        task.detectedMedia.isNotEmpty;
 
     Color statusColor;
     IconData statusIcon;
@@ -251,18 +257,38 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           if (_expanded) ...[
             const Divider(height: 1, indent: 12, endIndent: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: _buildStepTimeline(task, colorScheme),
-            ),
-            if (task.metadata['pendingConfirm'] == 'special_format')
-              _buildSpecialFormatConfirm(task, colorScheme),
-            if (task.status == catcatch.TaskStatus.running &&
-                task.steps.any(
-                  (s) => s.type == catcatch.StepType.userSelecting && s.running,
-                ) &&
-                task.detectedMedia.isNotEmpty) ...[
-              _buildMediaSelection(task, colorScheme),
+            if (isSelectingMedia)
+              SizedBox(
+                height: MediaQuery.sizeOf(context).height * (2 / 3),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: _buildStepTimeline(task, colorScheme),
+                            ),
+                            if (task.metadata['pendingConfirm'] ==
+                                'special_format')
+                              _buildSpecialFormatConfirm(task, colorScheme),
+                            _buildMediaSelection(task, colorScheme),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _buildMediaSelectionAction(task),
+                  ],
+                ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: _buildStepTimeline(task, colorScheme),
+              ),
+              if (task.metadata['pendingConfirm'] == 'special_format')
+                _buildSpecialFormatConfirm(task, colorScheme),
             ],
             const Divider(height: 1, indent: 12, endIndent: 12),
             _buildActionButtons(task, colorScheme),
@@ -589,61 +615,80 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     _buildMediaItem(visibleResources[index], task, colorScheme),
               ),
             ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: selectedUrls.isNotEmpty &&
-                      !_isFlowActionPending(task.id) &&
-                      (!widget.isFlowManaged ||
-                          task.status == catcatch.TaskStatus.running)
-                  ? () async {
-                      final selectedMediaList = mediaList
-                          .where((m) => selectedUrls.contains(m.url))
-                          .toList();
-                      if (selectedMediaList.isEmpty) return;
-                      final notifier = ref.read(catcatchTasksProvider.notifier);
-                      final mergeAudio = _mergeAudioUrls[task.id];
-                      if (widget.isFlowManaged) {
-                        await _performFlowAction(
-                          task.id,
-                          true,
-                          (notifier) => notifier.selectMedia(
-                            task.id,
-                            selectedMediaList.first,
-                            mergeAudioUrl: mergeAudio,
-                          ),
-                          selectedMediaUrl: selectedMediaList.first.url,
-                        );
-                      } else {
-                        notifier.batchSelectMedia(
-                          task.id,
-                          selectedMediaList,
-                          mergeAudioUrl: mergeAudio,
-                        );
-                      }
-                    }
-                  : null,
-              icon: Icon(
-                _isFlowActionPending(task.id)
-                    ? Icons.hourglass_top
-                    : Icons.download,
-              ),
-              label: Text(
-                _isFlowActionPending(task.id)
-                    ? '正在等待任务流资源'
-                    : selectedUrls.isNotEmpty
-                        ? '下载选中的 ${selectedUrls.length} 个资源'
-                        : '请选择要下载的资源',
-              ),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaSelectionAction(catcatch.CatCatchTask task) {
+    final selectedUrls = _getSelectedUrls(task.id);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: selectedUrls.isNotEmpty &&
+                  !_isFlowActionPending(task.id) &&
+                  (!widget.isFlowManaged ||
+                      task.status == catcatch.TaskStatus.running)
+              ? () async {
+                  final encodedCandidates = widget.isFlowManaged
+                      ? task.metadata[
+                          catcatch.CatCatchTask.flowSelectionCandidatesKey]
+                      : null;
+                  final allowedUrls = encodedCandidates == null
+                      ? null
+                      : (jsonDecode(encodedCandidates) as List)
+                          .cast<String>()
+                          .toSet();
+                  final selectedMediaList = task.detectedMedia
+                      .where((media) =>
+                          (allowedUrls == null ||
+                              allowedUrls.contains(media.url)) &&
+                          selectedUrls.contains(media.url))
+                      .toList();
+                  if (selectedMediaList.isEmpty) return;
+                  final notifier = ref.read(catcatchTasksProvider.notifier);
+                  final mergeAudio = _mergeAudioUrls[task.id];
+                  if (widget.isFlowManaged) {
+                    await _performFlowAction(
+                      task.id,
+                      true,
+                      (notifier) => notifier.selectMedia(
+                        task.id,
+                        selectedMediaList.first,
+                        mergeAudioUrl: mergeAudio,
+                      ),
+                      selectedMediaUrl: selectedMediaList.first.url,
+                    );
+                  } else {
+                    notifier.batchSelectMedia(
+                      task.id,
+                      selectedMediaList,
+                      mergeAudioUrl: mergeAudio,
+                    );
+                  }
+                }
+              : null,
+          icon: Icon(
+            _isFlowActionPending(task.id)
+                ? Icons.hourglass_top
+                : Icons.download,
+          ),
+          label: Text(
+            _isFlowActionPending(task.id)
+                ? '正在等待任务流资源'
+                : selectedUrls.isNotEmpty
+                    ? '下载选中的 ${selectedUrls.length} 个资源'
+                    : '请选择要下载的资源',
+          ),
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
