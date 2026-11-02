@@ -1447,9 +1447,9 @@ void main() {
                   taskId: taskId,
                   snapshot: snapshot,
                 );
-                unreferencedCandidateReference = OcrRetryStorage
-                    .referencesFromSnapshot(result)
-                    .singleWhere((reference) => reference != sharedReference);
+                unreferencedCandidateReference =
+                    OcrRetryStorage.referencesFromSnapshot(result).singleWhere(
+                        (reference) => reference != sharedReference);
                 migrationStarted.complete();
                 await finishMigration.future;
                 return result;

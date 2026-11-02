@@ -5949,6 +5949,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           var task = BackgroundTask.fromMap(
             Map<String, dynamic>.from(rawMap),
           );
+          if (task.type == BackgroundTaskType.ocr &&
+              !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+            // A parsed task can still carry a future or ambiguous retry shape
+            // whose cache owners this version cannot enumerate.
+            cleanupSafe = false;
+          }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];
             final hasUnsafeParsedTaskDiagnostics = [

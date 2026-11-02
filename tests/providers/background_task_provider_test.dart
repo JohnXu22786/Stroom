@@ -18580,6 +18580,44 @@ void main() {
     );
 
     test(
+      'OCR cache ownership is unavailable for parsed future retry data',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'future-ocr-retry-owner',
+              'type': 'ocr',
+              'title': 'Future OCR retry owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': 99,
+                'images': <dynamic>[],
+                'additionalCacheRefs': [
+                  'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById('future-ocr-retry-owner'), isNotNull);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'startup cleanup preserves OCR cache when tasks JSON is unreadable',
       () async {
         WebFileStore.enableTestMode();
