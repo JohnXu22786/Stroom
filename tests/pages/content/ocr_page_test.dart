@@ -778,7 +778,7 @@ void main() {
         expect(
             find.text('Replacement Model | Selection Provider'), findsNothing);
 
-        await tester.tap(find.text('请选择模型'));
+        await tester.tap(find.text('原 OCR 供应商或模型已不存在，请重新选择'));
         await tester.pumpAndSettle();
         await tester.tap(
           find.text('Replacement Model | Selection Provider').last,
