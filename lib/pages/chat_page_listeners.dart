@@ -295,6 +295,10 @@ extension _ChatPageListenersExt on _ChatPageState {
       reasoningParamValuesProvider,
       (_, __) => _persistCurrentReasoningSettings(),
     );
+    ref.listen(
+      customParamValuesProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
   }
 
   /// Updates the streaming message placeholder in the controller with the

@@ -11,7 +11,7 @@ import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart'
-    show ReasoningParam, findEffortParam;
+    show CustomParam, ReasoningParam, findEffortParam;
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
@@ -62,6 +62,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<Attachment> initialDraftAttachments;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
+  final List<CustomParam> customParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -113,6 +114,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftAttachments = const [],
     this.onModelsReordered,
     this.reasoningParams = const [],
+    this.customParams = const [],
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,

@@ -52,6 +52,7 @@ class _InspectingManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
     if (failStreamSetup) throw StateError('stream setup failed');
@@ -65,6 +66,7 @@ class _InspectingManager extends ChatStreamManager {
       reasoningParamValues: reasoningParamValues,
       streamingMsgId: streamingMsgId,
       assistant: assistant,
+      customParamValues: customParamValues,
       entriesStateOverride: entriesStateOverride,
     );
     services.add(adapter.currentChatService);
