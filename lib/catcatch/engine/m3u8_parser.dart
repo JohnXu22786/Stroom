@@ -93,7 +93,9 @@ class M3U8Parser {
           int? rangeStart;
           if (range != null) {
             rangeStart = range.offset ??
-                (previousMapRangeUri == resolvedUrl ? previousMapRangeEnd : null);
+                (previousMapRangeUri == resolvedUrl
+                    ? previousMapRangeEnd
+                    : null);
             if (rangeStart == null) {
               throw FormatException(
                 'Implicit EXT-X-MAP byte-range offset has no preceding range for $resolvedUrl',
