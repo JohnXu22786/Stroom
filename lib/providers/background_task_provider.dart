@@ -5642,9 +5642,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           final storageRef = image['storageRef'];
           if (storageRef != null &&
               (storageRef is! String ||
-                  !OcrRetryImage.isValidStorageReference(storageRef))) {
-            // An invalid explicit reference is malformed ownership even when
-            // it does not match a deletable cache path.
+                  !OcrRetryImage.isValidStorageReference(storageRef)) &&
+              containsCacheReference(storageRef)) {
             return true;
           }
           final format = image['format'];
@@ -5679,6 +5678,96 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     } catch (_) {
       return true;
     }
+  }
+
+  bool _hasUnserializedOcrTaskCacheReferences(Map<dynamic, dynamic> taskRow) {
+    bool containsCacheReference(Object? value) =>
+        _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
+
+    bool hasDroppedCollectionReferences(
+      Object? rawEntries,
+      Set<String> serializedFields,
+      bool Function(Map<dynamic, dynamic>) hasValidShape,
+    ) {
+      if (rawEntries == null) return false;
+      if (rawEntries is! List) return containsCacheReference(rawEntries);
+      for (final rawEntry in rawEntries) {
+        if (rawEntry is! Map) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        if (!hasValidShape(rawEntry)) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        for (final entry in rawEntry.entries) {
+          if ((entry.key is! String || !serializedFields.contains(entry.key)) &&
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (hasDroppedCollectionReferences(
+      taskRow['steps'],
+      const {'label', 'status', 'error'},
+      (step) =>
+          step['label'] is String &&
+          (step['status'] == null ||
+              (step['status'] is String &&
+                  BgStepStatus.values.any(
+                    (status) => status.name == step['status'],
+                  ))) &&
+          (step['error'] == null || step['error'] is String),
+    )) {
+      return true;
+    }
+    if (hasDroppedCollectionReferences(
+      taskRow['ocrPageOutcomes'],
+      const {'imageIndex', 'status', 'text', 'error'},
+      (outcome) =>
+          outcome['imageIndex'] is int &&
+          (outcome['imageIndex'] as int) >= 0 &&
+          outcome['status'] is String &&
+          OcrPageOutcomeStatus.values.any(
+            (status) => status.name == outcome['status'],
+          ) &&
+          (outcome['text'] == null || outcome['text'] is String) &&
+          (outcome['error'] == null || outcome['error'] is String),
+    )) {
+      return true;
+    }
+
+    const serializedTaskFields = {
+      'id',
+      'type',
+      'title',
+      'status',
+      'result',
+      'resultIsComplete',
+      'resultFolder',
+      'partialSaveRequested',
+      'resultSavedAsPartial',
+      'error',
+      'createdAt',
+      'completedAt',
+      'statusChangedAt',
+      'steps',
+      'downloadedFilePath',
+      'retryData',
+      'ocrPageOutcomes',
+    };
+    for (final entry in taskRow.entries) {
+      final isDiscardedOcrField =
+          entry.key == 'rawRequest' || entry.key == 'rawResponse';
+      if ((!serializedTaskFields.contains(entry.key) || isDiscardedOcrField) &&
+          _ocrCacheReferencesInPersistedValue(entry.value).isNotEmpty) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
@@ -6182,6 +6271,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             BackgroundTaskType.values.any(
               (type) => type.name == rawMap?['type'],
             );
+        final hasUnserializedOcrCacheReferences =
+            rawMap?['type'] == BackgroundTaskType.ocr.name &&
+                _hasUnserializedOcrTaskCacheReferences(rawMap!);
+        var ocrCacheOwnershipMarkerRecorded = false;
+        void recordUnknownOcrCacheOwnership() {
+          if (ocrCacheOwnershipMarkerRecorded || rawMap == null) return;
+          unrestoredRecords.add(
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown: true,
+              ocrCacheOwnershipKnown: false,
+              ocrCacheTaskId:
+                  rawMap['id'] is String ? rawMap['id'] as String : null,
+            ),
+          );
+          ocrCacheOwnershipMarkerRecorded = true;
+        }
+
+        if (hasUnserializedOcrCacheReferences) cleanupSafe = false;
         try {
           if (rawMap == null) {
             throw const FormatException('Task row is not an object');
@@ -6195,18 +6302,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             cleanupSafe = false;
           }
           if (task.type == BackgroundTaskType.ocr &&
-              _requiresDurableOcrCacheOwnershipMarker(rawRetryData)) {
+              (_requiresDurableOcrCacheOwnershipMarker(rawRetryData) ||
+                  hasUnserializedOcrCacheReferences)) {
             // Unknown fields can contain cache owners outside the images list.
             // Persist the sanitized task together with this marker so future
             // writes cannot accidentally authorize cleanup; removing the task
             // retires its marker in the same durable snapshot.
-            unrestoredRecords.add(
-              _unrestoredTaskRecord(
-                retryAudioOwnershipKnown: true,
-                ocrCacheOwnershipKnown: false,
-                ocrCacheTaskId: task.id,
-              ),
-            );
+            recordUnknownOcrCacheOwnership();
           }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];
@@ -6331,6 +6433,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               );
             }
           } else if (isKnownNonAsrRecord) {
+            if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
+                hasUnserializedOcrCacheReferences) {
+              recordUnknownOcrCacheOwnership();
+            }
             if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
                 !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
               cleanupSafe = false;
