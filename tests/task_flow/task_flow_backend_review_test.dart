@@ -1020,6 +1020,8 @@ void main() {
         true,
         (notifier) => notifier.selectMedia(taskId, media),
         selectedMediaUrl: media.url,
+        selectedMediaIdentity: media.selectionIdentity,
+        selectedMediaHasByteRange: media.hasByteRange,
       ),
       isTrue,
     );

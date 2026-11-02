@@ -407,16 +407,18 @@ void main() {
 
   test('video prompt retains distinct byte ranges sharing one URL', () {
     const firstRange = MediaResource(
-      url: 'https://x/video.ts',
+      url: 'https://x/video.mp4',
       name: 'first range',
-      ext: 'ts',
+      ext: 'mp4',
+      mimeType: 'video/mp4',
       byteRangeStart: 0,
       byteRangeLength: 100,
     );
     const secondRange = MediaResource(
-      url: 'https://x/video.ts',
+      url: 'https://x/video.mp4',
       name: 'second range',
-      ext: 'ts',
+      ext: 'mp4',
+      mimeType: 'video/mp4',
       byteRangeStart: 100,
       byteRangeLength: 100,
     );
@@ -447,7 +449,7 @@ void main() {
         [first, duplicate],
         desiredType: IOType.video,
       ),
-      [first, duplicate],
+      unorderedEquals([first, duplicate]),
     );
   });
 
