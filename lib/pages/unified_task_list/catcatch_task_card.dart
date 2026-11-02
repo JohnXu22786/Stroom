@@ -118,6 +118,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           (s) => s.type == catcatch.StepType.userSelecting && s.running,
         ) &&
         task.detectedMedia.isNotEmpty;
+    final taskListViewportHeight =
+        Scrollable.maybeOf(context)?.position.viewportDimension;
+    final resourceViewportHeight =
+        taskListViewportHeight != null && taskListViewportHeight.isFinite &&
+                taskListViewportHeight > 0
+            ? taskListViewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height * (2 / 3);
 
     Color statusColor;
     IconData statusIcon;
@@ -259,7 +266,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             if (isSelectingMedia)
               SizedBox(
                 key: const Key('catcatch_task_resource_viewport'),
-                height: MediaQuery.sizeOf(context).height * (2 / 3),
+                height: resourceViewportHeight,
                 child: Column(
                   children: [
                     if (_expandedSegments.contains(task.id) &&

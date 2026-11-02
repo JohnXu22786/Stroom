@@ -83,6 +83,30 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
   return downloads;
 }
 
+Future<void> _pumpInShortTaskListViewport(
+    WidgetTester tester, CatCatchTask task) async {
+  await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        catcatchTasksProvider.overrideWith((ref) {
+          return _Downloads(ref)..state = [task];
+        }),
+      ],
+      child: MaterialApp(
+          home: Scaffold(
+              body: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          key: const Key('task_list_main_viewport'),
+          height: 300,
+          child: ListView(
+            children: [CatCatchTaskCard(task: task)],
+          ),
+        ),
+      )))));
+  await tester.pump();
+}
+
 CatCatchTask _task(List<MediaResource> media, {bool confirmation = false}) =>
     CatCatchTask(
       id: 'download',
@@ -154,6 +178,29 @@ void main() {
     expect(toggleRect.top, greaterThanOrEqualTo(viewportRect.top));
     expect(toggleRect.top, lessThan(viewportRect.top + 52));
     expect(toggleRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+  });
+
+  testWidgets(
+      'resource viewport is capped by a short task-list viewport, not the screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpInShortTaskListViewport(
+      tester,
+      _task([one]).copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
+    );
+
+    final taskListViewport =
+        tester.getRect(find.byKey(const Key('task_list_main_viewport')));
+    final resourceViewport = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
+    expect(
+      resourceViewport.height,
+      lessThanOrEqualTo(taskListViewport.height * 2 / 3),
+    );
   });
 
   testWidgets(
