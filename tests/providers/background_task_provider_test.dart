@@ -18667,7 +18667,10 @@ void main() {
     test(
       'OCR cleanup stays fail-closed for preserved malformed ASR cache refs',
       () async {
-        const taskId = 'malformed-asr-row-with-ocr-cache-ref';
+        // The legacy-row sanitizer only treats UUID/hex-shaped IDs as task
+        // identifiers; long generic IDs are conservatively treated as opaque
+        // credential-like values and the row will not be preserved.
+        const taskId = '55555555-5555-4555-8555-555555555555';
         const cacheReference =
             'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin';
         final file = _tasksFileIn(testDir.path);
