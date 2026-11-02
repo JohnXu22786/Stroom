@@ -258,9 +258,15 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             const Divider(height: 1, indent: 12, endIndent: 12),
             if (isSelectingMedia)
               SizedBox(
+                key: const Key('catcatch_task_resource_viewport'),
                 height: MediaQuery.sizeOf(context).height * (2 / 3),
                 child: Column(
                   children: [
+                    if (_expandedSegments.contains(task.id) &&
+                        _getMediaSelectionData(task).selectableMedia.any(
+                          (media) => media.isPlaylistSegment,
+                        ))
+                      _buildSegmentCollapseControl(task),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(
@@ -508,10 +514,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     );
   }
 
-  Widget _buildMediaSelection(
-    catcatch.CatCatchTask task,
-    ColorScheme colorScheme,
-  ) {
+  ({
+    List<MediaResource> mediaList,
+    Map<String, List<MediaResource>> splitGroups,
+    List<MediaResource> selectableMedia,
+  }) _getMediaSelectionData(catcatch.CatCatchTask task) {
     final encodedCandidates = widget.isFlowManaged
         ? task.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey]
         : null;
@@ -523,17 +530,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         : task.detectedMedia
             .where((media) => allowedUrls.contains(media.url))
             .toList();
-    if (mediaList.isEmpty) return const SizedBox.shrink();
 
     final splitGroups = <String, List<MediaResource>>{};
-    for (final m in mediaList) {
-      if (m.groupId != null && m.isLikelySplitTrack) {
-        splitGroups.putIfAbsent(m.groupId!, () => []).add(m);
+    for (final media in mediaList) {
+      if (media.groupId != null && media.isLikelySplitTrack) {
+        splitGroups.putIfAbsent(media.groupId!, () => []).add(media);
       }
     }
-
-    final selectedUrls = _getSelectedUrls(task.id);
-    final isSegment = (MediaResource media) => media.isPlaylistSegment;
     final splitUrls = allowedUrls == null
         ? splitGroups.values
             .expand((group) => group.map((media) => media.url))
@@ -544,8 +547,59 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   group.any((media) => media.isVideo))
                 ...group.map((media) => media.url),
           };
-    final selectableMedia =
-        mediaList.where((media) => !splitUrls.contains(media.url)).toList();
+
+    return (
+      mediaList: mediaList,
+      splitGroups: splitGroups,
+      selectableMedia:
+          mediaList.where((media) => !splitUrls.contains(media.url)).toList(),
+    );
+  }
+
+  Widget _buildSegmentCollapseControl(catcatch.CatCatchTask task) {
+    final segments = _getMediaSelectionData(task)
+        .selectableMedia
+        .where((media) => media.isPlaylistSegment)
+        .toList();
+    final segmentsExpanded = _expandedSegments.contains(task.id);
+    return Padding(
+      padding: const EdgeInsets.only(left: 16),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('m3u8_segments_toggle'),
+          onPressed: () => setState(() {
+            if (segmentsExpanded) {
+              _expandedSegments.remove(task.id);
+            } else {
+              _expandedSegments.add(task.id);
+            }
+          }),
+          icon: Icon(
+            segmentsExpanded ? Icons.expand_less : Icons.expand_more,
+          ),
+          label: Text(
+            segmentsExpanded
+                ? '收起 ${segments.length} 个分片'
+                : '显示 ${segments.length} 个分片',
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaSelection(
+    catcatch.CatCatchTask task,
+    ColorScheme colorScheme,
+  ) {
+    final selection = _getMediaSelectionData(task);
+    final mediaList = selection.mediaList;
+    final splitGroups = selection.splitGroups;
+    if (mediaList.isEmpty) return const SizedBox.shrink();
+
+    final selectedUrls = _getSelectedUrls(task.id);
+    final isSegment = (MediaResource media) => media.isPlaylistSegment;
+    final selectableMedia = selection.selectableMedia;
     final segments = selectableMedia.where(isSegment).toList();
     final segmentsExpanded = _expandedSegments.contains(task.id);
     final visibleResources = segments.isEmpty || segmentsExpanded
@@ -582,28 +636,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               _buildSplitTrackGroup(context, task, entry.value, colorScheme),
             const SizedBox(height: 12),
           ],
-          if (segments.isNotEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                key: const Key('m3u8_segments_toggle'),
-                onPressed: () => setState(() {
-                  if (segmentsExpanded) {
-                    _expandedSegments.remove(task.id);
-                  } else {
-                    _expandedSegments.add(task.id);
-                  }
-                }),
-                icon: Icon(
-                  segmentsExpanded ? Icons.expand_less : Icons.expand_more,
-                ),
-                label: Text(
-                  segmentsExpanded
-                      ? '收起 ${segments.length} 个分片'
-                      : '显示 ${segments.length} 个分片',
-                ),
-              ),
-            ),
+          if (segments.isNotEmpty && !segmentsExpanded)
+            _buildSegmentCollapseControl(task),
           if (visibleResources.isNotEmpty)
             SizedBox(
               height: resourceHeight,
