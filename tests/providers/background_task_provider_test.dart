@@ -18525,6 +18525,657 @@ void main() {
     );
 
     test(
+      'ASR diagnostic sanitization retains OCR cache ownership until removal',
+      () async {
+        WebFileStore.enableTestMode();
+        const asrTaskId = 'asr-request-ocr-cache-owner';
+        final bytes = Uint8List.fromList([31, 32, 33, 34]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'asr-request-cache-source',
+          snapshot: OcrRetrySnapshot.capture(
+            configId: 'config-1',
+            modelId: 'model-1',
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            BackgroundTask(
+              id: asrTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR diagnostics with a serialized OCR cache owner',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
+              rawRequest: {'cacheReference': cacheReference},
+              retryData: {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': '11111111111111111111111111111111',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 0,
+                  'sha256': '1' * 64,
+                  'requiresSourceReselection': true,
+                },
+              },
+            ).toMap(),
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          final asrRow = persistedRows.whereType<Map>().singleWhere(
+                (row) => row['id'] == asrTaskId,
+              );
+          expect(asrRow.containsKey('rawRequest'), isFalse);
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == asrTaskId,
+                ),
+            isTrue,
+          );
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+          );
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            isNull,
+          );
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason:
+                'the discarded diagnostic owner must stay protected until task removal',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'runtime ASR diagnostics persist OCR cache ownership before sanitization',
+      () async {
+        WebFileStore.enableTestMode();
+        const asrTaskId = 'runtime-asr-diagnostic-ocr-owner';
+        final bytes = Uint8List.fromList([35, 36, 37, 38]);
+        final file = _tasksFileIn(testDir.path);
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          final retryData = await OcrRetryStorage.cacheSnapshot(
+            taskId: 'runtime-asr-diagnostic-cache-source',
+            snapshot: OcrRetrySnapshot.capture(
+              images: [OcrRetryImage(bytes: bytes, format: 'png')],
+            ),
+          );
+          final cacheReference = ((retryData['images'] as List).single
+              as Map)['storageRef'] as String;
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Runtime ASR diagnostics with OCR cache reference',
+            taskId: asrTaskId,
+          );
+          notifier.setRawDiagnostics(
+            asrTaskId,
+            rawRequest: {'cacheReference': cacheReference},
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == asrTaskId,
+              );
+          expect(asrRow.containsKey('rawRequest'), isFalse);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == asrTaskId,
+                ),
+            isTrue,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason: 'runtime diagnostics must remain owners after sanitization',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'OCR cleanup stays fail-closed for preserved malformed ASR cache refs',
+      () async {
+        // The legacy-row sanitizer only treats UUID/hex-shaped IDs as task
+        // identifiers; long generic IDs are conservatively treated as opaque
+        // credential-like values and the row will not be preserved.
+        const taskId = '55555555-5555-4555-8555-555555555555';
+        const cacheReference =
+            'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final rawRow = {
+          'id': taskId,
+          'type': 'asr',
+          'title': 'Malformed legacy ASR owner',
+          'status': 'unknown-status',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          // This legacy row is safely preserved, but the task model drops
+          // this OCR cache reference when it tries to parse the row.
+          'retryData': {'legacyContext': cacheReference},
+        };
+        await file.writeAsString(jsonEncode([rawRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Triggers a snapshot while the malformed row is retained',
+          );
+          await notifier.pendingPersistence;
+
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().firstWhere(
+                  (row) => row['id'] == taskId,
+                ),
+            equals(rawRow),
+          );
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == taskId,
+                ),
+            isTrue,
+          );
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+            reason:
+                'an ASR row retained in the snapshot still owns hidden OCR refs',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'unknown ASR audio ownership does not block known OCR cache cleanup',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'asr-unknown-audio-only',
+              'type': 'asr',
+              'title': 'ASR row with unsupported audio references',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'version': 99,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'cccccccccccccccccccccccccccccccc',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 4,
+                  'sha256': 'c' * 64,
+                },
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isEmpty,
+            reason:
+                'unknown ASR audio ownership does not imply unknown OCR cache ownership',
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isEmpty);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership is unavailable when a skipped row is ambiguous',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final rows = [
+          {
+            'type': 'future-task-type',
+            'title': 'Unknown persisted owner',
+            'retryData': {
+              'type': 'ocr',
+              'images': [
+                {
+                  'storageRef':
+                      'ocr_retry_cache/1111111111111111111111111111111111111111111111111111111111111111.bin',
+                },
+              ],
+            },
+          },
+          {
+            'id': 'ambiguous-skipped-ocr-owner',
+            'type': 'ocr',
+            'title': 'Skipped OCR with ambiguous retry data',
+            'status': 'unknown-status',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': <dynamic>[],
+            'retryData': {
+              'type': 'ocr',
+              'version': 3,
+              'modelRef': <String, dynamic>{},
+              'images': <dynamic>[],
+              'batchMode': 'joint',
+              'perImageConcurrency': 1,
+              'requestSizeBudgetBytes': 1024,
+              'extraCacheRefs': [
+                'ocr_retry_cache/2222222222222222222222222222222222222222222222222222222222222222.bin',
+              ],
+            },
+          },
+        ];
+
+        for (final row in rows) {
+          await file.writeAsString(jsonEncode([row]));
+          final notifier = BackgroundTaskNotifier();
+          try {
+            expect(await notifier.restoreFromPersistence(), isFalse);
+            expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+            if (row['type'] == 'future-task-type') {
+              notifier.addTask(
+                type: BackgroundTaskType.ocr,
+                title: 'Unrelated OCR task after unknown row restore',
+                startImmediately: false,
+              );
+              await notifier.pendingPersistence;
+              expect(
+                notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+                isNull,
+              );
+            }
+          } finally {
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership is unavailable for parsed future retry data',
+      () async {
+        WebFileStore.enableTestMode();
+        final imageBytes = Uint8List.fromList([41, 42, 43, 44]);
+        final cachedSnapshot = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'future-ocr-image-owner',
+          snapshot: OcrRetrySnapshot.capture(
+            configId: 'config-1',
+            modelId: 'model-1',
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final recognizedCacheReference =
+            ((cachedSnapshot['images'] as List).single as Map)['storageRef']
+                as String;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'future-ocr-retry-owner',
+              'type': 'ocr',
+              'title': 'Future OCR retry owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': 99,
+                'images': [
+                  {
+                    'storageRef': recognizedCacheReference,
+                    'format': 'png',
+                  },
+                ],
+                'additionalCacheRefs': [
+                  'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.taskById('future-ocr-retry-owner'), isNotNull);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          final persistedTask = persistedRows
+              .whereType<Map<String, dynamic>>()
+              .singleWhere((row) => row['id'] == 'future-ocr-retry-owner');
+          final persistedRetryData =
+              persistedTask['retryData'] as Map<String, dynamic>;
+          expect(
+              persistedRetryData['version'], OcrRetrySnapshot.currentVersion);
+          expect(persistedRetryData, isNot(contains('additionalCacheRefs')));
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == 'future-ocr-retry-owner',
+                ),
+            isTrue,
+          );
+          expect(
+            await OcrRetryStorage.read(recognizedCacheReference),
+            imageBytes,
+            reason:
+                'future-version sanitization must not orphan a recognized cache owner',
+          );
+
+          notifier.setSteps('future-ocr-retry-owner', [
+            const BgTaskStep(
+                label: 'still present', status: BgStepStatus.pending),
+          ]);
+          await notifier.pendingPersistence;
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedAfterMutation =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedAfterMutation.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == 'future-ocr-retry-owner',
+                ),
+            isTrue,
+          );
+          expect(
+            await OcrRetryStorage.read(recognizedCacheReference),
+            imageBytes,
+          );
+
+          expect(
+            await notifier.removeTasksPersisted(['future-ocr-retry-owner']),
+            isTrue,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isEmpty);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'loaded OCR cache ownership retains refs until a snapshot write succeeds',
+      () async {
+        WebFileStore.enableTestMode();
+        const taskId = 'ocr-durable-cache-owner';
+        final bytes = Uint8List.fromList([23, 24, 25]);
+        final originalRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final cacheReference =
+            OcrRetryStorage.referencesFromSnapshot(originalRetryData).single;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'OCR task with a durable cache owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': originalRetryData,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          final writeStarted = Completer<void>();
+          final finishWrite = Completer<void>();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeStarted.complete();
+            await finishWrite.future;
+            throw StateError('injected task snapshot write failure');
+          };
+          notifier.setRetryData(taskId, {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+          });
+          await writeStarted.future;
+
+          final references =
+              notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup();
+          expect(references, contains(cacheReference));
+          await OcrRetryStorage.deleteUnreferenced(
+            candidates: {cacheReference},
+            referenced: references!,
+          );
+          expect(await OcrRetryStorage.read(cacheReference), bytes);
+
+          finishWrite.complete();
+          await notifier.pendingPersistence;
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason: 'a failed write must leave the durable owner authoritative',
+          );
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            OcrRetryStorage.referencesFromSnapshot(
+              persistedRows
+                  .whereType<Map<String, dynamic>>()
+                  .single['retryData'] as Map<String, dynamic>,
+            ),
+            contains(cacheReference),
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership stays unavailable for unknown task row references',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        const taskId = 'ocr-unknown-task-row-cache-owner';
+        const stepTaskId = 'ocr-unknown-step-cache-owner';
+        const outcomeTaskId = 'ocr-unknown-outcome-cache-owner';
+        const asrTaskId = 'asr-unknown-ocr-cache-owner';
+        const asrTaskLevelKeyTaskId = 'asr-task-level-ocr-cache-key-owner';
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'OCR retry with an unknown task row cache owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': OcrRetryStorage.unavailableSnapshotForCount(
+                taskId: taskId,
+                imageCount: 0,
+              ),
+              'additionalCacheRefs': [
+                'ocr_retry_cache/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.bin',
+              ],
+            },
+            {
+              'id': stepTaskId,
+              'type': 'ocr',
+              'title': 'OCR retry with an unknown step cache owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [
+                {
+                  'label': 'failed',
+                  'status': 'failed',
+                  'ocr_retry_cache/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.bin':
+                      true,
+                },
+              ],
+              'retryData': OcrRetryStorage.unavailableSnapshotForCount(
+                taskId: stepTaskId,
+                imageCount: 0,
+              ),
+            },
+            {
+              'id': outcomeTaskId,
+              'type': 'ocr',
+              'title': 'OCR retry with an unknown outcome cache owner',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'ocrPageOutcomes': [
+                {
+                  'imageIndex': 0,
+                  'status': 'failed',
+                  'additionalCacheRefs': [
+                    'ocr_retry_cache/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.bin',
+                  ],
+                },
+              ],
+              'retryData': OcrRetryStorage.unavailableSnapshotForCount(
+                taskId: outcomeTaskId,
+                imageCount: 0,
+              ),
+            },
+            BackgroundTask(
+              id: asrTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR row with an unknown OCR cache owner',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
+              retryData: {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': AsrAudioReference(
+                  id: 'ffffffffffffffffffffffffffffffff',
+                  name: 'source.wav',
+                  format: 'wav',
+                  byteLength: 0,
+                  sha256:
+                      '0000000000000000000000000000000000000000000000000000000000000000',
+                  requiresSourceReselection: true,
+                ).toMap(),
+                'additionalCacheRefs': {
+                  'ocr_retry_cache/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.bin':
+                      true,
+                },
+              },
+            ).toMap(),
+            BackgroundTask(
+              id: asrTaskLevelKeyTaskId,
+              type: BackgroundTaskType.asr,
+              title: 'ASR row with an OCR cache ref as a task field key',
+              status: TaskStatus.failed,
+              createdAt: DateTime(2025, 1, 1),
+            ).toMap()
+              ..['ocr_retry_cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin'] =
+                  true,
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById(taskId), isNotNull);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            isNull,
+          );
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          for (final expectedTaskId in [
+            taskId,
+            stepTaskId,
+            outcomeTaskId,
+            asrTaskId,
+            asrTaskLevelKeyTaskId,
+          ]) {
+            expect(
+              persistedRows.whereType<Map<String, dynamic>>().any(
+                    (row) =>
+                        row['_unrestoredTaskRecord'] == true &&
+                        row['ocrCacheOwnershipKnown'] == false &&
+                        row['ocrCacheTaskId'] == expectedTaskId,
+                  ),
+              isTrue,
+            );
+          }
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'startup cleanup preserves OCR cache when tasks JSON is unreadable',
       () async {
         WebFileStore.enableTestMode();
@@ -18552,6 +19203,71 @@ void main() {
           notifier.dispose();
           await notifier.pendingPersistence;
           WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership stays unavailable for unknown model reference fields',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'ocr-model-reference-extension-owner',
+              'type': 'ocr',
+              'title': 'OCR retry with an unknown model reference field',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'modelRef': {
+                  'configId': 'saved-config',
+                  'modelId': 'saved-model',
+                  'ocr_retry_cache/4444444444444444444444444444444444444444444444444444444444444444.bin':
+                      true,
+                },
+                'images': [
+                  {
+                    'storageRef':
+                        'ocr_retry_cache/4444444444444444444444444444444444444444444444444444444444444444.bin',
+                    'format': 'png',
+                  },
+                ],
+                'batchMode': 'joint',
+                'perImageConcurrency': 1,
+                'requestSizeBudgetBytes': 1024,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(
+            notifier.taskById('ocr-model-reference-extension-owner'),
+            isNotNull,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] ==
+                          'ocr-model-reference-extension-owner',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
         }
       },
     );
@@ -18639,6 +19355,406 @@ void main() {
           notifier.dispose();
           await notifier.pendingPersistence;
           WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership stays unavailable for invalid model reference values',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'ocr-invalid-model-reference-owner',
+              'type': 'ocr',
+              'title': 'OCR retry with an invalid model reference value',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'modelRef': {
+                  'configId': {
+                    'storageRef':
+                        'ocr_retry_cache/5555555555555555555555555555555555555555555555555555555555555555.bin',
+                  },
+                  'modelId': 'saved-model',
+                },
+                'images': <dynamic>[],
+                'batchMode': 'joint',
+                'perImageConcurrency': 1,
+                'requestSizeBudgetBytes': 1024,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(
+            notifier.taskById('ocr-invalid-model-reference-owner'),
+            isNotNull,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] ==
+                          'ocr-invalid-model-reference-owner',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership stays unavailable for malformed model references',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'ocr-malformed-model-reference-owner',
+              'type': 'ocr',
+              'title': 'OCR retry with a malformed model reference',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'modelRef': [
+                  {
+                    'storageRef':
+                        'ocr_retry_cache/6666666666666666666666666666666666666666666666666666666666666666.bin',
+                  },
+                ],
+                'images': <dynamic>[],
+                'batchMode': 'joint',
+                'perImageConcurrency': 1,
+                'requestSizeBudgetBytes': 1024,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(
+            notifier.taskById('ocr-malformed-model-reference-owner'),
+            isNotNull,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] ==
+                          'ocr-malformed-model-reference-owner',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership survives a malformed scalar retry payload',
+      () async {
+        const taskId = 'ocr-scalar-retry-cache-owner';
+        const cacheReference =
+            'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'OCR retry with a scalar payload',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': cacheReference,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById(taskId), isNotNull);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == taskId,
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'OCR cache ownership stays unavailable for malformed image data',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        Future<void> expectUnknownOwnership(
+          String taskId,
+          dynamic images, {
+          Map<String, dynamic> retryFields = const {},
+        }) async {
+          await file.writeAsString(
+            jsonEncode([
+              {
+                'id': taskId,
+                'type': 'ocr',
+                'title': 'OCR retry with malformed image data',
+                'status': 'failed',
+                'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+                'steps': <dynamic>[],
+                'retryData': {
+                  'type': 'ocr',
+                  'version': OcrRetrySnapshot.currentVersion,
+                  'modelRef': {'configId': null, 'modelId': null},
+                  'images': images,
+                  'batchMode': 'joint',
+                  'perImageConcurrency': 1,
+                  'requestSizeBudgetBytes': 1024,
+                  ...retryFields,
+                },
+              },
+            ]),
+          );
+
+          final notifier = BackgroundTaskNotifier();
+          try {
+            await notifier.restoreFromPersistence();
+            expect(notifier.taskById(taskId), isNotNull);
+            expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+            expect(
+              notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+              isNull,
+            );
+            final persistedRows =
+                jsonDecode(await file.readAsString()) as List<dynamic>;
+            expect(
+              persistedRows.whereType<Map<String, dynamic>>().any(
+                    (row) =>
+                        row['_unrestoredTaskRecord'] == true &&
+                        row['ocrCacheOwnershipKnown'] == false &&
+                        row['ocrCacheTaskId'] == taskId,
+                  ),
+              isTrue,
+            );
+          } finally {
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+
+        await expectUnknownOwnership(
+          'ocr-malformed-image-entry-owner',
+          [
+            'ocr_retry_cache/7777777777777777777777777777777777777777777777777777777777777777.bin',
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-malformed-image-container-owner',
+          {
+            'storageRef':
+                'ocr_retry_cache/8888888888888888888888888888888888888888888888888888888888888888.bin',
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-malformed-storage-ref-owner',
+          [
+            {
+              'storageRef': {
+                'nestedRef':
+                    'ocr_retry_cache/9999999999999999999999999999999999999999999999999999999999999999.bin',
+              },
+            },
+          ],
+        );
+        const validReference =
+            'ocr_retry_cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin';
+        await expectUnknownOwnership(
+          'ocr-invalid-image-name-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': {'storageRef': validReference},
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-format-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': {'storageRef': validReference},
+              'name': 'image.png',
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-bytes-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+              'bytes': {'storageRef': validReference},
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-api-key-owner',
+          <dynamic>[],
+          retryFields: {
+            'apiKey': {'storageRef': validReference},
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-data-owner',
+          <dynamic>[],
+          retryFields: {
+            'imageData': {'storageRef': validReference},
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-reference-in-sanitized-api-key-owner',
+          <dynamic>[],
+          retryFields: {'apiKey': 'credential note: $validReference'},
+        );
+        await expectUnknownOwnership(
+          'ocr-reference-in-sanitized-image-data-owner',
+          <dynamic>[],
+          retryFields: {'imageData': 'inline data: $validReference'},
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-entry-data-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+              'imageData': 'inline data: $validReference',
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-unsupported-version-reference-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+            },
+          ],
+          retryFields: {
+            'version': 99,
+            'additionalCacheRefs': [
+              'ocr_retry_cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin',
+            ],
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-instruction-content-owner',
+          <dynamic>[],
+          retryFields: {
+            'instructionContent': {'storageRef': validReference},
+          },
+        );
+        await expectUnknownOwnership(
+          'ocr-cache-reference-in-inline-bytes-owner',
+          [
+            {'bytes': validReference, 'format': 'png'},
+          ],
+        );
+      },
+    );
+
+    test(
+      'invalid OCR cache references do not create durable ownership markers',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        const taskId = 'ocr-invalid-storage-ref-owner';
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'OCR retry with an invalid cache reference',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'retryData': {
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'modelRef': {'configId': null, 'modelId': null},
+                'images': [
+                  {'storageRef': 'ocr_retry_cache/not-a-valid-reference.bin'},
+                ],
+                'batchMode': 'joint',
+                'perImageConcurrency': 1,
+                'requestSizeBudgetBytes': 1024,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById(taskId), isNotNull);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNotNull);
+          final persistedRows =
+              jsonDecode(await file.readAsString()) as List<dynamic>;
+          expect(
+            persistedRows.whereType<Map<String, dynamic>>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == taskId,
+                ),
+            isFalse,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
         }
       },
     );

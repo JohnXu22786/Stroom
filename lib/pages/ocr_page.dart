@@ -476,19 +476,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               taskId: taskId,
               snapshot: snapshot,
             ));
-        if (!notifier.mounted) return;
-        if (!notifier.state.any((task) => task.id == taskId)) {
-          await OcrRetryStorage.deleteUnreferenced(
-            candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
-            referenced: {
-              for (final task in notifier.state)
-                if (task.type == BackgroundTaskType.ocr)
-                  ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-            },
-          );
+        if (notifier.mounted &&
+            notifier.state.any((task) => task.id == taskId)) {
+          notifier.setRetryData(taskId, retryData);
           return;
         }
-        notifier.setRetryData(taskId, retryData);
+        final referenced =
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup();
+        if (referenced == null) return;
+        await OcrRetryStorage.deleteUnreferenced(
+          candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
+          referenced: referenced,
+        );
       });
     } catch (error) {
       debugPrint('[OCR] Legacy retry image migration failed: $error');

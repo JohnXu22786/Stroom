@@ -26,10 +26,14 @@ Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
   Set<String> retryAudioIds = const {},
   bool retireAfterSnapshot = false,
+  bool ocrCacheOwnershipKnown = true,
+  String? ocrCacheTaskId,
 }) =>
     {
       '_unrestoredTaskRecord': true,
       'retryAudioOwnershipKnown': retryAudioOwnershipKnown,
+      'ocrCacheOwnershipKnown': ocrCacheOwnershipKnown,
+      if (ocrCacheTaskId != null) 'ocrCacheTaskId': ocrCacheTaskId,
       if (retryAudioIds.isNotEmpty)
         'retryAudioIds': retryAudioIds.toList()..sort(),
       if (retireAfterSnapshot) 'retireAfterSnapshot': true,
@@ -3790,6 +3794,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   // The last durable task snapshot remains authoritative until another write
   // replaces it, even when live retryData has already changed.
   final Set<String> _persistedRetryAudioIds = <String>{};
+  final Set<String> _persistedOcrCacheReferences = <String>{};
+  bool _ocrCacheOwnershipLoaded = false;
+  bool _ocrCacheCleanupSafe = false;
   List<dynamic> _unrestoredTaskRecords = [];
 
   /// Whether retry audio references are complete enough to authorize pruning.
@@ -5089,18 +5096,68 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
       return false;
     }
+    for (final task in currentSnapshot) {
+      if (task.type != BackgroundTaskType.asr ||
+          _ocrCacheReferencesInPersistedValue({
+            'rawRequest': task.rawRequest,
+            'rawResponse': task.rawResponse,
+          }).isEmpty ||
+          _unrestoredTaskRecords.any(
+            (record) =>
+                record is Map &&
+                record['ocrCacheOwnershipKnown'] == false &&
+                record['ocrCacheTaskId'] == task.id,
+          )) {
+        continue;
+      }
+      // ASR diagnostics are sanitized before serialization. Record their
+      // cache ownership while the raw fields are still available so the
+      // durable snapshot cannot make a live reference invisible.
+      _unrestoredTaskRecords.add(
+        _unrestoredTaskRecord(
+          retryAudioOwnershipKnown: true,
+          ocrCacheOwnershipKnown: false,
+          ocrCacheTaskId: task.id,
+        ),
+      );
+      _ocrCacheCleanupSafe = false;
+    }
     final skippedEntries = canPreserveSkippedEntries
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
-    final unrestoredRecords = List<dynamic>.unmodifiable(
-      _unrestoredTaskRecords.where(
-        (record) =>
-            !retireUnrestoredRecords ||
+    // A durable replacement snapshot removes an unknown task row and all of
+    // its discarded fields. Keep its credential-free diagnostic marker while
+    // resolving OCR ownership; conservatively retain unknown audio ownership.
+    final unrestoredRecords = List<dynamic>.unmodifiable([
+      for (final record in _unrestoredTaskRecords)
+        if (!retireUnrestoredRecords ||
             record is! Map ||
-            record['retireAfterSnapshot'] != true,
-      ),
-    );
+            record['retireAfterSnapshot'] != true)
+          if (retireUnrestoredRecords &&
+              record is Map &&
+              record['ocrCacheOwnershipKnown'] == false &&
+              record['ocrCacheTaskId'] is String &&
+              !currentSnapshot.any(
+                (task) => task.id == record['ocrCacheTaskId'],
+              ) &&
+              !skippedEntries.any(
+                (entry) =>
+                    entry is Map && entry['id'] == record['ocrCacheTaskId'],
+              ))
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown:
+                  record['retryAudioOwnershipKnown'] == true,
+              retryAudioIds: {
+                if (record['retryAudioIds'] is List)
+                  for (final id in record['retryAudioIds'] as List)
+                    if (id is String) id,
+              },
+              ocrCacheOwnershipKnown: true,
+            )
+          else
+            record,
+    ]);
     final preservedEntries = [...skippedEntries, ...unrestoredRecords];
     final saved = _hasCacheMigrations(currentSnapshot)
         ? await OcrRetryStorage.withCacheMaintenanceLock(
@@ -5135,6 +5192,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }
     if (saved) {
+      if (retireUnrestoredRecords) {
+        _unrestoredTaskRecords = List<dynamic>.of(unrestoredRecords);
+      }
       _persistedRetryAudioIds
         ..clear()
         ..addAll(_retryAudioIdsInSnapshot(currentSnapshot, preservedEntries));
@@ -5142,9 +5202,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _pendingSanitizedAsrRetryAudioIds.clear();
       _pendingReplacedRestoreAsrRetryAudioIds.clear();
       if (retireUnrestoredRecords) {
-        _unrestoredTaskRecords.removeWhere(
-          (record) => record is Map && record['retireAfterSnapshot'] == true,
-        );
         _retryAudioCleanupSafe = _pendingCompletedLegacyAsrRetryAudioIds
                 .isEmpty &&
             !_hasUntrackedSkippedAsrAudioOwnership(_skippedTaskEntries) &&
@@ -5243,7 +5300,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       ...prepared.map((task) => task.toMap()),
       ...preservedEntries,
     ];
-    return _writeSnapshotData(data, dirOverride);
+    final saved = await _writeSnapshotData(data, dirOverride);
+    if (saved) {
+      _persistedOcrCacheReferences
+        ..clear()
+        ..addAll(
+          _ocrCacheReferencesFromTasksAndEntries(prepared, preservedEntries),
+        );
+      _ocrCacheOwnershipLoaded = true;
+      _ocrCacheCleanupSafe = _hasKnownOcrCacheOwnership(
+        prepared,
+        preservedEntries,
+      );
+    }
+    return saved;
   }
 
   List<BackgroundTask>? _prepareAsrRetriesForPersistence(
@@ -5416,39 +5486,499 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return true;
   }
 
-  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
-    final persisted = await _loadPersistedTasks();
-    if (!persisted.isReadable) return null;
+  /// Returns every safely known OCR cache owner, or null when the persisted
+  /// task snapshot cannot be read safely enough to authorize deletion.
+  Future<Set<String>?> ocrCacheReferencesForCleanup() =>
+      _ocrCacheReferencesForCleanup();
+
+  /// Uses the already loaded snapshot while OCR cache maintenance is locked.
+  Set<String>? ocrCacheReferencesFromLoadedSnapshotForCleanup() {
+    if (!_ocrCacheOwnershipLoaded || !_ocrCacheCleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
       for (final task in tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      for (final task in persisted.tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        ..._ocrCacheReferencesInPersistedValue(task.toMap()),
+      ..._persistedOcrCacheReferences,
       ..._referencesFromSkippedTaskEntries(),
-      ..._referencesFromSkippedTaskEntries(persisted.skippedEntries),
+      for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
+        for (final task in removedTasks)
+          ..._ocrCacheReferencesInPersistedValue(task.toMap()),
     };
+  }
+
+  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
+    final persisted = await _loadPersistedTasks();
+    if (!persisted.isReadable || !persisted.ocrCacheCleanupSafe) return null;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    return _ocrCacheReferencesFromTasksAndEntries(
+      [...tasks, ...persisted.tasks],
+      [..._skippedTaskEntries, ...persisted.skippedEntries],
+    );
+  }
+
+  bool _canSafelyCollectSkippedOcrCacheReferences(Object? retryData) {
+    if (retryData == null) return true;
+    if (retryData is! Map) return false;
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      final type = data['type'];
+      if ((type != null && type != BackgroundTaskType.ocr.name) ||
+          data['images'] is! List) {
+        return false;
+      }
+      data['type'] ??= BackgroundTaskType.ocr.name;
+      final snapshot = OcrRetrySnapshot.fromMap(data);
+      final supportedVersion = snapshot.isLegacy ||
+          snapshot.version == 1 ||
+          snapshot.version == 2 ||
+          snapshot.version == OcrRetrySnapshot.currentVersion;
+      if (!supportedVersion) {
+        // A future version makes image execution unsupported, but its
+        // recognized image references still have known ownership. Unknown
+        // fields and malformed image metadata remain fail-closed.
+        return !snapshot.hasUnknownFields &&
+            !snapshot.hasInvalidImageMetadata &&
+            snapshot.imageEntryCount == snapshot.images.length;
+      }
+      return !snapshot.hasUnknownFields &&
+          !snapshot.hasInvalidImages &&
+          !snapshot.hasInvalidImageMetadata;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Set<String> _ocrCacheReferencesInPersistedValue(Object? value) {
+    final references = <String>{};
+    final pending = <Object?>[value];
+    final referencePattern = RegExp(r'ocr_retry_cache/[0-9a-f]{64}\.bin');
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (current is Map) {
+        for (final entry in current.entries) {
+          pending
+            ..add(entry.key)
+            ..add(entry.value);
+        }
+      } else if (current is List) {
+        pending.addAll(current);
+      } else if (current is String) {
+        for (final match in referencePattern.allMatches(current)) {
+          final reference = match.group(0);
+          if (reference != null &&
+              OcrRetryImage.isValidStorageReference(reference)) {
+            references.add(reference);
+          }
+        }
+      }
+    }
+    return references;
+  }
+
+  bool _requiresDurableOcrCacheOwnershipMarker(Object? retryData) {
+    if (retryData is! Map) {
+      return _ocrCacheReferencesInPersistedValue(retryData).isNotEmpty;
+    }
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
+      final version = data['version'];
+      bool containsCacheReference(Object? value) =>
+          _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
+      if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
+        return rawCacheReferences.isNotEmpty;
+      }
+      if (version is int &&
+          version > OcrRetrySnapshot.currentVersion &&
+          rawCacheReferences.isNotEmpty) {
+        final futureData = {...data, 'type': BackgroundTaskType.ocr.name};
+        final snapshot = OcrRetrySnapshot.fromMap(futureData);
+        final rawImages = futureData['images'];
+        final referencesOutsideStorageRefs = <String>{
+          ..._ocrCacheReferencesInPersistedValue(
+            Map<String, dynamic>.from(futureData)..remove('images'),
+          ),
+          if (futureData.containsKey('images') && rawImages is! List)
+            ..._ocrCacheReferencesInPersistedValue(rawImages),
+          if (rawImages is List)
+            for (final image in rawImages)
+              ..._ocrCacheReferencesInPersistedValue(
+                image is Map
+                    ? (Map<dynamic, dynamic>.of(image)..remove('storageRef'))
+                    : image,
+              ),
+        };
+        // The unsupported-version migration discards every input image. Once
+        // that transformed snapshot is durable, its recognized storageRefs
+        // can be collected. Refs in unknown fields or malformed image shapes
+        // still require a durable owner marker until the task is removed.
+        return snapshot.hasUnknownFields ||
+            snapshot.hasInvalidImageMetadata ||
+            snapshot.imageEntryCount != snapshot.images.length ||
+            referencesOutsideStorageRefs.isNotEmpty;
+      }
+      final modelIndex = data['modelIndex'];
+      if (modelIndex != null &&
+          modelIndex is! int &&
+          containsCacheReference(modelIndex)) {
+        return true;
+      }
+      final instructionIndex = data['instructionIndex'];
+      if (instructionIndex != null &&
+          instructionIndex is! int &&
+          containsCacheReference(instructionIndex)) {
+        return true;
+      }
+      final instructionContent = data['instructionContent'];
+      if (instructionContent != null &&
+          instructionContent is! String &&
+          containsCacheReference(instructionContent)) {
+        return true;
+      }
+      final saveFolder = data['saveFolder'];
+      if (saveFolder != null &&
+          saveFolder is! String &&
+          containsCacheReference(saveFolder)) {
+        return true;
+      }
+      final batchMode = data['batchMode'];
+      if (batchMode != null &&
+          (batchMode is! String ||
+              (batchMode != OcrBatchMode.joint.name &&
+                  batchMode != OcrBatchMode.perImage.name)) &&
+          containsCacheReference(batchMode)) {
+        return true;
+      }
+      final perImageConcurrency = data['perImageConcurrency'];
+      if (perImageConcurrency != null &&
+          (perImageConcurrency is! int ||
+              perImageConcurrency < 1 ||
+              perImageConcurrency > 2) &&
+          containsCacheReference(perImageConcurrency)) {
+        return true;
+      }
+      final requestSizeBudgetBytes = data['requestSizeBudgetBytes'];
+      if (requestSizeBudgetBytes != null &&
+          (requestSizeBudgetBytes is! int || requestSizeBudgetBytes <= 0) &&
+          containsCacheReference(requestSizeBudgetBytes)) {
+        return true;
+      }
+
+      const snapshotFields = {
+        'type',
+        'version',
+        'modelRef',
+        'images',
+        'modelIndex',
+        'instructionContent',
+        'instructionIndex',
+        'saveFolder',
+        'batchMode',
+        'perImageConcurrency',
+        'requestSizeBudgetBytes',
+      };
+      // These historical extensions are known credential/inline-body fields;
+      // sanitizing them cannot discard another cache reference.
+      const sanitizedNonOwnershipFields = {'apiKey', 'imageData'};
+      for (final entry in data.entries) {
+        final key = entry.key;
+        if (key is! String) {
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+          continue;
+        }
+        if (snapshotFields.contains(key)) continue;
+        if (!sanitizedNonOwnershipFields.contains(key) ||
+            (entry.value != null && entry.value is! String)) {
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+          continue;
+        }
+        if (containsCacheReference(key) ||
+            containsCacheReference(entry.value)) {
+          return true;
+        }
+      }
+      final modelRef = data['modelRef'];
+      if (modelRef != null &&
+          modelRef is! Map &&
+          containsCacheReference(modelRef)) {
+        return true;
+      }
+      if (modelRef is Map) {
+        const modelReferenceFields = {'configId', 'modelId'};
+        for (final entry in modelRef.entries) {
+          if (entry.key is! String ||
+              !modelReferenceFields.contains(entry.key) ||
+              (entry.value != null && entry.value is! String)) {
+            if (containsCacheReference(entry.key) ||
+                containsCacheReference(entry.value)) {
+              return true;
+            }
+            continue;
+          }
+          if (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+        }
+      }
+      final images = data['images'];
+      if (images != null && images is! List && containsCacheReference(images)) {
+        return true;
+      }
+      if (images is List) {
+        const imageFields = {'storageRef', 'format', 'name', 'bytes'};
+        for (final image in images) {
+          if (image is! Map) {
+            if (containsCacheReference(image)) return true;
+            continue;
+          }
+          for (final entry in image.entries) {
+            final key = entry.key;
+            if (key is! String) {
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
+              continue;
+            }
+            if (imageFields.contains(key)) continue;
+            if (!sanitizedNonOwnershipFields.contains(key) ||
+                (entry.value != null && entry.value is! String)) {
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
+              continue;
+            }
+            if (containsCacheReference(key) ||
+                containsCacheReference(entry.value)) {
+              return true;
+            }
+          }
+          final storageRef = image['storageRef'];
+          if (storageRef != null &&
+              (storageRef is! String ||
+                  !OcrRetryImage.isValidStorageReference(storageRef)) &&
+              containsCacheReference(storageRef)) {
+            return true;
+          }
+          final format = image['format'];
+          if (format != null &&
+              format is! String &&
+              containsCacheReference(format)) {
+            return true;
+          }
+          final name = image['name'];
+          if (name != null && name is! String && containsCacheReference(name)) {
+            return true;
+          }
+          final bytes = image['bytes'];
+          if (bytes != null &&
+              bytes is! String &&
+              containsCacheReference(bytes)) {
+            return true;
+          }
+        }
+      }
+      if (rawCacheReferences.isNotEmpty) {
+        final snapshot = OcrRetrySnapshot.fromMap(data);
+        final retainedReferences = {
+          for (final image in snapshot.images)
+            if (image.storageRef != null) image.storageRef!,
+        };
+        if (!retainedReferences.containsAll(rawCacheReferences)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasUnserializedTaskOcrCacheReferences(Map<dynamic, dynamic> taskRow) {
+    bool containsCacheReference(Object? value) =>
+        _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
+
+    if (taskRow['type'] != BackgroundTaskType.ocr.name &&
+        containsCacheReference(taskRow['retryData'])) {
+      // ASR persistence rebuilds supported retryData from a whitelist; an OCR
+      // cache ref in that non-OCR payload may be dropped by the sanitizer.
+      return true;
+    }
+
+    bool hasDroppedCollectionReferences(
+      Object? rawEntries,
+      Set<String> serializedFields,
+      bool Function(Map<dynamic, dynamic>) hasValidShape,
+    ) {
+      if (rawEntries == null) return false;
+      if (rawEntries is! List) return containsCacheReference(rawEntries);
+      for (final rawEntry in rawEntries) {
+        if (rawEntry is! Map) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        if (!hasValidShape(rawEntry)) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        for (final entry in rawEntry.entries) {
+          if ((entry.key is! String || !serializedFields.contains(entry.key)) &&
+              (containsCacheReference(entry.key) ||
+                  containsCacheReference(entry.value))) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (hasDroppedCollectionReferences(
+      taskRow['steps'],
+      const {'label', 'status', 'error'},
+      (step) =>
+          step['label'] is String &&
+          (step['status'] == null ||
+              (step['status'] is String &&
+                  BgStepStatus.values.any(
+                    (status) => status.name == step['status'],
+                  ))) &&
+          (step['error'] == null || step['error'] is String),
+    )) {
+      return true;
+    }
+    if (hasDroppedCollectionReferences(
+      taskRow['ocrPageOutcomes'],
+      const {'imageIndex', 'status', 'text', 'error'},
+      (outcome) =>
+          outcome['imageIndex'] is int &&
+          (outcome['imageIndex'] as int) >= 0 &&
+          outcome['status'] is String &&
+          OcrPageOutcomeStatus.values.any(
+            (status) => status.name == outcome['status'],
+          ) &&
+          (outcome['text'] == null || outcome['text'] is String) &&
+          (outcome['error'] == null || outcome['error'] is String),
+    )) {
+      return true;
+    }
+
+    const serializedTaskFields = {
+      'id',
+      'type',
+      'title',
+      'status',
+      'result',
+      'resultIsComplete',
+      'resultFolder',
+      'partialSaveRequested',
+      'resultSavedAsPartial',
+      'error',
+      'createdAt',
+      'completedAt',
+      'statusChangedAt',
+      'steps',
+      'downloadedFilePath',
+      'retryData',
+      'ocrPageOutcomes',
+    };
+    for (final entry in taskRow.entries) {
+      final isRawDiagnosticField =
+          entry.key == 'rawRequest' || entry.key == 'rawResponse';
+      final rawDiagnosticsAreSanitized =
+          taskRow['type'] == BackgroundTaskType.ocr.name ||
+              taskRow['type'] == BackgroundTaskType.asr.name;
+      final isDiscardedField = (!serializedTaskFields.contains(entry.key) &&
+              !(!rawDiagnosticsAreSanitized && isRawDiagnosticField)) ||
+          (rawDiagnosticsAreSanitized && isRawDiagnosticField);
+      if (isDiscardedField &&
+          (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
       if (entry is! Map) continue;
+      final serializedFields = Map<dynamic, dynamic>.of(entry)
+        ..remove('retryData');
+      references.addAll(_ocrCacheReferencesInPersistedValue(serializedFields));
       final retryData = entry['retryData'];
       if (retryData is! Map) continue;
       try {
-        references.addAll(
-          OcrRetryStorage.referencesFromSnapshot(
-            Map<String, dynamic>.from(retryData),
-          ),
-        );
+        final data = Map<String, dynamic>.from(retryData);
+        if (entry['type'] == BackgroundTaskType.ocr.name) {
+          data['type'] ??= BackgroundTaskType.ocr.name;
+          references.addAll(OcrRetryStorage.referencesFromSnapshot(data));
+        }
       } catch (_) {
         // Unknown persisted data must never expand the set of deletable paths.
       }
     }
     return references;
+  }
+
+  Set<String> _ocrCacheReferencesFromTasksAndEntries(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) {
+    final references = <String>{};
+    for (final task in tasks) {
+      final serialized = task.toMap();
+      if (task.type == BackgroundTaskType.ocr) {
+        references.addAll(
+          OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        );
+        // OCR images can carry large legacy Base64 payloads; recognized cache
+        // references are collected above, so scan only its other serialized
+        // fields recursively.
+        serialized.remove('retryData');
+      }
+      references.addAll(_ocrCacheReferencesInPersistedValue(serialized));
+    }
+    references.addAll(_referencesFromSkippedTaskEntries(entries));
+    return references;
+  }
+
+  bool _hasKnownOcrCacheOwnership(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) {
+    for (final task in tasks) {
+      if (task.type == BackgroundTaskType.ocr &&
+          _requiresDurableOcrCacheOwnershipMarker(task.retryData)) {
+        return false;
+      }
+    }
+    for (final entry in entries) {
+      if (entry is! Map) return false;
+      if (entry['_unrestoredTaskRecord'] == true) {
+        if (entry['ocrCacheOwnershipKnown'] != true) return false;
+        continue;
+      }
+      // Non-OCR rows may still carry cache owners in fields their task model
+      // would discard; preserved raw rows remain authoritative until removed.
+      if (_hasUnserializedTaskOcrCacheReferences(entry)) return false;
+      if (entry['type'] != BackgroundTaskType.ocr.name) continue;
+      final retryData = entry['retryData'];
+      if (!_canSafelyCollectSkippedOcrCacheReferences(retryData) ||
+          _requiresDurableOcrCacheOwnershipMarker(retryData) ||
+          _hasUnserializedTaskOcrCacheReferences(entry)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _hasCacheMigrations(List<BackgroundTask> snapshot) {
@@ -5790,6 +6320,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         bool isReadable,
         List<dynamic> skippedEntries,
         bool cleanupSafe,
+        bool ocrCacheCleanupSafe,
         List<dynamic> unrestoredRecords,
         bool hasUnsafeSkippedAsrData,
       })> _loadPersistedTasks({
@@ -5806,6 +6337,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: true,
           skippedEntries: <dynamic>[],
           cleanupSafe: true,
+          ocrCacheCleanupSafe: true,
           unrestoredRecords: <dynamic>[],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5821,6 +6353,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5837,6 +6370,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5849,6 +6383,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5860,6 +6395,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       var isComplete = true;
       var isCompleteExceptLegacyAsr = true;
       var cleanupSafe = true;
+      var ocrCacheCleanupSafe = true;
       var hasUnsafeSkippedAsrData = false;
       for (final m in list) {
         if (m is Map && m['_unrestoredTaskRecord'] == true) {
@@ -5874,6 +6410,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             'retryAudioOwnershipKnown',
             'retryAudioIds',
             'retireAfterSnapshot',
+            'ocrCacheOwnershipKnown',
+            'ocrCacheTaskId',
           };
           final hasUnsafeMarkerFields = m.entries.any(
             (entry) =>
@@ -5888,7 +6426,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               ) &&
               (rawIds == null || rawIds is List) &&
               (m['retireAfterSnapshot'] == null ||
-                  m['retireAfterSnapshot'] is bool);
+                  m['retireAfterSnapshot'] is bool) &&
+              (m['ocrCacheOwnershipKnown'] == null ||
+                  m['ocrCacheOwnershipKnown'] is bool) &&
+              (m['ocrCacheTaskId'] == null ||
+                  (m['ocrCacheTaskId'] is String &&
+                      (m['ocrCacheTaskId'] as String).isNotEmpty));
           if (rawIds is List) {
             for (final id in rawIds) {
               if (id is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
@@ -5898,18 +6441,29 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               retryAudioIds.add(id);
             }
           }
+          final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] == true;
           if (!markerValid || !ownershipKnown) cleanupSafe = false;
+          if (!markerValid || !ocrCacheOwnershipKnown) {
+            ocrCacheCleanupSafe = false;
+          }
           unrestoredRecords.add(
             _unrestoredTaskRecord(
               retryAudioOwnershipKnown: markerValid && ownershipKnown,
               retryAudioIds: markerValid ? retryAudioIds : const {},
               retireAfterSnapshot: markerValid && retireAfterSnapshot,
+              ocrCacheOwnershipKnown: markerValid && ocrCacheOwnershipKnown,
+              ocrCacheTaskId: markerValid && m['ocrCacheTaskId'] is String
+                  ? m['ocrCacheTaskId'] as String
+                  : null,
             ),
           );
           continue;
         }
         final rawMap = m is Map ? m : null;
         final rawRetryData = rawMap?['retryData'];
+        final hasNonOcrRetryCacheReferences = rawMap != null &&
+            rawMap['type'] != BackgroundTaskType.ocr.name &&
+            _ocrCacheReferencesInPersistedValue(rawRetryData).isNotEmpty;
         final hasAsrReferenceShape = rawRetryData is Map &&
             (rawRetryData.containsKey('audioReference') ||
                 rawRetryData.containsKey('audioReferences'));
@@ -5919,6 +6473,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             BackgroundTaskType.values.any(
               (type) => type.name == rawMap?['type'],
             );
+        final hasUnserializedOcrCacheReferences = rawMap != null &&
+            (_hasUnserializedTaskOcrCacheReferences(rawMap) ||
+                hasNonOcrRetryCacheReferences);
+        var ocrCacheOwnershipMarkerRecorded = false;
+        void recordUnknownOcrCacheOwnership() {
+          if (ocrCacheOwnershipMarkerRecorded || rawMap == null) return;
+          unrestoredRecords.add(
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown: true,
+              ocrCacheOwnershipKnown: false,
+              ocrCacheTaskId:
+                  rawMap['id'] is String ? rawMap['id'] as String : null,
+            ),
+          );
+          ocrCacheOwnershipMarkerRecorded = true;
+        }
+
+        if (hasUnserializedOcrCacheReferences) {
+          ocrCacheCleanupSafe = false;
+          recordUnknownOcrCacheOwnership();
+        }
         try {
           if (rawMap == null) {
             throw const FormatException('Task row is not an object');
@@ -5926,6 +6501,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           var task = BackgroundTask.fromMap(
             Map<String, dynamic>.from(rawMap),
           );
+          if (task.type == BackgroundTaskType.ocr &&
+              !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+            // Keep cleanup fail-closed until retry data has been normalized.
+            ocrCacheCleanupSafe = false;
+          }
+          if (hasUnserializedOcrCacheReferences ||
+              (task.type == BackgroundTaskType.ocr &&
+                  _requiresDurableOcrCacheOwnershipMarker(rawRetryData))) {
+            // Unknown fields can contain cache owners outside the images list.
+            // Persist the sanitized task together with this marker so future
+            // writes cannot accidentally authorize cleanup; removing the task
+            // retires its marker in the same durable snapshot.
+            recordUnknownOcrCacheOwnership();
+          }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];
             final hasUnsafeParsedTaskDiagnostics = [
@@ -6041,6 +6630,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 _unrestoredTaskRecord(
                   retryAudioOwnershipKnown: retryAudioIds != null,
                   retryAudioIds: retryAudioIds ?? const {},
+                  ocrCacheOwnershipKnown: !hasUnserializedOcrCacheReferences,
+                  ocrCacheTaskId: hasUnserializedOcrCacheReferences &&
+                          rawMap['id'] is String
+                      ? rawMap['id'] as String
+                      : null,
                   retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
                     rawMap,
                     rawRetryData,
@@ -6049,11 +6643,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               );
             }
           } else if (isKnownNonAsrRecord) {
+            if (hasUnserializedOcrCacheReferences) {
+              recordUnknownOcrCacheOwnership();
+            }
+            if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
+                !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+              ocrCacheCleanupSafe = false;
+            }
             skippedEntries.add(m);
           } else {
             cleanupSafe = false;
+            ocrCacheCleanupSafe = false;
             unrestoredRecords.add(
-              _unrestoredTaskRecord(retryAudioOwnershipKnown: false),
+              _unrestoredTaskRecord(
+                retryAudioOwnershipKnown: false,
+                ocrCacheOwnershipKnown: false,
+                ocrCacheTaskId:
+                    rawMap?['id'] is String ? rawMap!['id'] as String : null,
+              ),
             );
           }
           debugPrint(
@@ -6068,6 +6675,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: true,
         skippedEntries: skippedEntries,
         cleanupSafe: cleanupSafe,
+        ocrCacheCleanupSafe: ocrCacheCleanupSafe,
         unrestoredRecords: unrestoredRecords,
         hasUnsafeSkippedAsrData: hasUnsafeSkippedAsrData,
       );
@@ -6080,6 +6688,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: false,
         skippedEntries: <dynamic>[],
         cleanupSafe: false,
+        ocrCacheCleanupSafe: false,
         unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
         hasUnsafeSkippedAsrData: false,
       );
@@ -6126,6 +6735,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<bool> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
+    _persistedOcrCacheReferences
+      ..clear()
+      ..addAll(
+        _ocrCacheReferencesFromTasksAndEntries(
+          loaded.tasks,
+          [...loaded.skippedEntries, ...loaded.unrestoredRecords],
+        ),
+      );
     _persistedRetryAudioIds
       ..clear()
       ..addAll(
@@ -6236,6 +6855,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         _pendingRestoreTaskRemovals.clear();
         await _cleanupOrphanedOcrCache();
       }
+      _ocrCacheOwnershipLoaded = loaded.isReadable;
+      _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
       return snapshotComplete;
     }
     final restored = <BackgroundTask>[];
@@ -6330,6 +6951,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             _pendingReplacedRestoreAsrRetryAudioIds.isNotEmpty)) {
       _retryAudioCleanupSafe = false;
     }
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = snapshotSaved
+        ? _hasKnownOcrCacheOwnership(
+            mounted ? state : (_disposedSnapshot ?? restored),
+            [..._skippedTaskEntries, ..._unrestoredTaskRecords],
+          )
+        : loaded.isReadable && loaded.ocrCacheCleanupSafe;
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
     if (snapshotComplete && snapshotSaved) {
