@@ -605,12 +605,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final encodedCandidates =
         state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
     if (encodedCandidates != null) {
-      final candidates = (jsonDecode(encodedCandidates) as List)
-          .cast<String>()
-          .toSet();
+      final candidates =
+          (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
       final identityVersioned = state[index].metadata.containsKey(
-        CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
-      );
+            CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+          );
       if (!CatCatchTask.flowSelectionCandidateAllowed(
         candidates: candidates,
         identity: media.selectionIdentity,
@@ -668,8 +667,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       ..[CatCatchTask.flowManagedSelectionKey] = 'true'
       ..[CatCatchTask.flowSelectionCandidatesIdentityVersionKey] =
           CatCatchTask.flowSelectionCandidatesIdentityVersion
-      ..[CatCatchTask.flowSelectionCandidatesKey] =
-          jsonEncode(candidates.map((media) => media.selectionIdentity).toList());
+      ..[CatCatchTask.flowSelectionCandidatesKey] = jsonEncode(
+          candidates.map((media) => media.selectionIdentity).toList());
     final updated = task.copyWith(metadata: metadata);
     state = [
       for (int i = 0; i < state.length; i++)

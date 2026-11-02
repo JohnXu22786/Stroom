@@ -541,14 +541,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final mediaList = allowedIdentities == null
         ? task.detectedMedia
         : task.detectedMedia
-            .where((media) =>
-                catcatch.CatCatchTask.flowSelectionCandidateAllowed(
-                  candidates: allowedIdentities,
-                  identity: media.selectionIdentity,
-                  url: media.url,
-                  hasByteRange: media.hasByteRange,
-                  identityVersioned: identityVersioned,
-                ))
+            .where(
+                (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                      candidates: allowedIdentities,
+                      identity: media.selectionIdentity,
+                      url: media.url,
+                      hasByteRange: media.hasByteRange,
+                      identityVersioned: identityVersioned,
+                    ))
             .toList();
 
     final splitGroups = <String, List<MediaResource>>{};
@@ -571,10 +571,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     return (
       mediaList: mediaList,
       splitGroups: splitGroups,
-      selectableMedia:
-          mediaList
-              .where((media) => !splitUrls.contains(media.selectionIdentity))
-              .toList(),
+      selectableMedia: mediaList
+          .where((media) => !splitUrls.contains(media.selectionIdentity))
+          .toList(),
     );
   }
 
@@ -698,8 +697,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           .cast<String>()
                           .toSet();
                   final identityVersioned = task.metadata.containsKey(
-                    catcatch.CatCatchTask
-                        .flowSelectionCandidatesIdentityVersionKey,
+                    catcatch
+                        .CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
                   );
                   final selectedMediaList = task.detectedMedia
                       .where((media) =>
@@ -712,8 +711,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                 hasByteRange: media.hasByteRange,
                                 identityVersioned: identityVersioned,
                               )) &&
-                          selectedIdentities
-                              .contains(media.selectionIdentity))
+                          selectedIdentities.contains(media.selectionIdentity))
                       .toList();
                   if (selectedMediaList.isEmpty) return;
                   final notifier = ref.read(catcatchTasksProvider.notifier);
@@ -863,13 +861,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     : () {
                         final primaryVideo = videoResources.first;
                         setState(() {
-                          final identities =
-                              _getSelectedIdentities(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) identities.clear();
                           identities.add(primaryVideo.selectionIdentity);
                           if (!widget.isFlowManaged) {
-                            identities.add(
-                                audioResources.first.selectionIdentity);
+                            identities
+                                .add(audioResources.first.selectionIdentity);
                           }
                           _mergeAudioUrls[task.id] = audioResources.first.url;
                         });
@@ -890,8 +887,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final identities =
-                              _getSelectedIdentities(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
                             identities
                               ..clear()
@@ -920,8 +916,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final identities =
-                              _getSelectedIdentities(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
                             identities
                               ..clear()

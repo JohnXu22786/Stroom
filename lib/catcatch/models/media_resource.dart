@@ -53,7 +53,11 @@ class MediaResource {
   /// separate HLS byte ranges that share a URL.
   String get selectionIdentity {
     if (!hasByteRange) return url;
-    return '\u0000hls-range:${jsonEncode([url, byteRangeStart, byteRangeLength])}';
+    return '\u0000hls-range:${jsonEncode([
+          url,
+          byteRangeStart,
+          byteRangeLength
+        ])}';
   }
 
   const MediaResource({

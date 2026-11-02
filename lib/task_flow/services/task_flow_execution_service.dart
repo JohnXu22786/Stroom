@@ -248,8 +248,7 @@ class TaskFlowExecutionService {
       final encoded =
           task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
       if (encoded != null) {
-        final candidates =
-            (jsonDecode(encoded) as List).cast<String>().toSet();
+        final candidates = (jsonDecode(encoded) as List).cast<String>().toSet();
         final identityVersioned = task?.metadata.containsKey(
               catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
             ) ??

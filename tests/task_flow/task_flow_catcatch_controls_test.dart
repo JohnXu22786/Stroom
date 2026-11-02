@@ -181,7 +181,9 @@ void main() {
     await tester.tap(submit);
     await tester.pump();
 
-    expect(downloads.batches, [[firstRange]]);
+    expect(downloads.batches, [
+      [firstRange]
+    ]);
   });
 
   testWidgets('same-URL non-range candidates keep URL-based selection',
@@ -203,7 +205,9 @@ void main() {
     await tester.tap(submit);
     await tester.pump();
 
-    expect(downloads.batches, [[first, duplicate]]);
+    expect(downloads.batches, [
+      [first, duplicate]
+    ]);
   });
 
   testWidgets('flow candidate filtering and handoff distinguish byte ranges',
