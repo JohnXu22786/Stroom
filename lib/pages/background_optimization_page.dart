@@ -377,6 +377,8 @@ class _BackgroundOptimizationPageState
           _buildSectionHeader('系统环境检测', theme),
           const SizedBox(height: 8),
           _buildPlatformDetectionCard(theme),
+          const SizedBox(height: 8),
+          _buildPlatformTutorialEntry(theme),
           const SizedBox(height: 24),
           _buildSectionHeader('后台优化检测', theme),
           const SizedBox(height: 8),
@@ -395,16 +397,6 @@ class _BackgroundOptimizationPageState
             _buildDesktopKeepAliveCard(theme),
             const SizedBox(height: 24),
           ],
-          _buildSectionHeader('平台教程', theme),
-          const SizedBox(height: 8),
-          _buildDescription(
-            '选择您的操作系统查看详细的后台运行优化教程。'
-            '不同系统的设置方式有所不同，请根据您的设备选择对应教程。',
-            theme,
-          ),
-          const SizedBox(height: 12),
-          ..._buildPlatformTutorialCards(),
-          const SizedBox(height: 24),
         ],
       ),
     );
@@ -1073,79 +1065,26 @@ class _BackgroundOptimizationPageState
     );
   }
 
-  // ── Platform Tutorial Cards ──────────────────────────────────────────
-
-  List<Widget> _buildPlatformTutorialCards() {
-    final platforms = [
-      PlatformTutorialConfig(
-        platformName: 'Android',
-        icon: Icons.android,
-        color: Colors.green,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'iOS',
-        icon: Icons.phone_iphone,
-        color: Colors.grey,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Windows',
-        icon: Icons.desktop_windows,
-        color: Colors.blue,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'macOS',
-        icon: Icons.desktop_mac,
-        color: Colors.blueGrey,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Linux',
-        icon: Icons.terminal,
-        color: Colors.orange,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Web',
-        icon: Icons.language,
-        color: Colors.purple,
-      ),
-    ];
-
-    return platforms.map((config) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Card(
-          child: ListTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: config.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              alignment: Alignment.center,
-              child: Icon(config.icon, color: config.color, size: 24),
-            ),
-            title: Text(
-              config.platformName,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text('${config.platformName} 后台运行优化教程'),
-            trailing: const Icon(Icons.chevron_right),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 4,
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PlatformTutorialPage(config: config),
-                ),
-              );
-            },
-          ),
+  Widget _buildPlatformTutorialEntry(ThemeData theme) {
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          Icons.menu_book_outlined,
+          color: theme.colorScheme.primary,
         ),
-      );
-    }).toList();
+        title: const Text('平台教程'),
+        subtitle: const Text('查看各个平台的后台运行优化教程'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PlatformTutorialSelectionPage(),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // ── Status Description ──────────────────────────────────────────────

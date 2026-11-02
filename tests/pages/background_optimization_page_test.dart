@@ -278,11 +278,13 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Tap the Android tutorial card by its unique subtitle
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
+      expect(find.text('平台教程'), findsOneWidget);
+      expect(find.text('Android 后台运行优化教程'), findsOneWidget);
+
       await tester.tap(find.text('Android 后台运行优化教程'));
       await tester.pumpAndSettle();
-
-      // Should navigate to PlatformTutorialPage with Android tutorial
       expect(find.text('Android 后台运行教程'), findsOneWidget);
     });
 
@@ -301,10 +303,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Windows 后台运行优化教程'));
       await tester.pumpAndSettle();
-
-      // Should navigate to PlatformTutorialPage with Windows tutorial
       expect(find.text('Windows 后台运行教程'), findsOneWidget);
     });
   });
@@ -1859,7 +1861,8 @@ void main() {
   });
 
   group('BackgroundOptimizationPage - platform tutorial cards', () {
-    testWidgets('tutorial card list includes a Web entry', (tester) async {
+    testWidgets('tutorial entry is below system environment detection',
+        (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 5000);
       tester.view.devicePixelRatio = 1.0;
@@ -1871,14 +1874,44 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // 六个平台教程入口都可达（Android 同时出现在平台检测卡，
-      // 因此用 findsWidgets；'Web' 只在教程卡片出现，可精确断言）。
-      expect(find.text('Android'), findsWidgets);
-      expect(find.text('iOS'), findsWidgets);
-      expect(find.text('Windows'), findsWidgets);
-      expect(find.text('macOS'), findsWidgets);
-      expect(find.text('Linux'), findsWidgets);
-      expect(find.text('Web'), findsOneWidget);
+      final detectionCard = find
+          .ancestor(
+            of: find.text('Android'),
+            matching: find.byType(Card),
+          )
+          .first;
+      final tutorialCard = find.ancestor(
+        of: find.text('查看各个平台的后台运行优化教程'),
+        matching: find.byType(Card),
+      );
+      expect(
+        tester.getTopLeft(tutorialCard).dy,
+        greaterThan(tester.getBottomLeft(detectionCard).dy),
+      );
+      expect(find.text('Android 后台运行优化教程'), findsNothing);
+    });
+
+    testWidgets('platform tutorial page lists supported platforms',
+        (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Android 后台运行优化教程'), findsOneWidget);
+      expect(find.text('iOS 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Windows 后台运行优化教程'), findsOneWidget);
+      expect(find.text('macOS 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Linux 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Web 后台运行优化教程'), findsOneWidget);
     });
   });
 }
