@@ -190,7 +190,8 @@ void main() {
 
     await _pumpInShortTaskListViewport(
       tester,
-      _task([one]).copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
+      _task([one])
+          .copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
     );
 
     final taskListViewport =

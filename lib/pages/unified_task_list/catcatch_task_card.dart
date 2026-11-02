@@ -120,11 +120,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         task.detectedMedia.isNotEmpty;
     final taskListViewportHeight =
         Scrollable.maybeOf(context)?.position.viewportDimension;
-    final resourceViewportHeight =
-        taskListViewportHeight != null && taskListViewportHeight.isFinite &&
-                taskListViewportHeight > 0
-            ? taskListViewportHeight * (2 / 3)
-            : MediaQuery.sizeOf(context).height * (2 / 3);
+    final resourceViewportHeight = taskListViewportHeight != null &&
+            taskListViewportHeight.isFinite &&
+            taskListViewportHeight > 0
+        ? taskListViewportHeight * (2 / 3)
+        : MediaQuery.sizeOf(context).height * (2 / 3);
 
     Color statusColor;
     IconData statusIcon;
