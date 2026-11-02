@@ -39,7 +39,7 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
 class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   bool _expanded = false;
   final Set<int> _expandedSteps = {};
-  final Map<String, Set<String>> _selectedMediaUrls = {};
+  final Map<String, Set<String>> _selectedMediaIdentities = {};
   final Map<String, String?> _mergeAudioUrls = {};
   final Set<String> _pendingFlowActions = {};
   final Set<String> _expandedSegments = {};
@@ -52,6 +52,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     bool selecting,
     void Function(CatCatchNotifier) action, {
     String? selectedMediaUrl,
+    String? selectedMediaIdentity,
+    bool selectedMediaHasByteRange = false,
   }) async {
     if (!_pendingFlowActions.add(taskId)) return;
     setState(() {});
@@ -59,7 +61,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       final started = await ref
           .read(taskFlowExecutionServiceProvider)
           .performManualCatCatchAction(taskId, selecting, action,
-              selectedMediaUrl: selectedMediaUrl);
+              selectedMediaUrl: selectedMediaUrl,
+              selectedMediaIdentity: selectedMediaIdentity,
+              selectedMediaHasByteRange: selectedMediaHasByteRange);
       if (!started && mounted) {
         _showFlowActionError('任务流操作未执行，请检查流程状态后重试');
       }
@@ -76,21 +80,21 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Set<String> _getSelectedUrls(String taskId) =>
-      _selectedMediaUrls.putIfAbsent(taskId, () => {});
+  Set<String> _getSelectedIdentities(String taskId) =>
+      _selectedMediaIdentities.putIfAbsent(taskId, () => {});
 
-  bool _isSelected(String taskId, String url) =>
-      _getSelectedUrls(taskId).contains(url);
+  bool _isSelected(String taskId, String identity) =>
+      _getSelectedIdentities(taskId).contains(identity);
 
-  void _toggleSelection(String taskId, String url) {
+  void _toggleSelection(String taskId, String identity) {
     if (_isFlowActionPending(taskId)) return;
     setState(() {
-      final urls = _getSelectedUrls(taskId);
-      if (urls.contains(url)) {
-        urls.remove(url);
+      final identities = _getSelectedIdentities(taskId);
+      if (identities.contains(identity)) {
+        identities.remove(identity);
       } else {
-        if (widget.isFlowManaged) urls.clear();
-        urls.add(url);
+        if (widget.isFlowManaged) identities.clear();
+        identities.add(identity);
       }
       if (widget.isFlowManaged) _mergeAudioUrls[taskId] = null;
     });
@@ -528,13 +532,23 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final encodedCandidates = widget.isFlowManaged
         ? task.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey]
         : null;
-    final allowedUrls = encodedCandidates == null
+    final allowedIdentities = encodedCandidates == null
         ? null
         : (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
-    final mediaList = allowedUrls == null
+    final identityVersioned = task.metadata.containsKey(
+      catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+    );
+    final mediaList = allowedIdentities == null
         ? task.detectedMedia
         : task.detectedMedia
-            .where((media) => allowedUrls.contains(media.url))
+            .where(
+                (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                      candidates: allowedIdentities,
+                      identity: media.selectionIdentity,
+                      url: media.url,
+                      hasByteRange: media.hasByteRange,
+                      identityVersioned: identityVersioned,
+                    ))
             .toList();
 
     final splitGroups = <String, List<MediaResource>>{};
@@ -543,22 +557,23 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         splitGroups.putIfAbsent(media.groupId!, () => []).add(media);
       }
     }
-    final splitUrls = allowedUrls == null
+    final splitUrls = allowedIdentities == null
         ? splitGroups.values
-            .expand((group) => group.map((media) => media.url))
+            .expand((group) => group.map((media) => media.selectionIdentity))
             .toSet()
         : <String>{
             for (final group in splitGroups.values)
               if (group.any((media) => media.isAudio) &&
                   group.any((media) => media.isVideo))
-                ...group.map((media) => media.url),
+                ...group.map((media) => media.selectionIdentity),
           };
 
     return (
       mediaList: mediaList,
       splitGroups: splitGroups,
-      selectableMedia:
-          mediaList.where((media) => !splitUrls.contains(media.url)).toList(),
+      selectableMedia: mediaList
+          .where((media) => !splitUrls.contains(media.selectionIdentity))
+          .toList(),
     );
   }
 
@@ -603,7 +618,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final splitGroups = selection.splitGroups;
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
-    final selectedUrls = _getSelectedUrls(task.id);
+    final selectedIdentities = _getSelectedIdentities(task.id);
     final isSegment = (MediaResource media) => media.isPlaylistSegment;
     final selectableMedia = selection.selectableMedia;
     final segments = selectableMedia.where(isSegment).toList();
@@ -627,8 +642,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            selectedUrls.isNotEmpty
-                ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
+            selectedIdentities.isNotEmpty
+                ? '已选 ${selectedIdentities.length}/${mediaList.length} 个资源'
                 : '检测到 ${mediaList.length} 个媒体资源'
                     '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
             style: Theme.of(context)
@@ -660,14 +675,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   }
 
   Widget _buildMediaSelectionAction(catcatch.CatCatchTask task) {
-    final selectedUrls = _getSelectedUrls(task.id);
+    final selectedIdentities = _getSelectedIdentities(task.id);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed: selectedUrls.isNotEmpty &&
+          onPressed: selectedIdentities.isNotEmpty &&
                   !_isFlowActionPending(task.id) &&
                   (!widget.isFlowManaged ||
                       task.status == catcatch.TaskStatus.running)
@@ -676,16 +691,27 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       ? task.metadata[
                           catcatch.CatCatchTask.flowSelectionCandidatesKey]
                       : null;
-                  final allowedUrls = encodedCandidates == null
+                  final allowedIdentities = encodedCandidates == null
                       ? null
                       : (jsonDecode(encodedCandidates) as List)
                           .cast<String>()
                           .toSet();
+                  final identityVersioned = task.metadata.containsKey(
+                    catcatch
+                        .CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+                  );
                   final selectedMediaList = task.detectedMedia
                       .where((media) =>
-                          (allowedUrls == null ||
-                              allowedUrls.contains(media.url)) &&
-                          selectedUrls.contains(media.url))
+                          (allowedIdentities == null ||
+                              catcatch.CatCatchTask
+                                  .flowSelectionCandidateAllowed(
+                                candidates: allowedIdentities,
+                                identity: media.selectionIdentity,
+                                url: media.url,
+                                hasByteRange: media.hasByteRange,
+                                identityVersioned: identityVersioned,
+                              )) &&
+                          selectedIdentities.contains(media.selectionIdentity))
                       .toList();
                   if (selectedMediaList.isEmpty) return;
                   final notifier = ref.read(catcatchTasksProvider.notifier);
@@ -700,6 +726,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         mergeAudioUrl: mergeAudio,
                       ),
                       selectedMediaUrl: selectedMediaList.first.url,
+                      selectedMediaIdentity:
+                          selectedMediaList.first.selectionIdentity,
+                      selectedMediaHasByteRange:
+                          selectedMediaList.first.hasByteRange,
                     );
                   } else {
                     notifier.batchSelectMedia(
@@ -718,8 +748,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           label: Text(
             _isFlowActionPending(task.id)
                 ? '正在等待任务流资源'
-                : selectedUrls.isNotEmpty
-                    ? '下载选中的 ${selectedUrls.length} 个资源'
+                : selectedIdentities.isNotEmpty
+                    ? '下载选中的 ${selectedIdentities.length} 个资源'
                     : '请选择要下载的资源',
           ),
           style: FilledButton.styleFrom(
@@ -831,11 +861,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     : () {
                         final primaryVideo = videoResources.first;
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
-                          if (widget.isFlowManaged) urls.clear();
-                          urls.add(primaryVideo.url);
+                          final identities = _getSelectedIdentities(task.id);
+                          if (widget.isFlowManaged) identities.clear();
+                          identities.add(primaryVideo.selectionIdentity);
                           if (!widget.isFlowManaged) {
-                            urls.add(audioResources.first.url);
+                            identities
+                                .add(audioResources.first.selectionIdentity);
                           }
                           _mergeAudioUrls[task.id] = audioResources.first.url;
                         });
@@ -856,14 +887,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
-                            urls
+                            identities
                               ..clear()
-                              ..add(videoResources.first.url);
+                              ..add(videoResources.first.selectionIdentity);
                           } else {
                             for (final v in videoResources) {
-                              urls.add(v.url);
+                              identities.add(v.selectionIdentity);
                             }
                           }
                           _mergeAudioUrls[task.id] = null;
@@ -885,14 +916,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
-                            urls
+                            identities
                               ..clear()
-                              ..add(audioResources.first.url);
+                              ..add(audioResources.first.selectionIdentity);
                           } else {
                             for (final a in audioResources) {
-                              urls.add(a.url);
+                              identities.add(a.selectionIdentity);
                             }
                           }
                           _mergeAudioUrls[task.id] = null;
@@ -923,7 +954,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     ColorScheme colorScheme, {
     required bool isAudio,
   }) {
-    final isSelected = _isSelected(task.id, media.url);
+    final identity = media.selectionIdentity;
+    final isSelected = _isSelected(task.id, identity);
 
     return Card(
       elevation: 0,
@@ -942,7 +974,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         borderRadius: BorderRadius.circular(8),
         onTap: _isFlowActionPending(task.id)
             ? null
-            : () => _toggleSelection(task.id, media.url),
+            : () => _toggleSelection(task.id, identity),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
@@ -1111,7 +1143,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final isSelected = _isSelected(task.id, media.url);
+    final identity = media.selectionIdentity;
+    final isSelected = _isSelected(task.id, identity);
     final isAudioType = isAudioPreviewResource(media);
 
     return Card(
@@ -1128,7 +1161,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         borderRadius: BorderRadius.circular(8),
         onTap: _isFlowActionPending(task.id)
             ? null
-            : () => _toggleSelection(task.id, media.url),
+            : () => _toggleSelection(task.id, identity),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
