@@ -4194,6 +4194,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
   }) {
+    final task = taskById(taskId);
+    if (task != null &&
+        task.type == BackgroundTaskType.ocr &&
+        task.status == TaskStatus.waiting &&
+        task.error == '已取消') {
+      // A canceled runner can report its result after failed-removal rollback.
+      // Keep the restored retry task waiting instead of replacing its safe
+      // cancellation summary with a stale, potentially hidden error.
+      return;
+    }
     _updateTask(
       taskId,
       TaskStatus.failed,
@@ -4640,7 +4650,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final taskToRestore = task.status == TaskStatus.running
           ? task.copyWith(
               status: TaskStatus.waiting,
-              error: 'Canceled because task removal could not be saved.',
+              error: '已取消',
             )
           : task;
       restored.insert(restoreIndex ?? restored.length, taskToRestore);

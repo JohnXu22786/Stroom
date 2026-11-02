@@ -468,6 +468,7 @@ void main() {
         await seed.pendingPersistence;
 
         final notifier = BackgroundTaskNotifier();
+        final cancellationHandled = Completer<void>();
         var cancellationHandledWhileAbsent = false;
         var writeAttempts = 0;
         try {
@@ -481,8 +482,7 @@ void main() {
             scheduleMicrotask(() {
               cancellationHandledWhileAbsent =
                   notifier.taskById(taskId) == null;
-              // Model the runner trying to report cancellation after removal.
-              notifier.failTask(taskId, error: 'Canceled by removal');
+              cancellationHandled.complete();
             });
           });
           BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
@@ -491,7 +491,11 @@ void main() {
           };
 
           notifier.removeTask(taskId);
-          await Future<void>.delayed(Duration.zero);
+          await cancellationHandled.future;
+          await notifier.pendingPersistence;
+          // The canceled runner may report after rollback has already
+          // restored the waiting task.
+          notifier.failTask(taskId, error: 'Canceled by removal');
           await notifier.pendingPersistence;
 
           final restored = notifier.taskById(taskId)!;
@@ -501,7 +505,7 @@ void main() {
           expect(restored.title, 'OCR retry task');
           expect(restored.status, TaskStatus.waiting);
           expect(restored.status, isNot(TaskStatus.running));
-          expect(restored.error, startsWith('Canceled'));
+          expect(restored.error, '已取消');
           expect(restored.retryData, retryData);
         } finally {
           BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
