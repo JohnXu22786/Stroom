@@ -275,7 +275,7 @@ void main() {
       const source = r'Escaped \$x$ and \(y plus $unfinished';
       final nodes = _parseWithLatex(source);
       expect(_findElement(nodes, 'latex'), isNull);
-      expect(_collectPlainText(nodes).join(), source);
+      expect(_collectPlainText(nodes).join(), source.replaceFirst(r'\$', r'$'));
     });
 
     test('escaped dollar inside math does not end the formula', () {
@@ -400,7 +400,10 @@ void main() {
 
       final fallback = find.text(r'$\frac{1}{$', findRichText: true);
       expect(fallback, findsOneWidget);
-      expect(tester.widget<Text>(fallback).style?.color, Colors.red);
+      final fallbackText = find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == r'$\frac{1}{$',
+      );
+      expect(tester.widget<Text>(fallbackText).style?.color, Colors.red);
       await tester.tap(fallback);
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);

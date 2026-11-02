@@ -136,6 +136,23 @@ class LatexSyntax extends m.InlineSyntax {
         );
 
   @override
+  bool tryMatch(m.InlineParser parser, [int? startMatchPos]) {
+    final position = startMatchPos ?? parser.pos;
+    final match = pattern.matchAsPrefix(parser.source, position);
+    if (match != null &&
+        !_hasEscapedBackslash(parser.source, position) &&
+        match[0]!.startsWith(r'$') &&
+        !match[0]!.startsWith(r'$$') &&
+        _isCrossPairedInlineDollar(parser.source, position, match[0]!)) {
+      parser.writeText();
+      parser.addNode(m.Text(r'$'));
+      parser.consume(1);
+      return true;
+    }
+    return super.tryMatch(parser, startMatchPos);
+  }
+
+  @override
   bool onMatch(m.InlineParser parser, Match match) {
     final input = match.input;
     final matchValue = input.substring(match.start, match.end);
@@ -146,13 +163,6 @@ class LatexSyntax extends m.InlineSyntax {
       parser.addNode(m.Text(matchValue));
       return true;
     }
-    if (matchValue.startsWith(inlineSyntax) &&
-        !matchValue.startsWith(blockSyntax) &&
-        _isCrossPairedInlineDollar(input, match.start, matchValue)) {
-      parser.addNode(m.Text(matchValue));
-      return true;
-    }
-
     String content = '';
     bool isInline = true;
 
@@ -196,6 +206,7 @@ bool _isCrossPairedInlineDollar(
   int index,
   String matchValue,
 ) {
+  if (index == 0) return false;
   final previousDollar = input.lastIndexOf(r'$', index - 1);
   if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
     return false;
