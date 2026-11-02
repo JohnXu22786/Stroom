@@ -51,7 +51,7 @@ fi
 run_node() {
   local label=$1 nodeargs=$2 marker=$3 max_wait=${4:-120} log i
   adb shell am force-stop "$package" || true
-  adb logcat -c >/dev/null 2>&1 || true
+  adb logcat -c
   echo "===== Start $label ====="
   local start_output
   start_output=$(start_with_nodeargs "$nodeargs" 2>&1) || {
@@ -68,17 +68,10 @@ run_node() {
     echo "Activity start has not completed yet; waiting for $label output."
   fi
   for i in $(seq 1 "$max_wait"); do
-    # Scope output to this launch's process: logcat buffers can retain a previous
-    # stage's RESULT:FAIL even after `adb logcat -c` on slower emulator boots.
-    local pid
-    pid=$(adb shell pidof "$package" 2>/dev/null | tr -d '\r' | awk '{print $1}') || true
-    if [[ -n "$pid" ]]; then
-      # MainActivity writes its input args at verbose level. Exclude those lines
-      # so a marker embedded in the command cannot be mistaken for output.
-      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
-    else
-      log=''
-    fi
+    # This stage starts with a cleared log buffer. Read the buffer rather than
+    # filtering by the app PID so markers remain observable after Node Mobile
+    # exits the Activity process (as npm does after its exit handler runs).
+    log=$(adb logcat -d -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
     if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
       break
     fi
@@ -96,7 +89,7 @@ run_node() {
 
 run_expected_raw_failure() {
   adb shell am force-stop "$package" || true
-  adb logcat -c >/dev/null 2>&1 || true
+  adb logcat -c
   echo '===== Confirm unpatched UTF-8 module read failure ====='
   local output log i
   output=$(start_with_nodeargs \
