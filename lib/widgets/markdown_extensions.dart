@@ -128,7 +128,11 @@ class LatexSyntax extends m.InlineSyntax {
       r'(\\\((?:(?:\\.)|[^\\])+?\\\))|'
       r'(\\\[(?:(?:\\.)|[^\\])+?\\\])|'
       r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
-      r'(\$(?!\$)(?:(?:\\.)|[^\\$\n])+?\$(?!\$))';
+      r'(\$(?!\$)(?:(?:\\.)|[^\\$\n])+?\$(?!\$))|'
+      // Preserve unmatched math openers as literal text instead of letting
+      // Markdown's EscapeSyntax remove their leading backslash.
+      r'(\\\()|'
+      r'(\\\[)';
 
   LatexSyntax()
       : super(
@@ -160,6 +164,10 @@ class LatexSyntax extends m.InlineSyntax {
     const inlineSyntax = r'$';
 
     if (_hasEscapedBackslash(input, match.start)) {
+      parser.addNode(m.Text(matchValue));
+      return true;
+    }
+    if (matchValue == r'\(' || matchValue == r'\[') {
       parser.addNode(m.Text(matchValue));
       return true;
     }
@@ -302,7 +310,7 @@ class LatexNode extends SpanNode {
               builder: (dialogContext) => AlertDialog(
                 title: const Text('Math parse error'),
                 content: SingleChildScrollView(
-                  child: SelectableText(error.toString()),
+                  child: SelectableText(error.messageWithType),
                 ),
                 actions: [
                   TextButton(

@@ -272,10 +272,13 @@ void main() {
     });
 
     test('escaped and incomplete delimiters stay literal', () {
-      const source = r'Escaped \$x$ and \(y plus $unfinished';
+      const source = r'Escaped \$x$ and \(y plus \[z plus $unfinished';
       final nodes = _parseWithLatex(source);
       expect(_findElement(nodes, 'latex'), isNull);
-      expect(_collectPlainText(nodes).join(), source.replaceFirst(r'\$', r'$'));
+      expect(
+        _collectPlainText(nodes).join(),
+        source.replaceFirst(r'\$', r'$'),
+      );
     });
 
     test('escaped dollar inside math does not end the formula', () {
@@ -407,7 +410,13 @@ void main() {
       await tester.tap(fallback);
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.textContaining('Expected'), findsOneWidget);
+      final parserError = find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.data?.contains('Parser Error') == true &&
+            widget.data?.contains('Expected') == true,
+      );
+      expect(parserError, findsOneWidget);
     });
   });
 
