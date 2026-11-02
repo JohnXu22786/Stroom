@@ -124,8 +124,7 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
 class LatexSyntax extends m.InlineSyntax {
   /// Matches existing dollar forms and the common LaTeX display/inline
   /// delimiters. Markdown handles code spans and fences before this syntax.
-  static const String latexPattern =
-      r'(\$\$[\s\S]+?\$\$)|(\\\([\s\S]+?\\\))|'
+  static const String latexPattern = r'(\$\$[\s\S]+?\$\$)|(\\\([\s\S]+?\\\))|'
       r'(\\\[[\s\S]+?\\\])|'
       r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
       r'(\$(?!\$)[^\n$]+?\$(?!\$))';
@@ -153,11 +152,9 @@ class LatexSyntax extends m.InlineSyntax {
         matchValue != blockSyntax) {
       content = matchValue.substring(2, matchValue.length - 2);
       isInline = false;
-    } else if (matchValue.startsWith(r'\(') &&
-        matchValue.endsWith(r'\)')) {
+    } else if (matchValue.startsWith(r'\(') && matchValue.endsWith(r'\)')) {
       content = matchValue.substring(2, matchValue.length - 2);
-    } else if (matchValue.startsWith(r'\[') &&
-        matchValue.endsWith(r'\]')) {
+    } else if (matchValue.startsWith(r'\[') && matchValue.endsWith(r'\]')) {
       content = matchValue.substring(2, matchValue.length - 2);
       isInline = false;
     } else if (matchValue.startsWith(r'\begin{')) {
@@ -189,10 +186,12 @@ String _prepareMathEnvironment(String content) {
   const equationStart = r'\begin{equation}';
   const equationEnd = r'\end{equation}';
   if (content.startsWith(equationStart) && content.endsWith(equationEnd)) {
-    return content.substring(
-      equationStart.length,
-      content.length - equationEnd.length,
-    ).trim();
+    return content
+        .substring(
+          equationStart.length,
+          content.length - equationEnd.length,
+        )
+        .trim();
   }
   const alignStart = r'\begin{align}';
   const alignEnd = r'\end{align}';

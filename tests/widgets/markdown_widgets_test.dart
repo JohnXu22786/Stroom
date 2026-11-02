@@ -267,7 +267,8 @@ void main() {
 
       collect(nodes);
       expect(elements, hasLength(3));
-      expect(elements.every((e) => e.attributes['isInline'] == 'false'), isTrue);
+      expect(
+          elements.every((e) => e.attributes['isInline'] == 'false'), isTrue);
     });
 
     test('escaped and incomplete delimiters stay literal', () {
