@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/m3u8_parser.dart';
 
 void main() {
-  test('includes the resolved initialization map before media segments', () async {
+  test('includes the resolved initialization map before media segments',
+      () async {
     const playlist = '''
 #EXTM3U
 #EXT-X-VERSION:7
