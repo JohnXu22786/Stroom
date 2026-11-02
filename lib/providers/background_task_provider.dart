@@ -5495,6 +5495,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           return true;
         }
       }
+      final modelRef = data['modelRef'];
+      if (modelRef is Map) {
+        const modelReferenceFields = {'configId', 'modelId'};
+        if (modelRef.keys.any(
+          (key) => key is! String || !modelReferenceFields.contains(key),
+        )) {
+          return true;
+        }
+      }
       final images = data['images'];
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
