@@ -5525,7 +5525,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             }
           }
           final storageRef = image['storageRef'];
-          if (storageRef != null && storageRef is! String) {
+          if (storageRef != null &&
+              (storageRef is! String ||
+                  !OcrRetryImage.isValidStorageReference(storageRef))) {
             return true;
           }
         }

@@ -19033,6 +19033,12 @@ void main() {
             },
           ],
         );
+        await expectUnknownOwnership(
+          'ocr-invalid-storage-ref-owner',
+          [
+            {'storageRef': 'ocr_retry_cache/not-a-valid-reference.bin'},
+          ],
+        );
       },
     );
 
