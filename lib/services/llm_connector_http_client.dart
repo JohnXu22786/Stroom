@@ -57,6 +57,7 @@ class LlmConnectorHttpClient {
     required LlmAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,
@@ -189,6 +190,7 @@ class LlmConnectorHttpClient {
           awsCredentials: awsCredentials,
           modelId: modelId,
           body: body,
+          conversationId: conversationId,
           // Devin's source contract exposes unary Connect-RPC. The app's
           // chat stream adapter still expects SSE, which is synthesized from
           // the completed unary response below.

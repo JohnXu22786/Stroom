@@ -551,6 +551,7 @@ abstract interface class AiGatewayExecutor {
     required AiGatewayAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,

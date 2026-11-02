@@ -1406,6 +1406,18 @@ void main() {
         credentialStore: _MemoryCredentialStore(),
         dio: discoveryDio,
       );
+      const originalCredential = '{"access_token":"existing-access"}';
+      final originalAccount = LlmAccount(
+        id: 'workbuddy-cancel-discovery',
+        connectorType: 'workbuddy',
+        authType: 'oauth',
+        displayName: 'Existing WorkBuddy',
+        status: LlmAccountStatus.ready,
+      );
+      await service.saveAccount(
+        originalAccount,
+        secret: originalCredential,
+      );
       final oauthDio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           if (options.uri.path.endsWith('/state')) {
@@ -1457,10 +1469,14 @@ void main() {
         authorization.completed,
         throwsA(isA<AiGatewayOAuthException>()),
       );
-      expect(await service.listAccounts(), isEmpty);
+      final remainingAccount = (await service.listAccounts()).single;
+      expect(remainingAccount.id, originalAccount.id);
+      expect(remainingAccount.displayName, originalAccount.displayName);
+      expect(remainingAccount.status, originalAccount.status);
+      expect(remainingAccount.models, isEmpty);
       expect(
         await service.readCredential('workbuddy-cancel-discovery'),
-        isNull,
+        originalCredential,
       );
     },
   );

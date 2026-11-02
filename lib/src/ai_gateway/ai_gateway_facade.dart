@@ -1288,43 +1288,41 @@ class _LlmTencentDeviceAuthorization
       if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
       var models = _account.models;
       if (_account.connectorType == 'workbuddy') {
-        final temporary = await _accountManagement.saveAuthorizedOAuthAccount(
-          AiGatewayAccount(
-            id: _account.id,
-            connectorType: _account.connectorType,
-            authType: _account.authType,
-            displayName: _account.displayName,
-            status: AiGatewayAccountStatus.ready,
-            hasCredential: true,
-            credentialRef: _account.credentialRef,
-            endpointConfig: _account.endpointConfig,
-            models: const [],
-          ),
-          secret: jsonEncode(bundle),
-        );
-        if (_cancelToken.isCancelled) {
-          await _accountManagement.deleteAccount(temporary.id);
-          throw const AiGatewayOAuthException();
-        }
+        final temporaryId = '${_account.id}:discovery:${const Uuid().v4()}';
         try {
-          final discovered = await _accounts.discoverModels(
-            _legacyAccount(temporary),
-            refreshRemote: true,
+          final temporary = await _accountManagement.saveAuthorizedOAuthAccount(
+            AiGatewayAccount(
+              id: temporaryId,
+              connectorType: _account.connectorType,
+              authType: _account.authType,
+              displayName: _account.displayName,
+              status: AiGatewayAccountStatus.ready,
+              hasCredential: true,
+              endpointConfig: _account.endpointConfig,
+              models: const [],
+            ),
+            secret: jsonEncode(bundle),
           );
           if (_cancelToken.isCancelled) {
             throw const AiGatewayOAuthException();
           }
-          models = [for (final model in discovered) _gatewayModel(model)];
-        } catch (_) {
-          if (_cancelToken.isCancelled) {
-            await _accountManagement.deleteAccount(temporary.id);
-            throw const AiGatewayOAuthException();
+          try {
+            final discovered = await _accounts.discoverModels(
+              _legacyAccount(temporary),
+              refreshRemote: true,
+            );
+            if (_cancelToken.isCancelled) {
+              throw const AiGatewayOAuthException();
+            }
+            models = [for (final model in discovered) _gatewayModel(model)];
+          } catch (_) {
+            if (_cancelToken.isCancelled) {
+              throw const AiGatewayOAuthException();
+            }
+            models = const [];
           }
-          models = const [];
-        }
-        if (_cancelToken.isCancelled) {
-          await _accountManagement.deleteAccount(temporary.id);
-          throw const AiGatewayOAuthException();
+        } finally {
+          await _accountManagement.deleteAccount(temporaryId);
         }
       } else {
         final catalog = _account.connectorType == 'codebuddy-cn'
@@ -1362,10 +1360,6 @@ class _LlmTencentDeviceAuthorization
         ),
         secret: jsonEncode(bundle),
       );
-      if (_cancelToken.isCancelled) {
-        await _accountManagement.deleteAccount(saved.id);
-        throw const AiGatewayOAuthException();
-      }
       return saved;
     } catch (_) {
       throw const AiGatewayOAuthException();
@@ -1919,6 +1913,7 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
     required AiGatewayAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,
@@ -1951,6 +1946,7 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
         account: _legacyAccount(account),
         modelId: modelId,
         body: body,
+        conversationId: conversationId,
         stream: stream,
         nativeFormat: nativeFormat,
         cancelToken: cancelToken,

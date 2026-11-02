@@ -1629,6 +1629,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     required LlmAccount account,
     required String modelId,
     required Object? body,
+    String? conversationId,
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,

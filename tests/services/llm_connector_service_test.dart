@@ -3663,6 +3663,7 @@ void main() {
         credential: jsonEncode({'access_token': 'workbuddy-access'}),
         modelId: 'model-one',
         body: body,
+        conversationId: 'stroom-conversation-one',
       );
       expect(
         workbuddy.uri.toString(),
@@ -3672,6 +3673,33 @@ void main() {
       expect(workbuddy.headers['X-Agent-Purpose'], 'conversation');
       expect(workbuddy.headers['X-Conversation-ID'], isNotEmpty);
       expect((workbuddy.body as Map)['stream'], isTrue);
+      final sameConversation = builder.build(
+        account: _account('workbuddy-oauth', 'workbuddy', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'workbuddy-access'}),
+        modelId: 'model-one',
+        body: const {
+          'model': 'model-one',
+          'messages': [
+            {'role': 'user', 'content': 'a different turn'},
+          ],
+        },
+        conversationId: 'stroom-conversation-one',
+      );
+      final otherConversation = builder.build(
+        account: _account('workbuddy-oauth', 'workbuddy', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'workbuddy-access'}),
+        modelId: 'model-one',
+        body: body,
+        conversationId: 'stroom-conversation-two',
+      );
+      expect(
+        sameConversation.headers['X-Conversation-ID'],
+        workbuddy.headers['X-Conversation-ID'],
+      );
+      expect(
+        otherConversation.headers['X-Conversation-ID'],
+        isNot(workbuddy.headers['X-Conversation-ID']),
+      );
     });
 
     test(

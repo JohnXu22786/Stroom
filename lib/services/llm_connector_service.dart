@@ -48,6 +48,7 @@ void _addTencentClientHeaders(
   Map<String, String> headers, {
   bool discovery = false,
   Object? body,
+  String? conversationId,
 }) {
   switch (connectorType) {
     case 'codebuddy-cn':
@@ -88,7 +89,12 @@ void _addTencentClientHeaders(
           'X-Agent-Purpose': 'conversation',
           'X-Agent-Type': 'main',
         });
-        _addConversationHeaders(headers, body, workbuddy: true);
+        _addConversationHeaders(
+          headers,
+          body,
+          workbuddy: true,
+          conversationId: conversationId,
+        );
       }
   }
 }
@@ -97,17 +103,20 @@ void _addConversationHeaders(
   Map<String, String> headers,
   Object? body, {
   bool workbuddy = false,
+  String? conversationId,
 }) {
   final map = body is Map ? body : const <Object?, Object?>{};
-  String key = [
-    map['session_id'],
-    map['prompt_cache_key'],
-    map['conversation_id']
-  ]
-      .whereType<String>()
-      .map((value) => value.trim())
-      .firstWhere((value) => value.isNotEmpty, orElse: () => '');
-  if (key.isEmpty) {
+  String key = conversationId?.trim().isNotEmpty == true
+      ? conversationId!.trim()
+      : [
+          map['session_id'],
+          map['prompt_cache_key'],
+          map['conversation_id'],
+        ]
+          .whereType<String>()
+          .map((value) => value.trim())
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+  if (key.isEmpty && !workbuddy) {
     final messages = map['messages'];
     if (messages is Iterable) {
       final firstUser = messages.whereType<Map>().firstWhere(
@@ -117,10 +126,10 @@ void _addConversationHeaders(
       if (firstUser.isNotEmpty) key = jsonEncode(firstUser);
     }
   }
-  final conversationId = key.isEmpty
+  final resolvedConversationId = key.isEmpty
       ? const Uuid().v4()
       : crypto.sha256.convert(utf8.encode(key)).toString().substring(0, 32);
-  headers['X-Conversation-ID'] = conversationId;
+  headers['X-Conversation-ID'] = resolvedConversationId;
   headers['X-Conversation-Request-ID'] = const Uuid().v4();
   final messageId = const Uuid().v4();
   headers['X-Conversation-Message-ID'] = messageId;
@@ -3642,6 +3651,7 @@ class LlmNativeRequestBuilder {
     required String? credential,
     required String modelId,
     required Object? body,
+    String? conversationId,
     AwsSigV4Credentials? awsCredentials,
     bool stream = false,
     String? nativeFormat,
@@ -3795,7 +3805,12 @@ class LlmNativeRequestBuilder {
         break;
       case 'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy':
         headers['Authorization'] = 'Bearer $secret';
-        _addTencentClientHeaders(account.connectorType, headers, body: body);
+        _addTencentClientHeaders(
+          account.connectorType,
+          headers,
+          body: body,
+          conversationId: conversationId,
+        );
         break;
       case 'antigravity':
         headers['Authorization'] = 'Bearer $secret';
