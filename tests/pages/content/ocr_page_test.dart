@@ -1,5 +1,6 @@
 // Merged from: ocr_page_test.dart, ocr_page_preview_edit_test.dart
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:image_picker/image_picker.dart';
@@ -1350,6 +1351,140 @@ void main() {
           ),
         );
         expect(blockedStartButton.onPressed, isNull);
+      },
+    );
+
+    testWidgets(
+      'disposed legacy migration preserves cache owned by skipped persisted OCR row',
+      (tester) async {
+        WebFileStore.enableTestMode();
+        final storageDir = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('ocr_retry_cache_ownership_'),
+        ))!;
+        final bytes = Uint8List.fromList([17, 18, 19]);
+        final unreferencedBytes = Uint8List.fromList([20, 21, 22]);
+        String? unreferencedCandidateReference;
+        const skippedTaskId = 'skipped-ocr-owner';
+        const legacyTaskId = 'legacy-migration-owner';
+        final migrationStarted = Completer<void>();
+        final finishMigration = Completer<void>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        BackgroundTaskNotifier.debugStorageDirectoryOverride = storageDir.path;
+        try {
+          final sharedRetryData = await tester.runAsync(
+            () => OcrRetryStorage.cacheSnapshot(
+              taskId: skippedTaskId,
+              snapshot: OcrRetrySnapshot.capture(
+                configId: 'config-1',
+                modelId: 'model-1',
+                images: [OcrRetryImage(bytes: bytes, format: 'png')],
+              ),
+            ),
+          );
+          final sharedReference = (((sharedRetryData!['images'] as List).single
+              as Map)['storageRef'] as String);
+          final skippedRow = {
+            // The invalid status makes this OCR row skippable on restore;
+            // its valid retry reference must keep owning the cache entry.
+            'id': skippedTaskId,
+            'type': 'ocr',
+            'title': 'Skipped OCR owner',
+            'status': 'unknown-status',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': <dynamic>[],
+            'retryData': sharedRetryData,
+          };
+          final tasksFile = File(
+            '${storageDir.path}/background/tasks.json',
+          );
+          await tester.runAsync(() async {
+            await tasksFile.parent.create(recursive: true);
+            await tasksFile.writeAsString(jsonEncode([skippedRow]));
+          });
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.tasksForTest, isEmpty);
+          notifier.setTasksForTest([
+            BackgroundTask(
+              id: legacyTaskId,
+              type: BackgroundTaskType.ocr,
+              title: 'Legacy OCR retry',
+              status: TaskStatus.failed,
+              retryData: {
+                'type': 'ocr',
+                'version': 1,
+                'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+                'images': [
+                  {'bytes': base64Encode(bytes), 'format': 'png'},
+                  {
+                    'bytes': base64Encode(unreferencedBytes),
+                    'format': 'png',
+                  },
+                ],
+              },
+            ),
+          ]);
+
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry()],
+              backgroundTasksNotifier: notifier,
+              retryData: {
+                'type': 'ocr',
+                'version': 1,
+                'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+                'images': [
+                  {'bytes': base64Encode(bytes), 'format': 'png'},
+                  {
+                    'bytes': base64Encode(unreferencedBytes),
+                    'format': 'png',
+                  },
+                ],
+              },
+              retryTaskId: legacyTaskId,
+              testRetrySnapshotCacher: (
+                  {required taskId, required snapshot}) async {
+                final result = await OcrRetryStorage.cacheSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                );
+                unreferencedCandidateReference = OcrRetryStorage
+                    .referencesFromSnapshot(result)
+                    .singleWhere((reference) => reference != sharedReference);
+                migrationStarted.complete();
+                await finishMigration.future;
+                return result;
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+          await migrationStarted.future;
+
+          notifier.setTasksForTest([]);
+          await tester.pumpWidget(const SizedBox.shrink());
+          finishMigration.complete();
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 100)),
+          );
+
+          expect(
+            await tester.runAsync(() => OcrRetryStorage.read(sharedReference)),
+            bytes,
+          );
+          expect(unreferencedCandidateReference, isNotNull);
+          expect(
+            await tester.runAsync(
+              () => OcrRetryStorage.read(unreferencedCandidateReference!),
+            ),
+            isNull,
+          );
+        } finally {
+          if (!finishMigration.isCompleted) finishMigration.complete();
+          await tester.pumpWidget(const SizedBox.shrink());
+          notifier.dispose();
+          BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
+          WebFileStore.disableTestMode();
+          await tester.runAsync(() => storageDir.delete(recursive: true));
+        }
       },
     );
 

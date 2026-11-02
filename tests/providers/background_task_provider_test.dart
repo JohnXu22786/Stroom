@@ -18525,6 +18525,61 @@ void main() {
     );
 
     test(
+      'OCR cache ownership is unavailable when a skipped row is ambiguous',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final rows = [
+          {
+            'type': 'future-task-type',
+            'title': 'Unknown persisted owner',
+            'retryData': {
+              'type': 'ocr',
+              'images': [
+                {
+                  'storageRef':
+                      'ocr_retry_cache/1111111111111111111111111111111111111111111111111111111111111111.bin',
+                },
+              ],
+            },
+          },
+          {
+            'id': 'ambiguous-skipped-ocr-owner',
+            'type': 'ocr',
+            'title': 'Skipped OCR with ambiguous retry data',
+            'status': 'unknown-status',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': <dynamic>[],
+            'retryData': {
+              'type': 'ocr',
+              'version': 3,
+              'modelRef': <String, dynamic>{},
+              'images': <dynamic>[],
+              'batchMode': 'joint',
+              'perImageConcurrency': 1,
+              'requestSizeBudgetBytes': 1024,
+              'extraCacheRefs': [
+                'ocr_retry_cache/2222222222222222222222222222222222222222222222222222222222222222.bin',
+              ],
+            },
+          },
+        ];
+
+        for (final row in rows) {
+          await file.writeAsString(jsonEncode([row]));
+          final notifier = BackgroundTaskNotifier();
+          try {
+            expect(await notifier.restoreFromPersistence(), isFalse);
+            expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          } finally {
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+      },
+    );
+
+    test(
       'startup cleanup preserves OCR cache when tasks JSON is unreadable',
       () async {
         WebFileStore.enableTestMode();

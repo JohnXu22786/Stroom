@@ -478,13 +478,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ));
         if (!notifier.mounted) return;
         if (!notifier.state.any((task) => task.id == taskId)) {
+          final referenced = await notifier.ocrCacheReferencesForCleanup();
+          if (referenced == null) return;
           await OcrRetryStorage.deleteUnreferenced(
             candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
-            referenced: {
-              for (final task in notifier.state)
-                if (task.type == BackgroundTaskType.ocr)
-                  ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-            },
+            referenced: referenced,
           );
           return;
         }

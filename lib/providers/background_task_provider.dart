@@ -5416,9 +5416,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return true;
   }
 
+  /// Returns every safely known OCR cache owner, or null when the persisted
+  /// task snapshot cannot be read safely enough to authorize deletion.
+  Future<Set<String>?> ocrCacheReferencesForCleanup() =>
+      _ocrCacheReferencesForCleanup();
+
   Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
     final persisted = await _loadPersistedTasks();
-    if (!persisted.isReadable) return null;
+    if (!persisted.isReadable || !persisted.cleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
       for (final task in tasks)
@@ -5432,6 +5437,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     };
   }
 
+  bool _canSafelyCollectSkippedOcrCacheReferences(Object? retryData) {
+    if (retryData == null) return true;
+    if (retryData is! Map) return false;
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      final type = data['type'];
+      if ((type != null && type != BackgroundTaskType.ocr.name) ||
+          data['images'] is! List) {
+        return false;
+      }
+      data['type'] ??= BackgroundTaskType.ocr.name;
+      final snapshot = OcrRetrySnapshot.fromMap(data);
+      return !snapshot.hasUnknownFields && !snapshot.hasInvalidImages;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
@@ -5439,11 +5462,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final retryData = entry['retryData'];
       if (retryData is! Map) continue;
       try {
-        references.addAll(
-          OcrRetryStorage.referencesFromSnapshot(
-            Map<String, dynamic>.from(retryData),
-          ),
-        );
+        final data = Map<String, dynamic>.from(retryData);
+        if (entry['type'] == BackgroundTaskType.ocr.name) {
+          data['type'] ??= BackgroundTaskType.ocr.name;
+        }
+        references.addAll(OcrRetryStorage.referencesFromSnapshot(data));
       } catch (_) {
         // Unknown persisted data must never expand the set of deletable paths.
       }
@@ -6049,6 +6072,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               );
             }
           } else if (isKnownNonAsrRecord) {
+            if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
+                !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+              cleanupSafe = false;
+            }
             skippedEntries.add(m);
           } else {
             cleanupSafe = false;
