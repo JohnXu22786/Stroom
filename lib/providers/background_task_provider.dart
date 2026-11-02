@@ -4637,7 +4637,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
       // Tasks added while the removal was pending are newer and belong ahead
       // of the restored generation when no original neighbor survives.
-      restored.insert(restoreIndex ?? restored.length, task);
+      final taskToRestore = task.status == TaskStatus.running
+          ? task.copyWith(
+              status: TaskStatus.waiting,
+              error: 'Canceled because task removal could not be saved.',
+            )
+          : task;
+      restored.insert(restoreIndex ?? restored.length, taskToRestore);
       _taskSnapshotEpoch++;
       restoredTask = true;
       if (mounted) {
