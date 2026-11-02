@@ -19039,6 +19039,39 @@ void main() {
             {'storageRef': 'ocr_retry_cache/not-a-valid-reference.bin'},
           ],
         );
+        const validReference =
+            'ocr_retry_cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin';
+        await expectUnknownOwnership(
+          'ocr-invalid-image-name-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': {'storageRef': validReference},
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-format-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': {'storageRef': validReference},
+              'name': 'image.png',
+            },
+          ],
+        );
+        await expectUnknownOwnership(
+          'ocr-invalid-image-bytes-owner',
+          [
+            {
+              'storageRef': validReference,
+              'format': 'png',
+              'name': 'image.png',
+              'bytes': {'storageRef': validReference},
+            },
+          ],
+        );
       },
     );
 

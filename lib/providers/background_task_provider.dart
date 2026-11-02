@@ -5530,6 +5530,18 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                   !OcrRetryImage.isValidStorageReference(storageRef))) {
             return true;
           }
+          final format = image['format'];
+          if (format != null && format is! String) {
+            return true;
+          }
+          final name = image['name'];
+          if (name != null && name is! String) {
+            return true;
+          }
+          final bytes = image['bytes'];
+          if (bytes != null && bytes is! String) {
+            return true;
+          }
         }
       }
       return false;
