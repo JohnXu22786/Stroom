@@ -14996,6 +14996,48 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves a natural line-broken documentation prompt under an open mask',
+      () {
+        const instruction = 'Please review the documentation\ncarefully';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-natural-line-break',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedTask = jsonDecode(persisted) as Map<String, dynamic>;
+        final serializedRetryData =
+            serializedTask['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(serializedRetryData['instructionContent'], instruction);
+        expect(serializedTask, isNot(contains('rawRequest')));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('Bearer documentation…')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts whitespace-split documentation echoes and preserves safe text',
       () {
         BackgroundTask taskFor(
