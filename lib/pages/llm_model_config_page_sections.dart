@@ -197,6 +197,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: DropdownButtonFormField<String>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     initialValue: _endpointType,
                     decoration: const InputDecoration(
                       labelText: '端点类型',
@@ -405,6 +407,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
+                            dropdownColor: StroomMenuStyle.surface(context),
+                            borderRadius: StroomMenuStyle.borderRadius,
                             value: param.type,
                             isDense: true,
                             items: ParamType.values

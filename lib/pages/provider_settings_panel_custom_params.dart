@@ -226,6 +226,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
+                            dropdownColor: StroomMenuStyle.surface(context),
+                            borderRadius: StroomMenuStyle.borderRadius,
                             value: param.type,
                             isDense: true,
                             items: ParamType.values

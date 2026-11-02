@@ -38,10 +38,10 @@ void registerCatCatchPr708PolicyTests() {
 
   test('manual selection and confirmation is the explicit safe default', () {
     final policy = BlockTypeDefinition.catcatch.params
-        .singleWhere((p) => p.key == 'automaticResourceSelection');
-    expect(policy.defaultValue, false);
+        .singleWhere((p) => p.key == 'resourceSelectionPolicy');
+    expect(policy.defaultValue, 'manual');
     expect(policy.hintText, contains('手动'));
-    expect(policy.hintText, contains('链接'));
+    expect(policy.hintText, contains('询问'));
   });
 
   test('automatic resource choice is deterministic and avoids split tracks',
@@ -128,7 +128,9 @@ void registerCatCatchPr708PolicyTests() {
       executions.addSubTask(execId, subTask);
       late String taskId;
       var reads = 0;
-      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+      when(() => notifier.addTask(any(), any(),
+              taskId: any(named: 'taskId'),
+              flowManagedSelection: any(named: 'flowManagedSelection')))
           .thenAnswer((invocation) {
         taskId = invocation.namedArguments[#taskId] as String;
         return taskId;
@@ -202,6 +204,7 @@ void registerCatCatchPr708PolicyTests() {
     MediaResource? selected;
     when(() => notifier.addTask(any(), any(),
         taskId: any(named: 'taskId'),
+        flowManagedSelection: any(named: 'flowManagedSelection'),
         deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
@@ -264,7 +267,9 @@ void registerCatCatchPr708PolicyTests() {
         status: TaskStatus.waiting);
     executions.addSubTask(execId, subTask);
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+    when(() => notifier.addTask(any(), any(),
+            taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

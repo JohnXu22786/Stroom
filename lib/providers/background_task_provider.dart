@@ -643,7 +643,8 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
   final chunks = RegExp(r'\S+').allMatches(suffix).toList();
   var compactSuffix = '';
   var credentialEnd = 0;
-  for (final chunk in chunks) {
+  for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    final chunk = chunks[chunkIndex];
     final token = chunk.group(0)!.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
     if (token.isEmpty) break;
     final alphaCount = RegExp(r'[a-zA-Z]').allMatches(token).length;
@@ -708,7 +709,25 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
               minimumEntropy: 2,
               maximumVowelRatio: 0.4,
             ));
-    if (!hasStrongInitialCredentialShape) break;
+    if (!hasStrongInitialCredentialShape) {
+      if (chunkIndex + 1 < chunks.length) {
+        final nextChunk = chunks[chunkIndex + 1];
+        final nextToken =
+            nextChunk.group(0)!.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
+        final combinedToken = '$token$nextToken';
+        if (RegExp(r'^[a-z]{6,}xyz$').hasMatch(combinedToken) &&
+            _legacyOcrTextContainsMaskedCredential(
+              'documentation$combinedToken',
+              [maskedValue],
+            )) {
+          compactSuffix = combinedToken;
+          credentialEnd = nextChunk.start + nextToken.length;
+          chunkIndex++;
+          continue;
+        }
+      }
+      break;
+    }
     compactSuffix += token;
     if (_legacyOcrTextContainsMaskedCredential(
       'documentation$compactSuffix',

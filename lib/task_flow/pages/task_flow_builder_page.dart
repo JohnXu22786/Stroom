@@ -1278,7 +1278,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                '输出: ${def?.outputType.label ?? '-'}',
+                '输出: ${def == null ? '-' : block.outputTypeLabel}',
                 style: TextStyle(fontSize: 14, color: cs.onSurface),
               ),
               if (block.params.isNotEmpty) ...[

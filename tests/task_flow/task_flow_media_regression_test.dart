@@ -325,7 +325,9 @@ void main() {
         .copy('${directory.path}/recording.mp4');
     final notifier = _CatCatch();
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+    when(() => notifier.addTask(any(), any(),
+            taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

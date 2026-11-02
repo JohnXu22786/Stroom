@@ -162,6 +162,7 @@ class ManifestOperations<T extends FileRecord> {
             cache.indexWhere((record) => identical(record, updated));
         if (currentIndex != -1) cache[currentIndex] = previous;
       }
+      _recordMutationRevision++;
       rethrow;
     }
   }
@@ -1074,37 +1075,45 @@ class ManifestOperations<T extends FileRecord> {
       }
 
       // Decrement per record being deleted; only delete file when count reaches 0
-      for (final r in toRemoveRecords) {
-        final sn = storageNameOf(r);
-        final h = hashOf(r);
-        storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
-        if (storageNameCount[sn]! <= 0) {
-          final name = storageNameOf(r);
-          // Guard against names without extension
-          final dotIndex = name.lastIndexOf('.');
-          if (dotIndex == -1) continue;
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(name));
-          } else {
-            final dir = await _storageDir;
-            final file = File(_storedFilePath(dir, name));
-            if (await file.exists()) await file.delete();
+      try {
+        for (final r in toRemoveRecords) {
+          final sn = storageNameOf(r);
+          final h = hashOf(r);
+          storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
+          if (storageNameCount[sn]! <= 0) {
+            final name = storageNameOf(r);
+            // Guard against names without extension
+            final dotIndex = name.lastIndexOf('.');
+            if (dotIndex == -1) continue;
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(name));
+            } else {
+              final dir = await _storageDir;
+              final file = File(_storedFilePath(dir, name));
+              if (await file.exists()) await file.delete();
+            }
+            if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
           }
-          if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
-        }
-        // Thumbnail deletion: keyed by hash, not storageName
-        hashCount[h] = (hashCount[h] ?? 1) - 1;
-        if (hashCount[h]! <= 0) {
-          final thumbName = _thumbFileNameOf(r);
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(thumbName));
-          } else {
-            final dir = await _storageDir;
-            final thumbFile = File(_storedFilePath(dir, thumbName));
-            if (await thumbFile.exists()) await thumbFile.delete();
+          // Thumbnail deletion: keyed by hash, not storageName
+          hashCount[h] = (hashCount[h] ?? 1) - 1;
+          if (hashCount[h]! <= 0) {
+            final thumbName = _thumbFileNameOf(r);
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(thumbName));
+            } else {
+              final dir = await _storageDir;
+              final thumbFile = File(_storedFilePath(dir, thumbName));
+              if (await thumbFile.exists()) await thumbFile.delete();
+            }
+            await _deleteLegacyThumbIfImage(h);
           }
-          await _deleteLegacyThumbIfImage(h);
         }
+      } catch (error, stackTrace) {
+        if (deletesAudioRecords) {
+          await _restoreAudioPrimaryFiles(audioPrimaryFiles);
+          await _restoreAudioSidecars(audioSidecars);
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
 
       if (idsToDelete.isNotEmpty) {
@@ -1173,16 +1182,37 @@ class ManifestOperations<T extends FileRecord> {
         await ManifestDatabase.deleteFolder(f, recordTable: tableName);
       }
 
-      // Move records in the removed folder path to root
+      // Move records in the removed folder path to root.
       final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
-      for (var i = 0; i < (_cache?.length ?? 0); i++) {
-        final r = _cache![i];
-        final f = folderOf(r);
-        if (f == folderPath ||
-            (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
-          _cache![i] = copyFolder(r, '');
-          await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+      final processedRecordIds = <String>{};
+      while (true) {
+        T? nextRecord;
+        for (final record in _cache ?? <T>[]) {
+          final folder = folderOf(record);
+          if (!processedRecordIds.contains(record.id) &&
+              (folder == folderPath ||
+                  (folderPrefix.isNotEmpty &&
+                      folder.startsWith(folderPrefix)))) {
+            nextRecord = record;
+            break;
+          }
         }
+        if (nextRecord == null) break;
+
+        final id = nextRecord.id;
+        processedRecordIds.add(id);
+        await _withRecordMutationLock(id, () async {
+          final cache = _cache;
+          if (cache == null) return;
+          final index = cache.indexWhere((record) => record.id == id);
+          if (index == -1) return;
+          final record = cache[index];
+          final folder = folderOf(record);
+          if (folder == folderPath ||
+              (folderPrefix.isNotEmpty && folder.startsWith(folderPrefix))) {
+            await _persistCachedRecordMutation(index, copyFolder(record, ''));
+          }
+        });
       }
     } catch (e, st) {
       await AppLogService.error('ManifestOperations($manifestKey)',

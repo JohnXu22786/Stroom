@@ -54,7 +54,7 @@ Future<void> validateTaskFlow(
   if (flow.blocks.isEmpty) {
     throw TaskFlowValidationException('任务流没有步骤，请先添加功能块', flowId: flow.id);
   }
-  var previousOutput = flow.inputType;
+  var previousOutputs = <IOType>[flow.inputType];
   String? initialChatEndpointType;
   for (var i = 0; i < flow.blocks.length; i++) {
     final block = flow.blocks[i];
@@ -66,19 +66,34 @@ Future<void> validateTaskFlow(
           blockIndex: i,
         );
     if (def == null) fail('功能块已不受支持，请替换此步骤');
-    if (!def.acceptsInput(previousOutput)) {
-      fail('${i == 0 ? '初始输入' : '上一步输出'}为${previousOutput.label}，'
-          '「${def.label}」需要${def.inputType.label}，请修改输入类型或替换此步骤');
+    final previousBlock = i == 0 ? null : flow.blocks[i - 1];
+    final constrainedOutputs = previousBlock == null
+        ? previousOutputs
+        : previousBlock.outputTypesForNext(def.inputType);
+    final canUseOutput = def.acceptsAnyOutput(constrainedOutputs);
+    if (!canUseOutput) {
+      if (previousBlock?.followsDownstreamOutput == true) {
+        fail('下游需要${def.inputType.label}，下载资源可输出音频或视频；请修改下游步骤或输出策略');
+      }
+      fail(
+        '${i == 0 ? '初始输入' : '上一步输出'}为${previousOutputs.map((type) => type.label).join('或')}，'
+        '「${def.label}」需要${def.inputType.label}，请修改输入类型或替换此步骤',
+      );
     }
     for (final param in def.params) {
       if (param.type == BlockParamType.modelSelector) {
         final selected = resolveProviderModel(
-            providers, param.configType, block.params['modelRef']);
+          providers,
+          param.configType,
+          block.params['modelRef'],
+        );
         if (selected == null || selected.model.modelId.trim().isEmpty) {
-          fail(block.params['modelSelectionRequired'] == true ||
-                  block.params.containsKey('modelIndex')
-              ? '旧版模型选择需要确认，请在「${def.label}」设置中重新选择模型'
-              : '模型未选择、已删除或供应商配置不可用，请在「${def.label}」设置中重新选择模型并检查供应商地址和密钥');
+          fail(
+            block.params['modelSelectionRequired'] == true ||
+                    block.params.containsKey('modelIndex')
+                ? '旧版模型选择需要确认，请在「${def.label}」设置中重新选择模型'
+                : '模型未选择、已删除或供应商配置不可用，请在「${def.label}」设置中重新选择模型并检查供应商地址和密钥',
+          );
         }
       } else if (param.type == BlockParamType.assistantSelector) {
         final id = block.params[param.key];
@@ -88,8 +103,9 @@ Future<void> validateTaskFlow(
             id.startsWith('builtin:')) {
           fail('助手未选择或已删除，请在「${def.label}」设置中重新选择助手');
         }
-        final assistant =
-            assistants.firstWhere((assistant) => assistant.id == id);
+        final assistant = assistants.firstWhere(
+          (assistant) => assistant.id == id,
+        );
         final available = flattenProviderModels(providers, 'llm');
         final modelId = assistant.modelId?.trim();
         final defaultId = assistant.defaultModelId?.trim();
@@ -98,26 +114,39 @@ Future<void> validateTaskFlow(
         final modelAvailable = modelId != null && modelId.isNotEmpty
             ? available.any((item) => item.model.modelId == modelId)
             : defaultId != null && defaultId.isNotEmpty
-                ? available.any((item) =>
-                    item.model.modelId == defaultId &&
-                    (providerName == null ||
-                        providerName.isEmpty ||
-                        item.config.providerName == providerName))
+                ? available.any(
+                    (item) =>
+                        item.model.modelId == defaultId &&
+                        (providerName == null ||
+                            providerName.isEmpty ||
+                            item.config.providerName == providerName),
+                  )
                 : displayName != null && displayName.isNotEmpty
-                    ? available.any((item) =>
-                        '${item.model.name.isEmpty ? item.model.modelId : item.model.name} | ${item.config.providerName}' ==
-                        displayName)
+                    ? available.any(
+                        (item) =>
+                            '${item.model.name.isEmpty ? item.model.modelId : item.model.name} | ${item.config.providerName}' ==
+                            displayName,
+                      )
                     : true; // An unbound assistant uses the current chat model.
         if (!modelAvailable) {
           fail('助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型');
         }
-        final endpointType = flowChatEndpointType(assistant, providers,
-            fallback: fallbackChatEndpointType);
-        final unsupported = flowChatInputError(previousOutput, endpointType);
+        final endpointType = flowChatEndpointType(
+          assistant,
+          providers,
+          fallback: fallbackChatEndpointType,
+        );
+        final chatInputTypes = previousBlock == null
+            ? previousOutputs
+            : previousBlock.outputTypesForNext(def.inputType);
+        final unsupported = chatInputTypes
+            .map((type) => flowChatInputError(type, endpointType))
+            .whereType<String>()
+            .firstOrNull;
         // For initial media, defer protocol checks until each input's MIME
         // and path are known so the error points to the exact batch item.
         if (unsupported != null &&
-            (i != 0 || !FlowPayload.isFileType(previousOutput))) {
+            (i != 0 || !FlowPayload.isFileType(flow.inputType))) {
           fail(unsupported);
         }
         if (i == 0) initialChatEndpointType = endpointType;
@@ -132,12 +161,31 @@ Future<void> validateTaskFlow(
           fail('资源选择策略或输出类型无效，请在「${def.label}」设置中重新选择');
         }
       }
+      if (block.params.containsKey('outputPolicy') &&
+          !const [
+            'video',
+            'audio',
+            'followDownstream',
+          ].contains(block.params['outputPolicy'])) {
+        fail('输出类型无效，请在「${def.label}」设置中重新选择');
+      }
+      if (block.params.containsKey('resourceSelectionPolicy') &&
+          !const [
+            'manual',
+            'automatic',
+            'automaticWithPrompt',
+          ].contains(block.params['resourceSelectionPolicy'])) {
+        fail('资源选择策略无效，请在「${def.label}」设置中重新选择');
+      }
     }
-    previousOutput = def.outputType;
+    previousOutputs = def.possibleOutputTypes;
   }
   if (inputs.isEmpty) {
-    throw TaskFlowValidationException('请添加运行输入',
-        flowId: flow.id, isInputError: true);
+    throw TaskFlowValidationException(
+      '请添加运行输入',
+      flowId: flow.id,
+      isInputError: true,
+    );
   }
   final firstType = flow.blocks.first.getDefinition()!.inputType;
   final inputType = firstType == IOType.any ? flow.inputType : firstType;
@@ -215,8 +263,9 @@ Future<void> validateTaskFlow(
             await file.close();
           }
           if (checkLargeImage) {
-            error =
-                await flowChatImageSizeError(await File(text).readAsBytes());
+            error = await flowChatImageSizeError(
+              await File(text).readAsBytes(),
+            );
           } else if (checkTextEncoding) {
             error = flowChatTextFileError(
               inputName,

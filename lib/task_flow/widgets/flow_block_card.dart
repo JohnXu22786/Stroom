@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../models/flow_temporary_output.dart';
@@ -233,7 +234,9 @@ class FlowBlockCard extends ConsumerWidget {
                       Flexible(
                         child: IOTypeIndicator(
                           type: def.outputType,
+                          possibleTypes: def.possibleOutputTypes,
                           isInput: false,
+                          labelOverride: block.outputTypeLabel,
                         ),
                       ),
                     ],
@@ -271,8 +274,10 @@ class FlowBlockCard extends ConsumerWidget {
 
                   if (validationMessage != null) ...[
                     const SizedBox(height: 8),
-                    Text(validationMessage!,
-                        style: TextStyle(fontSize: 12, color: cs.error)),
+                    Text(
+                      validationMessage!,
+                      style: TextStyle(fontSize: 12, color: cs.error),
+                    ),
                   ],
 
                   // Tap hint
@@ -370,13 +375,20 @@ class FlowBlockCard extends ConsumerWidget {
         _menuItem(4, isFirst ? '上移（已在最前）' : '上移', callbacks[4]),
         _menuItem(5, isLast ? '下移（已在最后）' : '下移', callbacks[5]),
         _menuItem(6, '替换功能块', callbacks[6]),
+        if (callbacks[7] != null) const PopupMenuDivider(),
         _menuItem(7, '删除功能块', callbacks[7]),
       ],
     );
   }
 
   PopupMenuItem<int> _menuItem(
-          int action, String label, VoidCallback? callback) =>
+    int action,
+    String label,
+    VoidCallback? callback,
+  ) =>
       PopupMenuItem(
-          value: action, enabled: callback != null, child: Text(label));
+        value: action,
+        enabled: callback != null,
+        child: Text(label),
+      );
 }

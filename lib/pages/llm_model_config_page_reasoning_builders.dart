@@ -414,6 +414,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
           value: ParamType.values.any((t) => t.value == param.type)
               ? param.type
               : 'string',

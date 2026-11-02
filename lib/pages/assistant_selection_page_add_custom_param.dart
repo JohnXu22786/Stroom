@@ -50,6 +50,8 @@ void showAddCustomParameterDialog(
               ParamNamePathPreview(name: name),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 initialValue: type,
                 decoration: const InputDecoration(
                   labelText: '类型',

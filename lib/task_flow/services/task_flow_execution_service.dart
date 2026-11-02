@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
@@ -199,7 +200,8 @@ class TaskFlowExecutionService {
       return null;
     }
     final awaitingSelection = task.selectedMedia == null &&
-        task.detectedMedia.length > 1 &&
+        (task.detectedMedia.length > 1 ||
+            task.metadata['deferSingleResourceSelection'] == 'true') &&
         task.steps.any((step) =>
             step.type == catcatch.StepType.userSelecting &&
             step.running &&
@@ -230,10 +232,28 @@ class TaskFlowExecutionService {
 
   /// Called by flow-managed CatCatch cards before an action starts engine work.
   /// Only one tap per task may wait in the scheduler queue at a time.
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<bool> performManualCatCatchAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
+      {String? selectedMediaUrl}) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
-    if (execution == null || !_manualCatCatchActions.add(taskId)) return false;
+    if (execution == null || _manualCatCatchActions.contains(taskId))
+      return false;
+    if (selecting) {
+      final task = _ref
+          .read(catcatchTasksProvider)
+          .where((task) => task.id == taskId)
+          .firstOrNull;
+      final encoded =
+          task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
+      if (encoded != null) {
+        final candidates = (jsonDecode(encoded) as List).cast<String>();
+        if (selectedMediaUrl == null ||
+            !candidates.contains(selectedMediaUrl)) {
+          return false;
+        }
+      }
+    }
+    if (!_manualCatCatchActions.add(taskId)) return false;
     final id = execution.id;
     var acquired = false;
     try {
@@ -1257,7 +1277,8 @@ class TaskFlowExecutionService {
     }
     switch (def.typeKey) {
       case BlockType.catcatch:
-        var actualType = def.outputType;
+        IOType? actualType =
+            block.outputTypesForNext(nextInputType).singleOrNull;
         FlowPayload? outputPayload;
         final result = await executeCatCatchBlock(
           def: def,
@@ -1275,10 +1296,33 @@ class TaskFlowExecutionService {
           durationSecOverride: inputDurationSec,
           nextInputType: nextInputType,
           onManualWait: (taskId) => _releaseManualCatCatchSlot(execId, taskId),
+          onManualWaitWithCandidates: (taskId, candidates) {
+            catcatchNotifier.setFlowSelectionCandidates(taskId, candidates);
+          },
           onOutputType: (type) => actualType = type,
           onOutputPayload: (payload) => outputPayload = payload,
         );
-        return outputPayload ?? FlowPayload.fromValue(result, actualType);
+        final payload = outputPayload;
+        if (payload != null) {
+          if (payload.type != IOType.audio && payload.type != IOType.video) {
+            throw BlockExecutionException(
+              '下载任务未产生具体的音频或视频输出',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          return payload;
+        }
+        final resolvedType = actualType;
+        if (resolvedType == null ||
+            (resolvedType != IOType.audio && resolvedType != IOType.video)) {
+          throw BlockExecutionException(
+            '下载任务未能解析为具体的音频或视频输出',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
+        return FlowPayload.fromValue(result, resolvedType);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
             await executeAudioSeparationBlock(

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -667,6 +668,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
                     hint: Text(
                       _modelSelectionRequired || _selectedModelReference != null

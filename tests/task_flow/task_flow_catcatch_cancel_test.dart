@@ -23,6 +23,7 @@ void main() {
     when(() => download.state).thenReturn([]);
     when(() => download.addTask(any(), any(),
             taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection'),
             videoFolder: any(named: 'videoFolder'),
             audioFolder: any(named: 'audioFolder')))
         .thenAnswer((call) => call.namedArguments[#taskId] as String);

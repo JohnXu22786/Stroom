@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../anki/providers/anki_provider.dart';
 import '../anki/providers/anki_actions.dart';
@@ -236,6 +237,8 @@ class AnkiDroidPage extends ConsumerWidget {
               children: [
                 if (models.isNotEmpty)
                   DropdownButtonFormField<int>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedModelId,
                     decoration: const InputDecoration(
                         labelText: '笔记类型', border: OutlineInputBorder()),
@@ -383,6 +386,7 @@ class _DeckCard extends ConsumerWidget {
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: 'add', child: Text('添加卡片')),
                   const PopupMenuItem(value: 'rename', child: Text('重命名')),
+                  const PopupMenuDivider(),
                   const PopupMenuItem(
                       value: 'delete',
                       child: Text('删除', style: TextStyle(color: Colors.red))),

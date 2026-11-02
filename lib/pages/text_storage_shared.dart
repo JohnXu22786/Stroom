@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../utils/text_manifest.dart';
 
@@ -115,6 +116,8 @@ class TextCreatePageState extends State<TextCreatePage> {
                 SizedBox(
                   width: 120,
                   child: DropdownButtonFormField<String>(
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
                     initialValue: _selectedFormat,
                     decoration: const InputDecoration(
                       labelText: '格式',

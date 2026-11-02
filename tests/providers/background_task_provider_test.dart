@@ -15055,6 +15055,12 @@ void main() {
             'GHIJK',
           ),
           (
+            'short-line-split-lowercase-credential-echo',
+            'The image contains documentation foo\r\nbarxyz.',
+            'The image contains [redacted].',
+            'barxyz',
+          ),
+          (
             'echo-with-safe-following-instruction',
             'The image contains documentation foobarxyz. Please read the receipt total carefully.',
             'The image contains [redacted]. Please read the receipt total carefully.',

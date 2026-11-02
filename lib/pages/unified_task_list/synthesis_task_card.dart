@@ -218,6 +218,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
+            const PopupMenuDivider(),
             const PopupMenuItem(
               value: 'remove',
               child: ListTile(

@@ -1326,6 +1326,8 @@ class _McpGroupHeaderCard extends StatelessWidget {
                 itemBuilder: (context) => [
                   if (onEdit != null)
                     const PopupMenuItem(value: 'edit', child: Text('编辑组别')),
+                  if (onEdit != null && onDelete != null)
+                    const PopupMenuDivider(),
                   if (onDelete != null)
                     const PopupMenuItem(value: 'delete', child: Text('删除组别')),
                 ],

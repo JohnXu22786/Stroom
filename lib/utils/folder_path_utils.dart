@@ -19,6 +19,9 @@ class FolderPathUtils {
     'COM7',
     'COM8',
     'COM9',
+    'COM¹',
+    'COM²',
+    'COM³',
     'LPT1',
     'LPT2',
     'LPT3',
@@ -28,6 +31,9 @@ class FolderPathUtils {
     'LPT7',
     'LPT8',
     'LPT9',
+    'LPT¹',
+    'LPT²',
+    'LPT³',
   };
 
   /// Windows 非法字符集（控制字符、路径分隔符与保留字符）

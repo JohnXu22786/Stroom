@@ -53,6 +53,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             const SizedBox(height: 16),
             // 端点类型：该供应商下所有对话统一使用的协议格式
             DropdownButtonFormField<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
               initialValue: _endpointType,
               decoration: const InputDecoration(
                 labelText: '端点类型',
@@ -206,6 +208,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<AudioUploadMethod>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _uploadMethod,
                 isDense: true,
                 items: const [
@@ -340,6 +344,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _fallbackMethod,
                 isDense: true,
                 items: const [
@@ -428,6 +434,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _preprocessing,
                 isDense: true,
                 items: const [
