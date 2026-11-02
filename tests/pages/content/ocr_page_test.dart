@@ -1466,7 +1466,9 @@ void main() {
               },
             ),
           );
-          await tester.pumpAndSettle();
+          // Migration is deliberately paused by [finishMigration], so a
+          // settle wait can never finish while its loading animation runs.
+          await _pumpUntil(tester, () => migrationStarted.isCompleted);
           await migrationStarted.future;
 
           notifier.setTasksForTest([]);

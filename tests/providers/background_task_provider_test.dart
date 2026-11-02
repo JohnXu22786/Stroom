@@ -18608,6 +18608,63 @@ void main() {
     );
 
     test(
+      'runtime ASR diagnostics persist OCR cache ownership before sanitization',
+      () async {
+        WebFileStore.enableTestMode();
+        const asrTaskId = 'runtime-asr-diagnostic-ocr-owner';
+        final bytes = Uint8List.fromList([35, 36, 37, 38]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'runtime-asr-diagnostic-cache-source',
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final file = _tasksFileIn(testDir.path);
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Runtime ASR diagnostics with OCR cache reference',
+            taskId: asrTaskId,
+          );
+          notifier.setRawDiagnostics(
+            asrTaskId,
+            rawRequest: {'cacheReference': cacheReference},
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == asrTaskId,
+              );
+          expect(asrRow.containsKey('rawRequest'), isFalse);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == asrTaskId,
+                ),
+            isTrue,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            bytes,
+            reason: 'runtime diagnostics must remain owners after sanitization',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'OCR cleanup stays fail-closed for preserved malformed ASR cache refs',
       () async {
         const taskId = 'malformed-asr-row-with-ocr-cache-ref';
@@ -18738,6 +18795,19 @@ void main() {
     test(
       'OCR cache ownership is unavailable for parsed future retry data',
       () async {
+        WebFileStore.enableTestMode();
+        final imageBytes = Uint8List.fromList([41, 42, 43, 44]);
+        final cachedSnapshot = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'future-ocr-image-owner',
+          snapshot: OcrRetrySnapshot.capture(
+            configId: 'config-1',
+            modelId: 'model-1',
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final recognizedCacheReference =
+            ((cachedSnapshot['images'] as List).single as Map)['storageRef']
+                as String;
         final file = _tasksFileIn(testDir.path);
         await file.parent.create(recursive: true);
         await file.writeAsString(
@@ -18752,7 +18822,12 @@ void main() {
               'retryData': {
                 'type': 'ocr',
                 'version': 99,
-                'images': <dynamic>[],
+                'images': [
+                  {
+                    'storageRef': recognizedCacheReference,
+                    'format': 'png',
+                  },
+                ],
                 'additionalCacheRefs': [
                   'ocr_retry_cache/3333333333333333333333333333333333333333333333333333333333333333.bin',
                 ],
@@ -18785,6 +18860,12 @@ void main() {
                 ),
             isTrue,
           );
+          expect(
+            await OcrRetryStorage.read(recognizedCacheReference),
+            imageBytes,
+            reason:
+                'future-version sanitization must not orphan a recognized cache owner',
+          );
 
           notifier.setSteps('future-ocr-retry-owner', [
             const BgTaskStep(
@@ -18803,6 +18884,10 @@ void main() {
                 ),
             isTrue,
           );
+          expect(
+            await OcrRetryStorage.read(recognizedCacheReference),
+            imageBytes,
+          );
 
           expect(
             await notifier.removeTasksPersisted(['future-ocr-retry-owner']),
@@ -18812,6 +18897,7 @@ void main() {
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
         }
       },
     );

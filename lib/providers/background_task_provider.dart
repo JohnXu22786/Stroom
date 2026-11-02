@@ -5096,6 +5096,32 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
       return false;
     }
+    for (final task in currentSnapshot) {
+      if (task.type != BackgroundTaskType.asr ||
+          _ocrCacheReferencesInPersistedValue({
+            'rawRequest': task.rawRequest,
+            'rawResponse': task.rawResponse,
+          }).isEmpty ||
+          _unrestoredTaskRecords.any(
+            (record) =>
+                record is Map &&
+                record['ocrCacheOwnershipKnown'] == false &&
+                record['ocrCacheTaskId'] == task.id,
+          )) {
+        continue;
+      }
+      // ASR diagnostics are sanitized before serialization. Record their
+      // cache ownership while the raw fields are still available so the
+      // durable snapshot cannot make a live reference invisible.
+      _unrestoredTaskRecords.add(
+        _unrestoredTaskRecord(
+          retryAudioOwnershipKnown: true,
+          ocrCacheOwnershipKnown: false,
+          ocrCacheTaskId: task.id,
+        ),
+      );
+      _ocrCacheCleanupSafe = false;
+    }
     final skippedEntries = canPreserveSkippedEntries
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
@@ -5556,6 +5582,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     try {
       final data = Map<String, dynamic>.from(retryData);
       final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
+      final version = data['version'];
+      if (version is int &&
+          version > OcrRetrySnapshot.currentVersion &&
+          rawCacheReferences.isNotEmpty) {
+        // Future schemas are rewritten to unavailable placeholders, which do
+        // not retain even recognized image refs. Keep their owner marker until
+        // the task itself is durably removed.
+        return true;
+      }
       bool containsCacheReference(Object? value) =>
           _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
       if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
