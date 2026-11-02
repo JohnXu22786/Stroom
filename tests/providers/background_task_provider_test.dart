@@ -19136,13 +19136,23 @@ void main() {
           },
         );
         await expectUnknownOwnership(
+          'ocr-reference-in-sanitized-api-key-owner',
+          <dynamic>[],
+          retryFields: {'apiKey': 'credential note: $validReference'},
+        );
+        await expectUnknownOwnership(
+          'ocr-reference-in-sanitized-image-data-owner',
+          <dynamic>[],
+          retryFields: {'imageData': 'inline data: $validReference'},
+        );
+        await expectUnknownOwnership(
           'ocr-invalid-image-entry-data-owner',
           [
             {
               'storageRef': validReference,
               'format': 'png',
               'name': 'image.png',
-              'imageData': {'storageRef': validReference},
+              'imageData': 'inline data: $validReference',
             },
           ],
         );
