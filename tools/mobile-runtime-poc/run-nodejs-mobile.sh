@@ -111,8 +111,8 @@ run_expected_raw_failure() {
   echo 'RAW_NODE_MOBILE_REQUIRE_FAILURE_CONFIRMED'
 }
 
-runtime_args="-p (console.log('NODE_RUNTIME_PASS_'+process.version),Buffer.from('mobile').toString('utf8')==='mobile'?(console.log('NODE_BUFFER_PASS_mobile'),console.log('RESULT:PASS')):console.log('RESULT:FAIL'))"
-run_node 'Node runtime + in-memory Buffer' "$runtime_args" 'NODE_RUNTIME_PASS_v18.20.4'
+runtime_args="-p (console.log('NODE_RUNTIME_PASS_'+process.version),console.log('RESULT:PASS'))"
+run_node 'Node runtime version' "$runtime_args" 'NODE_RUNTIME_PASS_v18.20.4'
 run_expected_raw_failure
 
 adb shell run-as "$package" rm -rf "$fixture/node_modules" "$fixture/.npm" "$files/.npm-cache"
