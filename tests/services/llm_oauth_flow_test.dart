@@ -10,6 +10,138 @@ import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
   test(
+    'Tencent device auth uses distinct hosts and stores only bearer tokens',
+    () async {
+      for (final (connector, host, platform) in [
+        ('codebuddy-cn', 'copilot.tencent.com', 'CLI'),
+        ('codebuddy-intl', 'www.codebuddy.ai', 'ide'),
+        ('workbuddy', 'www.workbuddy.ai', 'CLI'),
+      ]) {
+        expect(LlmOAuthProviderPolicy.forProvider(connector).supported, isTrue);
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _OAuthAdapter((request) async {
+            requests.add(request);
+            if (request.uri.path.endsWith('/state')) {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'code': 0,
+                  'data': {
+                    'state': 'device-state',
+                    'authUrl': 'https://$host/device',
+                  },
+                }),
+                200,
+              );
+            }
+            return ResponseBody.fromString(
+              jsonEncode({
+                'code': 0,
+                'data': {
+                  'accessToken': 'account-access-token',
+                  'refreshToken': 'account-refresh-token',
+                  'expiresIn': 1800,
+                },
+              }),
+              200,
+            );
+          });
+        final client = LlmOAuthTokenClient(dio: dio);
+        final challenge = await client.startTencentDeviceAuthorization(
+          connectorType: connector,
+        );
+        expect(challenge.verificationUri.host, host);
+        expect(requests.single.uri.queryParameters['platform'], platform);
+        final bundle = await client.pollTencentDeviceAuthorization(
+          connectorType: connector,
+          deviceCode: challenge,
+        );
+        expect(requests.last.uri.host, host);
+        expect(requests.last.uri.queryParameters['state'], 'device-state');
+        expect(requests.last.headers['X-Product'], 'SaaS');
+        expect(bundle['access_token'], 'account-access-token');
+        expect(bundle['refresh_token'], 'account-refresh-token');
+      }
+    },
+  );
+
+  test('Tencent device polling stops promptly when cancelled', () async {
+    final firstPollReturned = Completer<void>();
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        if (request.uri.path.endsWith('/state')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'state': 'device-state',
+                'authUrl': 'https://copilot.tencent.com/device',
+              },
+            }),
+            200,
+          );
+        }
+        tokenRequests++;
+        firstPollReturned.complete();
+        return ResponseBody.fromString(jsonEncode({'code': 11217}), 200);
+      });
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = await client.startTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+    );
+    final cancelToken = CancelToken();
+    final polling = client.pollTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+      deviceCode: deviceCode,
+      cancelToken: cancelToken,
+    );
+
+    await firstPollReturned.future;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final stopwatch = Stopwatch()..start();
+    cancelToken.cancel('User cancelled');
+
+    await expectLater(polling, throwsA(isA<LlmOAuthFlowException>()));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(tokenRequests, 1);
+  });
+
+  test('Tencent device polling stops on a rejected token request', () async {
+    var tokenRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        if (request.uri.path.endsWith('/state')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'state': 'device-state',
+                'authUrl': 'https://copilot.tencent.com/device',
+              },
+            }),
+            200,
+          );
+        }
+        tokenRequests++;
+        return ResponseBody.fromString('{}', 401);
+      });
+    final client = LlmOAuthTokenClient(dio: dio);
+    final deviceCode = await client.startTencentDeviceAuthorization(
+      connectorType: 'codebuddy-cn',
+    );
+
+    await expectLater(
+      client.pollTencentDeviceAuthorization(
+        connectorType: 'codebuddy-cn',
+        deviceCode: deviceCode,
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    expect(tokenRequests, 1);
+  });
+
+  test(
     'Devin OAuth is separate and uses its pinned PKCE callback contract',
     () {
       expect(LlmOAuthProviderPolicy.forProvider('devin').supported, isTrue);
@@ -53,8 +185,7 @@ void main() {
     },
   );
 
-  test('Devin OAuth exchanges, verifies identity and checks plan status',
-      () async {
+  test('Devin OAuth exchanges, verifies identity and checks plan status', () async {
     final requests = <RequestOptions>[];
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
@@ -313,12 +444,12 @@ void main() {
           ..httpClientAdapter = _OAuthAdapter((request) async {
             final response = switch (request.uri.path) {
               '/oidc/device/authorization/' => {
-                  'device_code': 'fixture-meta-device-code',
-                  'user_code': 'META-1234',
-                  'verification_uri': 'https://www.meta.ai/device',
-                  'expires_in': 60,
-                  'interval': 1,
-                },
+                'device_code': 'fixture-meta-device-code',
+                'user_code': 'META-1234',
+                'verification_uri': 'https://www.meta.ai/device',
+                'expires_in': 60,
+                'interval': 1,
+              },
               '/oidc/device/token/' => {'access_token': 'dca:fixture-meta-dca'},
               _ => minted,
             };
@@ -361,19 +492,21 @@ void main() {
         'aud': LlmOAuthTokenClient.xaiClientId,
         'email': 'xai@example.test',
         'email_verified': true,
-        'exp': DateTime.now()
+        'exp':
+            DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 5))
                 .millisecondsSinceEpoch ~/
             1000,
       };
-      final validIdToken = (JsonWebSignatureBuilder()
-            ..jsonContent = claims
-            ..setProtectedHeader('typ', 'JWT')
-            ..setProtectedHeader('kid', 'xai-signing-key')
-            ..addRecipient(privateKey, algorithm: 'ES256'))
-          .build()
-          .toCompactSerialization();
+      final validIdToken =
+          (JsonWebSignatureBuilder()
+                ..jsonContent = claims
+                ..setProtectedHeader('typ', 'JWT')
+                ..setProtectedHeader('kid', 'xai-signing-key')
+                ..addRecipient(privateKey, algorithm: 'ES256'))
+              .build()
+              .toCompactSerialization();
       var returnedIdToken = validIdToken;
       Object? returnedScope =
           'openid profile email offline_access grok-cli:access';
@@ -492,26 +625,28 @@ void main() {
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
-      final nullAzpToken = (JsonWebSignatureBuilder()
-            ..jsonContent = {...claims, 'azp': null}
-            ..setProtectedHeader('typ', 'JWT')
-            ..setProtectedHeader('kid', 'xai-signing-key')
-            ..addRecipient(privateKey, algorithm: 'ES256'))
-          .build()
-          .toCompactSerialization();
+      final nullAzpToken =
+          (JsonWebSignatureBuilder()
+                ..jsonContent = {...claims, 'azp': null}
+                ..setProtectedHeader('typ', 'JWT')
+                ..setProtectedHeader('kid', 'xai-signing-key')
+                ..addRecipient(privateKey, algorithm: 'ES256'))
+              .build()
+              .toCompactSerialization();
       returnedIdToken = nullAzpToken;
       await expectLater(
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       returnedIdToken = validIdToken;
-      final conflictingAzpToken = (JsonWebSignatureBuilder()
-            ..jsonContent = {...claims, 'azp': 'another-client'}
-            ..setProtectedHeader('typ', 'JWT')
-            ..setProtectedHeader('kid', 'xai-signing-key')
-            ..addRecipient(privateKey, algorithm: 'ES256'))
-          .build()
-          .toCompactSerialization();
+      final conflictingAzpToken =
+          (JsonWebSignatureBuilder()
+                ..jsonContent = {...claims, 'azp': 'another-client'}
+                ..setProtectedHeader('typ', 'JWT')
+                ..setProtectedHeader('kid', 'xai-signing-key')
+                ..addRecipient(privateKey, algorithm: 'ES256'))
+              .build()
+              .toCompactSerialization();
       returnedIdToken = conflictingAzpToken;
       await expectLater(
         client.pollXaiDeviceAuthorization(deviceCode: code),
@@ -791,17 +926,18 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
-        () => LlmOAuthAuthorizationAttempt.openAiChatGpt(
-          redirectUri: redirect,
-          hostId: 'urn:uuid:host',
-        ).consumeCallback(
-          callback.replace(
-            queryParameters: {
-              ...callback.queryParameters,
-              'state': 'wrong-state',
-            },
-          ),
-        ),
+        () =>
+            LlmOAuthAuthorizationAttempt.openAiChatGpt(
+              redirectUri: redirect,
+              hostId: 'urn:uuid:host',
+            ).consumeCallback(
+              callback.replace(
+                queryParameters: {
+                  ...callback.queryParameters,
+                  'state': 'wrong-state',
+                },
+              ),
+            ),
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
@@ -1102,7 +1238,8 @@ void main() {
               jsonEncode({
                 'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
                 'aud': 'registered-openai-client',
-                'exp': DateTime.now()
+                'exp':
+                    DateTime.now()
                         .toUtc()
                         .add(const Duration(minutes: 5))
                         .millisecondsSinceEpoch ~/
@@ -1117,15 +1254,15 @@ void main() {
           requestedPaths.add(options.uri.path);
           final response = switch (options.uri.path) {
             '/api/accounts/oauth/token' => {
-                'access_token': 'chatgpt-access',
-                'refresh_token': 'chatgpt-refresh',
-                'id_token': '$header.$claims.invalid-signature',
-                'scope': 'openid chatgpt.tokens.use.direct',
-              },
+              'access_token': 'chatgpt-access',
+              'refresh_token': 'chatgpt-refresh',
+              'id_token': '$header.$claims.invalid-signature',
+              'scope': 'openid chatgpt.tokens.use.direct',
+            },
             '/.well-known/openid-configuration' => {
-                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-                'jwks_uri': 'https://auth.openai.com/jwks',
-              },
+              'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+              'jwks_uri': 'https://auth.openai.com/jwks',
+            },
             '/jwks' => {'keys': []},
             _ => throw StateError('Unexpected OAuth endpoint.'),
           };
@@ -1181,7 +1318,8 @@ void main() {
           'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
           'sub': subject,
           'aud': clientId,
-          'exp': DateTime.now()
+          'exp':
+              DateTime.now()
                   .toUtc()
                   .add(const Duration(minutes: 5))
                   .millisecondsSinceEpoch ~/
@@ -1193,13 +1331,14 @@ void main() {
           privateKey: generatedKey.cryptoKeyPair.privateKey,
           keyId: 'signing-key',
         );
-        final idToken = (JsonWebSignatureBuilder()
-              ..jsonContent = claims
-              ..setProtectedHeader('typ', 'JWT')
-              ..setProtectedHeader('kid', 'signing-key')
-              ..addRecipient(privateKey, algorithm: 'RS256'))
-            .build()
-            .toCompactSerialization();
+        final idToken =
+            (JsonWebSignatureBuilder()
+                  ..jsonContent = claims
+                  ..setProtectedHeader('typ', 'JWT')
+                  ..setProtectedHeader('kid', 'signing-key')
+                  ..addRecipient(privateKey, algorithm: 'RS256'))
+                .build()
+                .toCompactSerialization();
         final publicKey = JsonWebKey.fromCryptoKeys(
           publicKey: generatedKey.cryptoKeyPair.publicKey,
           keyId: 'signing-key',
@@ -1208,18 +1347,18 @@ void main() {
           ..httpClientAdapter = _OAuthAdapter((options) async {
             final response = switch (options.uri.path) {
               '/api/accounts/oauth/token' => {
-                  'access_token': 'chatgpt-access',
-                  'refresh_token': 'chatgpt-refresh',
-                  'id_token': idToken,
-                  'scope': 'openid chatgpt.tokens.use.direct',
-                },
+                'access_token': 'chatgpt-access',
+                'refresh_token': 'chatgpt-refresh',
+                'id_token': idToken,
+                'scope': 'openid chatgpt.tokens.use.direct',
+              },
               '/.well-known/openid-configuration' => {
-                  'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
-                  'jwks_uri': 'https://auth.openai.com/jwks',
-                },
+                'issuer': LlmOAuthAuthorizationAttempt.openAiIssuer,
+                'jwks_uri': 'https://auth.openai.com/jwks',
+              },
               '/jwks' => {
-                  'keys': [publicKey.toJson()],
-                },
+                'keys': [publicKey.toJson()],
+              },
               _ => throw StateError('Unexpected OAuth endpoint.'),
             };
             return ResponseBody.fromString(
@@ -1284,12 +1423,12 @@ void main() {
         ),
       );
 
-      final bundle =
-          await LlmOAuthTokenClient(dio: dio).exchangeGeminiDeveloperApi(
-        attempt: attempt,
-        callback: callback,
-        clientSecret: 'desktop-client-secret',
-      );
+      final bundle = await LlmOAuthTokenClient(dio: dio)
+          .exchangeGeminiDeveloperApi(
+            attempt: attempt,
+            callback: callback,
+            clientSecret: 'desktop-client-secret',
+          );
 
       expect(captured?.uri.toString(), 'https://oauth2.googleapis.com/token');
       expect(captured?.data.toString(), contains('desktop-client-secret'));
@@ -1312,15 +1451,14 @@ class _OAuthAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}
 }
 
 Uint8List _devinStatusResponse({required String userId, required String plan}) {
-  final status = <int>[]..addAll(_protoBytes(36, utf8.encode(userId)));
+  final status = <int>[..._protoBytes(36, utf8.encode(userId))];
   if (plan.isNotEmpty) {
     final planInfo = _protoBytes(2, utf8.encode(plan));
     status.addAll(_protoBytes(13, _protoBytes(1, planInfo)));
@@ -1329,10 +1467,10 @@ Uint8List _devinStatusResponse({required String userId, required String plan}) {
 }
 
 List<int> _protoBytes(int field, List<int> bytes) => [
-      ..._protoVarint((field << 3) | 2),
-      ..._protoVarint(bytes.length),
-      ...bytes,
-    ];
+  ..._protoVarint((field << 3) | 2),
+  ..._protoVarint(bytes.length),
+  ...bytes,
+];
 
 List<int> _protoVarint(int value) {
   final bytes = <int>[];

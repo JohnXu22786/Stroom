@@ -44,14 +44,15 @@ class LlmConnectorHttpClient {
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-  })  : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 60),
-              ),
-            ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           ),
+       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -75,14 +76,15 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker = Future<void>.sync(() async {
-        await onRequestSent?.call();
-      }).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {
-          requestSentMarkerFailed = true;
-        },
-      );
+      requestSentMarker =
+          Future<void>.sync(() async {
+            await onRequestSent?.call();
+          }).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {
+              requestSentMarkerFailed = true;
+            },
+          );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -263,8 +265,8 @@ class LlmConnectorHttpClient {
           final responseBytes = responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-                  ? await _readResponseStream(responseData)
-                  : responseData;
+              ? await _readResponseStream(responseData)
+              : responseData;
           if (responseBytes is! Uint8List && responseBytes is! List<int>) {
             throw const LlmConnectorHttpException();
           }
@@ -291,19 +293,21 @@ class LlmConnectorHttpClient {
           final message = choice['message'] as Map;
           final messageToolCalls = message['tool_calls'];
           final toolCalls = messageToolCalls is Iterable
-              ? messageToolCalls.indexed.map((entry) {
-                  final item = entry.$2 as Map;
-                  final fn = item['function'] as Map;
-                  return {
-                    'index': entry.$1,
-                    'id': item['id'],
-                    'type': 'function',
-                    'function': {
-                      'name': fn['name'],
-                      'arguments': fn['arguments'],
-                    },
-                  };
-                }).toList(growable: false)
+              ? messageToolCalls.indexed
+                    .map((entry) {
+                      final item = entry.$2 as Map;
+                      final fn = item['function'] as Map;
+                      return {
+                        'index': entry.$1,
+                        'id': item['id'],
+                        'type': 'function',
+                        'function': {
+                          'name': fn['name'],
+                          'arguments': fn['arguments'],
+                        },
+                      };
+                    })
+                    .toList(growable: false)
               : null;
           final chunk = {
             'id': decoded['id'],
@@ -336,8 +340,8 @@ class LlmConnectorHttpClient {
           final responseStream = responseData is ResponseBody
               ? responseData.stream
               : responseData is Stream<List<int>>
-                  ? responseData
-                  : null;
+              ? responseData
+              : null;
           if (stream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
@@ -401,13 +405,25 @@ class LlmConnectorHttpClient {
           );
         }
         final responseData = response.data;
-        final decoded = _decodeResponseBody(
-          responseData is ResponseBody
-              ? await _readResponseStream(responseData.stream)
-              : responseData is Stream<List<int>>
-                  ? await _readResponseStream(responseData)
-                  : responseData,
-        );
+        final rawResponse = responseData is ResponseBody
+            ? await _readResponseStream(responseData.stream)
+            : responseData is Stream<List<int>>
+            ? await _readResponseStream(responseData)
+            : responseData;
+        final decoded =
+            !stream &&
+                const {
+                  'codebuddy-cn',
+                  'codebuddy-intl',
+                  'workbuddy',
+                }.contains(storedAccount.connectorType) &&
+                (response.headers
+                        .value('content-type')
+                        ?.toLowerCase()
+                        .contains('text/event-stream') ??
+                    false)
+            ? _bufferOpenAiChatSse(rawResponse)
+            : _decodeResponseBody(rawResponse);
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
                 parseLlmConnectorObservation(
@@ -657,8 +673,9 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes =
-          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {
@@ -674,6 +691,108 @@ class LlmConnectorHttpClient {
     }
     if (data is List) return data;
     return data;
+  }
+
+  static Map<String, dynamic> _bufferOpenAiChatSse(Object? data) {
+    final bytes = data is Uint8List
+        ? data
+        : data is List<int>
+        ? Uint8List.fromList(data)
+        : null;
+    if (bytes == null) throw const LlmConnectorHttpException();
+    final text = utf8.decode(bytes, allowMalformed: true);
+    final content = StringBuffer();
+    final reasoning = StringBuffer();
+    final calls = <int, Map<String, dynamic>>{};
+    String? id;
+    String? model;
+    String? finishReason;
+    Map<String, dynamic>? usage;
+    for (final line in const LineSplitter().convert(text)) {
+      if (!line.startsWith('data:')) continue;
+      final dataLine = line.substring(5).trim();
+      if (dataLine.isEmpty || dataLine == '[DONE]') continue;
+      Object? parsed;
+      try {
+        parsed = jsonDecode(dataLine);
+      } catch (_) {
+        continue;
+      }
+      if (parsed is! Map) continue;
+      final chunk = Map<String, dynamic>.from(parsed);
+      if (chunk['error'] != null) throw const LlmConnectorHttpException();
+      id ??= chunk['id'] is String ? chunk['id'] as String : null;
+      model ??= chunk['model'] is String ? chunk['model'] as String : null;
+      if (chunk['usage'] is Map) {
+        usage = Map<String, dynamic>.from(chunk['usage'] as Map);
+      }
+      final choices = chunk['choices'];
+      if (choices is! List || choices.isEmpty || choices.first is! Map) {
+        continue;
+      }
+      final choice = Map<String, dynamic>.from(choices.first as Map);
+      final delta = choice['delta'];
+      if (delta is Map) {
+        final text = delta['content'];
+        if (text is String) content.write(text);
+        final thought = delta['reasoning_content'] ?? delta['reasoning'];
+        if (thought is String) reasoning.write(thought);
+        final toolCalls = delta['tool_calls'];
+        if (toolCalls is List) {
+          for (final rawCall in toolCalls) {
+            if (rawCall is! Map) continue;
+            final call = Map<String, dynamic>.from(rawCall);
+            final index = call['index'] is int ? call['index'] as int : 0;
+            final saved = calls.putIfAbsent(
+              index,
+              () => {
+                'id': '',
+                'type': 'function',
+                'function': {'name': '', 'arguments': ''},
+              },
+            );
+            if (call['id'] is String) saved['id'] = call['id'];
+            final function = call['function'];
+            if (function is Map) {
+              final mergedFunction = saved['function'] as Map<String, dynamic>;
+              if (function['name'] is String) {
+                mergedFunction['name'] =
+                    '${mergedFunction['name']}${function['name']}';
+              }
+              if (function['arguments'] is String) {
+                mergedFunction['arguments'] =
+                    '${mergedFunction['arguments']}${function['arguments']}';
+              }
+            }
+          }
+        }
+      }
+      if (choice['finish_reason'] is String) {
+        finishReason = choice['finish_reason'] as String;
+      }
+    }
+    final usageField = usage == null ? null : <String, dynamic>{'usage': usage};
+    return {
+      'id': id ?? 'buffered-chat-completion',
+      'object': 'chat.completion',
+      'model': model ?? '',
+      ...?usageField,
+      'choices': [
+        {
+          'index': 0,
+          'message': {
+            'role': 'assistant',
+            'content': content.toString(),
+            if (reasoning.isNotEmpty) 'reasoning_content': reasoning.toString(),
+            if (calls.isNotEmpty)
+              'tool_calls': [
+                for (final i in calls.keys.toList()..sort()) calls[i],
+              ],
+          },
+          'finish_reason': finishReason ?? 'stop',
+        },
+      ],
+    };
   }
 
   static Future<Uint8List> _readResponseStream(Stream<List<int>> stream) async {

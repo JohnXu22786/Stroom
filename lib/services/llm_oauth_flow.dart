@@ -48,6 +48,18 @@ class LlmOAuthProviderPolicy {
       providerId: 'muse-code',
       supported: true,
     ),
+    'codebuddy-cn': LlmOAuthProviderPolicy._(
+      providerId: 'codebuddy-cn',
+      supported: true,
+    ),
+    'codebuddy-intl': LlmOAuthProviderPolicy._(
+      providerId: 'codebuddy-intl',
+      supported: true,
+    ),
+    'workbuddy': LlmOAuthProviderPolicy._(
+      providerId: 'workbuddy',
+      supported: true,
+    ),
     'devin': LlmOAuthProviderPolicy._(providerId: 'devin', supported: true),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
@@ -127,15 +139,14 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmKimiDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmKimiDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 
   const LlmKimiDeviceCode._({
     required String deviceCode,
@@ -145,6 +156,43 @@ class LlmKimiDeviceCode {
     required this.expiresIn,
     required this.interval,
   }) : _deviceCode = deviceCode;
+}
+
+/// Secret device state for the Tencent desktop CLI authorization flow.
+class LlmTencentDeviceCode {
+  final String _deviceCode;
+  final String userCode;
+  final Uri verificationUri;
+  final Uri verificationUriComplete;
+  final Duration expiresIn;
+  final Duration interval;
+
+  String get deviceCode => _deviceCode;
+
+  const LlmTencentDeviceCode._({
+    required String deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.verificationUriComplete,
+    required this.expiresIn,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+
+  factory LlmTencentDeviceCode.fromResponse({
+    required String deviceCode,
+    required String userCode,
+    required Uri verificationUri,
+    required Uri verificationUriComplete,
+    required Duration expiresIn,
+    required Duration interval,
+  }) => LlmTencentDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// Verification details returned by Meta Muse's device authorization grant.
@@ -175,15 +223,14 @@ class LlmMetaMuseDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmMetaMuseDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmMetaMuseDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// Device authorization returned by xAI's public OIDC device grant.
@@ -225,19 +272,18 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmXaiDeviceCode._(
-        deviceCode: deviceCode,
-        tokenEndpoint: tokenEndpoint,
-        issuer: issuer,
-        jwksUri: jwksUri,
-        scope: scope,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmXaiDeviceCode._(
+    deviceCode: deviceCode,
+    tokenEndpoint: tokenEndpoint,
+    issuer: issuer,
+    jwksUri: jwksUri,
+    scope: scope,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in
@@ -256,7 +302,8 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope =
+      'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;
@@ -280,8 +327,8 @@ class LlmOAuthAuthorizationAttempt {
     required this.isOpenAiRegistration,
     bool isClaudeCode = false,
     bool isDevin = false,
-  })  : _isClaudeCode = isClaudeCode,
-        _isDevin = isDevin;
+  }) : _isClaudeCode = isClaudeCode,
+       _isDevin = isDevin;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,

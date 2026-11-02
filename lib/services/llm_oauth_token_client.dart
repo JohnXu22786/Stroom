@@ -27,17 +27,185 @@ class LlmOAuthTokenClient {
   static const _devinUserStatusPath =
       '/exa.seat_management_pb.SeatManagementService/GetUserStatus';
   static const _devinTokenPrefix = r'devin-session-token$';
+  static const _tencentCodeBuddyCnHost = 'copilot.tencent.com';
+  static const _tencentCodeBuddyIntlHost = 'www.codebuddy.ai';
+  static const _tencentWorkBuddyHost = 'www.workbuddy.ai';
 
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 30),
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 30),
+            ),
+          );
+
+  Future<LlmTencentDeviceCode> startTencentDeviceAuthorization({
+    required String connectorType,
+  }) async {
+    try {
+      final host = _tencentHost(connectorType);
+      final platform = connectorType == 'codebuddy-intl' ? 'ide' : 'CLI';
+      final userAgent = switch (connectorType) {
+        'codebuddy-cn' => 'CLI/2.108.1 CodeBuddy/2.108.1',
+        'codebuddy-intl' => 'IDE/2.108.1 CodeBuddy/2.108.1',
+        _ => 'WorkBuddy/5.5.6',
+      };
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Product': 'SaaS',
+      };
+      if (connectorType != 'workbuddy') {
+        headers.addAll({
+          'User-Agent': userAgent,
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-Domain': host,
+          'X-No-Authorization': 'true',
+          'X-No-User-Id': 'true',
+        });
+      }
+      final response = await _dio.postUri<Object?>(
+        Uri.https(host, '/v2/plugin/auth/state', {'platform': platform}),
+        data: {'platform': platform},
+        options: Options(headers: headers, responseType: ResponseType.json),
+      );
+      final envelope = _jsonObject(response.data);
+      final data = _jsonObject(envelope['data']);
+      final state = _nonEmptyString(data['state']);
+      final authUrl = _nonEmptyString(data['authUrl'] ?? data['url']);
+      final parsedUri = authUrl == null ? null : Uri.tryParse(authUrl);
+      final allowedAuthHost = switch (connectorType) {
+        'codebuddy-cn' => parsedUri?.host == 'copilot.tencent.com',
+        'codebuddy-intl' => parsedUri?.host == 'www.codebuddy.ai',
+        _ => parsedUri?.host == 'www.workbuddy.ai',
+      };
+      if (envelope['code'] != 0 ||
+          state == null ||
+          parsedUri == null ||
+          parsedUri.scheme != 'https' ||
+          !allowedAuthHost) {
+        throw const LlmOAuthFlowException();
+      }
+      return LlmTencentDeviceCode.fromResponse(
+        deviceCode: state,
+        userCode: state,
+        verificationUri: parsedUri,
+        verificationUriComplete: parsedUri,
+        expiresIn: const Duration(minutes: 10),
+        interval: const Duration(seconds: 5),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> pollTencentDeviceAuthorization({
+    required String connectorType,
+    required LlmTencentDeviceCode deviceCode,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final host = _tencentHost(connectorType);
+      final deadline = DateTime.now().add(deviceCode.expiresIn);
+      var firstPoll = true;
+      while (DateTime.now().isBefore(deadline)) {
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        if (!firstPoll) {
+          await _waitForTencentPollingInterval(
+            deviceCode.interval,
+            cancelToken,
+          );
+        }
+        firstPoll = false;
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+        if (!DateTime.now().isBefore(deadline)) break;
+        final headers = <String, String>{'Accept': 'application/json'};
+        if (connectorType != 'workbuddy') {
+          headers.addAll({
+            'User-Agent': connectorType == 'codebuddy-cn'
+                ? 'CLI/2.108.1 CodeBuddy/2.108.1'
+                : 'IDE/2.108.1 CodeBuddy/2.108.1',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-Domain': host,
+            'X-No-Authorization': 'true',
+            'X-No-User-Id': 'true',
+            'X-No-Enterprise-Id': 'true',
+            'X-No-Department-Info': 'true',
+          });
+        }
+        headers['X-Product'] = 'SaaS';
+        final response = await _dio.getUri<Object?>(
+          Uri.https(host, '/v2/plugin/auth/token', {
+            'state': deviceCode.deviceCode,
+          }),
+          options: Options(
+            headers: headers,
+            responseType: ResponseType.json,
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+        if ((response.statusCode ?? 0) < 200 ||
+            (response.statusCode ?? 0) >= 300) {
+          throw const LlmOAuthFlowException();
+        }
+        final envelope = _jsonObject(response.data);
+        if (envelope['code'] == 11217) continue;
+        final token = _jsonObject(envelope['data']);
+        final accessToken = _nonEmptyString(token['accessToken']);
+        if (envelope['code'] != 0 || accessToken == null) {
+          throw const LlmOAuthFlowException();
+        }
+        final expiresIn = token['expiresIn'] is num
+            ? (token['expiresIn'] as num).toInt()
+            : connectorType == 'workbuddy'
+            ? 31_104_000
+            : 86_400;
+        if (expiresIn <= 0) throw const LlmOAuthFlowException();
+        return {
+          'access_token': accessToken,
+          'refresh_token': _nonEmptyString(token['refreshToken']) ?? '',
+          'token_type': _nonEmptyString(token['tokenType']) ?? 'Bearer',
+          'expires_in': expiresIn,
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(Duration(seconds: expiresIn))
+              .toIso8601String(),
+          'connector_type': connectorType,
+        };
+      }
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static String _tencentHost(String connectorType) => switch (connectorType) {
+    'codebuddy-cn' => _tencentCodeBuddyCnHost,
+    'codebuddy-intl' => _tencentCodeBuddyIntlHost,
+    'workbuddy' => _tencentWorkBuddyHost,
+    _ => throw const LlmOAuthFlowException(),
+  };
+
+  static Future<void> _waitForTencentPollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(interval);
+      return;
+    }
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
+  }
 
   Future<Map<String, dynamic>> exchangeOpenAiChatGpt({
     required LlmOAuthAuthorizationAttempt attempt,
@@ -361,8 +529,7 @@ class LlmOAuthTokenClient {
   static Uint8List? _firstBytesField(
     List<_DevinProtoField> fields,
     int number,
-  ) =>
-      fields.where((field) => field.number == number).firstOrNull?.bytes;
+  ) => fields.where((field) => field.number == number).firstOrNull?.bytes;
 
   static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
       fields.where((field) => field.number == number).firstOrNull?.value;
@@ -435,13 +602,13 @@ class LlmOAuthTokenClient {
   }
 
   static String _devinOsName(TargetPlatform platform) => switch (platform) {
-        TargetPlatform.android => 'android',
-        TargetPlatform.iOS => 'ios',
-        TargetPlatform.linux => 'linux',
-        TargetPlatform.macOS => 'darwin',
-        TargetPlatform.windows => 'windows',
-        TargetPlatform.fuchsia => 'fuchsia',
-      };
+    TargetPlatform.android => 'android',
+    TargetPlatform.iOS => 'ios',
+    TargetPlatform.linux => 'linux',
+    TargetPlatform.macOS => 'darwin',
+    TargetPlatform.windows => 'windows',
+    TargetPlatform.fuchsia => 'fuchsia',
+  };
 
   static String _devenFingerprint(String seed) {
     final value = StringBuffer();
@@ -474,7 +641,8 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete = _kimiVerificationUri(
+      final complete =
+          _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -585,7 +753,8 @@ class LlmOAuthTokenClient {
       final verification = _metaMuseVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete = _metaMuseVerificationUri(
+      final complete =
+          _metaMuseVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -692,6 +861,9 @@ class LlmOAuthTokenClient {
         final active = minted['is_subs_active'];
         if (active != true) throw const LlmOAuthFlowException();
         final baseUrl = _metaMuseBaseUrl(minted['base_url']);
+        final fullName = _nonEmptyString(minted['user_full_name']);
+        final tierName = _nonEmptyString(minted['subs_tier_name']);
+        final tierId = _nonEmptyString(minted['subs_tier_id']);
         return <String, dynamic>{
           'access_token': apiKey,
           'api_key': apiKey,
@@ -700,12 +872,9 @@ class LlmOAuthTokenClient {
           'auth_kind': 'oauth',
           'oauth_contract': 'meta-muse-device-v1',
           'email': email,
-          if (_nonEmptyString(minted['user_full_name']) case final name?)
-            'name': name,
-          if (_nonEmptyString(minted['subs_tier_name']) case final tier?)
-            'subs_tier_name': tier,
-          if (_nonEmptyString(minted['subs_tier_id']) case final tierId?)
-            'subs_tier_id': tierId,
+          ...?_optionalStringField('name', fullName),
+          ...?_optionalStringField('subs_tier_name', tierName),
+          ...?_optionalStringField('subs_tier_id', tierId),
           if (active is bool) 'is_subs_active': active,
           if (minted['has_payment_method'] is bool)
             'has_payment_method': minted['has_payment_method'],
@@ -761,7 +930,8 @@ class LlmOAuthTokenClient {
       final deviceCode = _nonEmptyString(data['device_code']);
       final userCode = _nonEmptyString(data['user_code']);
       final verification = _xaiVerificationUri(data['verification_uri']);
-      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
+      final complete =
+          _xaiVerificationUri(data['verification_uri_complete']) ??
           verification;
       final expiresIn = _seconds(data['expires_in']);
       final interval = _seconds(data['interval']);
@@ -894,12 +1064,12 @@ class LlmOAuthTokenClient {
   }
 
   static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
-        'X-Msh-Platform': 'CLIProxyAPI',
-        'X-Msh-Version': 'stroom',
-        'X-Msh-Device-Name': 'Stroom',
-        'X-Msh-Device-Model': 'Stroom',
-        'X-Msh-Device-Id': deviceId,
-      };
+    'X-Msh-Platform': 'CLIProxyAPI',
+    'X-Msh-Version': 'stroom',
+    'X-Msh-Device-Name': 'Stroom',
+    'X-Msh-Device-Model': 'Stroom',
+    'X-Msh-Device-Id': deviceId,
+  };
 
   static Future<void> _waitForXaiPollingInterval(
     Duration interval,
@@ -1073,8 +1243,8 @@ class LlmOAuthTokenClient {
   static int _seconds(Object? value) => value is num
       ? value.toInt()
       : value is String
-          ? int.tryParse(value) ?? 0
-          : 0;
+      ? int.tryParse(value) ?? 0
+      : 0;
 
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
@@ -1146,8 +1316,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-            ? int.tryParse(expiresIn)
-            : null;
+        ? int.tryParse(expiresIn)
+        : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,
@@ -1161,6 +1331,9 @@ class LlmOAuthTokenClient {
 
   static String? _nonEmptyString(Object? value) =>
       value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  static Map<String, String>? _optionalStringField(String key, String? value) =>
+      value == null ? null : <String, String>{key: value};
 
   static bool _scopeContains(String granted, String required) =>
       granted.split(RegExp(r'\s+')).contains(required);
