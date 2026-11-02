@@ -15049,9 +15049,21 @@ void main() {
             'GHIJK',
           ),
           (
+            'line-break-between-credential-fragments',
+            'The image contains documentation ABCDEF\nGHIJK.',
+            'The image contains [redacted].',
+            'GHIJK',
+          ),
+          (
             'echo-with-safe-following-instruction',
             'The image contains documentation foobarxyz. Please read the receipt total carefully.',
             'The image contains [redacted]. Please read the receipt total carefully.',
+            'foobarxyz',
+          ),
+          (
+            'echo-with-safe-uppercase-instruction',
+            'The image contains documentation foobarxyz PRINT the receipt total carefully.',
+            'The image contains [redacted] PRINT the receipt total carefully.',
             'foobarxyz',
           ),
         ]) {

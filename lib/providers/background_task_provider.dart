@@ -619,7 +619,7 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
       r'(^|[^a-zA-Z0-9])'
       r'[dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN]'
       r'[ \t\r\n]+'
-      r'([a-zA-Z0-9_./+=~-]+(?:[ \t]+[a-zA-Z0-9_./+=~-]+)*)'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t\r\n]+[a-zA-Z0-9_./+=~-]+)*)'
       r'(?=$|[^a-zA-Z0-9_])',
       caseSensitive: true,
     );
@@ -655,7 +655,7 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
           r'(?:ly|ing|ed|er|est|able|ary|aries|ation|ize|ise|ization|istic|based)$',
         ).hasMatch(normalizedToken) ||
         RegExp(
-          r'^(?:and|but|or|then|while|because|although|please|read|review|'
+          r'^(?:and|but|or|then|while|because|although|please|print|read|review|'
           r'the|a|an|in|to|for|with|instructions?|ocr)$',
           caseSensitive: false,
         ).hasMatch(token);
@@ -681,7 +681,14 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
                 maximumVowelRatio: 0.3,
               ));
       if (!hasStrongContinuationShape) break;
-      compactSuffix += token;
+      final extendedSuffix = '$compactSuffix$token';
+      if (!_legacyOcrTextContainsMaskedCredential(
+        'documentation$extendedSuffix',
+        [maskedValue],
+      )) {
+        break;
+      }
+      compactSuffix = extendedSuffix;
       credentialEnd = chunk.start + token.length;
       continue;
     }
@@ -693,6 +700,7 @@ int _legacyOcrMaskedDocumentationCredentialEchoLength(
               minimumEntropy: 3,
               maximumVowelRatio: 0.34,
             )) ||
+        RegExp(r'^[a-z]{6,}xyz$').hasMatch(token) ||
         (RegExp(r'^[A-Z]{6,}$').hasMatch(token) &&
             _legacyOcrHasHighAlphabeticEntropy(
               token.toLowerCase(),
@@ -2608,7 +2616,7 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
       r'(^|[^a-zA-Z0-9])'
       r'([dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN])'
       r'([ \t\r\n]+)'
-      r'([a-zA-Z0-9_./+=~-]+(?:[ \t]+[a-zA-Z0-9_./+=~-]+)*)'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t\r\n]+[a-zA-Z0-9_./+=~-]+)*)'
       r'(?=$|[^a-zA-Z0-9_])',
       caseSensitive: true,
     );
