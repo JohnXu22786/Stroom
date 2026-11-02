@@ -12,10 +12,16 @@ import '../../catcatch/models/media_resource.dart';
 
 String previewExtensionForResource(MediaResource resource) {
   final ext = resource.ext.toLowerCase().replaceFirst(RegExp(r'^\.'), '');
+  final mime = (resource.mimeType ?? '').split(';').first.trim().toLowerCase();
+  if (mime == 'audio/ogg') return 'oga';
+  if (mime == 'video/ogg') return 'ogg';
+  if (mime == 'video/x-theora+ogg') return 'ogv';
+
   const supported = {
     'mp4',
     'webm',
     'ogg',
+    'oga',
     'mov',
     'mkv',
     'ogv',
@@ -36,7 +42,7 @@ String previewExtensionForResource(MediaResource resource) {
     'video/quicktime': 'mov',
     'video/x-matroska': 'mkv',
     'audio/mpeg': 'mp3',
-    'audio/ogg': 'ogg',
+    'audio/ogg': 'oga',
     'audio/wav': 'wav',
     'audio/x-wav': 'wav',
     'audio/mp4': 'm4a',
@@ -46,7 +52,6 @@ String previewExtensionForResource(MediaResource resource) {
     'audio/opus': 'opus',
     'audio/webm': 'weba',
   };
-  final mime = (resource.mimeType ?? '').split(';').first.trim().toLowerCase();
   return mimeExtensions[mime] ?? ext;
 }
 
@@ -122,6 +127,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
         'ogv',
       ].contains(ext);
       final isAudioFormat = [
+        'oga',
         'mp3',
         'wav',
         'm4a',
