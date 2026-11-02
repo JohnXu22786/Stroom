@@ -22,6 +22,11 @@ void main() {
     testWidgets('plays supported audio candidates in the sheet', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       var httpRequested = false;
       await HttpOverrides.runZoned(
         () async {
