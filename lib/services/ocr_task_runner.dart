@@ -16,7 +16,12 @@ class OcrTaskRunner {
   final String taskId;
   final BackgroundTaskNotifier notifier;
   final OcrConfig config;
-  final List<(Uint8List, String)> images;
+  final List<(Uint8List, String)> _images;
+
+  /// Returns a read-only snapshot of the image bytes owned by this runner.
+  List<(Uint8List, String)> get images => List.unmodifiable(
+        _images.map((image) => (Uint8List.fromList(image.$1), image.$2)),
+      );
   final List<String?> imageNames;
   final OcrBatchMode executionMode;
   final int perImageConcurrency;
@@ -74,7 +79,7 @@ class OcrTaskRunner {
           customParams:
               config.customParams.map((param) => param.copy()).toList(),
         ),
-        images = List.unmodifiable(
+        _images = List.unmodifiable(
           images.map((image) => (Uint8List.fromList(image.$1), image.$2)),
         ),
         imageNames = List.unmodifiable(
@@ -197,7 +202,7 @@ class OcrTaskRunner {
     if (uploadingPages.isNotEmpty) {
       final progress = uploadingPages.map((entry) {
         final percent = _perImageUploadPercent[entry.key] ?? 0;
-        return '第 ${entry.key + 1}/${images.length} 张图片 $percent%';
+        return '第 ${entry.key + 1}/${_images.length} 张图片 $percent%';
       }).join('，');
       steps[1] = steps[1].copyWith(label: '上传' + progress);
     }
@@ -244,16 +249,16 @@ class OcrTaskRunner {
       if (executionMode == OcrBatchMode.joint) {
         final service = _service = _serviceFactory(config);
         _activeServices.add(service);
-        result = images.length == 1
+        result = _images.length == 1
             ? await service.recognize(
-                imageBytes: images.single.$1,
-                imageFormat: images.single.$2,
+                imageBytes: _images.single.$1,
+                imageFormat: _images.single.$2,
                 cancelToken: _cancelToken,
                 onSendProgress: _uploadProgress,
                 onStage: _requestStage,
               )
             : await service.recognizeBatch(
-                imageBytesList: images,
+                imageBytesList: _images,
                 cancelToken: _cancelToken,
                 onSendProgress: _uploadProgress,
                 onStage: _requestStage,
@@ -371,13 +376,13 @@ class OcrTaskRunner {
   }
 
   Future<(OcrResult, String?)> _recognizePerImage() async {
-    if (images.isEmpty) {
+    if (_images.isEmpty) {
       throw ArgumentError(
         'OCR per-image execution requires at least one image',
       );
     }
     final outcomes = List<OcrPageOutcome>.generate(
-      images.length,
+      _images.length,
       (index) => OcrPageOutcome(
         imageIndex: index,
         status: OcrPageOutcomeStatus.pending,
@@ -424,7 +429,7 @@ class OcrTaskRunner {
           rethrow;
         }
         final imageIndex = nextImageIndex++;
-        if (imageIndex >= images.length) return;
+        if (imageIndex >= _images.length) return;
         if (outcomes[imageIndex].canReuseResult) continue;
 
         outcomes[imageIndex] = OcrPageOutcome(
@@ -432,7 +437,7 @@ class OcrTaskRunner {
           status: OcrPageOutcomeStatus.running,
         );
         _publishPageOutcomes(outcomes);
-        final image = images[imageIndex];
+        final image = _images[imageIndex];
         OcrService? service;
         try {
           service = _serviceFactory(config);
@@ -512,7 +517,7 @@ class OcrTaskRunner {
       OcrResult(
         text: combinedText,
         processingTimeMs: processingTimeMs,
-        imageCount: images.length,
+        imageCount: _images.length,
         isComplete: complete,
         finishReason: complete ? 'stop' : 'partial',
       ),
