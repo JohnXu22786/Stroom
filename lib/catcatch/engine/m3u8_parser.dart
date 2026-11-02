@@ -32,11 +32,12 @@ class M3U8Parser {
 
   /// Parses playlist resources and reports the media-fragment count separately
   /// from initialization resources such as `#EXT-X-MAP`.
-  static Future<({
-    List<String> resources,
-    int mediaSegmentCount,
-    bool hasInitializationMap,
-  })> parsePlaylistWithDetails(
+  static Future<
+      ({
+        List<String> resources,
+        int mediaSegmentCount,
+        bool hasInitializationMap,
+      })> parsePlaylistWithDetails(
     String content,
     String baseUrl,
   ) async {
