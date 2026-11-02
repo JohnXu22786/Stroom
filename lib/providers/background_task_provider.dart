@@ -5513,7 +5513,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (images is List) {
         const imageFields = {'storageRef', 'format', 'name', 'bytes'};
         for (final image in images) {
-          if (image is! Map) continue;
+          if (image is! Map) return true;
           for (final key in image.keys) {
             if (key is! String ||
                 (!imageFields.contains(key) &&
