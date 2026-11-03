@@ -222,8 +222,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _isRetryImagesLoading = false;
   int _pendingImageImports = 0;
   bool get _isImageImportPending => _pendingImageImports > 0;
-  // File reads may overlap, but batches are committed in selection order.
-  Future<void> _systemGalleryCommitTail = Future<void>.value();
+  // File reads may overlap, but imports are committed in selection order.
+  Future<void> _imageImportCommitTail = Future<void>.value();
   bool get _hasReusablePageResults =>
       _retryPageOutcomes.any((outcome) => outcome.canReuseResult);
   bool get _isImageSelectionLocked =>
@@ -307,7 +307,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   int _invalidateImageImports() {
-    _systemGalleryCommitTail = Future<void>.value();
+    _imageImportCommitTail = Future<void>.value();
     return ++_imageImportGeneration;
   }
 
@@ -318,7 +318,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Whether reorder mode is active
   bool _reorderMode = false;
 
-  /// Invalidates pending image imports after a clear or a newer import.
+  /// Invalidates pending image imports after the current selection is cleared.
   int _imageImportGeneration = 0;
 
   /// Index of the image currently being long-press-dragged in grid, or null.
@@ -1947,6 +1947,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _takePhotoWithSystemCamera() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
+    final previousImportCommit = _imageImportCommitTail;
+    final importCommit = Completer<void>();
+    _imageImportCommitTail = importCommit.future;
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
@@ -1967,7 +1970,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
       final bytes = await file.readAsBytes();
@@ -1975,6 +1977,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final payload = await _prepareImagePayload(bytes);
       if (!mounted || importGeneration != _imageImportGeneration) return;
 
+      await previousImportCommit;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.add(
           SelectedImage.fromPayload(
@@ -1999,6 +2003,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
     } finally {
+      if (!importCommit.isCompleted) importCommit.complete();
       if (importPending) _finishImageImport();
     }
   }
@@ -2007,9 +2012,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromSystemGallery() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    final previousGalleryCommit = _systemGalleryCommitTail;
+    final previousImportCommit = _imageImportCommitTail;
     final galleryCommit = Completer<void>();
-    _systemGalleryCommitTail = galleryCommit.future;
+    _imageImportCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
@@ -2070,7 +2075,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       if (!mounted || importGeneration != _imageImportGeneration) return;
-      await previousGalleryCommit;
+      await previousImportCommit;
       if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
@@ -2110,6 +2115,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromAppAlbum() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
+    final previousImportCommit = _imageImportCommitTail;
+    final importCommit = Completer<void>();
+    _imageImportCommitTail = importCommit.future;
     try {
       final result = await showAppAlbumPickerDialog(context);
       if (!mounted ||
@@ -2118,9 +2126,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
-      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
+      await previousImportCommit;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
       var loadedCount = 0;
       for (final entry in result) {
         if (!mounted || importGeneration != _imageImportGeneration) return;
@@ -2148,6 +2157,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     } finally {
+      if (!importCommit.isCompleted) importCommit.complete();
       if (importPending) _finishImageImport();
     }
   }

@@ -678,6 +678,75 @@ void main() {
     },
   );
 
+  testWidgets(
+    'accepted gallery import survives a later camera import in selection order',
+    (tester) async {
+      final validBytes = _createValidOcrTestImage().bytes;
+      final galleryPreparationStarted = Completer<void>();
+      final finishGalleryPreparation = Completer<OcrImagePayload>();
+      final cameraPreparationCompleted = Completer<void>();
+      var preparationCalls = 0;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async => [
+            _NamedPickerFile('gallery.png', validBytes),
+          ],
+          testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+              XFile.fromData(validBytes, name: 'camera.png'),
+          testImagePayloadPreparer: (bytes) {
+            preparationCalls++;
+            if (preparationCalls == 1) {
+              galleryPreparationStarted.complete();
+              return finishGalleryPreparation.future;
+            }
+            cameraPreparationCompleted.complete();
+            return Future.value(prepareOcrImagePayloadSync(bytes));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从系统相册选择'));
+      await tester.pump();
+      await _pumpUntil(tester, () => galleryPreparationStarted.isCompleted);
+
+      await tester.tap(find.text('拍照识别'));
+      await _pumpUntil(tester, () => cameraPreparationCompleted.isCompleted);
+      expect(find.text('已选 1 张图片'), findsNothing);
+
+      finishGalleryPreparation.complete(
+        prepareOcrImagePayloadSync(validBytes),
+      );
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 2 张图片').evaluate().isNotEmpty,
+      );
+
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_0')),
+            )
+            .image
+            .sourceName,
+        'gallery.png',
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_1')),
+            )
+            .image
+            .sourceName,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
       tester,
