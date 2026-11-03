@@ -132,6 +132,20 @@ void terminateCursorTransportForStatus(
   if (statusCode < 200 || statusCode >= 300) terminate();
 }
 
+class CursorComposerTerminalState {
+  var _hasContent = false;
+  var _toolActivitySinceText = false;
+
+  bool get shouldEndOnKvCheckpoint => _hasContent && !_toolActivitySinceText;
+
+  void noteContent() {
+    _hasContent = true;
+    _toolActivitySinceText = false;
+  }
+
+  void noteInternalToolActivity() => _toolActivitySinceText = true;
+}
+
 /// Drives the pinned Cursor bidirectional Connect-RPC through HTTP/2 so the
 /// request-context and key-value acknowledgements can be written while the
 /// response is still streaming.
@@ -242,7 +256,8 @@ class CursorHttp2Transport {
     final decoder = CursorConnectFrameDecoder();
     var responseStatus = 0;
     var terminal = false;
-    var sawContent = false;
+    final composerTerminalState = CursorComposerTerminalState();
+    final isComposer = modelId.toLowerCase().contains('composer');
     var terminated = false;
     Timer? drainTimer;
 
@@ -306,6 +321,7 @@ class CursorHttp2Transport {
                   ),
                 );
               } else if (delta.mcpStateId != null) {
+                composerTerminalState.noteInternalToolActivity();
                 stream.sendData(
                   CursorConnectFrameDecoder.encodeMcpStateAck(
                     id: delta.mcpStateId!,
@@ -327,7 +343,8 @@ class CursorHttp2Transport {
                     requestMetadata: delta.requestMetadata,
                   ),
                 );
-                if (modelId.toLowerCase().contains('composer') && sawContent) {
+                if (isComposer &&
+                    composerTerminalState.shouldEndOnKvCheckpoint) {
                   completeAfterTerminal();
                 }
               } else if (delta.unsupportedAction != null) {
@@ -342,7 +359,7 @@ class CursorHttp2Transport {
                 continue;
               } else {
                 if (delta.text != null || delta.reasoning != null) {
-                  sawContent = true;
+                  composerTerminalState.noteContent();
                 }
                 controller.add(delta);
                 if (delta.turnEnded) completeAfterTerminal();

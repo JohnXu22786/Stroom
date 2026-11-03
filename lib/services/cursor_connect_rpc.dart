@@ -71,9 +71,8 @@ class CursorConnectFrameDecoder {
       final raw = _pending.sublist(offset + 5, offset + 5 + length);
       offset += 5 + length;
       if ((flags & 0x02) != 0) {
-        final trailerBytes = (flags & 0x01) != 0
-            ? GZipDecoder().decodeBytes(raw)
-            : raw;
+        final trailerBytes =
+            (flags & 0x01) != 0 ? GZipDecoder().decodeBytes(raw) : raw;
         final trailer = _decodeJsonObject(trailerBytes);
         final nestedError = trailer['error'];
         final error = nestedError is Map
@@ -88,9 +87,8 @@ class CursorConnectFrameDecoder {
         }
         continue;
       }
-      final payload = (flags & 0x01) != 0
-          ? GZipDecoder().decodeBytes(raw)
-          : raw;
+      final payload =
+          (flags & 0x01) != 0 ? GZipDecoder().decodeBytes(raw) : raw;
       deltas.addAll(decodeAgentServerMessage(payload));
     }
     _pending = Uint8List.fromList(_pending.sublist(offset));
@@ -142,8 +140,20 @@ class CursorConnectFrameDecoder {
     if (messages is! Iterable) {
       throw const CursorConnectRpcException('invalid_request');
     }
+    final rawMessages = messages.toList(growable: false);
+    var latestUserMessageIndex = -1;
+    for (var index = 0; index < rawMessages.length; index++) {
+      final raw = rawMessages[index];
+      if (raw is Map &&
+          raw['role'] is String &&
+          (raw['role'] as String).toLowerCase() == 'user') {
+        latestUserMessageIndex = index;
+      }
+    }
     final tools = body['tools'];
-    if (tools is Iterable && tools.isNotEmpty) {
+    if (tools is Iterable &&
+        tools.isNotEmpty &&
+        body['tool_choice'] != 'none') {
       throw const CursorConnectRpcException('unsupported_tools');
     }
     final systemText = <String>[];
@@ -152,7 +162,8 @@ class CursorConnectFrameDecoder {
     var onlyUserTurn = true;
     var turnCount = 0;
     String? singleUserText;
-    for (final raw in messages) {
+    for (var index = 0; index < rawMessages.length; index++) {
+      final raw = rawMessages[index];
       if (raw is! Map || raw['role'] is! String) {
         throw const CursorConnectRpcException('invalid_request');
       }
@@ -168,7 +179,9 @@ class CursorConnectFrameDecoder {
       }
       final content = _messageText(
         raw['content'],
-        images: role == 'user' ? images : null,
+        images:
+            role == 'user' && index == latestUserMessageIndex ? images : null,
+        ignoreImages: role == 'user' && index != latestUserMessageIndex,
       );
       if (content.isEmpty) continue;
       if (role == 'system') {
@@ -215,9 +228,8 @@ class CursorConnectFrameDecoder {
       final imageBytes = _imageBytes(image);
       final blobId = Uint8List.fromList(sha256.convert(imageBytes).bytes);
       if (blobStore != null) {
-        final blobIdHex = blobId
-            .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-            .join();
+        final blobIdHex =
+            blobId.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
         blobStore[blobIdHex] = imageBytes;
       }
       selectedImages.add(
@@ -282,7 +294,7 @@ class CursorConnectFrameDecoder {
   }
 
   static ({String modelId, List<(String, String)> parameters})
-  _resolveRequestedModel(String modelId, Object? reasoningEffort) {
+      _resolveRequestedModel(String modelId, Object? reasoningEffort) {
     var id = modelId.trim();
     final parameters = <(String, String)>[];
     if (id == 'auto') return (modelId: 'default', parameters: parameters);
@@ -361,8 +373,8 @@ class CursorConnectFrameDecoder {
       final grokPrefix = id.startsWith('cursor-grok-')
           ? 'cursor-grok-'
           : id.startsWith('grok-')
-          ? 'grok-'
-          : null;
+              ? 'grok-'
+              : null;
       if (grokPrefix != null) {
         final fast = id.endsWith('-fast');
         if (fast) id = id.substring(0, id.length - 5);
@@ -379,8 +391,8 @@ class CursorConnectFrameDecoder {
         final prefix = id.startsWith('claude-')
             ? 'claude-'
             : id.startsWith('gpt-')
-            ? 'gpt-'
-            : null;
+                ? 'gpt-'
+                : null;
         if (prefix != null) {
           for (final level in ['low', 'medium', 'high', 'xhigh', 'max']) {
             if (id.endsWith('-$level') &&
@@ -412,34 +424,35 @@ class CursorConnectFrameDecoder {
   }
 
   static Uint8List encodeRequestContextAck(int id, String execId) => _frame(
-    _message(2, [
-      _varint(1, id),
-      _string(15, execId),
-      _message(10, [
-        _message(1, [_message(1, const [])]),
-      ]),
-    ]),
-  );
+        _message(2, [
+          _varint(1, id),
+          _string(15, execId),
+          _message(10, [
+            _message(1, [_message(1, const [])]),
+          ]),
+        ]),
+      );
 
   static Uint8List encodeMcpStateAck({
     required int id,
     required String execId,
     required String serverIdentifier,
-  }) => _frame(
-    _message(2, [
-      _varint(1, id),
-      _string(15, execId),
-      _message(36, [
-        _message(1, [
-          _message(1, [
-            _string(1, serverIdentifier),
-            _string(2, serverIdentifier),
-            _string(7, 'ready'),
+  }) =>
+      _frame(
+        _message(2, [
+          _varint(1, id),
+          _string(15, execId),
+          _message(36, [
+            _message(1, [
+              _message(1, [
+                _string(1, serverIdentifier),
+                _string(2, serverIdentifier),
+                _string(7, 'ready'),
+              ]),
+            ]),
           ]),
         ]),
-      ]),
-    ]),
-  );
+      );
 
   static Uint8List encodeKeyValueAck({
     required int id,
@@ -477,17 +490,16 @@ class CursorConnectFrameDecoder {
             final usage = _fields(update.bytes!);
             final input = _integer(usage, 1);
             final tokens = _integer(usage, 2);
+            final tokenUsage = <String, int>{};
+            if (input != null) tokenUsage['prompt_tokens'] = input;
+            if (tokens != null) tokenUsage['completion_tokens'] = tokens;
+            if (input != null || tokens != null) {
+              tokenUsage['total_tokens'] = (input ?? 0) + (tokens ?? 0);
+            }
             output.add(
               CursorAgentDelta(
                 turnEnded: true,
-                usage: input == null && tokens == null
-                    ? null
-                    : {
-                        'prompt_tokens': ?input,
-                        'completion_tokens': ?tokens,
-                        if (input != null || tokens != null)
-                          'total_tokens': (input ?? 0) + (tokens ?? 0),
-                      },
+                usage: tokenUsage.isEmpty ? null : tokenUsage,
               ),
             );
           } else if (update.number == 2 || update.number == 3) {
@@ -505,12 +517,12 @@ class CursorConnectFrameDecoder {
           final serverIdentifier = stateArgs.bytes == null
               ? null
               : _fields(stateArgs.bytes!)
-                    .where((field) => field.number == 1 && field.bytes != null)
-                    .map((field) => utf8.decode(field.bytes!))
-                    .firstWhere(
-                      (value) => value.trim().isNotEmpty,
-                      orElse: () => 'stroom',
-                    );
+                  .where((field) => field.number == 1 && field.bytes != null)
+                  .map((field) => utf8.decode(field.bytes!))
+                  .firstWhere(
+                    (value) => value.trim().isNotEmpty,
+                    orElse: () => 'stroom',
+                  );
           output.add(
             CursorAgentDelta(
               mcpStateId: id,
@@ -584,10 +596,16 @@ class CursorConnectFrameDecoder {
           'finish_reason': done ? 'stop' : null,
         },
       ],
-      'usage': ?usage,
     };
+    if (usage != null) chunk['usage'] = usage;
     return Uint8List.fromList(utf8.encode('data: ${jsonEncode(chunk)}\n\n'));
   }
+
+  static Uint8List encodeSseErrorChunk(String code) => Uint8List.fromList(
+        utf8.encode('data: ${jsonEncode({
+              'error': {'code': code}
+            })}\n\n'),
+      );
 
   /// Composer models return private thinking followed by their visible reply in
   /// a dedicated sentinel format. Only return the suffix after the final end
@@ -604,7 +622,17 @@ class CursorConnectFrameDecoder {
         RegExp(r'^\s*<[｜|][^>]*$').hasMatch(visible)) {
       return '';
     }
-    return visible.replaceFirst(close, '');
+    visible = visible.replaceFirst(close, '');
+    if (RegExp(
+      r'<[｜|]tool[▁_]calls[▁_]begin[｜|]>',
+      caseSensitive: false,
+    ).hasMatch(visible)) {
+      throw const CursorConnectRpcException('unsupported_tools');
+    }
+    // The pinned Composer parser trims the beginning of the post-thinking
+    // reply after removing its final wrapper. Keep trailing spaces so deltas
+    // split across frames retain their original boundaries.
+    return visible.trimLeft();
   }
 
   static Map<String, dynamic> _decodeJsonObject(List<int> bytes) {
@@ -616,7 +644,11 @@ class CursorConnectFrameDecoder {
     }
   }
 
-  static String _messageText(Object? raw, {List<Uint8List>? images}) {
+  static String _messageText(
+    Object? raw, {
+    List<Uint8List>? images,
+    bool ignoreImages = false,
+  }) {
     if (raw is String) return raw;
     if (raw == null) return '';
     if (raw is Iterable) {
@@ -633,6 +665,7 @@ class CursorConnectFrameDecoder {
         } else if (item['type'] == 'image' ||
             item['type'] == 'image_url' ||
             item['image_url'] != null) {
+          if (ignoreImages) continue;
           if (images == null) {
             throw const CursorConnectRpcException('unsupported_images');
           }
@@ -773,24 +806,24 @@ class CursorConnectFrameDecoder {
       _bytes(number, Uint8List.fromList(utf8.encode(value)));
 
   static Uint8List _varint(int number, int value) => Uint8List.fromList([
-    ..._encodeVarint((number << 3)),
-    ..._encodeVarint(value),
-  ]);
+        ..._encodeVarint((number << 3)),
+        ..._encodeVarint(value),
+      ]);
 
   static Uint8List _bytes(int number, List<int> value) => Uint8List.fromList([
-    ..._encodeVarint((number << 3) | 2),
-    ..._encodeVarint(value.length),
-    ...value,
-  ]);
+        ..._encodeVarint((number << 3) | 2),
+        ..._encodeVarint(value.length),
+        ...value,
+      ]);
 
   static Uint8List _frame(List<int> payload) => Uint8List.fromList([
-    0,
-    (payload.length >> 24) & 0xff,
-    (payload.length >> 16) & 0xff,
-    (payload.length >> 8) & 0xff,
-    payload.length & 0xff,
-    ...payload,
-  ]);
+        0,
+        (payload.length >> 24) & 0xff,
+        (payload.length >> 16) & 0xff,
+        (payload.length >> 8) & 0xff,
+        payload.length & 0xff,
+        ...payload,
+      ]);
 
   static List<int> _encodeVarint(int value) {
     final bytes = <int>[];
@@ -813,9 +846,10 @@ class CursorComposerReplyDecoder {
     final visible = CursorConnectFrameDecoder.visibleComposerReply(
       _thinking.toString(),
     );
-    if (visible.length <= _emittedLength) return '';
-    final result = visible.substring(_emittedLength);
-    _emittedLength = visible.length;
+    final safeVisible = _withoutPartialComposerToolMarker(visible);
+    if (safeVisible.length <= _emittedLength) return '';
+    final result = safeVisible.substring(_emittedLength);
+    _emittedLength = safeVisible.length;
     return result;
   }
 
@@ -823,10 +857,35 @@ class CursorComposerReplyDecoder {
     final visible = CursorConnectFrameDecoder.visibleComposerReply(
       _thinking.toString(),
     );
-    if (visible.length <= _emittedLength) return '';
-    final result = visible.substring(_emittedLength);
-    _emittedLength = visible.length;
+    final safeVisible = _withoutPartialComposerToolMarker(visible);
+    if (safeVisible.length <= _emittedLength) return '';
+    final result = safeVisible.substring(_emittedLength);
+    _emittedLength = safeVisible.length;
     return result;
+  }
+
+  static String _withoutPartialComposerToolMarker(String visible) {
+    const pipes = ['｜', '|'];
+    const separators = ['▁', '_'];
+    final markers = <String>[
+      for (final leftPipe in pipes)
+        for (final rightPipe in pipes)
+          for (final firstSeparator in separators)
+            for (final secondSeparator in separators)
+              '<$leftPipe'
+                  'tool$firstSeparator'
+                  'calls$secondSeparator'
+                  'begin$rightPipe>',
+    ];
+    for (var start = visible.lastIndexOf('<'); start >= 0; start--) {
+      final suffix = visible.substring(start);
+      if (markers.any(
+        (marker) => marker.toLowerCase().startsWith(suffix.toLowerCase()),
+      )) {
+        return visible.substring(0, start);
+      }
+    }
+    return visible;
   }
 }
 

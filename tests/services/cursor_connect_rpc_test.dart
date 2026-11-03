@@ -148,14 +148,14 @@ void main() {
 
   test('Cursor model variants resolve to runtime model ids and parameters', () {
     Uint8List request(String model) => CursorConnectFrameDecoder.encodeRequest(
-      modelId: model,
-      conversationId: 'conversation-model',
-      body: const {
-        'messages': [
-          {'role': 'user', 'content': 'hello'},
-        ],
-      },
-    );
+          modelId: model,
+          conversationId: 'conversation-model',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        );
 
     final claude = request('claude-sonnet-5-high');
     expect(claude, containsSubsequence(utf8.encode('claude-sonnet-5')));
@@ -267,9 +267,8 @@ void main() {
       ),
     );
     final digest = Uint8List.fromList(sha256.convert(rootPromptBytes).bytes);
-    final digestHex = digest
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final digestHex =
+        digest.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
     expect(blobs[digestHex], rootPromptBytes);
     expect(request, containsSubsequence(digest));
     expect(request, containsSubsequence(utf8.encode('first instruction')));
@@ -368,6 +367,59 @@ void main() {
     },
   );
 
+  test('Cursor attaches only images from the latest user turn', () {
+    final oldImage = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47, 0x01]);
+    final currentImage = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47, 0x02]);
+    String dataUrl(Uint8List bytes) =>
+        'data:image/png;base64,${base64Encode(bytes)}';
+    final blobs = <String, Uint8List>{};
+    final request = CursorConnectFrameDecoder.encodeRequest(
+      modelId: 'claude-sonnet-5-high',
+      conversationId: 'conversation-image-history',
+      blobStore: blobs,
+      body: {
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': 'Earlier image'},
+              {
+                'type': 'image_url',
+                'image_url': {'url': dataUrl(oldImage)},
+              },
+            ],
+          },
+          {'role': 'assistant', 'content': 'Earlier description'},
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': 'What is in this image?'},
+              {
+                'type': 'image_url',
+                'image_url': {'url': dataUrl(currentImage)},
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(request, containsSubsequence(currentImage));
+    expect(request, isNot(containsSubsequence(oldImage)));
+    final currentDigest = sha256
+        .convert(currentImage)
+        .bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final oldDigest = sha256
+        .convert(oldImage)
+        .bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    expect(blobs[currentDigest], currentImage);
+    expect(blobs.containsKey(oldDigest), isFalse);
+  });
+
   test(
     'Cursor rejects unmapped tools and non-inline image sources explicitly',
     () {
@@ -451,6 +503,30 @@ void main() {
       );
     },
   );
+
+  test('Cursor accepts supplied tools when tool_choice disables them', () {
+    final request = CursorConnectFrameDecoder.encodeRequest(
+      modelId: 'claude-sonnet-5-high',
+      conversationId: 'conversation-tools-disabled',
+      body: const {
+        'messages': [
+          {'role': 'user', 'content': 'Answer without tools.'},
+        ],
+        'tools': [
+          {
+            'type': 'function',
+            'function': {
+              'name': 'lookup',
+              'parameters': {'type': 'object'},
+            },
+          },
+        ],
+        'tool_choice': 'none',
+      },
+    );
+
+    expect(request, containsSubsequence(utf8.encode('Answer without tools.')));
+  });
 
   test('Cursor rejects malformed messages and unsupported content values', () {
     for (final message in [
@@ -579,6 +655,18 @@ void main() {
     expect(response, containsSubsequence(utf8.encode('exec-state')));
   });
 
+  test('Composer KV checkpoint after MCP state does not end the turn', () {
+    final state = CursorComposerTerminalState();
+    state.noteContent();
+    expect(state.shouldEndOnKvCheckpoint, isTrue);
+
+    state.noteInternalToolActivity();
+    expect(state.shouldEndOnKvCheckpoint, isFalse);
+
+    state.noteContent();
+    expect(state.shouldEndOnKvCheckpoint, isTrue);
+  });
+
   test('Cursor response stream enforces a bounded lifetime', () async {
     final source = StreamController<int>();
     var terminated = false;
@@ -666,6 +754,12 @@ void main() {
         'visible answer',
       );
       expect(
+        CursorConnectFrameDecoder.visibleComposerReply(
+          'private analysis</think>   <|final|>  visible answer<|/final|>',
+        ),
+        'visible answer',
+      );
+      expect(
         CursorConnectFrameDecoder.visibleComposerReply('private analysis'),
         isEmpty,
       );
@@ -693,6 +787,37 @@ void main() {
       expect(spacedDecoder.finish(), isEmpty);
     },
   );
+
+  test('Cursor Composer inline tool markers are rejected before completion',
+      () {
+    final toolDecoder = CursorComposerReplyDecoder();
+    expect(
+      toolDecoder.add(
+        'private analysis</think>Visible preamble<|tool_calls_',
+      ),
+      'Visible preamble',
+    );
+    expect(
+      () => toolDecoder.add('begin|>tool payload'),
+      throwsA(
+        isA<CursorConnectRpcException>().having(
+          (error) => error.code,
+          'code',
+          'unsupported_tools',
+        ),
+      ),
+    );
+  });
+
+  test('Cursor stream capability failures use a structured SSE error', () {
+    final chunk = CursorConnectFrameDecoder.encodeSseErrorChunk(
+      'unsupported_capability',
+    );
+    final frame = utf8.decode(chunk).trim();
+    final data = jsonDecode(frame.substring('data: '.length)) as Map;
+
+    expect((data['error'] as Map)['code'], 'unsupported_capability');
+  });
 }
 
 Matcher containsSubsequence(List<int> expected) =>
@@ -711,22 +836,22 @@ Matcher containsSubsequence(List<int> expected) =>
     }, 'contains byte subsequence $expected');
 
 Uint8List _frame(List<int> payload, {int flags = 0}) => Uint8List.fromList([
-  flags,
-  (payload.length >> 24) & 0xff,
-  (payload.length >> 16) & 0xff,
-  (payload.length >> 8) & 0xff,
-  payload.length & 0xff,
-  ...payload,
-]);
+      flags,
+      (payload.length >> 24) & 0xff,
+      (payload.length >> 16) & 0xff,
+      (payload.length >> 8) & 0xff,
+      payload.length & 0xff,
+      ...payload,
+    ]);
 
 Uint8List _message(int number, List<Uint8List> parts) =>
     _bytes(number, parts.expand((part) => part).toList());
 
 Uint8List _bytes(int number, List<int> data) => Uint8List.fromList([
-  ..._rawVarint((number << 3) | 2),
-  ..._rawVarint(data.length),
-  ...data,
-]);
+      ..._rawVarint((number << 3) | 2),
+      ..._rawVarint(data.length),
+      ...data,
+    ]);
 
 Uint8List _varint(int number, int value) =>
     Uint8List.fromList([..._rawVarint(number << 3), ..._rawVarint(value)]);
