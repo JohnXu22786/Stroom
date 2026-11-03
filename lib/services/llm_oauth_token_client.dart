@@ -423,7 +423,7 @@ class LlmOAuthTokenClient {
           envelope['success'] == true ? _jsonObject(envelope['data']) : null;
       final apiKey = _nonEmptyString(userInfo?['apiKey']);
       if (apiKey == null) throw const LlmOAuthFlowException();
-      final bundle = _credentialBundle(tokens)
+      final bundle = _qoderCredentialBundle(tokens)
         ..['api_key'] = apiKey
         ..['client_id'] = clientId
         ..['client_secret'] = clientSecret
@@ -1403,6 +1403,27 @@ class LlmOAuthTokenClient {
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,
+      if (seconds != null && seconds > 0)
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(Duration(seconds: seconds))
+            .toIso8601String(),
+    };
+  }
+
+  static Map<String, dynamic> _qoderCredentialBundle(
+    Map<String, dynamic> token,
+  ) {
+    final expiresIn = token['expires_in'];
+    final seconds = expiresIn is num
+        ? expiresIn.toInt()
+        : expiresIn is String
+            ? int.tryParse(expiresIn)
+            : null;
+    final refreshToken = _nonEmptyString(token['refresh_token']);
+    return <String, dynamic>{
+      'access_token': _nonEmptyString(token['access_token'])!,
+      ...?_optionalStringField('refresh_token', refreshToken),
       if (seconds != null && seconds > 0)
         'expires_at': DateTime.now()
             .toUtc()

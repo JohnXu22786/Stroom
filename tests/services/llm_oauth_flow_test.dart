@@ -1523,6 +1523,47 @@ void main() {
     expect(bundle['oauth_contract'], 'qoder-admin-code-v1');
     expect(bundle['display_name'], 'Qoder User');
   });
+
+  test('Qoder OAuth accepts an access-token-only authorization response',
+      () async {
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((options) async {
+        final response = options.uri.path == '/token'
+            ? {'access_token': 'qoder-access'}
+            : {
+                'success': true,
+                'data': {'apiKey': 'dashscope-account-key'},
+              };
+        return ResponseBody.fromString(jsonEncode(response), 200,
+            headers: const {
+              'content-type': ['application/json']
+            });
+      });
+    final attempt = LlmOAuthAuthorizationAttempt.qoder(
+      redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+      authorizeUrl: 'https://login.example.test/authorize',
+      clientId: 'qoder-client',
+    );
+    final callback = attempt.consumeCallback(attempt.redirectUri.replace(
+      queryParameters: {'code': 'qoder-code', 'state': attempt.state},
+    ));
+
+    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeQoderCode(
+      attempt: attempt,
+      callback: callback,
+      configuration: const {
+        'authorizeUrl': 'https://login.example.test/authorize',
+        'tokenUrl': 'https://login.example.test/token',
+        'userInfoUrl': 'https://login.example.test/user',
+        'clientId': 'qoder-client',
+        'clientSecret': 'qoder-client-secret',
+      },
+    );
+
+    expect(bundle['access_token'], 'qoder-access');
+    expect(bundle, isNot(contains('refresh_token')));
+    expect(bundle['api_key'], 'dashscope-account-key');
+  });
 }
 
 class _OAuthAdapter implements HttpClientAdapter {
