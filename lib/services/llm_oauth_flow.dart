@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 /// Provider OAuth admission is based on a public third-party inference flow,
 /// not on an official CLI's private session format.
@@ -48,6 +49,7 @@ class LlmOAuthProviderPolicy {
       providerId: 'muse-code',
       supported: true,
     ),
+    'cursor': LlmOAuthProviderPolicy._(providerId: 'cursor', supported: true),
     'codebuddy-cn': LlmOAuthProviderPolicy._(
       providerId: 'codebuddy-cn',
       supported: true,
@@ -114,6 +116,65 @@ class LlmOAuthProviderPolicy {
       );
 }
 
+/// PKCE state for Cursor's short-lived deep-control login. The verifier stays
+/// in the authorization object and is never included in the browser URL.
+class LlmCursorOAuthSession {
+  static const lifetime = Duration(minutes: 15);
+
+  final String uuid;
+  final String _verifier;
+  final Uri authorizationUri;
+  final DateTime expiresAt;
+
+  String get verifier => _verifier;
+
+  LlmCursorOAuthSession._({
+    required this.uuid,
+    required String verifier,
+    required this.authorizationUri,
+    required this.expiresAt,
+  }) : _verifier = verifier;
+
+  factory LlmCursorOAuthSession.create({
+    DateTime? now,
+    String? uuid,
+    String? verifier,
+  }) {
+    final resolvedVerifier = verifier ?? _securePkceValue();
+    final resolvedUuid = uuid ?? const Uuid().v4();
+    if (resolvedVerifier.length < 43 ||
+        resolvedVerifier.length > 128 ||
+        resolvedUuid.isEmpty) {
+      throw const LlmOAuthFlowException();
+    }
+    final challenge = base64Url
+        .encode(sha256.convert(utf8.encode(resolvedVerifier)).bytes)
+        .replaceAll('=', '');
+    final uri = Uri.https('cursor.com', '/loginDeepControl', {
+      'challenge': challenge,
+      'uuid': resolvedUuid,
+      'mode': 'login',
+      'redirectTarget': 'cli',
+    });
+    return LlmCursorOAuthSession._(
+      uuid: resolvedUuid,
+      verifier: resolvedVerifier,
+      authorizationUri: uri,
+      expiresAt: (now ?? DateTime.now()).add(lifetime),
+    );
+  }
+
+  bool isExpired([DateTime? now]) =>
+      !(now ?? DateTime.now()).isBefore(expiresAt);
+}
+
+String _securePkceValue() {
+  final random = Random.secure();
+  return base64Url
+      .encode(List<int>.generate(32, (_) => random.nextInt(256)))
+      .replaceAll('=', '');
+}
+
 class LlmOAuthFlowException implements Exception {
   const LlmOAuthFlowException();
 
@@ -153,15 +214,14 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmKimiDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmKimiDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 
   const LlmKimiDeviceCode._({
     required String deviceCode,
@@ -198,14 +258,13 @@ class LlmKiloDeviceCode {
     required Uri verificationUri,
     required Uri verificationUriComplete,
     required Duration interval,
-  }) =>
-      LlmKiloDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        interval: interval,
-      );
+  }) => LlmKiloDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    interval: interval,
+  );
 }
 
 /// Secret device state for the Tencent desktop CLI authorization flow.
@@ -235,15 +294,14 @@ class LlmTencentDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmTencentDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmTencentDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// Verification details returned by Meta Muse's device authorization grant.
@@ -274,15 +332,14 @@ class LlmMetaMuseDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmMetaMuseDeviceCode._(
-        deviceCode: deviceCode,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmMetaMuseDeviceCode._(
+    deviceCode: deviceCode,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// Device authorization returned by xAI's public OIDC device grant.
@@ -324,19 +381,18 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmXaiDeviceCode._(
-        deviceCode: deviceCode,
-        tokenEndpoint: tokenEndpoint,
-        issuer: issuer,
-        jwksUri: jwksUri,
-        scope: scope,
-        userCode: userCode,
-        verificationUri: verificationUri,
-        verificationUriComplete: verificationUriComplete,
-        expiresIn: expiresIn,
-        interval: interval,
-      );
+  }) => LlmXaiDeviceCode._(
+    deviceCode: deviceCode,
+    tokenEndpoint: tokenEndpoint,
+    issuer: issuer,
+    jwksUri: jwksUri,
+    scope: scope,
+    userCode: userCode,
+    verificationUri: verificationUri,
+    verificationUriComplete: verificationUriComplete,
+    expiresIn: expiresIn,
+    interval: interval,
+  );
 }
 
 /// One-use OAuth authorization attempt. The state, nonce and verifier live in
@@ -358,7 +414,8 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope =
+      'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;
@@ -386,10 +443,10 @@ class LlmOAuthAuthorizationAttempt {
     bool isDevin = false,
     bool isQoder = false,
     bool isCline = false,
-  })  : _isClaudeCode = isClaudeCode,
-        _isDevin = isDevin,
-        _isQoder = isQoder,
-        _isCline = isCline;
+  }) : _isClaudeCode = isClaudeCode,
+       _isDevin = isDevin,
+       _isQoder = isQoder,
+       _isCline = isCline;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,

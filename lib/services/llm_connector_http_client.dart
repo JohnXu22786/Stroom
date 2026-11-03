@@ -12,6 +12,8 @@ import 'aws_sigv4.dart';
 import 'llm_connector_service.dart';
 import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
+import 'cursor_connect_rpc.dart';
+import 'cursor_http2_transport.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -44,14 +46,15 @@ class LlmConnectorHttpClient {
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-  })  : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 60),
-              ),
-            ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           ),
+       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -76,14 +79,15 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker = Future<void>.sync(() async {
-        await onRequestSent?.call();
-      }).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {
-          requestSentMarkerFailed = true;
-        },
-      );
+      requestSentMarker =
+          Future<void>.sync(() async {
+            await onRequestSent?.call();
+          }).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {
+              requestSentMarkerFailed = true;
+            },
+          );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -204,8 +208,138 @@ class LlmConnectorHttpClient {
         );
       } on LlmConnectorHttpException {
         rethrow;
+      } on CursorConnectRpcException catch (error) {
+        throw LlmConnectorHttpException(
+          code: error.code == 'unsupported_images'
+              ? 'cursor_inline_images_only'
+              : error.code.startsWith('unsupported_')
+              ? 'unsupported_capability'
+              : 'invalid_request',
+        );
       } catch (_) {
         throw const LlmConnectorHttpException();
+      }
+      if (storedAccount.connectorType == 'cursor') {
+        try {
+          final accessToken = LlmNativeRequestBuilder.credentialBundleString(
+            credential,
+            const ['access_token', 'accessToken'],
+          );
+          if (accessToken == null || prepared.body is! List<int>) {
+            throw const LlmConnectorAuthenticationRequired();
+          }
+          final response = await CursorHttp2Transport.open(
+            dio: _dio,
+            accessToken: accessToken,
+            modelId: modelId,
+            requestBody: prepared.body as List<int>,
+            requestBlobs: prepared.requestBlobs,
+            cancelToken: requestCancelToken,
+            onRequestSent: () {
+              markRequestSent();
+              return waitForRequestSentMarker();
+            },
+          );
+          await waitForRequestSentMarker();
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            if (response.statusCode == 401 &&
+                !didRetry &&
+                _canRefresh(storedAccount)) {
+              didRetry = true;
+              if (await accountService.refreshCredential(
+                storedAccount,
+                cancelToken: cancelToken,
+              )) {
+                continue;
+              }
+            }
+            throw LlmConnectorHttpException(
+              code: response.statusCode == 401 || response.statusCode == 403
+                  ? 'authentication_required'
+                  : 'upstream_error',
+            );
+          }
+          if (stream) {
+            final completed = Completer<LlmConnectorObservation>();
+            final chunks = _cursorSse(response.deltas, modelId, completed);
+            return LlmConnectorResponse(
+              statusCode: response.statusCode,
+              headers: response.headers,
+              body: chunks,
+              observation: LlmConnectorObservation(),
+              completedObservation: completed.future,
+            );
+          }
+          final text = StringBuffer();
+          final reasoning = StringBuffer();
+          Map<String, int>? usage;
+          await for (final delta in response.deltas) {
+            if (delta.text != null) text.write(delta.text);
+            if (delta.reasoning != null) reasoning.write(delta.reasoning);
+            usage = delta.usage ?? usage;
+          }
+          if (_isCursorComposerModel(modelId)) {
+            text.write(
+              CursorConnectFrameDecoder.visibleComposerReply(
+                reasoning.toString(),
+              ),
+            );
+            reasoning.clear();
+          }
+          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final decoded = <String, dynamic>{
+            'id': 'cursor-${now.toRadixString(16)}',
+            'object': 'chat.completion',
+            'created': now,
+            'model': modelId,
+            'choices': [
+              {
+                'index': 0,
+                'message': {
+                  'role': 'assistant',
+                  'content': text.toString(),
+                  if (reasoning.isNotEmpty)
+                    'reasoning_content': reasoning.toString(),
+                },
+                'finish_reason': 'stop',
+              },
+            ],
+            'usage': ?usage,
+          };
+          return LlmConnectorResponse(
+            statusCode: response.statusCode,
+            headers: response.headers,
+            body: decoded,
+            observation: LlmConnectorObservation(),
+          );
+        } on LlmConnectorHttpException {
+          rethrow;
+        } on LlmConnectorRequestCancelled {
+          rethrow;
+        } on CursorConnectRpcException catch (error) {
+          if (error.code == 'unsupported_capability' ||
+              error.code.startsWith('unsupported_')) {
+            throw const LlmConnectorHttpException(
+              code: 'unsupported_capability',
+            );
+          }
+          if (error.code == 'authentication_required') {
+            throw const LlmConnectorAuthenticationRequired();
+          }
+          if (error.code == 'request_cancelled') {
+            throw const LlmConnectorRequestCancelled();
+          }
+          throw LlmConnectorHttpException(
+            code:
+                error.code == 'http2_unavailable' ||
+                    error.code == 'transport_error'
+                ? 'connection_error'
+                : 'upstream_error',
+          );
+        } catch (_) {
+          await waitForRequestSentMarker();
+          throw const LlmConnectorHttpException();
+        }
       }
       try {
         final response = await _dio.requestUri<Object?>(
@@ -271,8 +405,8 @@ class LlmConnectorHttpClient {
           final responseBytes = responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-                  ? await _readResponseStream(responseData)
-                  : responseData;
+              ? await _readResponseStream(responseData)
+              : responseData;
           if (responseBytes is! Uint8List && responseBytes is! List<int>) {
             throw const LlmConnectorHttpException();
           }
@@ -299,19 +433,21 @@ class LlmConnectorHttpClient {
           final message = choice['message'] as Map;
           final messageToolCalls = message['tool_calls'];
           final toolCalls = messageToolCalls is Iterable
-              ? messageToolCalls.indexed.map((entry) {
-                  final item = entry.$2 as Map;
-                  final fn = item['function'] as Map;
-                  return {
-                    'index': entry.$1,
-                    'id': item['id'],
-                    'type': 'function',
-                    'function': {
-                      'name': fn['name'],
-                      'arguments': fn['arguments'],
-                    },
-                  };
-                }).toList(growable: false)
+              ? messageToolCalls.indexed
+                    .map((entry) {
+                      final item = entry.$2 as Map;
+                      final fn = item['function'] as Map;
+                      return {
+                        'index': entry.$1,
+                        'id': item['id'],
+                        'type': 'function',
+                        'function': {
+                          'name': fn['name'],
+                          'arguments': fn['arguments'],
+                        },
+                      };
+                    })
+                    .toList(growable: false)
               : null;
           final chunk = {
             'id': decoded['id'],
@@ -344,8 +480,8 @@ class LlmConnectorHttpClient {
           final responseStream = responseData is ResponseBody
               ? responseData.stream
               : responseData is Stream<List<int>>
-                  ? responseData
-                  : null;
+              ? responseData
+              : null;
           if (stream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
@@ -412,9 +548,10 @@ class LlmConnectorHttpClient {
         final rawResponse = responseData is ResponseBody
             ? await _readResponseStream(responseData.stream)
             : responseData is Stream<List<int>>
-                ? await _readResponseStream(responseData)
-                : responseData;
-        final decoded = !stream &&
+            ? await _readResponseStream(responseData)
+            : responseData;
+        final decoded =
+            !stream &&
                 const {
                   'codebuddy-cn',
                   'codebuddy-intl',
@@ -473,6 +610,71 @@ class LlmConnectorHttpClient {
       }
     }
   }
+
+  static Stream<List<int>> _cursorSse(
+    Stream<CursorAgentDelta> source,
+    String modelId,
+    Completer<LlmConnectorObservation> completed,
+  ) async* {
+    final id =
+        'cursor-${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}';
+    Map<String, int>? usage;
+    final composerReply = CursorComposerReplyDecoder();
+    final isComposer = _isCursorComposerModel(modelId);
+    try {
+      await for (final delta in source) {
+        usage = delta.usage ?? usage;
+        final composerText = isComposer && delta.reasoning != null
+            ? composerReply.add(delta.reasoning!)
+            : null;
+        if (composerText != null && composerText.isNotEmpty) {
+          yield CursorConnectFrameDecoder.encodeSseChunk(
+            id: id,
+            model: modelId,
+            text: composerText,
+          );
+        }
+        if (delta.text != null || (!isComposer && delta.reasoning != null)) {
+          yield CursorConnectFrameDecoder.encodeSseChunk(
+            id: id,
+            model: modelId,
+            text: delta.text,
+            reasoning: isComposer ? null : delta.reasoning,
+          );
+        }
+      }
+      if (isComposer) {
+        final finalText = composerReply.finish();
+        if (finalText.isNotEmpty) {
+          yield CursorConnectFrameDecoder.encodeSseChunk(
+            id: id,
+            model: modelId,
+            text: finalText,
+          );
+        }
+      }
+      yield CursorConnectFrameDecoder.encodeSseChunk(
+        id: id,
+        model: modelId,
+        usage: usage,
+        done: true,
+      );
+      yield Uint8List.fromList(utf8.encode('data: [DONE]\n\n'));
+      if (!completed.isCompleted) {
+        completed.complete(LlmConnectorObservation());
+      }
+    } catch (_) {
+      if (!completed.isCompleted) {
+        completed.complete(LlmConnectorObservation());
+      }
+      rethrow;
+    }
+  }
+
+  static bool _isCursorComposerModel(String modelId) => RegExp(
+    r'^composer(?:-|$)',
+    caseSensitive: false,
+  ).hasMatch(modelId.split('/').last);
 
   static bool _canRefresh(LlmAccount account) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
@@ -678,8 +880,9 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes =
-          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {
@@ -701,8 +904,8 @@ class LlmConnectorHttpClient {
     final bytes = data is Uint8List
         ? data
         : data is List<int>
-            ? Uint8List.fromList(data)
-            : null;
+        ? Uint8List.fromList(data)
+        : null;
     if (bytes == null) throw const LlmConnectorHttpException();
     final text = utf8.decode(bytes, allowMalformed: true);
     final content = StringBuffer();
