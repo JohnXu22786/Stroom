@@ -1070,8 +1070,9 @@ bool _legacyOcrHasCredentialUseContext(
         r'[\p{L}\p{M}\p{N}_/+~-]',
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
-  final shortNaturalWordEcho =
-      prefix.length < 8 && _legacyOcrCanRedactShortNaturalWordEcho(naturalWord);
+  final shortNaturalWordEcho = prefix.length < 8 &&
+      _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) &&
+      !explicitCredentialTarget;
   final isNaturalContinuation = _legacyOcrHasNaturalAlphaContinuation(suffix);
   final isNaturalWordContinuation = _legacyOcrHasNaturalWordContinuation(
     prefix,
@@ -2120,6 +2121,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
   String text, {
   bool allowBareAction = false,
   bool allowReceiptUse = false,
+  bool allowShortDocumentationApiKeyTarget = false,
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
@@ -2132,6 +2134,12 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeShortDocumentationApiKeyTarget =
+      allowShortDocumentationApiKeyTarget &&
+          RegExp(
+            r'^\s*(?:please\s+)?use\s+\[redacted\]\s+as\s+the\s+api\s+key\s*[.!?]?\s*$',
+            caseSensitive: false,
+          ).hasMatch(text);
   final safeReceiptUseLead = RegExp(
     r'^\s*(?:please\s+)?use\s+\[redacted\].*\bfor (?:this|the) receipt\b',
     caseSensitive: false,
@@ -2164,10 +2172,32 @@ bool _legacyOcrHasSafeRedactedInstruction(
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
       (safeUseLead && safeRequestUseLead) ||
+      safeShortDocumentationApiKeyTarget ||
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeImageContext ||
       safeKeepLead;
+}
+
+bool _legacyOcrHasShortDocumentationApiKeyEcho(
+  String sourceText,
+  Iterable<String> credentialValues,
+) {
+  if (!RegExp(
+    r'^\s*(?:please\s+)?use\s+documentation\s+as\s+the\s+api\s+key\s*[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(sourceText)) {
+    return false;
+  }
+  return credentialValues.any((value) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) {
+      return false;
+    }
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    return prefix.length < 8 && prefix.toLowerCase() == 'docu';
+  });
 }
 
 bool _legacyOcrHasStrongReceiptCredentialPrefix(
@@ -2375,6 +2405,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           sourceText,
           credentialValues,
         ),
+        allowShortDocumentationApiKeyTarget:
+            _legacyOcrHasShortDocumentationApiKeyEcho(
+          sourceText,
+          credentialValues,
+        ),
       );
     }
     if (_legacyOcrTextContainsCredential(
@@ -2389,6 +2424,11 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       text,
       allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(sourceText),
       allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+        sourceText,
+        credentialValues,
+      ),
+      allowShortDocumentationApiKeyTarget:
+          _legacyOcrHasShortDocumentationApiKeyEcho(
         sourceText,
         credentialValues,
       ),
