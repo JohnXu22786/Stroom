@@ -156,6 +156,15 @@ def normalize_text(value: str) -> str:
     return " ".join(unicodedata.normalize("NFC", line_normalized).split())
 
 
+def _validate_unicode_scalar_text(value: str, fixture_id: str, field: str) -> None:
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise EvaluationError(
+            f"{fixture_id}: {field} must contain valid Unicode scalar values"
+        ) from error
+
+
 def levenshtein_distance(left: str, right: str) -> int:
     """Return code-point Levenshtein distance using two working rows."""
     if len(left) < len(right):
@@ -193,6 +202,7 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         seen.add(fixture_id)
         if not isinstance(fixture.get("gold_text"), str):
             raise EvaluationError(f"{fixture_id}: gold_text must be a string")
+        _validate_unicode_scalar_text(fixture["gold_text"], fixture_id, "gold_text")
         categories = fixture.get("categories")
         if (
             not isinstance(categories, list)
@@ -203,13 +213,23 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         for field in ("table_text", "formula_text"):
             if field in fixture and not isinstance(fixture[field], str):
                 raise EvaluationError(f"{fixture_id}: {field} must be a string")
+            if field in fixture:
+                _validate_unicode_scalar_text(fixture[field], fixture_id, field)
             if field in fixture and not normalize_text(fixture[field]):
                 raise EvaluationError(f"{fixture_id}: {field} must not be empty")
         reading_order = fixture.get("reading_order", [])
         if not isinstance(reading_order, list) or any(
-            not isinstance(anchor, str) or not normalize_text(anchor)
+            not isinstance(anchor, str)
             for anchor in reading_order
         ):
+            raise EvaluationError(
+                f"{fixture_id}: reading_order must contain non-empty strings"
+            )
+        for index, anchor in enumerate(reading_order):
+            _validate_unicode_scalar_text(
+                anchor, fixture_id, f"reading_order[{index}]"
+            )
+        if any(not normalize_text(anchor) for anchor in reading_order):
             raise EvaluationError(
                 f"{fixture_id}: reading_order must contain non-empty strings"
             )

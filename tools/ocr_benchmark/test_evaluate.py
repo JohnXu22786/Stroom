@@ -153,6 +153,84 @@ class EvaluateTests(unittest.TestCase):
                     if output_path is not None:
                         self.assertFalse(output_path.exists())
 
+    def test_cli_rejects_lone_surrogates_in_manifest_text_without_traceback(self):
+        invalid_fields = {
+            "gold_text": "gold_text",
+            "table_text": "table_text",
+            "formula_text": "formula_text",
+            "reading_order": "reading_order[0]",
+        }
+        for source_field, error_field in invalid_fields.items():
+            with self.subTest(field=source_field), TemporaryDirectory() as directory:
+                root = Path(directory)
+                fixture = {
+                    "id": "bad-unicode",
+                    "gold_text": (
+                        "text with invalid scalar \ud800"
+                        if source_field == "gold_text"
+                        else "valid text"
+                    ),
+                    "categories": ["english"],
+                }
+                if source_field == "table_text":
+                    fixture[source_field] = "invalid \ud800"
+                elif source_field == "formula_text":
+                    fixture[source_field] = "invalid \ud800"
+                elif source_field == "reading_order":
+                    fixture[source_field] = ["invalid \ud800"]
+                manifest_path = root / "manifest.json"
+                predictions_path = root / "predictions.json"
+                manifest_path.write_text(
+                    json.dumps({"fixtures": [fixture]}), encoding="utf-8"
+                )
+                predictions_path.write_text(
+                    json.dumps(predictions([])), encoding="utf-8"
+                )
+
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "evaluate.py"),
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("bad-unicode", result.stderr)
+                self.assertIn(error_field, result.stderr)
+                self.assertIn("valid Unicode scalar values", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(result.stdout, "")
+
+    def test_valid_non_bmp_manifest_text_is_accepted(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "supplementary-unicode",
+                    "gold_text": "😀 table formula",
+                    "table_text": "table",
+                    "formula_text": "formula",
+                    "reading_order": ["😀"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "supplementary-unicode", "text": "😀 table formula"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_cli_reports_lone_surrogate_in_report_metadata_without_traceback(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
