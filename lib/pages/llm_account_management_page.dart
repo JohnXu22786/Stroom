@@ -8,6 +8,7 @@ import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
 import '../services/devin_cli_acp.dart';
+import '../services/api_protocol_config.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -1546,11 +1547,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   String? _initialDevinCliExecutable;
   late String _connectorType;
   late String _authType;
+  late String _apiProtocol;
+  String? _selectedCommandCodeModelId;
+  String _commandCodeModelProtocol = '';
   late AiGatewayAccountStatus _status;
   var _draftChanged = false;
   var _reconnectCli = false;
   var _trustDevinCliExecutable = false;
   String? _error;
+  List<AiGatewayUpstreamModel> _discoveredModels = const [];
 
   @override
   void initState() {
@@ -1558,6 +1563,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final account = widget.account;
     _connectorType = account?.connectorType ?? 'openai-compatibility';
     _authType = account?.authType ?? 'api_key';
+    final configuredProtocol = account?.endpointConfig['apiProtocol'];
+    _apiProtocol = configuredProtocol is String &&
+            kCustomHttpApiProtocols.contains(configuredProtocol)
+        ? configuredProtocol
+        : builtinDefaultApiProtocolForConnector(_connectorType);
+    if (_connectorType == 'command-code' &&
+        account?.models.isNotEmpty == true) {
+      final model = account!.models.first;
+      _selectedCommandCodeModelId = model.upstreamModelId;
+      final override = model.config['apiProtocolOverride'];
+      if (override is String) _commandCodeModelProtocol = override;
+    }
     _status = account?.status ?? AiGatewayAccountStatus.unknown;
     _name = TextEditingController(text: account?.displayName ?? '');
     final endpoint = account?.endpointConfig['baseUrl'] ??
@@ -1623,6 +1640,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                     ? entry.key
                                     : '${entry.key}=false',
                               ),
+                          if (_connectorType == 'command-code' &&
+                              model.config['apiProtocolOverride'] is String)
+                            'apiProtocolOverride=${model.config['apiProtocolOverride']}',
                         ].join(','),
                       )
                       .join('\n') ??
@@ -1643,6 +1663,64 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _devinCliExecutable.dispose();
     _models.dispose();
     super.dispose();
+  }
+
+  List<AiGatewayUpstreamModel> get _commandCodeModels {
+    final models = <String, AiGatewayUpstreamModel>{};
+    if (_connectorType == 'command-code' &&
+        widget.account?.connectorType == 'command-code') {
+      for (final model in widget.account!.models) {
+        models[model.upstreamModelId] = model;
+      }
+    }
+    for (final model in _discoveredModels) {
+      models[model.upstreamModelId] = model;
+    }
+    return models.values.toList(growable: false);
+  }
+
+  List<String> _commandCodeProtocolsForSelectedModel() {
+    final selectedModel = _commandCodeModels
+        .where((model) => model.upstreamModelId == _selectedCommandCodeModelId)
+        .firstOrNull;
+    final protocols = selectedModel?.capabilities['supportedApiProtocols'];
+    if (protocols is! Iterable) return const [];
+    return protocols
+        .whereType<String>()
+        .where(kCustomHttpApiProtocols.contains)
+        .toList(growable: false);
+  }
+
+  void _selectCommandCodeModel(String modelId) {
+    final model = _commandCodeModels
+        .where((item) => item.upstreamModelId == modelId)
+        .firstOrNull;
+    final override = model?.config['apiProtocolOverride'];
+    setState(() {
+      _selectedCommandCodeModelId = modelId;
+      _commandCodeModelProtocol = override is String ? override : '';
+    });
+  }
+
+  void _setCommandCodeModelProtocol(String protocol) {
+    final modelId = _selectedCommandCodeModelId;
+    if (modelId == null) return;
+    final lines = _models.text.split('\n');
+    for (var index = 0; index < lines.length; index++) {
+      final parts = lines[index].split(',').map((part) => part.trim()).toList();
+      if (parts.isEmpty || parts.first != modelId) continue;
+      parts.removeWhere((part) => part.startsWith('apiProtocolOverride='));
+      if (protocol.isNotEmpty) {
+        parts.add('apiProtocolOverride=$protocol');
+      }
+      lines[index] = parts.join(',');
+      break;
+    }
+    _models.text = lines.join('\n');
+    setState(() {
+      _commandCodeModelProtocol = protocol;
+      _draftChanged = true;
+    });
   }
 
   @override
@@ -1667,6 +1745,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     authTypes.sort();
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
+    final commandCodeModels = _commandCodeModels;
+    final commandCodeProtocols = _commandCodeProtocolsForSelectedModel();
+    final selectedCommandCodeProtocol =
+        commandCodeProtocols.contains(_commandCodeModelProtocol)
+            ? _commandCodeModelProtocol
+            : '';
     return AlertDialog(
       title: Text(widget.account == null ? '添加 LLM 账号' : '编辑 LLM 账号'),
       content: SizedBox(
@@ -1697,6 +1781,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _draftChanged = true;
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
+                    _apiProtocol = builtinDefaultApiProtocolForConnector(value);
+                    if (value == 'command-code' &&
+                        widget.account?.connectorType != 'command-code') {
+                      _models.clear();
+                      _selectedCommandCodeModelId = null;
+                      _commandCodeModelProtocol = '';
+                      _discoveredModels = const [];
+                    }
                     if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
                     } else if (value == 'kimi-coding') {
@@ -1887,18 +1979,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _endpoint,
-                enabled: _connectorType != 'devin-cli-agentic',
+                enabled: _connectorType != 'devin-cli-agentic' &&
+                    _connectorType != 'command-code',
                 decoration: InputDecoration(
                   labelText: '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
+                    'command-code' => kCommandCodeBaseUrl,
                     _ => 'https://api.example.com/v1',
                   },
                   helperText: switch (_connectorType) {
                     'opencode-go' ||
                     'opencode-zen' =>
                       '留空以使用此账号类型的官方模型目录和 API 端点。',
+                    'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
                     _ => null,
                   },
                 ),
@@ -1991,6 +2086,27 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
+              if (_connectorType == 'command-code') ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _apiProtocol,
+                  decoration: const InputDecoration(labelText: '默认 API 协议'),
+                  items: [
+                    for (final protocol in kCustomHttpApiProtocols)
+                      DropdownMenuItem(
+                        value: protocol,
+                        child: Text(apiProtocolLabels[protocol] ?? protocol),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _apiProtocol = value;
+                      _draftChanged = true;
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: 8),
               DropdownButtonFormField<AiGatewayAccountStatus>(
                 initialValue: _status,
@@ -2011,6 +2127,43 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   }
                 },
               ),
+              if (_connectorType == 'command-code' &&
+                  commandCodeModels.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedCommandCodeModelId,
+                  decoration: const InputDecoration(labelText: '要配置的模型'),
+                  items: [
+                    for (final model in commandCodeModels)
+                      DropdownMenuItem(
+                        value: model.upstreamModelId,
+                        child: Text(model.displayName),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _selectCommandCodeModel(value);
+                  },
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedCommandCodeProtocol,
+                  decoration: const InputDecoration(labelText: '模型 API 协议'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('继承账号默认协议'),
+                    ),
+                    for (final protocol in commandCodeProtocols)
+                      DropdownMenuItem(
+                        value: protocol,
+                        child: Text(apiProtocolLabels[protocol] ?? protocol),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _setCommandCodeModelProtocol(value);
+                  },
+                ),
+              ],
               const SizedBox(height: 8),
               TextField(
                 controller: _models,
@@ -2020,21 +2173,24 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType == 'kimi-coding' ||
                     _connectorType == 'grok-cli' ||
                     _connectorType == 'xai-oauth' ||
-                    _connectorType == 'muse-code',
+                    _connectorType == 'muse-code' ||
+                    _connectorType == 'command-code',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
-                  helperText: _connectorType == 'devin-cli-agentic'
-                      ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
-                      : _connectorType == 'kimi-coding'
-                          ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                          : _connectorType == 'grok-cli'
-                              ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                              : _connectorType == 'xai-oauth'
-                                  ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                                  : _connectorType == 'muse-code'
-                                      ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                      : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  helperText: _connectorType == 'command-code'
+                      ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
+                      : _connectorType == 'devin-cli-agentic'
+                          ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                          : _connectorType == 'kimi-coding'
+                              ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                              : _connectorType == 'grok-cli'
+                                  ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                                  : _connectorType == 'xai-oauth'
+                                      ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                                      : _connectorType == 'muse-code'
+                                          ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                          : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
                 onChanged: _connectorType == 'devin-cli-agentic' ||
                         _connectorType == 'kimi-coding' ||
@@ -2101,6 +2257,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       );
       if (!mounted) return;
       setState(() {
+        _discoveredModels = models;
+        if (!models.any(
+          (model) => model.upstreamModelId == _selectedCommandCodeModelId,
+        )) {
+          final firstModel = models.firstOrNull;
+          _selectedCommandCodeModelId = firstModel?.upstreamModelId;
+          final override = firstModel?.config['apiProtocolOverride'];
+          _commandCodeModelProtocol = override is String ? override : '';
+        }
         _models.text = models
             .map(
               (model) => [
@@ -2112,6 +2277,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? entry.key
                           : '${entry.key}=false',
                     ),
+                if (_connectorType == 'command-code' &&
+                    model.config['apiProtocolOverride'] is String)
+                  'apiProtocolOverride=${model.config['apiProtocolOverride']}',
               ].join(','),
             )
             .join('\n');
@@ -2206,11 +2374,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         existing = previousModels[index];
         usedModelIds.add(existing.id);
       }
+      if (existing == null) {
+        existing = _discoveredModels
+            .where((model) => model.upstreamModelId == upstreamId)
+            .firstOrNull;
+        if (existing != null) usedModelIds.add(existing.id);
+      }
       final capabilities = <String, dynamic>{
         if (existing != null)
           for (final entry in existing.capabilities.entries)
             if (entry.value is! bool) entry.key: entry.value,
       };
+      String? apiProtocolOverride;
       for (final declaration
           in parts.skip(1).where((part) => part.isNotEmpty)) {
         final separator = declaration.indexOf('=');
@@ -2221,9 +2396,33 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         final value = separator < 0
             ? 'true'
             : declaration.substring(separator + 1).trim().toLowerCase();
+        if (capability == 'apiProtocolOverride') {
+          if (_connectorType != 'command-code') continue;
+          final supportedProtocols =
+              existing?.capabilities['supportedApiProtocols'];
+          if (!kCustomHttpApiProtocols.contains(value) ||
+              supportedProtocols is! Iterable ||
+              !supportedProtocols.whereType<String>().contains(value)) {
+            setState(
+              () => _error = '请先刷新该模型目录，并选择其 supportedApiProtocols 中的协议。',
+            );
+            return;
+          }
+          apiProtocolOverride = value;
+          continue;
+        }
         if (value != 'true' && value != 'false') {
           setState(() => _error = '能力值只能是 true 或 false。');
           return;
+        }
+        if (_connectorType == 'command-code') {
+          final declared = existing?.capabilities[capability];
+          if (declared is! bool || declared != (value == 'true')) {
+            setState(() => _error = 'Command Code 模型能力只能由上游目录声明。');
+            return;
+          }
+          capabilities[capability] = declared;
+          continue;
         }
         capabilities[capability] = value == 'true';
       }
@@ -2235,13 +2434,23 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         newModelId = '$id:model:${++suffix}';
       }
       if (existing == null) usedModelIds.add(newModelId);
+      final modelConfig =
+          Map<String, dynamic>.from(existing?.config ?? const {});
+      if (_connectorType == 'command-code') {
+        modelConfig.remove('apiProtocolOverride');
+        if (apiProtocolOverride != null) {
+          modelConfig['apiProtocolOverride'] = apiProtocolOverride;
+        }
+      } else if (widget.account?.connectorType == 'command-code') {
+        modelConfig.remove('apiProtocolOverride');
+      }
       parsedModels.add(
         AiGatewayUpstreamModel(
           id: existing?.id ?? newModelId,
           upstreamModelId: upstreamId,
           displayName: existing?.displayName ?? upstreamId,
           capabilities: capabilities,
-          config: existing?.config ?? const {},
+          config: modelConfig,
         ),
       );
     }
@@ -2314,6 +2523,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('apiBase');
     } else {
       endpointConfig['baseUrl'] = endpoint;
+    }
+    if (_connectorType == 'command-code') {
+      endpointConfig.remove('baseUrl');
+      endpointConfig.remove('host');
+      endpointConfig.remove('apiBase');
+      endpointConfig['apiProtocol'] = _apiProtocol;
+    } else if (widget.account?.connectorType == 'command-code') {
+      endpointConfig.remove('apiProtocol');
     }
     if (_connectorType == 'bedrock') {
       endpointConfig['region'] = _region.text.trim();

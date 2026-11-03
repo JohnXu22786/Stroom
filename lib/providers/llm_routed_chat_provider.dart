@@ -25,6 +25,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'kimi.ai',
           'qwen-cloud',
           'qwen-cloud-token-plan',
+          'command-code',
         },
       'openai.responses' => const {
           'openai-compatibility',
@@ -38,6 +39,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'kimi.ai',
           'qwen-cloud',
           'qwen-cloud-token-plan',
+          'command-code',
         },
       'google.gemini.generate_content' => const {
           'gemini',
@@ -64,6 +66,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen',
           'qwen-cloud',
           'qwen-cloud-token-plan',
+          'command-code',
         },
     };
 
