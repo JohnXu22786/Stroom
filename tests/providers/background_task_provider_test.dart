@@ -1650,10 +1650,12 @@ void main() {
     );
 
     test(
-      'direct OCR task construction sanitizes credentials before persistence',
+      'direct OCR task construction drops future payloads before persistence',
       () {
         const authCredential = 'direct-ocr-auth-credential-5172';
         const apiCredential = 'direct-ocr-api-key-5172';
+        const nestedPayload = 'bmVzdGVkLWRvY3VtZW50LWJhc2U2NC1wYXlsb2Fk';
+        final encodedImage = base64Encode(List<int>.filled(64 * 1024, 0x5a));
         final storageRef = 'ocr_retry_cache/${'d' * 64}.bin';
         final task = BackgroundTask(
           id: 'direct-ocr-retry-credential-sanitization',
@@ -1670,8 +1672,13 @@ void main() {
                 'format': 'png',
                 'name': 'receipt.png',
               },
+              {'bytes': encodedImage, 'format': 'png', 'name': 'second.png'},
             ],
             'instructionContent': 'Read the receipt total',
+            'imageData': encodedImage,
+            'futureDocument': {
+              'metadata': {'base64': nestedPayload},
+            },
             'futureSettings': {'recognitionMode': 'highAccuracy'},
             'futureAuth': {'authorization': 'Bearer $authCredential'},
             'futureService': {
@@ -1689,19 +1696,29 @@ void main() {
           'configId': 'saved-config',
           'modelId': 'saved-model',
         });
-        expect(snapshot.images.single.storageRef, storageRef);
+        expect(snapshot.images, hasLength(2));
+        expect(snapshot.images.first.storageRef, storageRef);
         expect(snapshot.instructionContent, 'Read the receipt total');
-        expect(retryData['futureSettings'], {
-          'recognitionMode': 'highAccuracy',
-        });
+        expect(retryData.containsKey('futureSettings'), isFalse);
+        expect(retryData.containsKey('imageData'), isFalse);
+        expect(retryData.containsKey('futureDocument'), isFalse);
+        expect(
+          (retryData['images'] as List)
+              .every((image) => !(image as Map).containsKey('bytes')),
+          isTrue,
+        );
         expect(retryData.containsKey('futureAuth'), isFalse);
-        expect(retryData['futureService'], {'headers': {}});
-        expect(snapshot.hasUnknownFields, isTrue);
+        expect(retryData.containsKey('futureService'), isFalse);
+        expect(snapshot.hasUnknownFields, isFalse);
         expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
         expect(jsonEncode(retryData), isNot(contains(authCredential)));
         expect(jsonEncode(retryData), isNot(contains(apiCredential)));
+        expect(jsonEncode(retryData), isNot(contains(encodedImage)));
+        expect(jsonEncode(retryData), isNot(contains(nestedPayload)));
         expect(persisted, isNot(contains(authCredential)));
         expect(persisted, isNot(contains(apiCredential)));
+        expect(persisted, isNot(contains(encodedImage)));
+        expect(persisted, isNot(contains(nestedPayload)));
       },
     );
 
