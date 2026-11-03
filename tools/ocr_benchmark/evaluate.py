@@ -580,7 +580,12 @@ def _table_rows(
             if "|" not in line:
                 if allow_tsv and "\t" in line:
                     cells = tuple(normalize_text(cell) for cell in line.split("\t"))
-                    rows.append(cells)
+                    if column_count is None or (
+                        len(cells) == column_count
+                        and cells in (matching_rows or set())
+                    ):
+                        # Annotated rows disambiguate TSV from tab-delimited prose.
+                        rows.append(cells)
                 continue
             stripped = line.strip()
             has_table_row_shape = (

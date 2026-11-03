@@ -1121,6 +1121,37 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(complete_table["metrics"]["table_fidelity"]["value"], 1)
         self.assertEqual(missing_cell["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_plain_text_tsv_table_ignores_tab_separated_prose_after_table(self):
+        expected = "Code | Count\nP-12 | 3"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table",
+                    "text": (
+                        "Code\tCount\n"
+                        "P-12\t3\n"
+                        "The invoice notes\tthat totals may exclude tax."
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+
     def test_markdown_formatting_does_not_inflate_character_error_rate(self):
         manifest = {
             "fixtures": [
