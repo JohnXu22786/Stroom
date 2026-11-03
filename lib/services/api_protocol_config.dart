@@ -124,6 +124,7 @@ Set<String> supportedApiProtocolsForSupplier(
         'openai.chat_completions'
       },
     'cline' || 'clinepass' => const {'openai.chat_completions'},
+    'github' || 'ghe-copilot' => kCustomHttpApiProtocols,
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||
@@ -132,7 +133,7 @@ Set<String> supportedApiProtocolsForSupplier(
       kCustomHttpApiProtocols,
     'openference' || 'openference-api' => const {
         'openai.chat_completions',
-        'openai.responses',
+        'openai.responses'
       },
     _ => null,
   };

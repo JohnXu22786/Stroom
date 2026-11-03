@@ -1541,6 +1541,7 @@ void main() {
     for (final (connectorId, displayName) in [
       ('grok-cli', 'xAI Grok Build'),
       ('xai-oauth', 'xAI API OAuth'),
+      ('github', 'GitHub Copilot'),
     ]) {
       await tester.tap(find.byTooltip('添加账号'));
       await tester.pumpAndSettle();
@@ -1561,11 +1562,21 @@ void main() {
       );
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
-      expect(
-        oauthAuthorization.xaiDeviceAuthorizationAccounts.last.connectorType,
-        connectorId,
-      );
-      expect(find.text('XAI-1234'), findsOneWidget);
+      if (connectorId == 'github') {
+        expect(
+          oauthAuthorization
+              .githubDeviceAuthorizationAccounts.last.connectorType,
+          connectorId,
+        );
+        expect(find.text('GITHUB-1234'), findsOneWidget);
+        expect(find.text('打开 GitHub Copilot'), findsOneWidget);
+      } else {
+        expect(
+          oauthAuthorization.xaiDeviceAuthorizationAccounts.last.connectorType,
+          connectorId,
+        );
+        expect(find.text('XAI-1234'), findsOneWidget);
+      }
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
       expect(await service.listAccounts(), isEmpty);
@@ -4127,6 +4138,7 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final tencentDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final githubDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final kiloDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
@@ -4192,6 +4204,17 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
     return deviceAuthorization = _PendingOAuthDeviceAuthorization(
       verificationUri: Uri.parse('https://www.workbuddy.ai/device'),
       userCode: 'TENCENT-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginGithubDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    githubDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://github.com/login/device'),
+      userCode: 'GITHUB-1234',
     );
   }
 

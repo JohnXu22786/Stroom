@@ -502,6 +502,10 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account,
   );
 
+  Future<AiGatewayOAuthDeviceAuthorization> beginGithubDeviceAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<AiGatewayOAuthCursorAuthorization> beginCursorAuthorization(
     AiGatewayAccount account,
   );

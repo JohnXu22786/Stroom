@@ -16,6 +16,7 @@ import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
 import 'llm_oauth_flow.dart';
+import 'llm_oauth_token_client.dart';
 import 'devin_connect_rpc.dart';
 import 'qoder_cli_service.dart';
 import 'cursor_connect_rpc.dart';
@@ -320,6 +321,22 @@ abstract final class LlmConnectorRegistry {
       ).hasMatch(modelId);
 
   static const List<LlmConnectorDefinition> all = [
+    LlmConnectorDefinition(
+      id: 'github',
+      displayName: 'GitHub Copilot',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth'},
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'ghe-copilot',
+      displayName: 'GitHub Enterprise Copilot',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth'},
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
     LlmConnectorDefinition(
       id: 'codex',
       displayName: 'OpenAI Codex',
@@ -695,6 +712,8 @@ abstract final class LlmConnectorRegistry {
         'codebuddy-cn' ||
         'codebuddy-intl' ||
         'workbuddy' ||
+        'github' ||
+        'ghe-copilot' ||
         'qoder' ||
         'kilocode' =>
           'openai',
@@ -1538,6 +1557,8 @@ class LlmAccountConnectorService {
       'xai-oauth',
       'muse-code',
       'workbuddy',
+      'github',
+      'ghe-copilot',
       'kilocode',
       'openference',
       'openference-api',
@@ -1550,7 +1571,9 @@ class LlmAccountConnectorService {
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
     }
-    final accountEntitlementCatalog = account.connectorType == 'grok-cli' ||
+    final accountEntitlementCatalog = account.connectorType == 'github' ||
+        account.connectorType == 'ghe-copilot' ||
+        account.connectorType == 'grok-cli' ||
         account.connectorType == 'xai-oauth';
     if (account.connectorType == 'qoder' &&
         account.authType == 'pat' &&
@@ -1677,6 +1700,17 @@ class LlmAccountConnectorService {
               .toList(),
         );
       }
+      if (account.connectorType == 'github' ||
+          account.connectorType == 'ghe-copilot') {
+        final entitledIds =
+            discovered.map((model) => model.upstreamModelId).toSet();
+        return _mergeModelMappings(
+          discovered,
+          account.models
+              .where((model) => entitledIds.contains(model.upstreamModelId))
+              .toList(),
+        );
+      }
       return _mergeModelMappings(discovered, account.models);
     }
     return List.unmodifiable([
@@ -1793,6 +1827,213 @@ class LlmAccountConnectorService {
     return List.unmodifiable(merged);
   }
 
+  Future<bool> _refreshCopilotCredential(
+    LlmAccount account,
+    Map<String, dynamic> originalBundle,
+    CancelToken? cancelToken,
+  ) async {
+    final bundle = Map<String, dynamic>.from(originalBundle);
+    final accessToken = _firstString(bundle, const [
+      'access_token',
+      'accessToken',
+    ]);
+    if (accessToken == null) return false;
+    final gheUrl = _firstString(account.endpointConfig, const ['gheUrl']);
+    final tokenUri = account.connectorType == 'github'
+        ? Uri.https('api.github.com', '/copilot_internal/v2/token')
+        : _copilotEnterpriseTokenUri(gheUrl);
+    if (tokenUri == null) return false;
+    try {
+      final response = await _dio.getUri<Object?>(
+        tokenUri,
+        options: Options(
+          responseType: ResponseType.json,
+          headers: {
+            'Authorization': 'token $accessToken',
+            'Accept': 'application/json',
+            'X-GitHub-Api-Version': '2026-08-01',
+            'User-Agent': 'GithubCopilot/1.0',
+            'Editor-Version': 'copilot/1.0.91',
+            'Editor-Plugin-Version': 'copilot/1.0.91',
+          },
+          validateStatus: (status) => status != null,
+        ),
+        cancelToken: cancelToken,
+      );
+      if (response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300) {
+        final data = _asJsonMap(response.data);
+        final token = _firstString(data, const ['token']);
+        if (token == null) throw const LlmAccountConnectorException();
+        bundle['copilot_token'] = token;
+        if (_firstString(data, const ['expires_at']) != null) {
+          bundle['copilot_expires_at'] = _firstString(data, const [
+            'expires_at',
+          ]);
+          bundle['expires_at'] = _earlierExpiry(
+            bundle['oauth_expires_at'] ?? bundle['copilot_expires_at'],
+            bundle['copilot_expires_at'],
+          );
+        }
+        final endpoints = data?['endpoints'];
+        if (account.connectorType == 'ghe-copilot' && endpoints is Map) {
+          final api = _secureCopilotEndpoint(endpoints['api']);
+          final proxy = _secureCopilotEndpoint(endpoints['proxy']);
+          if (api != null) bundle['copilot_api_url'] = api;
+          if (proxy != null) bundle['copilot_proxy_url'] = proxy;
+        }
+        await saveAccount(account, secret: jsonEncode(bundle));
+        return true;
+      }
+      if (response.statusCode != 401 && response.statusCode != 403) {
+        throw const LlmAccountConnectorException();
+      }
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+    }
+    final refreshToken = _firstString(bundle, const [
+      'refresh_token',
+      'refreshToken',
+    ]);
+    if (refreshToken == null) return false;
+    final clientId =
+        _firstString(account.endpointConfig, const ['copilotClientId']) ??
+            LlmOAuthTokenClient.githubCopilotClientId;
+    final oauthBase = account.connectorType == 'github'
+        ? Uri.parse('https://github.com')
+        : Uri.tryParse(gheUrl ?? '');
+    if (oauthBase == null ||
+        oauthBase.scheme != 'https' ||
+        oauthBase.host.isEmpty ||
+        oauthBase.userInfo.isNotEmpty) {
+      return false;
+    }
+    final refreshUri = oauthBase.replace(
+      path:
+          '${oauthBase.path.replaceFirst(RegExp(r'/+$'), '')}/login/oauth/access_token',
+    );
+    try {
+      final response = await _dio.postUri<Object?>(
+        refreshUri,
+        data: {
+          'client_id': clientId,
+          'grant_type': 'refresh_token',
+          'refresh_token': refreshToken,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+        ),
+        cancelToken: cancelToken,
+      );
+      final refreshed = _asJsonMap(response.data);
+      final newAccessToken = _firstString(refreshed, const ['access_token']);
+      if (newAccessToken == null) return false;
+      bundle.addAll(refreshed!);
+      bundle['access_token'] = newAccessToken;
+      final rotated = _firstString(refreshed, const ['refresh_token']);
+      if (rotated != null) bundle['refresh_token'] = rotated;
+      final accessExpiry = _durationExpiry(refreshed['expires_in']);
+      if (accessExpiry != null) {
+        bundle['oauth_expires_at'] = accessExpiry;
+        bundle['expires_at'] = accessExpiry;
+      }
+      final copilotResponse = await _dio.getUri<Object?>(
+        tokenUri,
+        options: Options(
+          responseType: ResponseType.json,
+          headers: {
+            'Authorization': 'token $newAccessToken',
+            'Accept': 'application/json',
+            'X-GitHub-Api-Version': '2026-08-01',
+            'User-Agent': 'GithubCopilot/1.0',
+            'Editor-Version': 'copilot/1.0.91',
+            'Editor-Plugin-Version': 'copilot/1.0.91',
+          },
+        ),
+        cancelToken: cancelToken,
+      );
+      final copilot = _asJsonMap(copilotResponse.data);
+      final copilotToken = _firstString(copilot, const ['token']);
+      if (copilotToken == null) throw const LlmAccountConnectorException();
+      bundle['copilot_token'] = copilotToken;
+      final copilotExpiry = _firstString(copilot, const ['expires_at']);
+      if (copilotExpiry != null) {
+        bundle['copilot_expires_at'] = copilotExpiry;
+        bundle['expires_at'] = _earlierExpiry(
+          bundle['oauth_expires_at'] ?? bundle['expires_at'],
+          copilotExpiry,
+        );
+      }
+      final endpoints = copilot?['endpoints'];
+      if (account.connectorType == 'ghe-copilot' && endpoints is Map) {
+        final api = _secureCopilotEndpoint(endpoints['api']);
+        final proxy = _secureCopilotEndpoint(endpoints['proxy']);
+        if (api != null) bundle['copilot_api_url'] = api;
+        if (proxy != null) bundle['copilot_proxy_url'] = proxy;
+      }
+      await saveAccount(account, secret: jsonEncode(bundle));
+      return true;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
+    } catch (_) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
+  static Uri? _copilotEnterpriseTokenUri(String? enterpriseUrl) {
+    final uri = Uri.tryParse(enterpriseUrl?.trim() ?? '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      return null;
+    }
+    return uri.replace(
+      path:
+          '${uri.path.replaceFirst(RegExp(r'/+$'), '')}/api/v3/copilot_internal/v2/token',
+    );
+  }
+
+  static String? _secureCopilotEndpoint(Object? value) {
+    final uri = Uri.tryParse(value is String ? value.trim() : '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      return null;
+    }
+    return uri
+        .replace(path: uri.path.replaceFirst(RegExp(r'/+$'), ''))
+        .toString();
+  }
+
+  static String? _earlierExpiry(Object? first, Object? second) {
+    final firstTime = first is String ? DateTime.tryParse(first) : null;
+    final secondTime = second is String ? DateTime.tryParse(second) : null;
+    if (firstTime == null) return secondTime?.toUtc().toIso8601String();
+    if (secondTime == null) return firstTime.toUtc().toIso8601String();
+    return (firstTime.isBefore(secondTime) ? firstTime : secondTime)
+        .toUtc()
+        .toIso8601String();
+  }
+
+  static String? _durationExpiry(Object? value) {
+    final seconds = value is num ? value.toInt() : int.tryParse('$value');
+    if (seconds == null || seconds <= 0) return null;
+    return DateTime.now()
+        .toUtc()
+        .add(Duration(seconds: seconds))
+        .toIso8601String();
+  }
+
   /// Refreshes an OAuth credential using the provider's pinned refresh flow.
   /// Returns false for connectors that do not advertise token refresh.
   Future<bool> refreshCredential(
@@ -1830,6 +2071,10 @@ class LlmAccountConnectorService {
       return _refreshMetaDca(account, bundle, cancelToken);
     }
     if (account.authType != 'oauth') return false;
+    if (account.connectorType == 'github' ||
+        account.connectorType == 'ghe-copilot') {
+      return _refreshCopilotCredential(account, bundle, cancelToken);
+    }
 
     final refreshToken = _firstString(bundle, const [
       'refresh_token',
@@ -2508,6 +2753,105 @@ class LlmAccountConnectorService {
     return scope.trim();
   }
 
+  Future<List<LlmUpstreamModel>> _discoverCopilotModels(
+    LlmAccount account,
+  ) async {
+    if (account.authType != 'oauth' || account.credentialRef == null) {
+      throw const LlmAccountConnectorException();
+    }
+    var raw = await _readSecureValue(account.credentialRef!);
+    var bundle =
+        raw == null ? <String, dynamic>{} : _decodeCredentialBundle(raw);
+    var token = _firstString(bundle, const ['copilot_token']);
+    final expiresAt = DateTime.tryParse(
+      _firstString(bundle, const ['copilot_expires_at']) ?? '',
+    );
+    if (token == null ||
+        expiresAt != null &&
+            !expiresAt.isAfter(
+              DateTime.now().toUtc().add(const Duration(minutes: 1)),
+            )) {
+      await refreshCredential(account);
+      raw = await _readSecureValue(account.credentialRef!);
+      bundle = raw == null ? <String, dynamic>{} : _decodeCredentialBundle(raw);
+      token = _firstString(bundle, const ['copilot_token']);
+      if (token == null) {
+        await refreshCredential(account);
+        raw = await _readSecureValue(account.credentialRef!);
+        bundle =
+            raw == null ? <String, dynamic>{} : _decodeCredentialBundle(raw);
+        token = _firstString(bundle, const ['copilot_token']);
+      }
+    }
+    if (token == null) throw const LlmAccountConnectorException();
+    final base = account.connectorType == 'github'
+        ? 'https://api.githubcopilot.com'
+        : _firstString(bundle, const ['copilot_api_url']);
+    final uri = base == null ? null : Uri.tryParse('$base/models');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmAccountConnectorException();
+    }
+    LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
+    final response = await _dio.getUri<Object?>(
+      uri,
+      options: Options(
+        responseType: ResponseType.json,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+          'X-GitHub-Api-Version': '2026-08-01',
+          'User-Agent': 'GithubCopilot/1.0',
+          'Editor-Version': 'vscode/1.0.91',
+          'Editor-Plugin-Version': 'copilot/1.0.91',
+        },
+      ),
+    );
+    final payload = _asJsonMap(response.data);
+    final rawModels = payload?['data'] ?? payload?['models'];
+    if (rawModels is! Iterable) throw const LlmAccountConnectorException();
+    final models = <LlmUpstreamModel>[];
+    for (final rawModel in rawModels) {
+      if (rawModel is! Map) continue;
+      final item = Map<String, dynamic>.from(rawModel);
+      final modelId = _firstString(item, const ['id', 'name']);
+      if (modelId == null ||
+          !LlmConnectorRegistry.isConversationalModelId(modelId)) {
+        continue;
+      }
+      final endpointValues =
+          item['supported_endpoints'] ?? item['supportedEndpoints'];
+      final endpoints = endpointValues is Iterable
+          ? endpointValues.whereType<String>().toSet()
+          : <String>{};
+      final modelProtocols = <String>{
+        if (endpoints.contains('/chat/completions') || endpoints.isEmpty)
+          'openai.chat_completions',
+        if (endpoints.contains('/responses')) 'openai.responses',
+        if (endpoints.contains('/v1/messages')) 'anthropic.messages',
+      };
+      if (modelProtocols.isEmpty) continue;
+      models.add(
+        LlmUpstreamModel(
+          id: '${account.id}:copilot:$modelId',
+          upstreamModelId: modelId,
+          displayName: _firstString(item, const ['name', 'id']) ?? modelId,
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'supportedApiProtocols': modelProtocols,
+          },
+          config: const {'catalogSource': 'account-entitlement'},
+        ),
+      );
+    }
+    return models;
+  }
+
   Future<List<LlmUpstreamModel>> _discoverRemoteModels(
     LlmAccount account,
   ) async {
@@ -2520,6 +2864,10 @@ class LlmAccountConnectorService {
         account.connectorType == 'gemini-interactions';
     if (account.connectorType == 'bedrock') {
       return _discoverBedrockModels(account);
+    }
+    if (account.connectorType == 'github' ||
+        account.connectorType == 'ghe-copilot') {
+      return _discoverCopilotModels(account);
     }
     if (account.connectorType == 'cline' ||
         account.connectorType == 'clinepass') {
@@ -4440,6 +4788,32 @@ class LlmNativeRequestBuilder {
         !account.models.any((model) => model.upstreamModelId == modelId)) {
       throw const LlmAccountConnectorException();
     }
+    if ((account.connectorType == 'github' ||
+            account.connectorType == 'ghe-copilot') &&
+        (account.authType != 'oauth' ||
+            !account.models.any((model) => model.upstreamModelId == modelId) ||
+            nativeFormat != null &&
+                !const {'responses', 'anthropic'}.contains(nativeFormat) ||
+            nativeFormat == 'responses' &&
+                RegExp(
+                  r'claude|gemini',
+                  caseSensitive: false,
+                ).hasMatch(modelId))) {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'github' ||
+        account.connectorType == 'ghe-copilot') {
+      final model = account.models
+          .where((item) => item.upstreamModelId == modelId)
+          .firstOrNull;
+      final declared = model?.capabilities['supportedApiProtocols'];
+      if (declared is Iterable) {
+        final protocol = _copilotProtocolFor(modelId, nativeFormat);
+        if (!declared.whereType<String>().contains(protocol)) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+    }
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
@@ -4476,6 +4850,27 @@ class LlmNativeRequestBuilder {
         headers['X-Msh-Device-Name'] = 'Stroom';
         headers['X-Msh-Device-Model'] = 'Stroom';
         headers['X-Msh-Device-Id'] = deviceId;
+        break;
+      case 'github' || 'ghe-copilot':
+        final copilotToken = _credentialBundleString(credential, const [
+          'copilot_token',
+        ]);
+        if (copilotToken == null) throw const LlmAccountConnectorException();
+        headers['Authorization'] = 'Bearer $copilotToken';
+        headers.addAll({
+          'Editor-Version': 'copilot/1.0.91',
+          'copilot-integration-id': 'copilot-developer-cli',
+          'openai-intent': 'conversation-agent',
+          'x-interaction-type': 'conversation-user',
+          'copilot-harness-id': 'copilot-sdk',
+          'X-Initiator': 'user',
+          'User-Agent': 'copilot/1.0.91',
+          'X-GitHub-Api-Version': '2026-08-01',
+        });
+        final machineId = _credentialBundleString(credential, const [
+          'copilot_machine_id',
+        ]);
+        if (machineId != null) headers['x-client-machine-id'] = machineId;
         break;
       case 'kilocode':
         headers['Authorization'] =
@@ -4648,6 +5043,7 @@ class LlmNativeRequestBuilder {
       headers.putIfAbsent('anthropic-version', () => '2023-06-01');
     }
     final upstreamStream = stream ||
+        account.connectorType == 'ghe-copilot' ||
         account.connectorType == 'cline' ||
         account.connectorType == 'clinepass';
     if (upstreamStream && account.connectorType == 'bedrock') {
@@ -4815,6 +5211,8 @@ class LlmNativeRequestBuilder {
         'codebuddy-cn' ||
         'codebuddy-intl' ||
         'workbuddy' ||
+        'github' ||
+        'ghe-copilot' ||
         'gemini-interactions' ||
         'openai-compatibility' ||
         'openai-api' ||
@@ -5109,6 +5507,22 @@ class LlmNativeRequestBuilder {
       case 'workbuddy':
         baseUrl = _baseUrl(config, 'https://www.workbuddy.ai/v2');
         path = '/chat/completions';
+      case 'github' || 'ghe-copilot':
+        final enterpriseApi = _credentialBundleString(credential, const [
+          'copilot_api_url',
+        ]);
+        baseUrl = _baseUrl(
+          config,
+          account.connectorType == 'github'
+              ? 'https://api.githubcopilot.com'
+              : enterpriseApi ?? '',
+        );
+        if (baseUrl.isEmpty) throw const LlmAccountConnectorException();
+        path = switch (_copilotProtocolFor(modelId, nativeFormat)) {
+          'anthropic.messages' => '/v1/messages',
+          'openai.responses' => '/responses',
+          _ => '/chat/completions',
+        };
       case 'qoder':
         baseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
         path = '/chat/completions';
@@ -5361,6 +5775,22 @@ class LlmNativeRequestBuilder {
     });
   }
 
+  static bool _validGheCopilotHost(String host, Map<String, dynamic> config) {
+    final gheText = _configString(config, 'gheUrl');
+    final gheHost = gheText == null ? null : Uri.tryParse(gheText)?.host;
+    final hostParts = host.split('.');
+    final gheParts = (gheHost ?? '').split('.');
+    final sharesRegisteredDomain = hostParts.length >= 2 &&
+        gheParts.length >= 2 &&
+        hostParts.skip(1).join('.') == gheParts.skip(1).join('.');
+    return host.endsWith('.githubcopilot.com') ||
+        host == 'githubcopilot.com' ||
+        gheHost != null &&
+            (host == gheHost ||
+                host.endsWith('.$gheHost') ||
+                sharesRegisteredDomain);
+  }
+
   static bool _usesVertexInteractions(
     Map<String, dynamic> config,
     String? nativeFormat,
@@ -5471,6 +5901,8 @@ class LlmNativeRequestBuilder {
       'codebuddy-cn' => host == 'copilot.tencent.com',
       'codebuddy-intl' => host == 'www.codebuddy.ai',
       'workbuddy' => host == 'www.workbuddy.ai',
+      'github' => host == 'api.githubcopilot.com',
+      'ghe-copilot' => _validGheCopilotHost(host, account.endpointConfig),
       'qoder' => host == 'dashscope.aliyuncs.com',
       'kilocode' => host == 'api.kilo.ai',
       'cline' || 'clinepass' => host == 'api.cline.bot',
@@ -5528,6 +5960,19 @@ class LlmNativeRequestBuilder {
 
   static String _baseUrl(Map<String, dynamic> config, String fallback) =>
       _configString(config, 'baseUrl') ?? fallback;
+
+  static String _copilotProtocolFor(String modelId, String? nativeFormat) {
+    switch (nativeFormat) {
+      case 'responses':
+        return 'openai.responses';
+      case 'anthropic':
+        return 'anthropic.messages';
+    }
+    final normalized = modelId.toLowerCase();
+    if (normalized.contains('claude')) return 'anthropic.messages';
+    if (normalized.contains('codex')) return 'openai.responses';
+    return 'openai.chat_completions';
+  }
 
   static String? _vertexLocation(Map<String, dynamic> config) =>
       _configString(config, 'location') ?? _configString(config, 'region');

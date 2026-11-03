@@ -545,21 +545,32 @@ class LlmConnectorHttpClient {
             : responseData is Stream<List<int>>
                 ? await _readResponseStream(responseData)
                 : responseData;
+        final isSseResponse = response.headers
+                .value('content-type')
+                ?.toLowerCase()
+                .contains('text/event-stream') ??
+            false;
         final decoded = !stream &&
-                const {
-                  'codebuddy-cn',
-                  'codebuddy-intl',
-                  'workbuddy',
-                  'cline',
-                  'clinepass',
-                }.contains(storedAccount.connectorType) &&
-                (response.headers
-                        .value('content-type')
-                        ?.toLowerCase()
-                        .contains('text/event-stream') ??
-                    false)
-            ? _bufferOpenAiChatSse(rawResponse)
-            : _decodeResponseBody(rawResponse);
+                storedAccount.connectorType == 'ghe-copilot' &&
+                isSseResponse
+            ? nativeFormat == 'anthropic'
+                ? _bufferAnthropicMessagesSse(rawResponse)
+                : nativeFormat == 'responses' ||
+                        (nativeFormat == null &&
+                            modelId.toLowerCase().contains('codex'))
+                    ? _bufferOpenAiResponsesSse(rawResponse)
+                    : _bufferOpenAiChatSse(rawResponse)
+            : !stream &&
+                    const {
+                      'codebuddy-cn',
+                      'codebuddy-intl',
+                      'workbuddy',
+                      'cline',
+                      'clinepass',
+                    }.contains(storedAccount.connectorType) &&
+                    isSseResponse
+                ? _bufferOpenAiChatSse(rawResponse)
+                : _decodeResponseBody(rawResponse);
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
                 parseLlmConnectorObservation(
@@ -1004,6 +1015,152 @@ class LlmConnectorHttpClient {
         },
       ],
     };
+  }
+
+  static Map<String, dynamic> _bufferAnthropicMessagesSse(Object? data) {
+    final bytes = data is Uint8List
+        ? data
+        : data is List<int>
+            ? Uint8List.fromList(data)
+            : null;
+    if (bytes == null) throw const LlmConnectorHttpException();
+    final text = utf8.decode(bytes, allowMalformed: true);
+    final blocks = <int, Map<String, dynamic>>{};
+    String? id;
+    String? model;
+    String? stopReason;
+    String? stopSequence;
+    var inputTokens = 0;
+    var outputTokens = 0;
+    for (final line in const LineSplitter().convert(text)) {
+      if (!line.startsWith('data:')) continue;
+      final payload = line.substring(5).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(payload);
+      } catch (_) {
+        continue;
+      }
+      if (decoded is! Map) continue;
+      final event = Map<String, dynamic>.from(decoded);
+      switch (event['type']) {
+        case 'error':
+          throw const LlmConnectorHttpException();
+        case 'message_start':
+          final message = event['message'];
+          if (message is Map) {
+            id = message['id'] as String?;
+            model = message['model'] as String?;
+            final usage = message['usage'];
+            if (usage is Map) {
+              inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
+              outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
+            }
+          }
+          break;
+        case 'content_block_start':
+          final index = (event['index'] as num?)?.toInt();
+          final block = event['content_block'];
+          if (index != null && block is Map) {
+            blocks[index] = Map<String, dynamic>.from(block);
+          }
+          break;
+        case 'content_block_delta':
+          final index = (event['index'] as num?)?.toInt();
+          final block = index == null ? null : blocks[index];
+          final delta = event['delta'];
+          if (block == null || delta is! Map) continue;
+          if (delta['type'] == 'text_delta' && delta['text'] is String) {
+            block['text'] = '${block['text'] ?? ''}${delta['text']}';
+          } else if (delta['type'] == 'thinking_delta' &&
+              delta['thinking'] is String) {
+            block['thinking'] =
+                '${block['thinking'] ?? ''}${delta['thinking']}';
+          } else if (delta['type'] == 'signature_delta' &&
+              delta['signature'] is String) {
+            block['signature'] =
+                '${block['signature'] ?? ''}${delta['signature']}';
+          } else if (delta['type'] == 'input_json_delta' &&
+              delta['partial_json'] is String) {
+            block['input'] = '${block['input'] ?? ''}${delta['partial_json']}';
+          }
+          break;
+        case 'message_delta':
+          final delta = event['delta'];
+          if (delta is Map) {
+            stopReason = delta['stop_reason'] as String?;
+            stopSequence = delta['stop_sequence'] as String?;
+          }
+          final usage = event['usage'];
+          if (usage is Map) {
+            inputTokens =
+                (usage['input_tokens'] as num?)?.toInt() ?? inputTokens;
+            outputTokens =
+                (usage['output_tokens'] as num?)?.toInt() ?? outputTokens;
+          }
+          break;
+      }
+    }
+    if (blocks.isEmpty) throw const LlmConnectorHttpException();
+    final content = <Map<String, dynamic>>[];
+    for (final index in blocks.keys.toList()..sort()) {
+      final block = Map<String, dynamic>.from(blocks[index]!);
+      if (block['type'] == 'tool_use' && block['input'] is String) {
+        try {
+          final input = jsonDecode(block['input'] as String);
+          block['input'] = input is Map ? Map<String, dynamic>.from(input) : {};
+        } catch (_) {
+          throw const LlmConnectorHttpException();
+        }
+      }
+      content.add(block);
+    }
+    return {
+      'id': id ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      'type': 'message',
+      'role': 'assistant',
+      'model': model,
+      'content': content,
+      'stop_reason': stopReason,
+      'stop_sequence': stopSequence,
+      'usage': {'input_tokens': inputTokens, 'output_tokens': outputTokens},
+    };
+  }
+
+  static Map<String, dynamic> _bufferOpenAiResponsesSse(Object? data) {
+    final bytes = data is Uint8List
+        ? data
+        : data is List<int>
+            ? Uint8List.fromList(data)
+            : null;
+    if (bytes == null) throw const LlmConnectorHttpException();
+    final text = utf8.decode(bytes, allowMalformed: true);
+    for (final line in const LineSplitter().convert(text)) {
+      if (!line.startsWith('data:')) continue;
+      final payload = line.substring(5).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(payload);
+      } catch (_) {
+        continue;
+      }
+      if (decoded is! Map) continue;
+      final event = Map<String, dynamic>.from(decoded);
+      if (event['type'] == 'response.failed' || event['error'] != null) {
+        throw const LlmConnectorHttpException();
+      }
+      if (event['type'] == 'response.completed' ||
+          event['type'] == 'response.done') {
+        final response = event['response'];
+        if (response is Map) return Map<String, dynamic>.from(response);
+      }
+      if (event['object'] == 'response' && event['status'] == 'completed') {
+        return event;
+      }
+    }
+    throw const LlmConnectorHttpException();
   }
 
   static Future<Uint8List> _readResponseStream(Stream<List<int>> stream) async {

@@ -9,6 +9,7 @@ import 'llm_oauth_flow.dart';
 /// Exchanges one-use authorization codes and verifies provider identity data.
 /// Token values are returned only to the caller for immediate secure storage.
 class LlmOAuthTokenClient {
+  static const githubCopilotClientId = 'Iv1.b507a08c87ecfe98';
   static const _openAiDiscoveryUri =
       'https://auth.openai.com/.well-known/openid-configuration';
   static const xaiClientId = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -155,6 +156,258 @@ class LlmOAuthTokenClient {
 
   LlmCursorOAuthSession startCursorAuthorization() =>
       LlmCursorOAuthSession.create();
+
+  Future<LlmGithubDeviceCode> startGithubDeviceAuthorization({
+    required String connectorType,
+    String? enterpriseUrl,
+    String? clientId,
+  }) async {
+    try {
+      final base = _githubOAuthBase(connectorType, enterpriseUrl);
+      final selectedClientId = _nonEmptyString(clientId) ??
+          _nonEmptyString(
+            const String.fromEnvironment('GHE_COPILOT_OAUTH_CLIENT_ID'),
+          ) ??
+          githubCopilotClientId;
+      final response = await _dio.postUri<Object?>(
+        base.replace(path: _githubPath(base, '/login/device/code')),
+        data: {'client_id': selectedClientId, 'scope': 'read:user'},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+        ),
+      );
+      final data = _jsonObject(response.data);
+      final deviceCode = _nonEmptyString(data['device_code']);
+      final userCode = _nonEmptyString(data['user_code']);
+      final verifyText = _nonEmptyString(
+        data['verification_uri_complete'] ?? data['verification_uri'],
+      );
+      final verification = Uri.tryParse(verifyText ?? '');
+      final expires = _positiveSeconds(data['expires_in']);
+      final rawInterval = data['interval'];
+      final parsedInterval = rawInterval is num
+          ? rawInterval.toInt()
+          : int.tryParse('$rawInterval');
+      final interval =
+          parsedInterval != null && parsedInterval > 0 ? parsedInterval : 5;
+      if (deviceCode == null ||
+          userCode == null ||
+          verification == null ||
+          verification.scheme != 'https' ||
+          verification.userInfo.isNotEmpty ||
+          (connectorType == 'github' && verification.host != 'github.com') ||
+          (connectorType == 'ghe-copilot' && verification.host != base.host) ||
+          expires == null) {
+        throw const LlmOAuthFlowException();
+      }
+      return LlmGithubDeviceCode.fromOAuthResponse(
+        deviceCode: deviceCode,
+        connectorType: connectorType,
+        authorizationUri: verification,
+        userCode: userCode,
+        expiresIn: Duration(seconds: expires),
+        interval: Duration(seconds: interval),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> pollGithubDeviceAuthorization({
+    required String connectorType,
+    required LlmGithubDeviceCode deviceCode,
+    String? enterpriseUrl,
+    String? clientId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      if (deviceCode.connectorType != connectorType ||
+          !{'github', 'ghe-copilot'}.contains(connectorType)) {
+        throw const LlmOAuthFlowException();
+      }
+      final base = _githubOAuthBase(connectorType, enterpriseUrl);
+      final selectedClientId = _nonEmptyString(clientId) ??
+          _nonEmptyString(
+            const String.fromEnvironment('GHE_COPILOT_OAUTH_CLIENT_ID'),
+          ) ??
+          githubCopilotClientId;
+      final tokenUri = base.replace(
+        path: _githubPath(base, '/login/oauth/access_token'),
+      );
+      final deadline = DateTime.now().add(deviceCode.expiresIn);
+      var pollInterval = deviceCode.interval;
+      while (DateTime.now().isBefore(deadline)) {
+        if (cancelToken?.isCancelled ?? false) {
+          throw const LlmOAuthFlowException();
+        }
+        await _waitForGithubPollingInterval(pollInterval, cancelToken);
+        final response = await _dio.postUri<Object?>(
+          tokenUri,
+          data: {
+            'client_id': selectedClientId,
+            'device_code': deviceCode.deviceCode,
+            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+          },
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            responseType: ResponseType.json,
+            headers: const {'Accept': 'application/json'},
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+        final data = _jsonObject(response.data);
+        final accessToken = _nonEmptyString(data['access_token']);
+        if (accessToken == null) {
+          final error = _nonEmptyString(data['error']);
+          if (error == 'authorization_pending') continue;
+          if (error == 'slow_down') {
+            pollInterval += const Duration(seconds: 5);
+            continue;
+          }
+          throw const LlmOAuthFlowException();
+        }
+        final userUri = connectorType == 'github'
+            ? base.replace(path: '/user')
+            : base.replace(path: _githubPath(base, '/api/v3/user'));
+        final copilotUri = connectorType == 'github'
+            ? Uri.https('api.github.com', '/copilot_internal/v2/token')
+            : base.replace(
+                path: _githubPath(base, '/api/v3/copilot_internal/v2/token'),
+              );
+        final copilotResponse = await _dio.getUri<Object?>(
+          copilotUri,
+          options: Options(
+            responseType: ResponseType.json,
+            headers: _githubCopilotHeaders(accessToken),
+          ),
+          cancelToken: cancelToken,
+        );
+        final copilot = _jsonObject(copilotResponse.data);
+        final copilotToken = _nonEmptyString(copilot['token']);
+        if (copilotToken == null) throw const LlmOAuthFlowException();
+        final userResponse = await _dio.getUri<Object?>(
+          userUri,
+          options: Options(
+            responseType: ResponseType.json,
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': 'Bearer $accessToken',
+            },
+          ),
+          cancelToken: cancelToken,
+        );
+        final user = _jsonObject(userResponse.data);
+        final bundle = <String, dynamic>{
+          ...data,
+          'access_token': accessToken,
+          'copilot_token': copilotToken,
+          'github_user_id': user['id'],
+          'github_login': _nonEmptyString(user['login']),
+          if (_nonEmptyString(user['name']) != null)
+            'github_name': _nonEmptyString(user['name']),
+          if (_nonEmptyString(user['email']) != null)
+            'email': _nonEmptyString(user['email']),
+          if (copilot['expires_at'] != null)
+            'copilot_expires_at': copilot['expires_at'],
+        };
+        final endpoints = copilot['endpoints'];
+        if (connectorType == 'ghe-copilot' && endpoints is Map) {
+          final api = _safeHttpsEndpoint(endpoints['api']);
+          final proxy = _safeHttpsEndpoint(endpoints['proxy']);
+          if (api != null) bundle['copilot_api_url'] = api;
+          if (proxy != null) bundle['copilot_proxy_url'] = proxy;
+        }
+        if (_nonEmptyString(data['refresh_token']) != null) {
+          bundle['refresh_token'] = data['refresh_token'];
+        }
+        final seconds = _positiveSeconds(data['expires_in']);
+        if (seconds != null) {
+          final oauthExpiry = DateTime.now()
+              .toUtc()
+              .add(Duration(seconds: seconds))
+              .toIso8601String();
+          final copilotExpiry = _nonEmptyString(copilot['expires_at']);
+          final parsedCopilotExpiry = copilotExpiry == null
+              ? null
+              : DateTime.tryParse(copilotExpiry)?.toUtc();
+          final parsedOAuthExpiry = DateTime.parse(oauthExpiry);
+          bundle['oauth_expires_at'] = oauthExpiry;
+          bundle['expires_at'] = parsedCopilotExpiry != null &&
+                  parsedCopilotExpiry.isBefore(parsedOAuthExpiry)
+              ? parsedCopilotExpiry.toIso8601String()
+              : oauthExpiry;
+        }
+        return bundle;
+      }
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static Uri _githubOAuthBase(String connectorType, String? enterpriseUrl) {
+    if (connectorType == 'github') return Uri.parse('https://github.com');
+    if (connectorType != 'ghe-copilot') throw const LlmOAuthFlowException();
+    final uri = Uri.tryParse(enterpriseUrl?.trim() ?? '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmOAuthFlowException();
+    }
+    return uri.replace(path: uri.path.replaceFirst(RegExp(r'/+$'), ''));
+  }
+
+  static String _githubPath(Uri base, String suffix) =>
+      '${base.path.replaceFirst(RegExp(r'/+$'), '')}$suffix';
+
+  static Map<String, String> _githubCopilotHeaders(String accessToken) => {
+        'Authorization': 'Bearer $accessToken',
+        'Accept': 'application/json',
+        'X-GitHub-Api-Version': '2026-08-01',
+        'User-Agent': 'GitHubCopilotChat/1.0.91',
+        'Editor-Version': 'copilot/1.0.91',
+        'Editor-Plugin-Version': 'copilot-chat/1.0.91',
+      };
+
+  static String? _safeHttpsEndpoint(Object? value) {
+    final uri = Uri.tryParse(_nonEmptyString(value) ?? '');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      return null;
+    }
+    return uri
+        .replace(path: uri.path.replaceFirst(RegExp(r'/+$'), ''))
+        .toString();
+  }
+
+  static int? _positiveSeconds(Object? value) {
+    final seconds = value is num ? value.toInt() : int.tryParse('$value');
+    return seconds != null && seconds > 0 ? seconds : null;
+  }
+
+  static Future<void> _waitForGithubPollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (interval <= Duration.zero) return;
+    if (cancelToken == null) return Future<void>.delayed(interval);
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
+  }
 
   /// Performs one Cursor auth poll. `null` means approval is still pending.
   Future<Map<String, dynamic>?> pollCursorAuthorization(

@@ -1000,6 +1000,52 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginGithubDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (!{'github', 'ghe-copilot'}.contains(account.connectorType) ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      String? expectedUserId;
+      String? machineId;
+      final existing = await _accounts.getAccount(account.id);
+      if (existing != null) {
+        if (existing.connectorType != account.connectorType ||
+            existing.authType != 'oauth') {
+          throw const AiGatewayOAuthException();
+        }
+        final raw = await _accounts.readCredential(account.id);
+        if (raw == null) throw const AiGatewayOAuthException();
+        final existingBundle = _decodeOAuthBundle(raw);
+        expectedUserId = existingBundle['github_user_id']?.toString();
+        machineId = existingBundle['copilot_machine_id'] as String?;
+        if (expectedUserId == null || expectedUserId.isEmpty) {
+          throw const AiGatewayOAuthException();
+        }
+      }
+      final deviceCode = await _tokenClient.startGithubDeviceAuthorization(
+        connectorType: account.connectorType,
+        enterpriseUrl: account.endpointConfig['gheUrl'] as String?,
+        clientId: account.endpointConfig['copilotClientId'] as String?,
+      );
+      return _LlmGithubDeviceAuthorization(
+        account: account,
+        deviceCode: deviceCode,
+        expectedUserId: expectedUserId,
+        machineId: machineId,
+        tokenClient: _tokenClient,
+        accounts: _accounts,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<void> revoke(AiGatewayAccount account) async {
     try {
       if (account.authType != 'oauth') {
@@ -1549,6 +1595,112 @@ class _LlmMetaMuseDeviceAuthorization
         // Keep the secure account. The editor can retry entitlement discovery.
         return saved;
       }
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+class _LlmGithubDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmGithubDeviceCode _deviceCode;
+  final String? _expectedUserId;
+  final String? _machineId;
+  final LlmOAuthTokenClient _tokenClient;
+  final LlmAccountConnectorService _accounts;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmGithubDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmGithubDeviceCode deviceCode,
+    required String? expectedUserId,
+    required String? machineId,
+    required LlmOAuthTokenClient tokenClient,
+    required LlmAccountConnectorService accounts,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _expectedUserId = expectedUserId,
+        _machineId = machineId,
+        _tokenClient = tokenClient,
+        _accounts = accounts,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.authorizationUri;
+  @override
+  Uri get verificationUriComplete => _deviceCode.authorizationUri;
+  @override
+  String get userCode => _deviceCode.userCode;
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final bundle = await _tokenClient.pollGithubDeviceAuthorization(
+        connectorType: _account.connectorType,
+        deviceCode: _deviceCode,
+        enterpriseUrl: _account.endpointConfig['gheUrl'] as String?,
+        clientId: _account.endpointConfig['copilotClientId'] as String?,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled ||
+          _expectedUserId != null &&
+              _expectedUserId != bundle['github_user_id']?.toString()) {
+        throw const AiGatewayOAuthException();
+      }
+      bundle['copilot_machine_id'] = _machineId ?? const Uuid().v4();
+      var models = <AiGatewayUpstreamModel>[];
+      final temporaryId = '${_account.id}:discovery:${const Uuid().v4()}';
+      try {
+        final temporary = await _accountManagement.saveAuthorizedOAuthAccount(
+          AiGatewayAccount(
+            id: temporaryId,
+            connectorType: _account.connectorType,
+            authType: 'oauth',
+            displayName: _account.displayName,
+            status: AiGatewayAccountStatus.ready,
+            hasCredential: true,
+            endpointConfig: _account.endpointConfig,
+            models: const [],
+          ),
+          secret: jsonEncode(bundle),
+        );
+        final discovered = await _accounts.discoverModels(
+          _legacyAccount(temporary),
+          refreshRemote: true,
+        );
+        models = [for (final model in discovered) _gatewayModel(model)];
+      } finally {
+        await _accountManagement.deleteAccount(temporaryId);
+      }
+      return _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: 'oauth',
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          models: models,
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(bundle),
+      );
     } catch (_) {
       throw const AiGatewayOAuthException();
     }

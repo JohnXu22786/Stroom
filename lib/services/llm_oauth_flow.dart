@@ -77,6 +77,11 @@ class LlmOAuthProviderPolicy {
       providerId: 'clinepass',
       supported: true,
     ),
+    'github': LlmOAuthProviderPolicy._(providerId: 'github', supported: true),
+    'ghe-copilot': LlmOAuthProviderPolicy._(
+      providerId: 'ghe-copilot',
+      supported: true,
+    ),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
       supported: false,
@@ -232,6 +237,58 @@ class LlmKimiDeviceCode {
     required this.expiresIn,
     required this.interval,
   }) : _deviceCode = deviceCode;
+}
+
+/// GitHub device authorization details. The device code is intentionally
+/// omitted from diagnostics and is retained only while polling in memory.
+class LlmGithubDeviceCode {
+  final String _deviceCode;
+  final String connectorType;
+  final Uri authorizationUri;
+  final String userCode;
+  final Duration expiresIn;
+  final Duration interval;
+
+  String get deviceCode => _deviceCode;
+
+  const LlmGithubDeviceCode._({
+    required String deviceCode,
+    required this.connectorType,
+    required this.authorizationUri,
+    required this.userCode,
+    required this.expiresIn,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+
+  factory LlmGithubDeviceCode.fromOAuthResponse({
+    required String deviceCode,
+    required String connectorType,
+    required Uri authorizationUri,
+    required String userCode,
+    required Duration expiresIn,
+    required Duration interval,
+  }) {
+    if (deviceCode.trim().isEmpty ||
+        userCode.trim().isEmpty ||
+        !{'github', 'ghe-copilot'}.contains(connectorType) ||
+        authorizationUri.scheme != 'https' ||
+        expiresIn <= Duration.zero ||
+        interval.isNegative) {
+      throw const LlmOAuthFlowException();
+    }
+    return LlmGithubDeviceCode._(
+      deviceCode: deviceCode,
+      connectorType: connectorType,
+      authorizationUri: authorizationUri,
+      userCode: userCode,
+      expiresIn: expiresIn,
+      interval: interval,
+    );
+  }
+
+  @override
+  String toString() => 'LlmGithubDeviceCode(connectorType: $connectorType, '
+      'userCode: $userCode, expiresIn: $expiresIn)';
 }
 
 /// Verification details from Kilo's custom device-code flow. The device code

@@ -308,6 +308,23 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
           ),
         );
       }
+      if (result.account.connectorType == 'github' ||
+          result.account.connectorType == 'ghe-copilot') {
+        final authorization = await gateway.oauthAuthorization
+            .beginGithubDeviceAuthorization(result.account);
+        if (!mounted) {
+          authorization.cancel();
+          return null;
+        }
+        return showDialog<AiGatewayAccount>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _XaiDeviceAuthorizationDialog(
+            authorization: authorization,
+            connectorType: result.account.connectorType,
+          ),
+        );
+      }
       if (result.account.connectorType == 'muse-code') {
         final authorization = await gateway.oauthAuthorization
             .beginMetaMuseDeviceAuthorization(result.account);
@@ -1003,7 +1020,12 @@ class _XaiDeviceAuthorizationDialogState
     extends State<_XaiDeviceAuthorizationDialog> {
   String? _error;
 
-  bool get _isGrokBuild => widget.connectorType == 'grok-cli';
+  String get _providerName => switch (widget.connectorType) {
+        'github' => 'GitHub Copilot',
+        'ghe-copilot' => 'GitHub Enterprise Copilot',
+        'grok-cli' => 'Grok Build',
+        _ => 'xAI API',
+      };
 
   @override
   void initState() {
@@ -1013,7 +1035,7 @@ class _XaiDeviceAuthorizationDialogState
         if (mounted) Navigator.of(context).pop(account);
       },
       onError: (Object _) {
-        if (mounted) setState(() => _error = 'xAI 授权失败，请重新开始登录。');
+        if (mounted) setState(() => _error = '$_providerName 授权失败，请重新开始登录。');
       },
     );
   }
@@ -1024,12 +1046,12 @@ class _XaiDeviceAuthorizationDialogState
           if (didPop) widget.authorization.cancel();
         },
         child: AlertDialog(
-          title: Text(_isGrokBuild ? '登录 Grok Build' : '登录 xAI API'),
+          title: Text('登录 $_providerName'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('打开 xAI 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+              Text('打开 $_providerName 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
               const SizedBox(height: 12),
               SelectableText(widget.authorization.userCode),
               const SizedBox(height: 8),
@@ -1050,7 +1072,7 @@ class _XaiDeviceAuthorizationDialogState
                   mode: LaunchMode.externalApplication,
                 );
               },
-              child: const Text('打开 xAI'),
+              child: Text('打开 $_providerName'),
             ),
             TextButton(
               onPressed: () {
@@ -1781,7 +1803,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     _status = account?.status ?? AiGatewayAccountStatus.unknown;
     _name = TextEditingController(text: account?.displayName ?? '');
-    final endpoint = account?.endpointConfig['baseUrl'] ??
+    final endpoint = account?.endpointConfig[
+            _connectorType == 'ghe-copilot' ? 'gheUrl' : 'baseUrl'] ??
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
@@ -1811,10 +1834,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       text: projectId is String ? projectId : '',
     );
     _credential = TextEditingController();
-    final oauthClientId = account?.endpointConfig['clientId'] ??
+    final copilotClientId = account?.endpointConfig['copilotClientId'] ??
+        account?.endpointConfig['clientId'] ??
         account?.endpointConfig['qoderClientId'];
     _oauthClientId = TextEditingController(
-      text: oauthClientId is String ? oauthClientId : '',
+      text: copilotClientId is String ? copilotClientId : '',
     );
     _oauthClientSecret = TextEditingController();
     _qoderAuthorizeUrl = TextEditingController(
@@ -2292,6 +2316,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
               ],
               const SizedBox(height: 8),
+              if (_connectorType == 'ghe-copilot' && _authType == 'oauth') ...[
+                const Text(
+                  'GitHub Enterprise Cloud 或 Server 必须启用 Copilot，并允许 device OAuth。使用 HTTPS 实例地址；OAuth 应用客户端 ID 可由管理员提供，留空时使用公开客户端 ID。',
+                ),
+                TextField(
+                  controller: _oauthClientId,
+                  decoration: const InputDecoration(
+                    labelText:
+                        'Enterprise OAuth application client ID (optional)',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                const SizedBox(height: 8),
+              ],
               TextField(
                 controller: _endpoint,
                 enabled: _connectorType != 'devin-cli-agentic' &&
@@ -2301,8 +2339,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType != 'cline' &&
                     _connectorType != 'clinepass',
                 decoration: InputDecoration(
-                  labelText:
-                      _connectorType == 'cline' || _connectorType == 'clinepass'
+                  labelText: _connectorType == 'ghe-copilot'
+                      ? 'GitHub Enterprise instance HTTPS URL'
+                      : _connectorType == 'cline' ||
+                              _connectorType == 'clinepass'
                           ? 'Cline 使用固定服务端点'
                           : _connectorType == 'kilocode'
                               ? 'Kilo Code 使用固定服务端点'
@@ -2313,6 +2353,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
                     'command-code' => kCommandCodeBaseUrl,
+                    'ghe-copilot' => 'https://github.example.com',
                     _ => 'https://api.example.com/v1',
                   },
                   helperText: switch (_connectorType) {
@@ -2686,12 +2727,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         widget.account?.authType == 'oauth' &&
         widget.account!.endpointConfig['qoderClientId'] !=
             _oauthClientId.text.trim();
+    final gheOAuthConfigurationChanged = widget.account?.connectorType ==
+            'ghe-copilot' &&
+        widget.account?.authType == 'oauth' &&
+        _connectorType == 'ghe-copilot' &&
+        _authType == 'oauth' &&
+        (widget.account!.endpointConfig['gheUrl'] != _endpoint.text.trim() ||
+            widget.account!.endpointConfig['copilotClientId'] !=
+                _oauthClientId.text.trim());
     final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged ||
-            qoderOAuthConfigurationChanged);
+            qoderOAuthConfigurationChanged ||
+            gheOAuthConfigurationChanged);
     if (_connectorType == 'qoder' && _authType == 'oauth') {
       try {
         for (final value in [
@@ -2847,6 +2897,29 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final endpointConfig = Map<String, dynamic>.from(
       widget.account?.endpointConfig ?? const <String, dynamic>{},
     );
+    if (_connectorType == 'ghe-copilot') {
+      final gheUri = Uri.tryParse(endpoint);
+      if (_authType == 'oauth' &&
+          (gheUri == null ||
+              gheUri.scheme != 'https' ||
+              gheUri.host.isEmpty ||
+              gheUri.userInfo.isNotEmpty ||
+              gheUri.hasQuery ||
+              gheUri.hasFragment)) {
+        setState(() => _error = '请输入有效的 GitHub Enterprise HTTPS 实例地址。');
+        return;
+      }
+      endpointConfig['gheUrl'] = endpoint;
+      endpointConfig.remove('baseUrl');
+      if (_oauthClientId.text.trim().isEmpty) {
+        endpointConfig.remove('copilotClientId');
+      } else {
+        endpointConfig['copilotClientId'] = _oauthClientId.text.trim();
+      }
+    } else if (widget.account?.connectorType == 'ghe-copilot') {
+      endpointConfig.remove('gheUrl');
+      endpointConfig.remove('copilotClientId');
+    }
     if (_connectorType == 'devin-cli-agentic') {
       final executablePath = _devinCliExecutable.text.trim();
       final previousExecutablePath =
@@ -2912,7 +2985,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('qoderUserInfoUrl');
       endpointConfig.remove('qoderClientId');
     }
-    final previousEndpoint = widget.account?.endpointConfig['baseUrl'] ??
+    final previousEndpoint = widget.account?.endpointConfig[
+            _connectorType == 'ghe-copilot' ? 'gheUrl' : 'baseUrl'] ??
         widget.account?.endpointConfig['host'] ??
         widget.account?.endpointConfig['apiBase'];
     if (endpointConfig['legacyOcrFullEndpoint'] == true &&
@@ -2920,7 +2994,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             (previousEndpoint is String ? previousEndpoint.trim() : '')) {
       endpointConfig.remove('legacyOcrFullEndpoint');
     }
-    if (endpoint.isEmpty) {
+    if (_connectorType == 'ghe-copilot') {
+      endpointConfig['gheUrl'] = endpoint;
+      endpointConfig.remove('baseUrl');
+      endpointConfig.remove('host');
+      endpointConfig.remove('apiBase');
+    } else if (endpoint.isEmpty) {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');

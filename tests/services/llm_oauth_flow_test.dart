@@ -9,6 +9,169 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test(
+    'GitHub Copilot uses the source-backed public device OAuth flow',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          if (request.uri.path == '/login/device/code') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'private-device-code',
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://github.com/login/device',
+                'verification_uri_complete':
+                    'https://github.com/login/device?user_code=ABCD-EFGH',
+                'expires_in': 600,
+                'interval': 0,
+              }),
+              200,
+            );
+          }
+          if (request.uri.path == '/login/oauth/access_token') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'access_token': 'github-access',
+                'refresh_token': 'github-refresh',
+                'expires_in': 28800,
+                'token_type': 'bearer',
+                'scope': 'read:user',
+              }),
+              200,
+            );
+          }
+          if (request.uri.path == '/copilot_internal/v2/token') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'token': 'copilot-session',
+                'expires_at': '2026-11-03T01:00:00Z',
+              }),
+              200,
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({'id': 42, 'login': 'copilot-user'}),
+            200,
+          );
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
+
+      final code = await client.startGithubDeviceAuthorization(
+        connectorType: 'github',
+      );
+      expect(code.userCode, 'ABCD-EFGH');
+      expect(code.deviceCode, 'private-device-code');
+      expect(code.expiresIn, const Duration(minutes: 10));
+      expect(code.interval, const Duration(seconds: 5));
+
+      final credentials = await client.pollGithubDeviceAuthorization(
+        connectorType: 'github',
+        deviceCode: code,
+      );
+      expect(credentials['access_token'], 'github-access');
+      expect(credentials['refresh_token'], 'github-refresh');
+      expect(credentials['copilot_token'], 'copilot-session');
+      expect(credentials['github_user_id'], 42);
+      expect(credentials['github_login'], 'copilot-user');
+      expect(
+        requests.first.uri.toString(),
+        'https://github.com/login/device/code',
+      );
+      expect(requests.first.data, {
+        'client_id': 'Iv1.b507a08c87ecfe98',
+        'scope': 'read:user',
+      });
+      expect(requests[1].data, {
+        'client_id': 'Iv1.b507a08c87ecfe98',
+        'device_code': 'private-device-code',
+        'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+      });
+      expect(requests[2].headers['Authorization'], 'Bearer github-access');
+      expect(requests[3].uri.path, '/user');
+      expect(code.toString(), isNot(contains('private-device-code')));
+    },
+  );
+
+  test(
+    'GitHub Enterprise device OAuth stays on the configured HTTPS host',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          if (request.uri.path == '/login/device/code') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'enterprise-device',
+                'user_code': 'ENTR-CODE',
+                'verification_uri': 'https://ghe.example.com/login/device',
+                'expires_in': 600,
+                'interval': 0,
+              }),
+              200,
+            );
+          }
+          if (request.uri.path == '/login/oauth/access_token') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'access_token': 'enterprise-access',
+                'refresh_token': 'enterprise-refresh',
+                'expires_in': 28800,
+              }),
+              200,
+            );
+          }
+          if (request.uri.path.endsWith('/copilot_internal/v2/token')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'token': 'enterprise-copilot',
+                'expires_at': '2026-11-03T01:00:00Z',
+                'endpoints': {
+                  'api': 'https://ghe-api.example.com',
+                  'proxy': 'https://ghe-proxy.example.com',
+                },
+              }),
+              200,
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({'id': 43, 'login': 'enterprise-user'}),
+            200,
+          );
+        });
+      final client = LlmOAuthTokenClient(dio: dio);
+
+      final code = await client.startGithubDeviceAuthorization(
+        connectorType: 'ghe-copilot',
+        enterpriseUrl: 'https://ghe.example.com/',
+        clientId: 'enterprise-public-client',
+      );
+      final credentials = await client.pollGithubDeviceAuthorization(
+        connectorType: 'ghe-copilot',
+        deviceCode: code,
+        enterpriseUrl: 'https://ghe.example.com/',
+        clientId: 'enterprise-public-client',
+      );
+
+      expect(requests.map((request) => request.uri.host), [
+        'ghe.example.com',
+        'ghe.example.com',
+        'ghe.example.com',
+        'ghe.example.com',
+      ]);
+      expect(requests.first.uri.path, '/login/device/code');
+      expect(requests[0].data, {
+        'client_id': 'enterprise-public-client',
+        'scope': 'read:user',
+      });
+      expect(requests[2].uri.path, '/api/v3/copilot_internal/v2/token');
+      expect(credentials['copilot_api_url'], 'https://ghe-api.example.com');
+      expect(credentials['copilot_proxy_url'], 'https://ghe-proxy.example.com');
+    },
+  );
+
   test('Cursor deep-control OAuth keeps PKCE verifier off the login URL', () {
     final session = LlmCursorOAuthSession.create(
       now: DateTime.utc(2026, 11, 3),

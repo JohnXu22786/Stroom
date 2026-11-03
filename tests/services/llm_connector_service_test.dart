@@ -19,6 +19,404 @@ import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test(
+    'Copilot connectors preserve model-specific protocols and auth ownership',
+    () {
+      for (final connectorId in ['github', 'ghe-copilot']) {
+        final connector = LlmConnectorRegistry.find(connectorId)!;
+        expect(connector.authTypes, {'oauth'});
+        expect(connector.canRefreshCredentials, isTrue);
+        expect(
+          LlmOAuthProviderPolicy.forProvider(connectorId).supported,
+          isTrue,
+        );
+        expect(
+          LlmConnectorRegistry.chatAdapterEndpointType(connectorId),
+          'openai',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(null, connectorType: connectorId),
+          kCustomHttpApiProtocols,
+        );
+      }
+
+      final github = _account(
+        'github-account',
+        'github',
+        authType: 'oauth',
+        models: [_upstreamModel('gpt-6-astra')],
+      );
+      final chat = LlmNativeRequestBuilder().build(
+        account: github,
+        credential: jsonEncode({
+          'access_token': 'github-oauth-token',
+          'copilot_token': 'github-copilot-token',
+        }),
+        modelId: 'gpt-6-astra',
+        body: const {'model': 'gpt-6-astra', 'messages': [], 'stream': true},
+        stream: true,
+      );
+      expect(
+        chat.uri.toString(),
+        'https://api.githubcopilot.com/chat/completions',
+      );
+      expect(chat.headers['Authorization'], 'Bearer github-copilot-token');
+      expect(chat.body, {
+        'model': 'gpt-6-astra',
+        'messages': [],
+        'stream': true,
+      });
+
+      final responses = LlmNativeRequestBuilder().build(
+        account: github,
+        credential: jsonEncode({
+          'access_token': 'github-oauth-token',
+          'copilot_token': 'github-copilot-token',
+        }),
+        modelId: 'gpt-6-astra',
+        body: const {'model': 'gpt-6-astra', 'input': [], 'stream': true},
+        stream: true,
+        nativeFormat: 'responses',
+      );
+      expect(
+        responses.uri.toString(),
+        'https://api.githubcopilot.com/responses',
+      );
+      final codexDefault = LlmNativeRequestBuilder().build(
+        account: _account(
+          'github-codex-account',
+          'github',
+          authType: 'oauth',
+          models: [
+            LlmUpstreamModel(
+              id: 'codex-model',
+              upstreamModelId: 'gpt-codex',
+              displayName: 'gpt-codex',
+              capabilities: const {
+                'supportedApiProtocols': ['openai.responses'],
+              },
+            ),
+          ],
+        ),
+        credential: jsonEncode({
+          'access_token': 'github-oauth-token',
+          'copilot_token': 'github-copilot-token',
+        }),
+        modelId: 'gpt-codex',
+        body: const {'input': []},
+      );
+      expect(
+        codexDefault.uri.toString(),
+        'https://api.githubcopilot.com/responses',
+      );
+
+      final claudeDefault = LlmNativeRequestBuilder().build(
+        account: _account(
+          'github-claude-account',
+          'github',
+          authType: 'oauth',
+          models: [
+            LlmUpstreamModel(
+              id: 'claude-model',
+              upstreamModelId: 'claude-sonnet-5',
+              displayName: 'claude-sonnet-5',
+              capabilities: const {
+                'supportedApiProtocols': ['anthropic.messages'],
+              },
+            ),
+          ],
+        ),
+        credential: jsonEncode({
+          'access_token': 'github-oauth-token',
+          'copilot_token': 'github-copilot-token',
+        }),
+        modelId: 'claude-sonnet-5',
+        body: const {'messages': []},
+      );
+      expect(
+        claudeDefault.uri.toString(),
+        'https://api.githubcopilot.com/v1/messages',
+      );
+
+      final enterprise = LlmNativeRequestBuilder().build(
+        account: _account(
+          'ghe-account',
+          'ghe-copilot',
+          authType: 'oauth',
+          endpointConfig: const {'gheUrl': 'https://ghe.example.com'},
+          models: [_upstreamModel('claude-sonnet-5')],
+        ),
+        credential: jsonEncode({
+          'access_token': 'enterprise-oauth-token',
+          'copilot_token': 'enterprise-copilot-token',
+          'copilot_api_url': 'https://ghe-api.example.com',
+        }),
+        modelId: 'claude-sonnet-5',
+        body: const {
+          'model': 'claude-sonnet-5',
+          'messages': [],
+          'stream': false,
+        },
+        stream: false,
+        nativeFormat: 'anthropic',
+      );
+      expect(
+        enterprise.uri.toString(),
+        'https://ghe-api.example.com/v1/messages',
+      );
+      expect(
+        enterprise.headers['Authorization'],
+        'Bearer enterprise-copilot-token',
+      );
+      expect(enterprise.body, {
+        'model': 'claude-sonnet-5',
+        'messages': [],
+        'stream': true,
+      });
+      expect(enterprise.headers['Accept'], 'text/event-stream');
+    },
+  );
+
+  test('expired Copilot token is renewed before Chat dispatch', () async {
+    RequestOptions? tokenRequest;
+    RequestOptions? oauthRefreshRequest;
+    var tokenCalls = 0;
+    final refreshDio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        if (options.method == 'POST') {
+          oauthRefreshRequest = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'refreshed-github-oauth-token',
+              'refresh_token': 'rotated-github-refresh-token',
+              'expires_in': 28800,
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        }
+        tokenRequest = options;
+        tokenCalls++;
+        if (tokenCalls == 1) {
+          return ResponseBody.fromString(
+            jsonEncode({'error': 'bad credentials'}),
+            401,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        }
+        return ResponseBody.fromString(
+          jsonEncode({
+            'token': 'fresh-copilot-token',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 30))
+                .toIso8601String(),
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final credentials = _MemoryCredentials();
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+      dio: refreshDio,
+    );
+    final account = await accounts.saveAccount(
+      _account(
+        'github-expired-copilot',
+        'github',
+        authType: 'oauth',
+        models: [_upstreamModel('gpt-6-astra')],
+      ),
+      secret: jsonEncode({
+        'access_token': 'github-oauth-token',
+        'refresh_token': 'github-refresh-token',
+        'copilot_token': 'expired-copilot-token',
+        'expires_at': DateTime.utc(2020).toIso8601String(),
+        'copilot_expires_at': DateTime.utc(2020).toIso8601String(),
+      }),
+    );
+    RequestOptions? chatRequest;
+    final chatDio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        chatRequest = options;
+        return ResponseBody.fromString(
+          '{"choices":[{"message":{"role":"assistant","content":"ok"}}]}',
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+
+    await LlmConnectorHttpClient(
+      accountService: accounts,
+      dio: chatDio,
+    ).request(
+      account: account,
+      modelId: 'gpt-6-astra',
+      body: const {'messages': []},
+    );
+
+    expect(
+      tokenRequest?.uri.toString(),
+      'https://api.github.com/copilot_internal/v2/token',
+    );
+    expect(tokenCalls, 2);
+    expect(
+      oauthRefreshRequest?.uri.toString(),
+      'https://github.com/login/oauth/access_token',
+    );
+    expect(oauthRefreshRequest?.data, {
+      'client_id': 'Iv1.b507a08c87ecfe98',
+      'grant_type': 'refresh_token',
+      'refresh_token': 'github-refresh-token',
+    });
+    expect(chatRequest?.headers['Authorization'], 'Bearer fresh-copilot-token');
+  });
+
+  test(
+    'Enterprise Copilot streaming responses are buffered for nonstream calls',
+    () async {
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'ghe-streaming-only',
+          'ghe-copilot',
+          authType: 'oauth',
+          endpointConfig: const {'gheUrl': 'https://ghe.example.com'},
+          models: [_upstreamModel('gpt-6-astra')],
+        ),
+        secret: jsonEncode({
+          'access_token': 'enterprise-oauth-token',
+          'copilot_token': 'enterprise-copilot-token',
+          'copilot_api_url': 'https://ghe-api.example.com',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+        }),
+      );
+      RequestOptions? request;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          request = options;
+          return ResponseBody.fromString(
+            'data: {"id":"chat-1","model":"gpt-6-astra","choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":null}]}\n\n'
+            'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+            'data: [DONE]\n\n',
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-6-astra',
+        body: const {'messages': [], 'stream': false},
+        stream: false,
+      );
+
+      expect(request?.headers['Accept'], 'text/event-stream');
+      expect(
+        (response.body as Map)['choices'][0]['message']['content'],
+        'hello',
+      );
+    },
+  );
+
+  test(
+    'Enterprise Responses SSE returns the completed Responses object',
+    () async {
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'ghe-responses-sse',
+          'ghe-copilot',
+          authType: 'oauth',
+          endpointConfig: const {'gheUrl': 'https://ghe.example.com'},
+          models: [
+            LlmUpstreamModel(
+              id: 'ghe-responses-model',
+              upstreamModelId: 'gpt-6-astra',
+              displayName: 'gpt-6-astra',
+              capabilities: const {
+                'supportedApiProtocols': ['openai.responses'],
+              },
+            ),
+          ],
+        ),
+        secret: jsonEncode({
+          'access_token': 'enterprise-oauth-token',
+          'copilot_token': 'enterprise-copilot-token',
+          'copilot_api_url': 'https://ghe-api.example.com',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+        }),
+      );
+      final completedResponse = {
+        'id': 'resp_123',
+        'object': 'response',
+        'status': 'completed',
+        'output': [
+          {
+            'type': 'message',
+            'content': [
+              {'type': 'output_text', 'text': 'hello'},
+            ],
+          },
+        ],
+      };
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((_) async {
+          return ResponseBody.fromString(
+            'event: response.completed\n'
+            'data: ${jsonEncode({
+                  'type': 'response.completed',
+                  'response': completedResponse
+                })}\n\n'
+            'data: [DONE]\n\n',
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-6-astra',
+        body: const {'input': []},
+        nativeFormat: 'responses',
+      );
+
+      expect(response.body, completedResponse);
+    },
+  );
+
   test('Cursor unsupported image forms get an inline-only user message', () {
     final error = AiGatewayExecutionException(
       kind: AiGatewayFailureKind.request,
@@ -9525,6 +9923,7 @@ LlmAccount _account(
   String id,
   String connector, {
   String authType = 'api_key',
+  Map<String, dynamic> endpointConfig = const {},
   List<LlmUpstreamModel> models = const [],
 }) =>
     LlmAccount(
@@ -9532,6 +9931,7 @@ LlmAccount _account(
       connectorType: connector,
       authType: authType,
       displayName: connector,
+      endpointConfig: endpointConfig,
       models: models,
     );
 
