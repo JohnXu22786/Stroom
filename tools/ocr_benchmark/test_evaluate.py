@@ -740,6 +740,47 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_table_fidelity_rejects_labeled_row_after_table(self):
+        expected = "Name | Value\nFirst | 1\nSecond | 2"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-trailing-labeled-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        valid_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": expected,
+                    }
+                ]
+            ),
+        )
+        extra_row_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": f"{expected}\nStatus: Ready | 99",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(valid_report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(
+            extra_row_report["metrics"]["table_fidelity"]["value"], 0
+        )
+
     def test_table_fidelity_rejects_extra_compact_row_with_wrong_width(self):
         expected = "A|B\nx|y"
         report = evaluate_predictions(

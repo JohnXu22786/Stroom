@@ -562,6 +562,47 @@ def _table_rows(
                 and is_table_context_row(lines[line_index + 1])
             )
 
+        def is_trailing_labeled_table_row(line_index: int) -> bool:
+            stripped = lines[line_index].strip()
+            if (
+                line_index != len(lines) - 1
+                or line_index == 0
+                or not has_prose_label(stripped)
+                or stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or not re.search(r"\s\|\s", stripped)
+            ):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            previous = lines[line_index - 1].strip()
+            if (
+                (column_count is not None and len(cells) != column_count)
+                or len(cells) < 2
+                or not is_table_context_row(previous)
+            ):
+                return False
+            previous_cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(previous)
+            )
+            if previous.startswith("|"):
+                previous_cells = previous_cells[1:]
+            if _has_unescaped_trailing_pipe(previous):
+                previous_cells = previous_cells[:-1]
+
+            # A numeric value in the final column distinguishes the OCR row
+            # from common adjacent prose such as "Set relation: x | y".
+            return (
+                len(previous_cells) == len(cells)
+                and re.fullmatch(r"[-+−]?\d+(?:[.,]\d+)*(?:%)?", cells[-1])
+                is not None
+                and re.fullmatch(
+                    r"[-+−]?\d+(?:[.,]\d+)*(?:%)?", previous_cells[-1]
+                )
+                is not None
+            )
+
         def is_one_sided_pipe_formula(line: str) -> bool:
             stripped = line.strip()
             return (
@@ -595,7 +636,9 @@ def _table_rows(
             )
             has_context_on_both_sides = has_table_context_on_both_sides(line_index)
             is_prose_label = (
-                has_prose_label(stripped) and not has_context_on_both_sides
+                has_prose_label(stripped)
+                and not has_context_on_both_sides
+                and not is_trailing_labeled_table_row(line_index)
             )
             raw_cells = _split_pipe_cells(stripped)
             has_leading_pipe = stripped.startswith("|")
