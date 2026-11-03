@@ -1071,7 +1071,9 @@ bool _legacyOcrHasCredentialUseContext(
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
   final shortNaturalWordEcho =
-      prefix.length < 8 && _legacyOcrCanRedactShortNaturalWordEcho(naturalWord);
+      prefix.length < 8 &&
+          _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) &&
+          !explicitCredentialTarget;
   final isNaturalContinuation = _legacyOcrHasNaturalAlphaContinuation(suffix);
   final isNaturalWordContinuation = _legacyOcrHasNaturalWordContinuation(
     prefix,

@@ -15149,6 +15149,76 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts documentation used as an API key under a short mask',
+      () {
+        const echoedCredential = 'documentation';
+        const instruction = 'Use documentation as the API key';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-as-api-key-short-mask',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer docu…'},
+            'body': {
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction =
+            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent!;
+
+        expect(retryInstruction, 'Use [redacted] as the API key');
+        expect(persisted, isNot(contains(echoedCredential)));
+        expect(persisted, isNot(contains('Bearer docu…')));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves ordinary documentation under the same short mask',
+      () {
+        const instruction = 'Please review the documentation carefully.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-prompt-short-mask',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer docu…'},
+            'body': {
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Bearer docu…')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves a natural line-broken documentation prompt under an open mask',
       () {
         const instruction = 'Please review the documentation\ncarefully';
