@@ -740,6 +740,127 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_table_fidelity_rejects_labeled_row_after_table(self):
+        expected = "Name | Value\nFirst | 1\nSecond | 2"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-trailing-labeled-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        valid_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": expected,
+                    }
+                ]
+            ),
+        )
+        extra_row_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": f"{expected}\nStatus: Ready | 99",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(valid_report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(
+            extra_row_report["metrics"]["table_fidelity"]["value"], 0
+        )
+
+    def test_table_fidelity_rejects_trailing_labeled_text_row_with_matching_shape(
+        self,
+    ):
+        expected = "Name | Status\nFirst | Active\nSecond | Ready"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-trailing-labeled-text-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-text-row",
+                        "text": f"{expected}\nStatus: Current | Done",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_accepts_annotated_trailing_labeled_row(self):
+        expected = "Name | Status\nFirst | Active\nStatus: Current | Done"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-annotated-trailing-labeled-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-annotated-trailing-labeled-row",
+                        "text": expected,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_annotated_labeled_prose_after_text_table(
+        self,
+    ):
+        table = "Name | Status\nFirst | Active\nSecond | Ready"
+        prose = "Set relation: x | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "text-table-with-labeled-prose",
+                        "gold_text": f"{table}\n{prose}",
+                        "table_text": table,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "text-table-with-labeled-prose",
+                        "text": f"{table}\n{prose}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
     def test_table_fidelity_rejects_extra_compact_row_with_wrong_width(self):
         expected = "A|B\nx|y"
         report = evaluate_predictions(

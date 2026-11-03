@@ -467,6 +467,7 @@ def _table_rows(
     *,
     allow_tsv: bool = False,
     matching_rows: set[tuple[str, ...]] | None = None,
+    known_prose_rows: set[tuple[str, ...]] | None = None,
     allow_unframed_shape_without_context: bool = False,
     allow_compact_pipe_row_without_context: bool = False,
     allow_markdown_separator_rows: bool = False,
@@ -562,6 +563,37 @@ def _table_rows(
                 and is_table_context_row(lines[line_index + 1])
             )
 
+        def is_trailing_labeled_table_row(line_index: int) -> bool:
+            stripped = lines[line_index].strip()
+            if (
+                line_index != len(lines) - 1
+                or line_index == 0
+                or not has_prose_label(stripped)
+                or stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or not re.search(r"\s\|\s", stripped)
+            ):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            previous = lines[line_index - 1].strip()
+            if (
+                cells in (known_prose_rows or set())
+                or (column_count is not None and len(cells) != column_count)
+                or len(cells) < 2
+                or not is_table_context_row(previous)
+            ):
+                return False
+            previous_cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(previous)
+            )
+            if previous.startswith("|"):
+                previous_cells = previous_cells[1:]
+            if _has_unescaped_trailing_pipe(previous):
+                previous_cells = previous_cells[:-1]
+            return len(previous_cells) == len(cells)
+
         def is_one_sided_pipe_formula(line: str) -> bool:
             stripped = line.strip()
             return (
@@ -595,7 +627,9 @@ def _table_rows(
             )
             has_context_on_both_sides = has_table_context_on_both_sides(line_index)
             is_prose_label = (
-                has_prose_label(stripped) and not has_context_on_both_sides
+                has_prose_label(stripped)
+                and not has_context_on_both_sides
+                and not is_trailing_labeled_table_row(line_index)
             )
             raw_cells = _split_pipe_cells(stripped)
             has_leading_pipe = stripped.startswith("|")
@@ -768,12 +802,26 @@ def _table_matches(
     actual: str,
     output_format: str,
     formula_text: str | None = None,
+    gold_text: str | None = None,
 ) -> bool:
     allow_tsv = output_format == "plain_text"
     expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
     if not expected_rows:
         return normalize_text(expected) in normalize_text(actual)
     expected_column_count = max(len(row) for row in expected_rows)
+    known_prose_rows = set()
+    if gold_text is not None:
+        for line in gold_text.splitlines():
+            stripped = line.strip()
+            raw_cells = _split_pipe_cells(stripped)
+            if stripped.startswith("|"):
+                raw_cells = raw_cells[1:]
+            if _has_unescaped_trailing_pipe(stripped):
+                raw_cells = raw_cells[:-1]
+            if len(raw_cells) > 1:
+                known_prose_rows.add(
+                    tuple(normalize_text(cell) for cell in raw_cells)
+                )
     if formula_text:
         canonical_formula = _canonical_formula(formula_text, output_format)
         strip_markdown_markup = output_format in {"markdown", "table"}
@@ -807,6 +855,7 @@ def _table_matches(
                     expected_column_count,
                     allow_tsv=allow_tsv,
                     matching_rows=set(expected_rows),
+                    known_prose_rows=known_prose_rows,
                     allow_markdown_separator_rows=True,
                     prefer_markdown_separator_rows=(
                         output_format in {"markdown", "table"}
@@ -821,6 +870,7 @@ def _table_matches(
         expected_column_count,
         allow_tsv=allow_tsv,
         matching_rows=set(expected_rows),
+        known_prose_rows=known_prose_rows,
         allow_markdown_separator_rows=True,
         prefer_markdown_separator_rows=(
             output_format in {"markdown", "table"}
@@ -1582,6 +1632,7 @@ def _exact_snippet_metric(
                 text,
                 output_format,
                 formula_text=fixture.get("formula_text"),
+                gold_text=fixture.get("gold_text"),
             )
         else:
             expected = _canonical_formula(fixture[field], output_format)
