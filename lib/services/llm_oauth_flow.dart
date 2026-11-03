@@ -70,6 +70,11 @@ class LlmOAuthProviderPolicy {
       supported: true,
     ),
     'devin': LlmOAuthProviderPolicy._(providerId: 'devin', supported: true),
+    'cline': LlmOAuthProviderPolicy._(providerId: 'cline', supported: true),
+    'clinepass': LlmOAuthProviderPolicy._(
+      providerId: 'clinepass',
+      supported: true,
+    ),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
       supported: false,
@@ -366,6 +371,7 @@ class LlmOAuthAuthorizationAttempt {
   final bool _isClaudeCode;
   final bool _isDevin;
   final bool _isQoder;
+  final bool _isCline;
   var _consumed = false;
 
   LlmOAuthAuthorizationAttempt._({
@@ -379,9 +385,11 @@ class LlmOAuthAuthorizationAttempt {
     bool isClaudeCode = false,
     bool isDevin = false,
     bool isQoder = false,
+    bool isCline = false,
   })  : _isClaudeCode = isClaudeCode,
         _isDevin = isDevin,
-        _isQoder = isQoder;
+        _isQoder = isQoder,
+        _isCline = isCline;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,
@@ -547,6 +555,30 @@ class LlmOAuthAuthorizationAttempt {
     );
   }
 
+  /// Cline's WorkOS flow returns its token bundle in the authorization code.
+  /// The source accepts caller-supplied callback paths, so bind each attempt to
+  /// a fresh loopback path nonce without adding an unsupported query field.
+  static String newClineCallbackPath() => '/auth/callback/${_secureValue()}';
+
+  factory LlmOAuthAuthorizationAttempt.cline({required Uri redirectUri}) {
+    final pathNonce = _clineCallbackPathNonce(redirectUri.path);
+    _validateLoopbackRedirect(redirectUri, redirectUri.path);
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https('api.cline.bot', '/api/v1/auth/authorize', {
+        'client_type': 'extension',
+        'callback_url': redirectUri.toString(),
+        'redirect_uri': redirectUri.toString(),
+      }),
+      state: pathNonce,
+      nonce: '',
+      codeVerifier: '',
+      existingClientId: null,
+      isOpenAiRegistration: false,
+      isCline: true,
+    );
+  }
+
   /// Qoder's administrator-configured authorization-code flow has no PKCE
   /// contract. Its source uses these fixed phone-login parameters and the
   /// app's validated loopback redirect plus one-use state.
@@ -605,14 +637,20 @@ class LlmOAuthAuthorizationAttempt {
 
   LlmOAuthCallbackResult consumeCallback(Uri callbackUri) {
     if (_consumed) throw const LlmOAuthFlowException();
-    if (!_sameCallbackTarget(callbackUri, redirectUri)) {
+    if (!_sameCallbackTarget(callbackUri, redirectUri) ||
+        (_isCline &&
+            !_constantTimeEquals(
+              _clineCallbackPathNonce(callbackUri.path),
+              state,
+            ))) {
       throw const LlmOAuthFlowException();
     }
     final query = callbackUri.queryParametersAll;
     final states = query['state'];
-    if (states == null ||
-        states.length != 1 ||
-        !_constantTimeEquals(states.single, state)) {
+    if (!_isCline &&
+        (states == null ||
+            states.length != 1 ||
+            !_constantTimeEquals(states.single, state))) {
       throw const LlmOAuthFlowException();
     }
     _consumed = true;
@@ -644,6 +682,7 @@ class LlmOAuthAuthorizationAttempt {
     final returnedClientId = clientIds?.single;
     final clientId = returnedClientId ?? existingClientId;
     if (!_isDevin &&
+        !_isCline &&
         (clientId == null ||
             clientId.trim().isEmpty ||
             clientId == openAiDynamicClientId ||
@@ -699,6 +738,14 @@ class LlmOAuthAuthorizationAttempt {
           (expected.path.isEmpty && value.path == '/')) &&
       value.userInfo.isEmpty &&
       !value.hasFragment;
+
+  static String _clineCallbackPathNonce(String path) {
+    final match = RegExp(
+      r'^/auth/callback/([A-Za-z0-9_-]{43})$',
+    ).firstMatch(path);
+    if (match == null) throw const LlmOAuthFlowException();
+    return match.group(1)!;
+  }
 
   static bool _constantTimeEquals(String left, String right) {
     if (left.length != right.length) return false;

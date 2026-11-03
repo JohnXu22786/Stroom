@@ -1396,6 +1396,18 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'cline' && type == 'oauth') {
+    return 'Cline WorkOS OAuth';
+  }
+  if (connectorType == 'clinepass' && type == 'oauth') {
+    return 'ClinePass via Cline OAuth';
+  }
+  if (connectorType == 'cline' && type == 'api_key') {
+    return 'Cline API Key';
+  }
+  if (connectorType == 'clinepass' && type == 'api_key') {
+    return 'ClinePass API Key';
+  }
   if (connectorType == 'openference' && type == 'oauth') {
     return 'Openference OAuth';
   }
@@ -1928,7 +1940,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _models.text = _authType == 'none'
                           ? kKiloCodeAnonymousFreeModelIds.join('\n')
                           : kPinnedKiloCodeModels.join('\n');
-                    } else if (previousConnectorType == 'kimi-coding') {
+                    } else if (value == 'cline') {
+                      _models.text = kPinnedClineModels.join('\n');
+                    } else if (value == 'clinepass') {
+                      _models.text = kPinnedClinePassModels.join('\n');
+                    } else if (previousConnectorType == 'kimi-coding' ||
+                        previousConnectorType == 'cline' ||
+                        previousConnectorType == 'clinepass') {
                       _models.clear();
                     } else if (previousConnectorType == 'kilocode') {
                       _models.clear();
@@ -1971,6 +1989,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _models.text = _authType == 'none'
                           ? kKiloCodeAnonymousFreeModelIds.join('\n')
                           : kPinnedKiloCodeModels.join('\n');
+                    } else if (_connectorType == 'cline') {
+                      _models.text = kPinnedClineModels.join('\n');
+                    } else if (_connectorType == 'clinepass') {
+                      _models.text = kPinnedClinePassModels.join('\n');
                     }
                   });
                 },
@@ -2034,6 +2056,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   padding: EdgeInsets.only(top: 6),
                   child: Text(
                     'API Key 可添加为多个独立连接并通过模型组轮询。匿名模式只显示并调用已确认的免费模型；不会使用账号目录。',
+                  ),
+                ),
+              if (_connectorType == 'cline' || _connectorType == 'clinepass')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '每个 Cline API Key 需保存为独立账号。模型目录按 Cline 或 ClinePass 分开刷新；目录本身不代表账号拥有订阅授权。',
                   ),
                 ),
               if (_connectorType == 'devin-cli-agentic')
@@ -2194,13 +2223,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 enabled: _connectorType != 'devin-cli-agentic' &&
                     _connectorType != 'command-code' &&
                     _connectorType != 'qoder' &&
-                    _connectorType != 'kilocode',
+                    _connectorType != 'kilocode' &&
+                    _connectorType != 'cline' &&
+                    _connectorType != 'clinepass',
                 decoration: InputDecoration(
-                  labelText: _connectorType == 'kilocode'
-                      ? 'Kilo Code 使用固定服务端点'
-                      : _connectorType == 'qoder'
-                          ? 'Qoder 使用固定服务端点'
-                          : '端点地址（连接器需要时填写）',
+                  labelText:
+                      _connectorType == 'cline' || _connectorType == 'clinepass'
+                          ? 'Cline 使用固定服务端点'
+                          : _connectorType == 'kilocode'
+                              ? 'Kilo Code 使用固定服务端点'
+                              : _connectorType == 'qoder'
+                                  ? 'Qoder 使用固定服务端点'
+                                  : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
@@ -2213,6 +2247,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       '留空以使用此账号类型的官方模型目录和 API 端点。',
                     'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
                     'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
+                    'cline' ||
+                    'clinepass' =>
+                      '使用 Cline 的固定 HTTPS Chat Completions 端点。',
                     _ => null,
                   },
                 ),
@@ -2395,7 +2432,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType == 'grok-cli' ||
                     _connectorType == 'xai-oauth' ||
                     _connectorType == 'muse-code' ||
-                    _connectorType == 'command-code',
+                    _connectorType == 'command-code' ||
+                    _connectorType == 'cline' ||
+                    _connectorType == 'clinepass',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
@@ -2415,14 +2454,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                           ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
                                           : _connectorType == 'muse-code'
                                               ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                              : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                                              : _connectorType == 'cline' ||
+                                                      _connectorType ==
+                                                          'clinepass'
+                                                  ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
+                                                  : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
                 onChanged: _connectorType == 'devin-cli-agentic' ||
                         _connectorType == 'kimi-coding' ||
                         _connectorType == 'kilocode' ||
                         _connectorType == 'grok-cli' ||
                         _connectorType == 'xai-oauth' ||
-                        _connectorType == 'muse-code'
+                        _connectorType == 'muse-code' ||
+                        _connectorType == 'cline' ||
+                        _connectorType == 'clinepass'
                     ? null
                     : (_) => setState(() => _draftChanged = true),
               ),
@@ -2808,11 +2853,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     } else {
       endpointConfig['baseUrl'] = endpoint;
     }
-    if (_connectorType == 'command-code') {
+    if (_connectorType == 'command-code' ||
+        _connectorType == 'cline' ||
+        _connectorType == 'clinepass') {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
-      endpointConfig['apiProtocol'] = _apiProtocol;
+      if (_connectorType == 'command-code') {
+        endpointConfig['apiProtocol'] = _apiProtocol;
+      }
     } else if (widget.account?.connectorType == 'command-code') {
       endpointConfig.remove('apiProtocol');
     }

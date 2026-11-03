@@ -450,6 +450,22 @@ abstract final class LlmConnectorRegistry {
       modelCatalog: kPinnedOpenferenceModels,
     ),
     LlmConnectorDefinition(
+      id: 'cline',
+      displayName: 'Cline',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth', 'api_key'},
+      modelCatalog: kPinnedClineModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'clinepass',
+      displayName: 'ClinePass',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth', 'api_key'},
+      modelCatalog: kPinnedClinePassModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
       id: 'codebuddy-cn',
       displayName: 'CodeBuddy（中国）',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -660,6 +676,8 @@ abstract final class LlmConnectorRegistry {
         'xai-oauth' ||
         'openference' ||
         'openference-api' ||
+        'cline' ||
+        'clinepass' ||
         'meta' ||
         'muse-code' ||
         'codebuddy-cn' ||
@@ -1509,6 +1527,8 @@ class LlmAccountConnectorService {
       'kilocode',
       'openference',
       'openference-api',
+      'cline',
+      'clinepass',
       'bedrock',
       'vertex',
       'ollama',
@@ -1580,13 +1600,32 @@ class LlmAccountConnectorService {
       try {
         discovered = await _discoverRemoteModels(account);
       } catch (_) {
+        if (account.connectorType == 'cline' ||
+            account.connectorType == 'clinepass') {
+          final catalog = account.connectorType == 'cline'
+              ? kPinnedClineModels
+              : kPinnedClinePassModels;
+          return _mergeFallbackModelMappings([
+            for (final (index, modelId) in catalog.indexed)
+              LlmUpstreamModel(
+                id: '${account.id}:cline-fallback:$index',
+                upstreamModelId: modelId,
+                displayName: modelId,
+                capabilities: const {'chat': true, 'streaming': true},
+                config: const {
+                  'catalogSource': 'provider-fallback',
+                  'availability': 'unknown',
+                },
+              ),
+          ], account.models);
+        }
         if (!{
           'openference',
           'openference-api',
         }.contains(account.connectorType)) {
           rethrow;
         }
-        return _mergeOpenferenceFallbackMappings([
+        return _mergeFallbackModelMappings([
           for (var index = 0; index < connector.modelCatalog.length; index++)
             LlmUpstreamModel(
               id: '${account.id}:openference-fallback:$index',
@@ -1678,7 +1717,7 @@ class LlmAccountConnectorService {
     return List.unmodifiable(merged.values);
   }
 
-  static List<LlmUpstreamModel> _mergeOpenferenceFallbackMappings(
+  static List<LlmUpstreamModel> _mergeFallbackModelMappings(
     List<LlmUpstreamModel> fallback,
     List<LlmUpstreamModel> configured,
   ) {
@@ -1836,6 +1875,15 @@ class LlmAccountConnectorService {
       if (_firstString(updated, const ['refresh_token', 'refreshToken']) ==
           null) {
         updated['refresh_token'] = refreshToken;
+      }
+      if (account.connectorType == 'cline' ||
+          account.connectorType == 'clinepass') {
+        final sourceExpiry = _firstString(tokenResponse, const [
+          'expiresAt',
+          'expires_at',
+        ]);
+        if (sourceExpiry != null) updated['expires_at'] = sourceExpiry;
+        updated['oauth_contract'] = 'cline-workos-v1';
       }
       final expiresIn = tokenResponse?['expires_in'] ??
           tokenResponse?['expiresIn'] ??
@@ -2181,6 +2229,17 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
+      case 'cline' || 'clinepass':
+        return _LlmTokenRefreshRequest(
+          uri: Uri.parse('https://api.cline.bot/api/v1/auth/refresh'),
+          body: {
+            'refreshToken': refreshToken,
+            'grantType': 'refresh_token',
+            'clientType': 'extension',
+          },
+          contentType: Headers.jsonContentType,
+          headers: const {'Accept': 'application/json'},
+        );
       case 'gemini' || 'aistudio':
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
         final clientSecret = _firstString(bundle, const [
@@ -2361,6 +2420,10 @@ class LlmAccountConnectorService {
         account.connectorType == 'gemini-interactions';
     if (account.connectorType == 'bedrock') {
       return _discoverBedrockModels(account);
+    }
+    if (account.connectorType == 'cline' ||
+        account.connectorType == 'clinepass') {
+      return _discoverClineModels(account);
     }
     final fallbackBase = switch (account.connectorType) {
       'openai-api' => 'https://api.openai.com/v1',
@@ -2888,6 +2951,109 @@ class LlmAccountConnectorService {
     } catch (_) {
       throw const LlmAccountConnectorException();
     }
+  }
+
+  Future<List<LlmUpstreamModel>> _discoverClineModels(
+    LlmAccount account,
+  ) async {
+    const modelsUri = 'https://api.cline.bot/api/v1/ai/cline/models';
+    const recommendedUri =
+        'https://api.cline.bot/api/v1/ai/cline/recommended-models';
+    final options = Options(
+      headers: const {'Accept': 'application/json'},
+      receiveTimeout: const Duration(seconds: 5),
+    );
+    final recommendedResponse = await _dio.getUri<Object?>(
+      Uri.parse(recommendedUri),
+      options: options,
+    );
+    final recommended = _asJsonMap(recommendedResponse.data);
+    if (recommended == null) throw const LlmAccountConnectorException();
+
+    final candidates = <Map<String, dynamic>>[];
+    if (account.connectorType == 'clinepass') {
+      final bucket = recommended['clinePass'];
+      if (bucket is List) {
+        candidates.addAll(
+          bucket.whereType<Map>().map(Map<String, dynamic>.from),
+        );
+      }
+    } else {
+      for (final bucketName in ['recommended', 'free']) {
+        final bucket = recommended[bucketName];
+        if (bucket is List) {
+          candidates.addAll(
+            bucket.whereType<Map>().map(Map<String, dynamic>.from),
+          );
+        }
+      }
+      final fullResponse = await _dio.getUri<Object?>(
+        Uri.parse(modelsUri),
+        options: options,
+      );
+      final full = _asJsonMap(fullResponse.data);
+      final rawFull = fullResponse.data is List
+          ? fullResponse.data
+          : full?['data'] ?? full?['models'];
+      if (rawFull is List) {
+        for (final raw in rawFull.whereType<Map>()) {
+          final model = Map<String, dynamic>.from(raw);
+          final architecture = model['architecture'];
+          final modality =
+              architecture is Map ? architecture['modality'] : null;
+          if (modality is String &&
+              modality.toLowerCase().split('->').last.trim() == 'text') {
+            candidates.add(model);
+          }
+        }
+      }
+    }
+
+    final seen = <String>{};
+    final models = <LlmUpstreamModel>[];
+    for (final candidate in candidates) {
+      final rawId = candidate['id'];
+      if (rawId is! String || rawId.trim().isEmpty) continue;
+      final modelId = rawId.trim();
+      if (account.connectorType == 'clinepass'
+          ? !modelId.startsWith('cline-pass/')
+          : modelId.startsWith('cline-pass/')) {
+        continue;
+      }
+      if (!seen.add(modelId)) continue;
+      final name = candidate['name'];
+      models.add(
+        LlmUpstreamModel(
+          id: '${account.id}:cline:${models.length}',
+          upstreamModelId: modelId,
+          displayName:
+              name is String && name.trim().isNotEmpty ? name.trim() : modelId,
+          capabilities: const {'chat': true, 'streaming': true},
+          config: const {
+            'catalogSource': 'cline-public-catalog',
+            'availability': 'account-dependent',
+          },
+        ),
+      );
+    }
+    if (models.isNotEmpty) return List.unmodifiable(models);
+
+    final fallback = account.connectorType == 'cline'
+        ? kPinnedClineModels
+        : kPinnedClinePassModels;
+    return List.unmodifiable([
+      for (final (index, modelId) in fallback.indexed)
+        LlmUpstreamModel(
+          id: '${account.id}:cline-fallback:$index',
+          upstreamModelId: modelId,
+          displayName: modelId,
+          capabilities: const {'chat': true, 'streaming': true},
+          config: const {
+            'catalogSource': 'provider-fallback',
+            'availability': 'unknown',
+          },
+        ),
+    ]);
   }
 
   Future<List<LlmUpstreamModel>> _discoverBedrockModels(
@@ -4059,6 +4225,9 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        ((account.connectorType == 'cline' ||
+                account.connectorType == 'clinepass') &&
+            nativeFormat != null) ||
         (account.connectorType == 'qoder' && account.authType == 'pat') ||
         (stream &&
             account.connectorType == 'devin' &&
@@ -4247,6 +4416,24 @@ class LlmNativeRequestBuilder {
       case 'xai-oauth':
         headers['Authorization'] = 'Bearer $secret';
         break;
+      case 'cline' || 'clinepass':
+        final token =
+            account.authType == 'oauth' && !secret.startsWith('workos:')
+                ? 'workos:$secret'
+                : secret;
+        headers['Authorization'] = 'Bearer $token';
+        headers.addAll({
+          'HTTP-Referer': 'https://cline.bot',
+          'X-Title': 'Cline',
+          'User-Agent': 'Cline/Stroom',
+          'X-IS-MULTIROOT': 'false',
+          'X-CLIENT-TYPE': 'stroom',
+          'X-CLIENT-VERSION': '0.6',
+          'X-PLATFORM': 'Stroom',
+          'X-PLATFORM-VERSION': '0.6',
+          'X-CORE-VERSION': 'Stroom',
+        });
+        break;
       case 'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy':
         headers['Authorization'] = 'Bearer $secret';
         _addTencentClientHeaders(
@@ -4316,9 +4503,12 @@ class LlmNativeRequestBuilder {
     if (nativeFormat == 'anthropic') {
       headers.putIfAbsent('anthropic-version', () => '2023-06-01');
     }
-    if (stream && account.connectorType == 'bedrock') {
+    final upstreamStream = stream ||
+        account.connectorType == 'cline' ||
+        account.connectorType == 'clinepass';
+    if (upstreamStream && account.connectorType == 'bedrock') {
       headers['Accept'] = 'application/vnd.amazon.eventstream';
-    } else if (stream && account.connectorType != 'devin') {
+    } else if (upstreamStream && account.connectorType != 'devin') {
       headers['Accept'] = 'text/event-stream';
     }
 
@@ -4354,7 +4544,7 @@ class LlmNativeRequestBuilder {
                             account: account,
                             config: config,
                             body: body,
-                            stream: stream,
+                            stream: upstreamStream,
                             nativeFormat: nativeFormat,
                           );
 
@@ -4486,6 +4676,8 @@ class LlmNativeRequestBuilder {
         'openai-api' ||
         'openference' ||
         'openference-api' ||
+        'cline' ||
+        'clinepass' ||
         'opencode-go' ||
         'opencode-zen' ||
         'moonshot' ||
@@ -4759,6 +4951,9 @@ class LlmNativeRequestBuilder {
       case 'xai-oauth':
         baseUrl = _baseUrl(config, 'https://api.x.ai/v1');
         path = '/responses';
+      case 'cline' || 'clinepass':
+        baseUrl = 'https://api.cline.bot/api/v1';
+        path = '/chat/completions';
       case 'codebuddy-cn' || 'codebuddy-intl':
         baseUrl = _baseUrl(
           config,
@@ -4968,6 +5163,8 @@ class LlmNativeRequestBuilder {
         account.connectorType == 'qwen-cloud' ||
             account.connectorType == 'qwen-cloud-token-plan';
     final base = account.connectorType == 'openai-compatibility' ||
+            account.connectorType == 'cline' ||
+            account.connectorType == 'clinepass' ||
             usesProtocolSpecificQwenBase
         ? baseUrl
         : _baseUrl(config, baseUrl);
@@ -5132,6 +5329,7 @@ class LlmNativeRequestBuilder {
       'workbuddy' => host == 'www.workbuddy.ai',
       'qoder' => host == 'dashscope.aliyuncs.com',
       'kilocode' => host == 'api.kilo.ai',
+      'cline' || 'clinepass' => host == 'api.cline.bot',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
       'meta' || 'muse-code' => host == 'api.meta.ai',

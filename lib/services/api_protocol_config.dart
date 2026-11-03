@@ -123,6 +123,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' || 'qoder' => const {
         'openai.chat_completions'
       },
+    'cline' || 'clinepass' => const {'openai.chat_completions'},
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||

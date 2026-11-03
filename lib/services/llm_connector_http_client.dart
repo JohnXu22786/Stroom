@@ -419,6 +419,8 @@ class LlmConnectorHttpClient {
                   'codebuddy-cn',
                   'codebuddy-intl',
                   'workbuddy',
+                  'cline',
+                  'clinepass',
                 }.contains(storedAccount.connectorType) &&
                 (response.headers
                         .value('content-type')

@@ -18,6 +18,313 @@ import 'package:stroom/services/aws_sigv4.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test('Cline and ClinePass register distinct OAuth and direct-key owners', () {
+    for (final connectorId in ['cline', 'clinepass']) {
+      final connector = LlmConnectorRegistry.find(connectorId)!;
+      expect(connector.authTypes, {'oauth', 'api_key'});
+      expect(connector.protocol, LlmNativeProtocol.openAIChatCompletions);
+      expect(connector.canRefreshCredentials, isTrue);
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType(connectorId),
+        'openai',
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          connectorId,
+          'oauth',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          connectorId,
+          'api_key',
+        ),
+        isTrue,
+      );
+      expect(LlmOAuthProviderPolicy.forProvider(connectorId).supported, isTrue);
+      expect(
+        builtinDefaultApiProtocolForConnector(connectorId),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(null, connectorType: connectorId),
+        {'openai.chat_completions'},
+      );
+    }
+  });
+
+  test(
+    'Cline and ClinePass discovery keeps their separate live model buckets',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path.endsWith('/models')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'provider/paid-model',
+                    'name': 'Paid Model',
+                    'architecture': {'modality': 'text->text'},
+                  },
+                  {
+                    'id': 'provider/image-model',
+                    'architecture': {'modality': 'text->image'},
+                  },
+                  {
+                    'id': 'cline-pass/subscription-model',
+                    'architecture': {'modality': 'text->text'},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'recommended': [
+                {'id': 'provider/recommended', 'name': 'Recommended'},
+              ],
+              'free': [
+                {'id': 'cline-free/free-model', 'name': 'Free'},
+              ],
+              'clinePass': [
+                {'id': 'cline-pass/subscription-model', 'name': 'Pass Model'},
+                {'id': 'provider/wrong-bucket'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final cline = await service.saveAccount(
+        _account('cline-account', 'cline', authType: 'api_key'),
+        secret: 'cline-private-key',
+      );
+      final clinepass = await service.saveAccount(
+        _account('clinepass-account', 'clinepass', authType: 'api_key'),
+        secret: 'clinepass-private-key',
+      );
+
+      final clineModels = await service.discoverModels(
+        cline,
+        refreshRemote: true,
+      );
+      final clinepassModels = await service.discoverModels(
+        clinepass,
+        refreshRemote: true,
+      );
+
+      expect(cline.connectorType, 'cline');
+      expect(clinepass.connectorType, 'clinepass');
+      expect(clineModels.map((model) => model.upstreamModelId), [
+        'provider/recommended',
+        'cline-free/free-model',
+        'provider/paid-model',
+      ]);
+      expect(
+        clineModels.every((model) => model.capabilities['chat'] == true),
+        isTrue,
+      );
+      expect(
+        clineModels.any(
+          (model) => model.upstreamModelId.startsWith('cline-pass/'),
+        ),
+        isFalse,
+      );
+      expect(clinepassModels.map((model) => model.upstreamModelId), [
+        'cline-pass/subscription-model',
+      ]);
+      expect(requests.map((request) => request.uri.path), [
+        '/api/v1/ai/cline/recommended-models',
+        '/api/v1/ai/cline/models',
+        '/api/v1/ai/cline/recommended-models',
+      ]);
+      expect(
+        requests.every((request) => request.headers['Authorization'] == null),
+        isTrue,
+      );
+      expect(clineModels.toString(), isNot(contains('cline-private-key')));
+    },
+  );
+
+  test(
+      'Cline fallback models retain unknown availability after catalog failure',
+      () async {
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+      dio: dio,
+    );
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'cline-offline-catalog',
+        connectorType: 'cline',
+        authType: 'api_key',
+        displayName: 'Cline offline catalog',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'saved-cline-model',
+            upstreamModelId: kPinnedClineModels.first,
+            displayName: 'Saved name',
+            capabilities: const {'chat': true},
+            config: const {'availability': 'entitled', 'userSetting': 'keep'},
+          ),
+        ],
+      ),
+      secret: 'cline-private-key',
+    );
+
+    final discovered =
+        await service.discoverModels(account, refreshRemote: true);
+    final fallback = discovered.singleWhere(
+      (model) => model.upstreamModelId == kPinnedClineModels.first,
+    );
+
+    expect(fallback.id, 'saved-cline-model');
+    expect(fallback.displayName, 'Saved name');
+    expect(fallback.config['availability'], 'unknown');
+    expect(fallback.config['catalogSource'], 'provider-fallback');
+    expect(fallback.config['userSetting'], 'keep');
+  });
+
+  test('Cline auth shapes route only to streaming Chat Completions', () {
+    final builder = LlmNativeRequestBuilder();
+    for (final (connectorId, authType, credential, expectedAuthorization) in [
+      (
+        'cline',
+        'oauth',
+        jsonEncode({'access_token': 'oauth-secret'}),
+        'Bearer workos:oauth-secret',
+      ),
+      ('cline', 'api_key', 'cline-key-secret', 'Bearer cline-key-secret'),
+      (
+        'clinepass',
+        'oauth',
+        jsonEncode({'access_token': 'pass-oauth-secret'}),
+        'Bearer workos:pass-oauth-secret',
+      ),
+      (
+        'clinepass',
+        'api_key',
+        'clinepass-key-secret',
+        'Bearer clinepass-key-secret',
+      ),
+    ]) {
+      final request = builder.build(
+        account: _account(
+          'request-$connectorId-$authType',
+          connectorId,
+          authType: authType,
+        ),
+        credential: credential,
+        modelId: 'provider/model',
+        body: const {
+          'model': 'provider/model',
+          'messages': [],
+          'stream': false,
+        },
+      );
+      expect(
+        request.uri.toString(),
+        'https://api.cline.bot/api/v1/chat/completions',
+      );
+      expect(request.headers['Accept'], 'text/event-stream');
+      expect((request.body as Map)['stream'], isTrue);
+      expect(request.headers['Authorization'], expectedAuthorization);
+      expect(request.headers['HTTP-Referer'], 'https://cline.bot');
+      expect(request.headers['X-Title'], 'Cline');
+      expect(request.toString(), isNot(contains('secret')));
+    }
+    expect(
+      () => builder.build(
+        account: _account('cline-responses', 'cline', authType: 'api_key'),
+        credential: 'cline-key-secret',
+        modelId: 'provider/model',
+        body: const {'model': 'provider/model', 'messages': []},
+        nativeFormat: 'responses',
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+  });
+
+  test(
+    'Cline OAuth refresh uses the WorkOS grant and stores rotated refresh token',
+    () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': {
+                'accessToken': 'fresh-cline-access',
+                'refreshToken': 'fresh-cline-refresh',
+                'expiresAt': '2026-11-04T12:00:00Z',
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final credentials = _MemoryCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account('cline-refresh', 'cline', authType: 'oauth'),
+        secret: jsonEncode({
+          'access_token': 'old-cline-access',
+          'refresh_token': 'old-cline-refresh',
+        }),
+      );
+
+      expect(await service.refreshCredential(account), isTrue);
+
+      expect(
+        captured?.uri.toString(),
+        'https://api.cline.bot/api/v1/auth/refresh',
+      );
+      expect(captured?.method, 'POST');
+      expect(captured?.contentType, Headers.jsonContentType);
+      expect(captured?.data, {
+        'refreshToken': 'old-cline-refresh',
+        'grantType': 'refresh_token',
+        'clientType': 'extension',
+      });
+      final stored = jsonDecode(
+        await service.readCredential(account.id) ?? '{}',
+      );
+      expect(stored['access_token'], 'fresh-cline-access');
+      expect(stored['refresh_token'], 'fresh-cline-refresh');
+    },
+  );
+
   test(
     'Qoder PAT model discovery uses qodercli with the account token',
     () async {
@@ -839,8 +1146,9 @@ void main() {
         expect(savedGlm.config['availability'], 'unknown');
         expect(savedGlm.config['catalogSource'], 'provider-fallback');
         expect(
-          models
-              .singleWhere((model) => model.upstreamModelId == 'custom-model'),
+          models.singleWhere(
+            (model) => model.upstreamModelId == 'custom-model',
+          ),
           isNotNull,
         );
         expect(
@@ -6134,6 +6442,61 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('buffers Cline streaming output for completed-response callers',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            'data: {"id":"cline-completion","model":"provider/model","choices":[{"index":0,"delta":{"content":"answer"},"finish_reason":null}]}\n\n'
+            'data: {"id":"cline-completion","model":"provider/model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+            'data: [DONE]\n\n',
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('cline-buffer', 'cline', authType: 'oauth'),
+        secret: jsonEncode({'access_token': 'cline-private-token'}),
+      );
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'provider/model',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+          'stream': false,
+        },
+      );
+
+      expect(
+        captured?.uri.toString(),
+        'https://api.cline.bot/api/v1/chat/completions',
+      );
+      expect(captured?.headers['Authorization'],
+          'Bearer workos:cline-private-token');
+      expect(captured?.headers['Accept'], 'text/event-stream');
+      expect(captured?.data['stream'], isTrue);
+      expect(response.body, isA<Map>());
+      expect(
+        (response.body as Map)['choices'].first['message']['content'],
+        'answer',
+      );
+      expect(response.toString(), isNot(contains('cline-private-token')));
+    });
+
     test(
       'buffers CodeBuddy SSE when the caller requests a completed response',
       () async {

@@ -605,12 +605,15 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isDevin = account.connectorType == 'devin';
       final isQoder = account.connectorType == 'qoder';
       final isOpenference = account.connectorType == 'openference';
+      final isCline = account.connectorType == 'cline' ||
+          account.connectorType == 'clinepass';
       if (!isOpenAi &&
           !isGemini &&
           !isClaude &&
           !isDevin &&
           !isQoder &&
-          !isOpenference) {
+          !isOpenference &&
+          !isCline) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -621,14 +624,17 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       }
       if (kIsWeb) throw const AiGatewayOAuthException();
 
+      final callbackPath = isCline
+          ? LlmOAuthAuthorizationAttempt.newClineCallbackPath()
+          : isGemini
+              ? '/'
+              : isOpenference
+                  ? '/callback'
+                  : isClaude || isDevin
+                      ? '/callback'
+                      : '/auth/callback';
       listener = await LlmOAuthLoopback.bind(
-        isGemini
-            ? '/'
-            : isOpenference
-                ? '/callback'
-                : isClaude || isDevin
-                    ? '/callback'
-                    : '/auth/callback',
+        callbackPath,
         host: isClaude ? 'localhost' : '127.0.0.1',
         port: isClaude
             ? 54545
@@ -644,7 +650,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
               isClaude ||
               isDevin ||
               isQoder ||
-              isOpenference
+              isOpenference ||
+              isCline
           ? await _existingOAuthBundle(account)
           : null;
       final previousOpenAiBundle =
@@ -687,6 +694,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         );
       } else if (isOpenference) {
         attempt = LlmOAuthAuthorizationAttempt.openference(
+          redirectUri: listener.redirectUri,
+        );
+      } else if (isCline) {
+        attempt = LlmOAuthAuthorizationAttempt.cline(
           redirectUri: listener.redirectUri,
         );
       } else {
@@ -757,6 +768,12 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         tokenBundle = await _tokenClient.exchangeOpenferenceCode(
           attempt: attempt,
           callback: callback,
+        );
+      } else if (isCline) {
+        tokenBundle = await _tokenClient.exchangeClineCode(
+          attempt: attempt,
+          callback: callback,
+          provider: account.connectorType,
         );
       } else {
         tokenBundle = await _tokenClient.exchangeClaudeCode(
