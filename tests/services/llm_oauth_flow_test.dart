@@ -9,6 +9,46 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('Qoder browser OAuth is configurable and state-bound', () {
+    expect(LlmOAuthProviderPolicy.forProvider('qoder').supported, isTrue);
+    final attempt = LlmOAuthAuthorizationAttempt.qoder(
+      redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+      authorizeUrl: 'https://login.example.com/authorize',
+      clientId: 'qoder-client-id',
+    );
+    expect(attempt.authorizationUri.host, 'login.example.com');
+    expect(attempt.authorizationUri.path, '/authorize');
+    expect(attempt.authorizationUri.queryParameters, {
+      'loginMethod': 'phone',
+      'type': 'phone',
+      'redirect': attempt.redirectUri.toString(),
+      'state': attempt.state,
+      'client_id': 'qoder-client-id',
+    });
+    final callback = attempt.consumeCallback(
+      Uri.parse(
+        '${attempt.redirectUri}?code=authorization-code&state=${attempt.state}',
+      ),
+    );
+    expect(callback.code, 'authorization-code');
+    expect(callback.clientId, 'qoder-client-id');
+    expect(
+      () => LlmOAuthAuthorizationAttempt.qoder(
+        redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+        authorizeUrl: 'http://127.0.0.1:43127/authorize',
+        clientId: 'qoder-client-id',
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    expect(
+      () => LlmOAuthAuthorizationAttempt.qoder(
+        redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+        authorizeUrl: 'https://login.example.com/authorize',
+        clientId: '',
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+  });
   test(
     'Tencent device auth uses distinct hosts and stores only bearer tokens',
     () async {
@@ -185,8 +225,7 @@ void main() {
     },
   );
 
-  test('Devin OAuth exchanges, verifies identity and checks plan status',
-      () async {
+  test('Devin OAuth exchanges, verifies identity and checks plan status', () async {
     final requests = <RequestOptions>[];
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
@@ -493,13 +532,15 @@ void main() {
         'aud': LlmOAuthTokenClient.xaiClientId,
         'email': 'xai@example.test',
         'email_verified': true,
-        'exp': DateTime.now()
+        'exp':
+            DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 5))
                 .millisecondsSinceEpoch ~/
             1000,
       };
-      final validIdToken = (JsonWebSignatureBuilder()
+      final validIdToken =
+          (JsonWebSignatureBuilder()
             ..jsonContent = claims
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -624,7 +665,8 @@ void main() {
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
-      final nullAzpToken = (JsonWebSignatureBuilder()
+      final nullAzpToken =
+          (JsonWebSignatureBuilder()
             ..jsonContent = {...claims, 'azp': null}
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -637,7 +679,8 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       returnedIdToken = validIdToken;
-      final conflictingAzpToken = (JsonWebSignatureBuilder()
+      final conflictingAzpToken =
+          (JsonWebSignatureBuilder()
             ..jsonContent = {...claims, 'azp': 'another-client'}
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -923,7 +966,8 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
-        () => LlmOAuthAuthorizationAttempt.openAiChatGpt(
+        () =>
+            LlmOAuthAuthorizationAttempt.openAiChatGpt(
           redirectUri: redirect,
           hostId: 'urn:uuid:host',
         ).consumeCallback(
@@ -1234,7 +1278,8 @@ void main() {
               jsonEncode({
                 'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
                 'aud': 'registered-openai-client',
-                'exp': DateTime.now()
+                'exp':
+                    DateTime.now()
                         .toUtc()
                         .add(const Duration(minutes: 5))
                         .millisecondsSinceEpoch ~/
@@ -1313,7 +1358,8 @@ void main() {
           'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
           'sub': subject,
           'aud': clientId,
-          'exp': DateTime.now()
+          'exp':
+              DateTime.now()
                   .toUtc()
                   .add(const Duration(minutes: 5))
                   .millisecondsSinceEpoch ~/
@@ -1325,7 +1371,8 @@ void main() {
           privateKey: generatedKey.cryptoKeyPair.privateKey,
           keyId: 'signing-key',
         );
-        final idToken = (JsonWebSignatureBuilder()
+        final idToken =
+            (JsonWebSignatureBuilder()
               ..jsonContent = claims
               ..setProtectedHeader('typ', 'JWT')
               ..setProtectedHeader('kid', 'signing-key')
@@ -1416,8 +1463,8 @@ void main() {
         ),
       );
 
-      final bundle =
-          await LlmOAuthTokenClient(dio: dio).exchangeGeminiDeveloperApi(
+      final bundle = await LlmOAuthTokenClient(dio: dio)
+          .exchangeGeminiDeveloperApi(
         attempt: attempt,
         callback: callback,
         clientSecret: 'desktop-client-secret',
@@ -1432,6 +1479,54 @@ void main() {
       expect(bundle['oauth_contract'], 'google-gemini-developer-api-v1');
     },
   );
+  test('Qoder OAuth exchanges configured endpoints and returns a DashScope key', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((options) async {
+        requests.add(options);
+        final response = options.uri.path == '/token'
+            ? {'access_token': 'qoder-access', 'refresh_token': 'qoder-refresh'}
+            : {
+                'success': true,
+                'data': {
+                  'apiKey': 'dashscope-account-key',
+                  'email': 'qoder@example.test',
+                  'nickname': 'Qoder User',
+                },
+              };
+        return ResponseBody.fromString(jsonEncode(response), 200,
+            headers: const {'content-type': ['application/json']});
+      });
+    final attempt = LlmOAuthAuthorizationAttempt.qoder(
+      redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+      authorizeUrl: 'https://login.example.test/authorize',
+      clientId: 'qoder-client',
+    );
+    final callback = attempt.consumeCallback(attempt.redirectUri.replace(
+      queryParameters: {'code': 'qoder-code', 'state': attempt.state},
+    ));
+    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeQoderCode(
+      attempt: attempt,
+      callback: callback,
+      configuration: const {
+        'authorizeUrl': 'https://login.example.test/authorize',
+        'tokenUrl': 'https://login.example.test/token',
+        'userInfoUrl': 'https://login.example.test/user',
+        'clientId': 'qoder-client',
+        'clientSecret': 'qoder-client-secret',
+      },
+    );
+    expect(requests, hasLength(2));
+    expect(requests.first.uri.path, '/token');
+    expect((requests.first.data as Map)['client_secret'], 'qoder-client-secret');
+    expect(requests.first.headers['Authorization'], startsWith('Basic '));
+    expect(requests.last.uri.queryParameters['accessToken'], 'qoder-access');
+    expect(bundle['api_key'], 'dashscope-account-key');
+    expect(bundle['client_secret'], 'qoder-client-secret');
+    expect(bundle['oauth_contract'], 'qoder-admin-code-v1');
+    expect(bundle['display_name'], 'Qoder User');
+  });
+
 }
 
 class _OAuthAdapter implements HttpClientAdapter {
@@ -1444,8 +1539,7 @@ class _OAuthAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}

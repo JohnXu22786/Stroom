@@ -9,12 +9,32 @@ import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
+import 'package:stroom/services/qoder_cli_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/aws_sigv4.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test('Qoder PAT model discovery uses qodercli with the account token', () async {
+    final runner = _QoderModelListRunner();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+      qoderCliService: QoderCliService(runner: runner),
+    );
+    final account = await service.saveAccount(
+      _account('qoder-cli-catalog', 'qoder', authType: 'pat'),
+      secret: 'pt-account-token',
+    );
+
+    final models = await service.discoverModels(account, refreshRemote: true);
+
+    expect(runner.lastEnvironment['QODER_PERSONAL_ACCESS_TOKEN'], 'pt-account-token');
+    expect(runner.lastArguments, contains('--list-models'));
+    expect(models.map((model) => model.upstreamModelId), ['qwen3.8-max-preview']);
+    expect(models.single.config['catalogSource'], 'qodercli');
+  });
   group('LlmConnectorRegistry', () {
     test('covers the pinned core auth and executor provider identifiers', () {
       final ids = LlmConnectorRegistry.all.map((item) => item.id).toSet();
@@ -39,6 +59,7 @@ void main() {
           'codebuddy-cn',
           'codebuddy-intl',
           'workbuddy',
+          'qoder',
           'gemini',
           'gemini-interactions',
           'aistudio',
@@ -54,6 +75,11 @@ void main() {
           'qwen-cloud-token-plan',
         }),
       );
+      final qoder = LlmConnectorRegistry.find('qoder')!;
+      expect(qoder.authTypes, containsAll({'api_key', 'oauth', 'pat'}));
+      expect(qoder.modelCatalog, contains('qwen3.8-max-preview'));
+      expect(qoder.canRefreshCredentials, isFalse);
+      expect(LlmConnectorRegistry.isChatAdapterAuthTypeSupported('qoder', 'pat'), isTrue);
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
       expect(LlmConnectorRegistry.find('glmt'), isNull);
       expect(LlmConnectorRegistry.canonicalId('glmt'), 'glm');
@@ -6421,6 +6447,10 @@ void main() {
             'qwen',
             'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
           ),
+          (
+            'qoder',
+            'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+          ),
         ])
           (
             _account('native-${provider.$1}', provider.$1),
@@ -6433,6 +6463,38 @@ void main() {
               ],
             },
           ),
+        (
+          LlmAccount(
+            id: 'native-qoder-oauth',
+            connectorType: 'qoder',
+            authType: 'oauth',
+            displayName: 'Qoder OAuth',
+            endpointConfig: const {
+              'qoderLoginUrl': 'https://login.example.test/authorize',
+              'qoderExchangeUrl': 'https://login.example.test/token',
+              'qoderUserInfoUrl': 'https://login.example.test/user',
+              'qoderClientId': 'qoder-client',
+            },
+          ),
+          jsonEncode({
+            'access_token': 'qoder-oauth-token',
+            'refresh_token': 'qoder-refresh-token',
+            'api_key': 'qoder-oauth-api-key',
+            'client_id': 'qoder-client',
+            'client_secret': 'qoder-client-secret',
+            'authorize_url': 'https://login.example.test/authorize',
+            'token_url': 'https://login.example.test/token',
+            'user_info_url': 'https://login.example.test/user',
+            'oauth_contract': 'qoder-admin-code-v1',
+          }),
+          'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+          const {
+            'model': 'provider-chat-model',
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
         (
           _account('native-claude-api-key', 'claude'),
           'anthropic-api-test-key',
@@ -6468,6 +6530,18 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
+      final qoderRequest = requests.singleWhere((request) => request.headers['Authorization'] == 'Bearer qoder-test-key');
+      expect(qoderRequest.headers['Authorization'], 'Bearer qoder-test-key');
+      expect(qoderRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
+      expect(qoderRequest.headers['x-dashscope-cachecontrol'], 'enable');
+      expect(qoderRequest.headers['User-Agent'], contains('QwenCode/0.19.3'));
+      expect(qoderRequest.headers['x-stainless-lang'], 'js');
+      expect(qoderRequest.headers['x-stainless-arch'], isNot('unknown'));
+      final qoderOAuthRequest = requests.singleWhere(
+        (request) => request.headers['Authorization'] == 'Bearer qoder-oauth-api-key',
+      );
+      expect(qoderOAuthRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
+      expect(qoderOAuthRequest.headers['Authorization'], isNot('Bearer qoder-oauth-token'));
       for (final provider in ['opencode-go', 'opencode-zen']) {
         final request = requests.singleWhere(
           (request) =>
@@ -8276,4 +8350,30 @@ class _FunctionalAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+
+class _QoderModelListRunner implements QoderCliRunner {
+  List<String> lastArguments = const [];
+  Map<String, String> lastEnvironment = const {};
+
+  @override
+  Future<QoderCliRunResult> run({
+    required String executable,
+    required List<String> arguments,
+    required Map<String, String> environment,
+    required String workingDirectory,
+    required String stdin,
+    required Duration timeout,
+    CancelToken? cancelToken,
+  }) async {
+    lastArguments = arguments;
+    lastEnvironment = environment;
+    return const QoderCliRunResult(
+      stdout: 'qwen3.8-max-preview',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    );
+  }
 }

@@ -64,6 +64,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'minimax',
           'minimax-cn',
           'qwen',
+          'qoder',
           'qwen-cloud',
           'qwen-cloud-token-plan',
           'command-code',
@@ -103,7 +104,10 @@ String llmRoutedChatProtocolForAccountModel({
   String? apiProtocol,
   String? apiProtocolOverride,
 }) {
-  if (apiProtocolOverride?.isNotEmpty == true) return apiProtocolOverride!;
+  String protocol;
+  if (apiProtocolOverride?.isNotEmpty == true) {
+    protocol = apiProtocolOverride!;
+  } else {
   final accountModel = account.models
       .where((model) => model.upstreamModelId == upstreamModelId)
       .firstOrNull;
@@ -111,15 +115,21 @@ String llmRoutedChatProtocolForAccountModel({
   final modelOverride =
       modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
   if (modelOverride is String && modelOverride.isNotEmpty) {
-    return apiProtocolFromLegacyEndpointType(modelOverride);
-  }
+      protocol = apiProtocolFromLegacyEndpointType(modelOverride);
+    } else {
   final accountProtocol = account.endpointConfig['apiProtocol'] ??
       account.endpointConfig['chatProtocol'] ??
       account.endpointConfig['endpointType'];
-  if (accountProtocol is String && accountProtocol.isNotEmpty) {
-    return apiProtocolFromLegacyEndpointType(accountProtocol);
+      protocol = accountProtocol is String && accountProtocol.isNotEmpty
+          ? apiProtocolFromLegacyEndpointType(accountProtocol)
+          : apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
+    }
   }
-  return apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
+  if (account.connectorType == 'qoder' &&
+      protocol != 'openai.chat_completions') {
+    throw StateError('Qoder supports only Chat Completions chat requests.');
+  }
+  return protocol;
 }
 
 /// ChatAdapter provider that keeps the application's existing chat protocol

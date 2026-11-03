@@ -60,6 +60,7 @@ class LlmOAuthProviderPolicy {
       providerId: 'workbuddy',
       supported: true,
     ),
+    'qoder': LlmOAuthProviderPolicy._(providerId: 'qoder', supported: true),
     'devin': LlmOAuthProviderPolicy._(providerId: 'devin', supported: true),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
@@ -139,8 +140,7 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmKimiDeviceCode._(
+  }) => LlmKimiDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -186,8 +186,7 @@ class LlmTencentDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmTencentDeviceCode._(
+  }) => LlmTencentDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -225,8 +224,7 @@ class LlmMetaMuseDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmMetaMuseDeviceCode._(
+  }) => LlmMetaMuseDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -275,8 +273,7 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) =>
-      LlmXaiDeviceCode._(
+  }) => LlmXaiDeviceCode._(
         deviceCode: deviceCode,
         tokenEndpoint: tokenEndpoint,
         issuer: issuer,
@@ -306,7 +303,8 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope =
+      'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;
@@ -318,6 +316,7 @@ class LlmOAuthAuthorizationAttempt {
   final bool isOpenAiRegistration;
   final bool _isClaudeCode;
   final bool _isDevin;
+  final bool _isQoder;
   var _consumed = false;
 
   LlmOAuthAuthorizationAttempt._({
@@ -330,8 +329,10 @@ class LlmOAuthAuthorizationAttempt {
     required this.isOpenAiRegistration,
     bool isClaudeCode = false,
     bool isDevin = false,
+    bool isQoder = false,
   })  : _isClaudeCode = isClaudeCode,
-        _isDevin = isDevin;
+       _isDevin = isDevin,
+       _isQoder = isQoder;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,
@@ -472,6 +473,62 @@ class LlmOAuthAuthorizationAttempt {
     );
   }
 
+  /// Qoder's administrator-configured authorization-code flow has no PKCE
+  /// contract. Its source uses these fixed phone-login parameters and the
+  /// app's validated loopback redirect plus one-use state.
+  factory LlmOAuthAuthorizationAttempt.qoder({
+    required Uri redirectUri,
+    required String authorizeUrl,
+    required String clientId,
+  }) {
+    _validateLoopbackRedirect(redirectUri, '/auth/callback');
+    final normalizedClientId = clientId.trim();
+    final authorizationEndpoint = validateQoderOAuthEndpoint(authorizeUrl);
+    if (normalizedClientId.isEmpty) throw const LlmOAuthFlowException();
+    final state = _secureValue();
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: authorizationEndpoint.replace(
+        queryParameters: {
+          'loginMethod': 'phone',
+          'type': 'phone',
+          'redirect': redirectUri.toString(),
+          'state': state,
+          'client_id': normalizedClientId,
+        },
+      ),
+      state: state,
+      nonce: '',
+      codeVerifier: '',
+      existingClientId: normalizedClientId,
+      isOpenAiRegistration: false,
+      isQoder: true,
+    );
+  }
+
+  /// Qoder OAuth endpoints are operator supplied; reject insecure or
+  /// credential-bearing URLs before sending client secrets or authorization
+  /// codes to them.
+  static Uri validateQoderOAuthEndpoint(String raw) {
+    final uri = Uri.tryParse(raw.trim());
+    final host = uri?.host.toLowerCase() ?? '';
+    final isIpv4 = RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}$').hasMatch(host);
+    final isIpv6 = host.contains(':');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        host.isEmpty ||
+        host == 'localhost' ||
+        host.endsWith('.local') ||
+        isIpv4 ||
+        isIpv6 ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmOAuthFlowException();
+    }
+    return uri;
+  }
+
   LlmOAuthCallbackResult consumeCallback(Uri callbackUri) {
     if (_consumed) throw const LlmOAuthFlowException();
     if (!_sameCallbackTarget(callbackUri, redirectUri)) {
@@ -517,7 +574,8 @@ class LlmOAuthAuthorizationAttempt {
             clientId.trim().isEmpty ||
             clientId == openAiDynamicClientId ||
             (existingClientId != null && clientId != existingClientId) ||
-            (isOpenAiRegistration &&
+            (!_isQoder &&
+                isOpenAiRegistration &&
                 returnedClientId == null &&
                 existingClientId == null))) {
       throw const LlmOAuthFlowException();

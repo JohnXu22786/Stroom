@@ -34,7 +34,8 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-      : _dio = dio ??
+    : _dio =
+          dio ??
             Dio(
               BaseOptions(
                 connectTimeout: const Duration(seconds: 10),
@@ -364,6 +365,94 @@ class LlmOAuthTokenClient {
     }
   }
 
+  /// Exchanges Qoder's administrator-configured authorization code and reads
+  /// the DashScope API key returned by its configured user-info endpoint.
+  /// The caller stores this entire bundle in secure storage.
+  Future<Map<String, dynamic>> exchangeQoderCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+    required Map<String, String> configuration,
+  }) async {
+    try {
+      final clientId = configuration['clientId']?.trim() ?? '';
+      final clientSecret = configuration['clientSecret']?.trim() ?? '';
+      final tokenUri = LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
+        configuration['tokenUrl'] ?? '',
+      );
+      final userInfoUri =
+          LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
+            configuration['userInfoUrl'] ?? '',
+          );
+      if (clientId.isEmpty ||
+          clientSecret.isEmpty ||
+          callback.clientId != clientId ||
+          callback.code.trim().isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final form = {
+        'grant_type': 'authorization_code',
+        'code': callback.code,
+        'redirect_uri': attempt.redirectUri.toString(),
+        'client_id': clientId,
+        'client_secret': clientSecret,
+      };
+      final response = await _dio.postUri<Object?>(
+        tokenUri,
+        data: form,
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+          headers: {
+            'Accept': 'application/json',
+            'Authorization':
+                'Basic ${base64Encode(utf8.encode('$clientId:$clientSecret'))}',
+          },
+        ),
+      );
+      final tokens = _jsonObject(response.data);
+      final accessToken = _nonEmptyString(tokens['access_token']);
+      if (accessToken == null) throw const LlmOAuthFlowException();
+      final userInfoResponse = await _dio.getUri<Object?>(
+        userInfoUri.replace(queryParameters: {'accessToken': accessToken}),
+        options: Options(
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+        ),
+      );
+      final envelope = _jsonObject(userInfoResponse.data);
+      final userInfo = envelope['success'] == true
+          ? _jsonObject(envelope['data'])
+          : null;
+      final apiKey = _nonEmptyString(userInfo?['apiKey']);
+      if (apiKey == null) throw const LlmOAuthFlowException();
+      final bundle = _credentialBundle(tokens)
+        ..['api_key'] = apiKey
+        ..['client_id'] = clientId
+        ..['client_secret'] = clientSecret
+        ..['authorize_url'] =
+            LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
+              configuration['authorizeUrl'] ?? '',
+            ).toString()
+        ..['token_url'] = tokenUri.toString()
+        ..['user_info_url'] =
+            LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
+              configuration['userInfoUrl'] ?? '',
+            ).toString()
+        ..['oauth_contract'] = 'qoder-admin-code-v1';
+      final identity =
+          _nonEmptyString(userInfo?['email']) ??
+          _nonEmptyString(userInfo?['phone']);
+      final displayName =
+          _nonEmptyString(userInfo?['nickname']) ??
+          _nonEmptyString(userInfo?['name']);
+      if (identity != null) bundle['email'] = identity;
+      if (displayName != null) bundle['display_name'] = displayName;
+      return bundle;
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
   /// Completes Devin's source-pinned PKCE exchange and verifies both the
   /// account profile and seat plan before the caller persists the credential.
   Future<Map<String, dynamic>> exchangeDevinCode({
@@ -528,8 +617,7 @@ class LlmOAuthTokenClient {
   static Uint8List? _firstBytesField(
     List<_DevinProtoField> fields,
     int number,
-  ) =>
-      fields.where((field) => field.number == number).firstOrNull?.bytes;
+  ) => fields.where((field) => field.number == number).firstOrNull?.bytes;
 
   static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
       fields.where((field) => field.number == number).firstOrNull?.value;
@@ -641,7 +729,8 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete = _kimiVerificationUri(
+      final complete =
+          _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -752,7 +841,8 @@ class LlmOAuthTokenClient {
       final verification = _metaMuseVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete = _metaMuseVerificationUri(
+      final complete =
+          _metaMuseVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -928,7 +1018,8 @@ class LlmOAuthTokenClient {
       final deviceCode = _nonEmptyString(data['device_code']);
       final userCode = _nonEmptyString(data['user_code']);
       final verification = _xaiVerificationUri(data['verification_uri']);
-      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
+      final complete =
+          _xaiVerificationUri(data['verification_uri_complete']) ??
           verification;
       final expiresIn = _seconds(data['expires_in']);
       final interval = _seconds(data['interval']);

@@ -119,7 +119,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },
-    'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' => const {
+    'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' || 'qoder' => const {
         'openai.chat_completions'
       },
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
