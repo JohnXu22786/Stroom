@@ -435,6 +435,21 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'openference',
+      displayName: 'Openference',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedOpenferenceModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'openference-api',
+      displayName: 'Openference API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      modelCatalog: kPinnedOpenferenceModels,
+    ),
+    LlmConnectorDefinition(
       id: 'codebuddy-cn',
       displayName: 'CodeBuddy（中国）',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -643,6 +658,8 @@ abstract final class LlmConnectorRegistry {
         'xai' ||
         'grok-cli' ||
         'xai-oauth' ||
+        'openference' ||
+        'openference-api' ||
         'meta' ||
         'muse-code' ||
         'codebuddy-cn' ||
@@ -1490,6 +1507,8 @@ class LlmAccountConnectorService {
       'muse-code',
       'workbuddy',
       'kilocode',
+      'openference',
+      'openference-api',
       'bedrock',
       'vertex',
       'ollama',
@@ -1557,7 +1576,30 @@ class LlmAccountConnectorService {
           ).supported) {
         throw const LlmAccountConnectorException();
       }
-      final discovered = await _discoverRemoteModels(account);
+      late final List<LlmUpstreamModel> discovered;
+      try {
+        discovered = await _discoverRemoteModels(account);
+      } catch (_) {
+        if (!{
+          'openference',
+          'openference-api',
+        }.contains(account.connectorType)) {
+          rethrow;
+        }
+        return _mergeOpenferenceFallbackMappings([
+          for (var index = 0; index < connector.modelCatalog.length; index++)
+            LlmUpstreamModel(
+              id: '${account.id}:openference-fallback:$index',
+              upstreamModelId: connector.modelCatalog[index],
+              displayName: connector.modelCatalog[index],
+              capabilities: const {'chat': true, 'streaming': true},
+              config: const {
+                'catalogSource': 'provider-fallback',
+                'availability': 'unknown',
+              },
+            ),
+        ], account.models);
+      }
       if (account.connectorType == 'grok-cli' ||
           account.connectorType == 'xai-oauth') {
         final entitledIds =
@@ -1634,6 +1676,30 @@ class LlmAccountConnectorService {
       merged[model.upstreamModelId] = model;
     }
     return List.unmodifiable(merged.values);
+  }
+
+  static List<LlmUpstreamModel> _mergeOpenferenceFallbackMappings(
+    List<LlmUpstreamModel> fallback,
+    List<LlmUpstreamModel> configured,
+  ) {
+    final fallbackIds = fallback.map((model) => model.upstreamModelId).toSet();
+    return [
+      for (final model in _mergeModelMappings(fallback, configured))
+        if (fallbackIds.contains(model.upstreamModelId))
+          LlmUpstreamModel(
+            id: model.id,
+            upstreamModelId: model.upstreamModelId,
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            config: {
+              ...model.config,
+              'catalogSource': 'provider-fallback',
+              'availability': 'unknown',
+            },
+          )
+        else
+          model,
+    ];
   }
 
   static List<LlmUpstreamModel> _mergeCommandCodeModelMappings(
@@ -2105,6 +2171,16 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
+      case 'openference':
+        return _LlmTokenRefreshRequest(
+          uri: Uri.parse('https://openference.com/oauth/token'),
+          body: {
+            'client_id': 'omniroute',
+            'grant_type': 'refresh_token',
+            'refresh_token': refreshToken,
+          },
+          contentType: formContentType,
+        );
       case 'gemini' || 'aistudio':
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
         final clientSecret = _firstString(bundle, const [
@@ -2288,6 +2364,7 @@ class LlmAccountConnectorService {
     }
     final fallbackBase = switch (account.connectorType) {
       'openai-api' => 'https://api.openai.com/v1',
+      'openference' || 'openference-api' => 'https://api.openference.com/v1',
       'opencode-go' => _openCodeGoBaseUrl,
       'opencode-zen' => _openCodeZenBaseUrl,
       'command-code' => kCommandCodeBaseUrl,
@@ -2353,8 +2430,10 @@ class LlmAccountConnectorService {
           'codebuddy-intl',
           'workbuddy',
         }.contains(account.connectorType);
-    final usesRefreshableOAuth =
-        usesGeminiOAuth || usesXaiOAuth || usesTencentOAuth;
+    final usesRefreshableOAuth = usesGeminiOAuth ||
+        usesXaiOAuth ||
+        usesTencentOAuth ||
+        (account.authType == 'oauth' && account.connectorType == 'openference');
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
     final usesKiloOAuth =
@@ -2710,6 +2789,13 @@ class LlmAccountConnectorService {
                 if (const {
                   'opencode-go',
                   'opencode-zen',
+                }.contains(account.connectorType)) ...{
+                  'chat': true,
+                  'streaming': true,
+                },
+                if (const {
+                  'openference',
+                  'openference-api',
                 }.contains(account.connectorType)) ...{
                   'chat': true,
                   'streaming': true,
@@ -4398,6 +4484,8 @@ class LlmNativeRequestBuilder {
         'gemini-interactions' ||
         'openai-compatibility' ||
         'openai-api' ||
+        'openference' ||
+        'openference-api' ||
         'opencode-go' ||
         'opencode-zen' ||
         'moonshot' ||
@@ -4704,6 +4792,9 @@ class LlmNativeRequestBuilder {
         if (stream) query = 'alt=sse';
       case 'openai-api':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
+        path = nativeFormat == 'responses' ? '/responses' : '/chat/completions';
+      case 'openference' || 'openference-api':
+        baseUrl = _baseUrl(config, 'https://api.openference.com/v1');
         path = nativeFormat == 'responses' ? '/responses' : '/chat/completions';
       case 'opencode-go' || 'opencode-zen':
         final isGo = account.connectorType == 'opencode-go';
@@ -5049,6 +5140,7 @@ class LlmNativeRequestBuilder {
       'aistudio' =>
         host == 'generativelanguage.googleapis.com',
       'openai-api' => host == 'api.openai.com',
+      'openference' || 'openference-api' => host == 'api.openference.com',
       'opencode-go' || 'opencode-zen' => host == 'opencode.ai',
       'command-code' => host == 'api.commandcode.ai',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),

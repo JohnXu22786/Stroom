@@ -482,6 +482,44 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<Map<String, dynamic>> exchangeOpenferenceCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+  }) async {
+    try {
+      if (callback.clientId !=
+              LlmOAuthAuthorizationAttempt.openferenceClientId ||
+          callback.code.trim().isEmpty ||
+          attempt.codeVerifier.isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      final response = await _dio.postUri<Object?>(
+        Uri.https('openference.com', '/oauth/token'),
+        data: {
+          'grant_type': 'authorization_code',
+          'client_id': LlmOAuthAuthorizationAttempt.openferenceClientId,
+          'code': callback.code,
+          'redirect_uri': attempt.redirectUri.toString(),
+          'code_verifier': attempt.codeVerifier,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+        ),
+      );
+      final token = _jsonObject(response.data);
+      final bundle = _credentialBundle(token)
+        ..['client_id'] = LlmOAuthAuthorizationAttempt.openferenceClientId
+        ..['scope'] = _nonEmptyString(token['scope']) ??
+            LlmOAuthAuthorizationAttempt.openferenceScope
+        ..['oauth_contract'] = 'openference-pkce-v1';
+      return bundle;
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
   /// Exchanges Qoder's administrator-configured authorization code and reads
   /// the DashScope API key returned by its configured user-info endpoint.
   /// The caller stores this entire bundle in secure storage.

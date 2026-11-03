@@ -9,6 +9,87 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('Openference OAuth uses the pinned PKCE loopback contract', () {
+    final attempt = LlmOAuthAuthorizationAttempt.openference(
+      redirectUri: Uri.parse('http://127.0.0.1:56123/callback'),
+    );
+    final uri = attempt.authorizationUri;
+
+    expect(uri.origin, 'https://openference.com');
+    expect(uri.path, '/app/oauth/authorize');
+    expect(uri.queryParameters['client_id'], 'omniroute');
+    expect(uri.queryParameters['response_type'], 'code');
+    expect(uri.queryParameters['redirect_uri'], attempt.redirectUri.toString());
+    expect(
+      uri.queryParameters['scope'],
+      'openid profile email model:invoke offline_access',
+    );
+    expect(uri.queryParameters['code_challenge_method'], 'S256');
+    expect(uri.queryParameters['code_challenge'], isNotEmpty);
+    expect(attempt.codeVerifier, isNotEmpty);
+
+    final callback = attempt.consumeCallback(
+      attempt.redirectUri.replace(
+        queryParameters: {'code': 'openference-code', 'state': attempt.state},
+      ),
+    );
+    expect(callback.code, 'openference-code');
+    expect(callback.clientId, 'omniroute');
+    expect(callback.scope, isNull);
+  });
+
+  test(
+    'Openference OAuth exchanges PKCE code and stores rotated token fields',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          requests.add(request);
+          expect(request.uri.toString(), 'https://openference.com/oauth/token');
+          expect(request.method, 'POST');
+          expect(request.contentType, Headers.formUrlEncodedContentType);
+          final form = _requestForm(request.data);
+          expect(form['grant_type'], 'authorization_code');
+          expect(form['client_id'], 'omniroute');
+          expect(form['code'], 'openference-code');
+          expect(form['redirect_uri'], 'http://127.0.0.1:56123/callback');
+          expect(form['code_verifier'], isNotEmpty);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'oauth-access-secret',
+              'refresh_token': 'oar-rotating-secret',
+              'id_token': 'unverified-id-token',
+              'expires_in': 3600,
+            }),
+            200,
+          );
+        });
+      final attempt = LlmOAuthAuthorizationAttempt.openference(
+        redirectUri: Uri.parse('http://127.0.0.1:56123/callback'),
+      );
+      final callback = attempt.consumeCallback(
+        attempt.redirectUri.replace(
+          queryParameters: {'code': 'openference-code', 'state': attempt.state},
+        ),
+      );
+
+      final bundle = await LlmOAuthTokenClient(
+        dio: dio,
+      ).exchangeOpenferenceCode(attempt: attempt, callback: callback);
+
+      expect(requests, hasLength(1));
+      expect(bundle['access_token'], 'oauth-access-secret');
+      expect(bundle['refresh_token'], 'oar-rotating-secret');
+      expect(bundle['oauth_contract'], 'openference-pkce-v1');
+      expect(
+        bundle,
+        isNot(contains('id_token')),
+        reason:
+            'unverified identity tokens must not be treated as verified account claims',
+      );
+    },
+  );
+
   test(
     'Kilo Code device authorization uses its custom polling contract',
     () async {
@@ -1648,6 +1729,12 @@ void main() {
       expect(bundle['api_key'], 'dashscope-account-key');
     },
   );
+}
+
+Map<String, String> _requestForm(Object? body) {
+  if (body is Map) return body.map((key, value) => MapEntry('$key', '$value'));
+  if (body is String) return Uri.splitQueryString(body);
+  throw StateError('Expected an encoded form body.');
 }
 
 class _OAuthAdapter implements HttpClientAdapter {

@@ -195,6 +195,14 @@ const kPinnedMuseCodeModels = <String>[
   'muse-spark-1.1',
 ];
 
+/// Offline fallback models declared by the Openference conversational catalog.
+/// Live `/v1/models` discovery remains the source of account availability.
+const kPinnedOpenferenceModels = <String>[
+  'GLM-5.2',
+  'Qwen3.8 27b',
+  'Llama 3.2 3B',
+];
+
 const kPinnedGeminiModels = <String>[
   'gemini-2.5-pro',
   'gemini-2.5-flash',

@@ -10,6 +10,7 @@ import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_connector_model_catalog.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
+import 'package:stroom/services/api_protocol_config.dart';
 import 'package:stroom/services/qoder_cli_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_oauth_flow.dart';
@@ -138,6 +139,8 @@ void main() {
           'qwen-cloud',
           'qwen-cloud-token-plan',
           'kilocode',
+          'openference',
+          'openference-api',
         }),
       );
       final kilo = LlmConnectorRegistry.find('kilocode')!;
@@ -299,6 +302,45 @@ void main() {
       expect(LlmOAuthProviderPolicy.forProvider('grok-cli').supported, isTrue);
       expect(LlmOAuthProviderPolicy.forProvider('xai-oauth').supported, isTrue);
       expect(LlmOAuthProviderPolicy.forProvider('xai').supported, isFalse);
+      expect(LlmConnectorRegistry.find('openference')!.authTypes, {'oauth'});
+      expect(LlmConnectorRegistry.find('openference-api')!.authTypes, {
+        'api_key',
+      });
+      for (final id in ['openference', 'openference-api']) {
+        expect(LlmConnectorRegistry.chatAdapterEndpointType(id), 'openai');
+        expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            id,
+            id == 'openference' ? 'oauth' : 'api_key',
+          ),
+          isTrue,
+        );
+        expect(LlmConnectorRegistry.find(id)!.modelCatalog, [
+          'GLM-5.2',
+          'Qwen3.8 27b',
+          'Llama 3.2 3B',
+        ]);
+      }
+      expect(
+        LlmOAuthProviderPolicy.forProvider('openference').supported,
+        isTrue,
+      );
+      expect(
+        LlmOAuthProviderPolicy.forProvider('openference-api').supported,
+        isFalse,
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('openference'),
+        'openai.chat_completions',
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('openference-api'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(null, connectorType: 'openference'),
+        {'openai.chat_completions', 'openai.responses'},
+      );
       for (final id in {'grok-cli', 'xai-oauth'}) {
         expect(LlmConnectorRegistry.chatAdapterEndpointType(id), 'openai');
         expect(
@@ -588,6 +630,369 @@ void main() {
         isTrue,
       );
     });
+  });
+
+  group('Openference OAuth and API-key connector modes', () {
+    test(
+      'discovers conversational models through each bearer auth mode',
+      () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'qwen/Qwen3.8', 'name': 'Qwen 3.8'},
+                  {
+                    'id': 'GLM-5.2',
+                    'capabilities': {'chat': true},
+                  },
+                  {
+                    'id': 'text-embedding-v4',
+                    'capabilities': {'embedding': true},
+                  },
+                  {
+                    'id': 'reranker-v3',
+                    'capabilities': {'chat': false},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final service = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+
+        for (final (id, authType, secret, expectedHeader) in [
+          (
+            'openference-oauth',
+            'oauth',
+            jsonEncode({'access_token': 'oauth-secret-token'}),
+            'Bearer oauth-secret-token',
+          ),
+          (
+            'openference-api-key',
+            'api_key',
+            'sk-private-key',
+            'Bearer sk-private-key',
+          ),
+        ]) {
+          final account = await service.saveAccount(
+            _account(
+              id,
+              id == 'openference-oauth' ? 'openference' : 'openference-api',
+              authType: authType,
+            ),
+            secret: secret,
+          );
+          final models = await service.discoverModels(
+            account,
+            refreshRemote: true,
+          );
+
+          expect(
+            requests.last.uri.toString(),
+            'https://api.openference.com/v1/models',
+          );
+          expect(requests.last.headers['Authorization'], expectedHeader);
+          expect(models.map((model) => model.upstreamModelId), [
+            'qwen/Qwen3.8',
+            'GLM-5.2',
+          ]);
+          expect(models.map((model) => model.capabilities), [
+            {'chat': true, 'streaming': true},
+            {'chat': true, 'streaming': true},
+          ]);
+          expect(jsonEncode(account.toMap()), isNot(contains('private-key')));
+          expect(
+            jsonEncode(account.toMap()),
+            isNot(contains('oauth-secret-token')),
+          );
+          expect(
+            preferences.values.values.join(),
+            isNot(contains('sk-private-key')),
+          );
+          expect(
+            preferences.values.values.join(),
+            isNot(contains('oauth-secret-token')),
+          );
+        }
+        expect(requests, hasLength(2));
+      },
+    );
+
+    test(
+      'uses source-backed Chat Completions and Responses bearer endpoints',
+      () {
+        for (final (connector, authType) in [
+          ('openference', 'oauth'),
+          ('openference-api', 'api_key'),
+        ]) {
+          final account = _account(
+            'request-$connector',
+            connector,
+            authType: authType,
+          );
+          for (final (format, path) in [
+            (null, '/v1/chat/completions'),
+            ('responses', '/v1/responses'),
+          ]) {
+            final request = LlmNativeRequestBuilder().build(
+              account: account,
+              credential: 'provider-secret',
+              modelId: 'qwen/Qwen3.8',
+              body: const {'model': 'qwen/Qwen3.8', 'messages': []},
+              stream: true,
+              nativeFormat: format,
+            );
+            expect(request.uri.toString(), 'https://api.openference.com$path');
+            expect(request.headers['Authorization'], 'Bearer provider-secret');
+            expect((request.body as Map)['stream'], isTrue);
+          }
+        }
+      },
+    );
+
+    test(
+      'uses the source fallback list when live entitlement discovery fails',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            throw DioException(
+              requestOptions: options,
+              response: Response<Object?>(
+                requestOptions: options,
+                statusCode: 402,
+                data: {'error': 'plan-required'},
+              ),
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'openference-fallback',
+            'openference-api',
+            models: const [
+              LlmUpstreamModel(
+                id: 'saved-glm-mapping',
+                upstreamModelId: 'GLM-5.2',
+                displayName: 'My GLM label',
+                config: {
+                  'catalogSource': 'stale-live-catalog',
+                  'availability': 'available',
+                },
+              ),
+              LlmUpstreamModel(
+                id: 'saved-custom-model',
+                upstreamModelId: 'custom-model',
+                displayName: 'My custom model',
+              ),
+            ],
+          ),
+          secret: 'private-api-key',
+        );
+
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        const fallbackIds = {'GLM-5.2', 'Qwen3.8 27b', 'Llama 3.2 3B'};
+        final fallbackModels = models
+            .where((model) => fallbackIds.contains(model.upstreamModelId))
+            .toList();
+        expect(fallbackModels.map((model) => model.upstreamModelId), [
+          'GLM-5.2',
+          'Qwen3.8 27b',
+          'Llama 3.2 3B',
+        ]);
+        expect(
+          fallbackModels.every(
+            (model) => model.config['availability'] == 'unknown',
+          ),
+          isTrue,
+        );
+        expect(
+          fallbackModels.every(
+            (model) => model.config['catalogSource'] == 'provider-fallback',
+          ),
+          isTrue,
+        );
+        final savedGlm = models.singleWhere(
+          (model) => model.upstreamModelId == 'GLM-5.2',
+        );
+        expect(savedGlm.id, 'saved-glm-mapping');
+        expect(savedGlm.displayName, 'My GLM label');
+        expect(savedGlm.config['availability'], 'unknown');
+        expect(savedGlm.config['catalogSource'], 'provider-fallback');
+        expect(
+          models
+              .singleWhere((model) => model.upstreamModelId == 'custom-model'),
+          isNotNull,
+        );
+        expect(
+          jsonEncode(models.map((model) => model.toMap()).toList()),
+          isNot(contains('private-api-key')),
+        );
+      },
+    );
+
+    test(
+      'refresh rotates the one-time OAuth refresh token without leaking it',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'access_token': 'rotated-access-token',
+                'refresh_token': 'oar-rotated-token',
+                'expires_in': 3600,
+              }),
+              200,
+            );
+          });
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final service = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account('openference-refresh', 'openference', authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-access-token',
+            'refresh_token': 'oar-one-time-token',
+          }),
+        );
+
+        expect(await service.refreshCredential(account), isTrue);
+        expect(captured?.uri.toString(), 'https://openference.com/oauth/token');
+        expect(captured?.contentType, Headers.formUrlEncodedContentType);
+        expect(_requestForm(captured?.data), {
+          'grant_type': 'refresh_token',
+          'client_id': 'omniroute',
+          'refresh_token': 'oar-one-time-token',
+        });
+        final stored =
+            jsonDecode((await service.readCredential(account.id))!) as Map;
+        expect(stored['access_token'], 'rotated-access-token');
+        expect(stored['refresh_token'], 'oar-rotated-token');
+        expect(
+          preferences.values.values.join(),
+          isNot(contains('oar-one-time-token')),
+        );
+      },
+    );
+
+    test(
+      'retries a 401 once with the rotated Openference OAuth token',
+      () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            if (options.uri.host == 'openference.com') {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'access_token': 'new-openference-access',
+                  'refresh_token': 'oar-new-token',
+                  'expires_in': 3600,
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            if (requests
+                    .where(
+                      (request) => request.uri.host == 'api.openference.com',
+                    )
+                    .length ==
+                1) {
+              return ResponseBody.fromString(
+                '{"error":"invalid_token"}',
+                401,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            return ResponseBody.fromString(
+              '{}',
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          _account('openference-401-refresh', 'openference', authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-openference-access',
+            'refresh_token': 'oar-old-token',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 1))
+                .toIso8601String(),
+          }),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+
+        await client.request(
+          account: account,
+          modelId: 'GLM-5.2',
+          body: const {'model': 'GLM-5.2', 'messages': []},
+        );
+
+        final chatRequests = requests
+            .where((request) => request.uri.host == 'api.openference.com')
+            .toList();
+        expect(chatRequests, hasLength(2));
+        expect(
+          chatRequests.first.headers['Authorization'],
+          'Bearer old-openference-access',
+        );
+        expect(
+          chatRequests.last.headers['Authorization'],
+          'Bearer new-openference-access',
+        );
+        final refreshRequest = requests.singleWhere(
+          (request) => request.uri.host == 'openference.com',
+        );
+        expect(
+          _requestForm(refreshRequest.data)['refresh_token'],
+          'oar-old-token',
+        );
+        final saved =
+            jsonDecode((await accounts.readCredential(account.id))!) as Map;
+        expect(saved['refresh_token'], 'oar-new-token');
+      },
+    );
   });
 
   group('OpenCode Go and Zen account modes', () {
@@ -6654,6 +7059,22 @@ void main() {
           'https://llm.example.test/v1/chat/completions',
           const {'model': 'local-model', 'messages': []},
         ),
+        (
+          _account(
+            'native-openference-oauth',
+            'openference',
+            authType: 'oauth',
+          ),
+          jsonEncode({'access_token': 'openference-oauth-token'}),
+          'https://api.openference.com/v1/chat/completions',
+          const {'model': 'Qwen3.8 27b', 'messages': []},
+        ),
+        (
+          _account('native-openference-api', 'openference-api'),
+          'openference-api-key',
+          'https://api.openference.com/v1/chat/completions',
+          const {'model': 'Llama 3.2 3B', 'messages': []},
+        ),
       ];
 
       for (final (account, secret, expectedUri, body) in scenarios) {
@@ -6671,6 +7092,24 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
+      final openferenceOAuthRequest = requests.singleWhere(
+        (request) =>
+            request.uri.host == 'api.openference.com' &&
+            request.headers['Authorization'] ==
+                'Bearer openference-oauth-token',
+      );
+      expect(openferenceOAuthRequest.uri.path, '/v1/chat/completions');
+      expect(
+        requests
+            .singleWhere(
+              (request) =>
+                  request.headers['Authorization'] ==
+                  'Bearer openference-api-key',
+            )
+            .uri
+            .path,
+        '/v1/chat/completions',
+      );
       final qoderRequest = requests.singleWhere(
         (request) =>
             request.headers['Authorization'] == 'Bearer qoder-test-key',

@@ -1112,6 +1112,9 @@ class _AccountCard extends StatelessWidget {
             Text(
               '认证方式：${_authLabel(account.authType, connectorType: account.connectorType)}',
             ),
+            if (account.connectorType == 'openference' ||
+                account.connectorType == 'openference-api')
+              const Text('可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。'),
             Text('授权来源：${_authSourceLabel(account, connector)}'),
             if (authLimitation != null)
               Padding(
@@ -1393,6 +1396,12 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'openference' && type == 'oauth') {
+    return 'Openference OAuth';
+  }
+  if (connectorType == 'openference-api' && type == 'api_key') {
+    return 'Openference API Key';
+  }
   if (connectorType == 'kilocode' && type == 'oauth') {
     return 'Kilo Code 设备 OAuth';
   }
@@ -1975,6 +1984,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   padding: EdgeInsets.only(top: 6),
                   child: Text(
                     'ChatAdapter 暂不支持此连接器；保存后，该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。',
+                  ),
+                ),
+              if (_connectorType == 'openference' ||
+                  _connectorType == 'openference-api')
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    '可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。',
                   ),
                 ),
               const SizedBox(height: 8),
