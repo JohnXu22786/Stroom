@@ -2383,7 +2383,7 @@ void main() {
       test(
           'diagnostics exclude Authorization credentials added by Dio interceptors',
           () async {
-        const safeRequestId = 'req-safe-after-interceptor-credential-91';
+        const safeRequestId = 'req-safe-after-interceptor-91';
         final cases = [
           (
             'authorization',
