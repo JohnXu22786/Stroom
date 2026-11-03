@@ -1990,7 +1990,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _lastImageImportErrorMessage) {
+        if (_errorMessage == _retryImageResetMessage ||
+            _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
         _lastImageImportErrorMessage = null;
@@ -2190,7 +2191,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _lastImageImportErrorMessage) {
+        if (_errorMessage == _retryImageResetMessage ||
+            _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
         _lastImageImportErrorMessage = null;
