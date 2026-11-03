@@ -971,6 +971,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'transcribe',
     'tokenize',
     'tokenization',
+    'tokenomics',
     'tokenizers',
     'tokenized',
     'tokenizing',
