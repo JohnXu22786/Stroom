@@ -747,6 +747,74 @@ void main() {
     },
   );
 
+  testWidgets(
+    'camera choice accepted after gallery selection commits after the gallery',
+    (tester) async {
+      final validBytes = _createValidOcrTestImage().bytes;
+      final pendingCameraPicker = Completer<XFile?>();
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+              pendingCameraPicker.future,
+          testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async => [
+            _NamedPickerFile('gallery.png', validBytes),
+          ],
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('拍照识别'));
+      await tester.pump();
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从系统相册选择'));
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 1 张图片').evaluate().isNotEmpty,
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_0')),
+            )
+            .image
+            .sourceName,
+        'gallery.png',
+      );
+
+      pendingCameraPicker.complete(
+        XFile.fromData(validBytes, name: 'camera.png'),
+      );
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 2 张图片').evaluate().isNotEmpty,
+      );
+
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_0')),
+            )
+            .image
+            .sourceName,
+        'gallery.png',
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_1')),
+            )
+            .image
+            .sourceName,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
       tester,
