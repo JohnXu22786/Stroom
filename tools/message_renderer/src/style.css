@@ -379,12 +379,6 @@ button:disabled {
 .diagram {
   padding: 12px;
 }
-.diagram-controls {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-  font-size: 12px;
-}
 .diagram-pan {
   overflow: auto;
   min-height: 100px;
@@ -477,14 +471,12 @@ mark.current {
 }
 .message footer button:hover,
 .attachment:hover,
-.diagram-controls button:hover,
 .load-older:hover,
 .to-bottom:hover {
   background: var(--border);
 }
 .message footer button:focus-visible,
 .attachment:focus-visible,
-.diagram-controls button:focus-visible,
 .load-older:focus-visible,
 .to-bottom:focus-visible {
   outline: 2px solid var(--accent);

@@ -1003,6 +1003,74 @@ test("a previous Mermaid source toggle does not suppress an updated HTML preview
   }
 });
 
+test("Mermaid preview and source expose only their mode-specific actions", async () => {
+  const v = await view();
+  try {
+    const doc = v.dom.window.document;
+    v.receive(
+      snapshot("mermaid-toolbar", [
+        message("m", [{ type: "text", text: "```mermaid\ngraph TD; A-->B\n```" }]),
+      ]),
+    );
+    await wait();
+
+    const previewActions = doc.querySelector(".stroom-code-actions-floating");
+    assert.deepEqual(
+      [...previewActions.querySelectorAll("button")].map((button) => button.getAttribute("aria-label")),
+      ["缩小", "放大", "全屏", "查看源码"],
+    );
+    assert.equal(doc.querySelectorAll(".diagram-controls").length, 0);
+    const scaleTarget = doc.querySelector(".diagram-pan > div");
+    previewActions.querySelector('[aria-label="缩小"]').click();
+    await wait();
+    assert.equal(scaleTarget.style.transform, "scale(0.75)");
+    previewActions.querySelector('[aria-label="放大"]').click();
+    await wait();
+    assert.equal(scaleTarget.style.transform, "scale(1)");
+    previewActions.querySelector('[aria-label="全屏"]').click();
+    assert.equal(v.events.at(-1).action, "mermaid");
+
+    previewActions.querySelector('[aria-label="查看源码"]').click();
+    await wait();
+    const sourceActions = doc.querySelector(".stroom-code-actions");
+    assert.deepEqual(
+      [...sourceActions.querySelectorAll("button")].map((button) => button.getAttribute("aria-label")),
+      ["复制代码", "保存代码", "自动换行", "查看图表"],
+    );
+    assert.ok(doc.querySelector(".md-code-block"), "source mode keeps the DSH code block");
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("request/response and JSON inspection use distinct icons", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("message-actions", [
+        message("m", [{ type: "text", text: "answer" }]),
+      ]),
+    );
+    await wait();
+    const doc = v.dom.window.document;
+    const rawIcon = doc.querySelector('[data-action="raw"] svg');
+    const jsonIcon = doc.querySelector('[data-action="json"] svg');
+    assert.ok(rawIcon);
+    assert.ok(jsonIcon);
+    assert.notEqual(rawIcon.innerHTML, jsonIcon.innerHTML);
+    assert.equal(
+      doc.querySelector('[data-action="raw"]').getAttribute("aria-label"),
+      "查看请求与响应",
+    );
+    assert.equal(
+      doc.querySelector('[data-action="json"]').getAttribute("aria-label"),
+      "检查 JSON",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
 test("the DSH scroll-to-bottom button requests the Stroom command", async () => {
   const v = await view();
   try {

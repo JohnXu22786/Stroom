@@ -67,7 +67,10 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 
 以上 Intelligent UI 研究不属于 PR #800 的实现范围；后续重新启动时，应另行确定提示词/skill 方案并做真实渲染与交互验证。
 
-### Current work snapshot (2026-10-31)
+### Current status (2026-11-03)
 
-- The conversation message UI branch is `feat/dsh-message-renderer`, targeting `v0.7`; GitHub PR #800 remains a draft and is not merged.
-- PR CI now covers build and message-view smoke tests on Android, iOS, Windows, macOS, Linux, and Web. The current workflow run is being used to verify the six targets; record its final result and any follow-up fixes here before merging PR #800.
+- PR #800 was merged into `v0.7` on 2026-11-01 as commit `c90c50f259c09cc456eaae1661347f24519293ef`. The DSH message-area migration, chat v2 block migration, streaming persistence, Flutter bridge, and six-platform host coverage described above are implemented; this is not a pending page migration.
+- PR run [41331836925](https://github.com/JohnXu22786/Stroom/actions/runs/41331836925) completed successfully, including Android, iOS Simulator, Windows, macOS, Linux, and Web message-view smoke jobs and the associated test jobs.
+- A local follow-up applies the separately confirmed Mermaid toolbar layout: preview has zoom out, zoom in, full-screen, and source; source mode keeps the DSH code block and line numbers with copy, save, wrap, and chart actions. It also gives request/response and JSON inspection distinct icons. These refinements are not part of merged PR #800.
+- The current HTML renderer still treats every closed `html` fence as inline preview content. It runs in a sandboxed iframe with scripts and external resources enabled, has no inline toolbar, and sends content taller than the conversation viewport to Flutter's full-screen viewer. The message format does not distinguish that rendered content from an ordinary HTML code example. Intelligent UI generation remains deferred; this migration has not introduced a model output marker or changed that execution behavior.
+- CI smoke tests do not replace physical-device interaction checks. Keyboard, scrolling, file selection, and full-screen preview still need broader manual validation on actual devices.
