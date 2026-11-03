@@ -742,7 +742,32 @@ class LlmAccountConnectorService {
         await LlmAccountMigrationService.acquireCredentialTransaction();
     try {
       final records = await _readAccounts();
-      return records.map(LlmAccount.fromMap).toList(growable: false);
+      final accounts = records.map(LlmAccount.fromMap).toList();
+      for (var index = 0; index < accounts.length; index++) {
+        final account = accounts[index];
+        if (account.connectorType != 'qoder' ||
+            account.authType != 'oauth' ||
+            account.status == LlmAccountStatus.paused ||
+            account.status == LlmAccountStatus.needsAttention ||
+            !await _qoderOAuthNeedsReauthorization(account)) {
+          continue;
+        }
+        accounts[index] = LlmAccount(
+          id: account.id,
+          connectorType: account.connectorType,
+          authType: account.authType,
+          displayName: account.displayName,
+          status: LlmAccountStatus.needsAttention,
+          credentialRef: account.credentialRef,
+          endpointConfig: account.endpointConfig,
+          models: account.models,
+          policy: account.policy,
+          usageByWindow: account.usageByWindow,
+          remainingQuota: account.remainingQuota,
+          quotaSignals: account.quotaSignals,
+        );
+      }
+      return accounts;
     } on LlmAccountConnectorException {
       rethrow;
     } catch (_) {
@@ -758,6 +783,42 @@ class LlmAccountConnectorService {
       if (account.id == accountId) return account;
     }
     return null;
+  }
+
+  Future<bool> _qoderOAuthNeedsReauthorization(LlmAccount account) async {
+    final reference = account.credentialRef;
+    if (reference == null) return true;
+    final secret = await _readSecureValue(reference);
+    if (secret == null || secret.trim().isEmpty) return true;
+    final bundle = _decodeCredentialBundle(secret);
+    if (LlmNativeRequestBuilder._credentialBundleString(
+              secret,
+              const ['access_token', 'accessToken'],
+            ) ==
+            null ||
+        LlmNativeRequestBuilder._credentialBundleString(
+              secret,
+              const ['api_key', 'apiKey'],
+            ) ==
+            null) {
+      return true;
+    }
+    final expiryValue = bundle['expires_at'] ?? bundle['expired'];
+    if (expiryValue == null) return false;
+    final expiry = expiryValue is String
+        ? DateTime.tryParse(expiryValue)
+        : expiryValue is num
+            ? DateTime.fromMillisecondsSinceEpoch(
+                expiryValue > 100000000000
+                    ? expiryValue.toInt()
+                    : expiryValue.toInt() * 1000,
+                isUtc: true,
+              )
+            : null;
+    return expiry == null ||
+        !expiry.isAfter(
+          DateTime.now().toUtc().add(const Duration(seconds: 30)),
+        );
   }
 
   Future<List<LlmModelGroup>> listModelGroups() async {

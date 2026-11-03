@@ -118,6 +118,11 @@ class LlmConnectorHttpClient {
         ).supported) {
       throw const LlmConnectorAuthenticationRequired();
     }
+    if (storedAccount.connectorType == 'qoder' &&
+        storedAccount.authType == 'oauth' &&
+        storedAccount.status == LlmAccountStatus.needsAttention) {
+      throw const LlmConnectorAuthenticationRequired();
+    }
     if (storedAccount.connectorType == 'antigravity') {
       try {
         storedAccount = await accountService.ensureAntigravityProjectId(

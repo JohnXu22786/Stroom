@@ -6646,6 +6646,66 @@ void main() {
       }
     });
 
+    test('expired Qoder OAuth requires reauthorization before routing',
+        () async {
+      var requestsSent = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'qoder-expired-oauth',
+          connectorType: 'qoder',
+          authType: 'oauth',
+          displayName: 'Expired Qoder OAuth',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'qoderLoginUrl': 'https://login.example.test/authorize',
+            'qoderExchangeUrl': 'https://login.example.test/token',
+            'qoderUserInfoUrl': 'https://login.example.test/user',
+            'qoderClientId': 'qoder-client',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'expired-qoder-access-token',
+          'api_key': 'expired-qoder-api-key',
+          'client_id': 'qoder-client',
+          'client_secret': 'qoder-secret',
+          'authorize_url': 'https://login.example.test/authorize',
+          'token_url': 'https://login.example.test/token',
+          'user_info_url': 'https://login.example.test/user',
+          'oauth_contract': 'qoder-admin-code-v1',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(minutes: 2))
+              .toIso8601String(),
+        }),
+      );
+
+      final listedAccount = (await accounts.listAccounts()).single;
+      expect(listedAccount.status, LlmAccountStatus.needsAttention);
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'qwen3.8-max-preview',
+          body: const {
+            'model': 'qwen3.8-max-preview',
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmConnectorAuthenticationRequired>()),
+      );
+      expect(requestsSent, 0);
+    });
+
     test(
       'does not allow legacy Meta API-key accounts to use OAuth credentials',
       () async {
