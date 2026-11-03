@@ -233,6 +233,118 @@ void main() {
     });
   });
 
+  group('LatexSyntax - additional math forms', () {
+    test('parses parenthesized and bracketed delimiters', () {
+      final nodes = _parseWithLatex(r'Inline \(x^2\), display \[y^2\].');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements.map((e) => e.attributes['content']), ['x^2', 'y^2']);
+      expect(elements.map((e) => e.attributes['isInline']), ['true', 'false']);
+    });
+
+    test('parses equation, align, and gather environments as display math', () {
+      final nodes = _parseWithLatex(
+        r'\begin{equation}x=1\end{equation}'
+        '\n\n'
+        r'\begin{align}x&=1\\y&=2\end{align}'
+        '\n\n'
+        r'\begin{gather}x=1\\y=2\end{gather}',
+      );
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(3));
+      expect(
+          elements.every((e) => e.attributes['isInline'] == 'false'), isTrue);
+    });
+
+    test('escaped and incomplete delimiters stay literal', () {
+      const source = r'Escaped \$x$ and \(y plus \[z plus $unfinished';
+      final nodes = _parseWithLatex(source);
+      expect(_findElement(nodes, 'latex'), isNull);
+      expect(
+        _collectPlainText(nodes).join(),
+        source.replaceFirst(r'\$', r'$'),
+      );
+    });
+
+    test('escaped dollar inside math does not end the formula', () {
+      final nodes = _parseWithLatex(r'$a\$b$');
+      final formula = _findElement(nodes, 'latex');
+      expect(formula, isNotNull);
+      expect(formula!.attributes['content'], r'a\$b');
+    });
+
+    test('escaped dollar-like text does not consume the next formula', () {
+      final nodes = _parseWithLatex(r'\$x$ plus $y$');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(1));
+      expect(elements.single.attributes['content'], 'y');
+    });
+
+    test('escaped dollar text before an adjacent formula stays literal', () {
+      final nodes = _parseWithLatex(r'\$x$y$');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(1));
+      expect(elements.single.attributes['content'], 'y');
+    });
+
+    test('math-like content in inline and fenced code stays code', () {
+      final nodes = _parseLikeMarkdownGenerator(
+        r'`$x$`' '\n\n````\n' r'\(y\)' '\n````',
+      );
+      expect(_findElement(nodes, 'latex'), isNull);
+      expect(_findElement(nodes, 'code'), isNotNull);
+      expect(_findElement(nodes, 'pre'), isNotNull);
+    });
+
+    testWidgets('math, latex, and tex fences render through math widgets',
+        (WidgetTester tester) async {
+      const md = '```math\nx^2\n```\n\n'
+          '~~~latex\ny^2\n~~~\n\n'
+          '```tex\nz^2\n```';
+      final widgets = markdownGenerator.buildWidgets(
+        md,
+        config: buildMarkdownConfig(isDark: false),
+      );
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+
+      expect(find.byType(Math), findsNWidgets(3));
+      expect(find.byType(CodeBlockSourceView), findsNothing);
+    });
+  });
+
   group('LatexNode', () {
     testWidgets('build returns WidgetSpan for inline math',
         (WidgetTester tester) async {
@@ -276,6 +388,35 @@ void main() {
 
       final span = node.build();
       expect(span, isA<WidgetSpan>());
+    });
+
+    testWidgets('parse error keeps red source and opens its detail on tap',
+        (WidgetTester tester) async {
+      final node = LatexNode(
+        {'content': r'\frac{1}{', 'isInline': 'true'},
+        r'$\frac{1}{$',
+        MarkdownConfig.defaultConfig,
+      );
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      final fallback = find.text(r'$\frac{1}{$', findRichText: true);
+      expect(fallback, findsOneWidget);
+      final fallbackText = find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == r'$\frac{1}{$',
+      );
+      expect(tester.widget<Text>(fallbackText).style?.color, Colors.red);
+      await tester.tap(fallback);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      final parserError = find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.data?.contains('Parser Error') == true &&
+            widget.data?.contains('Expected') == true,
+      );
+      expect(parserError, findsOneWidget);
     });
   });
 
