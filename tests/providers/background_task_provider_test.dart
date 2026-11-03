@@ -1799,6 +1799,79 @@ void main() {
     );
 
     test(
+      'copyWith re-sanitizes retained OCR retry data for a changed request',
+      () {
+        const credential = 'copywith-new-ocr-credential-7391';
+        final original = BackgroundTask(
+          id: 'copywith-retained-ocr-retry-resanitization',
+          type: BackgroundTaskType.ocr,
+          title: 'Failed OCR task',
+          retryData: OcrRetrySnapshot.capture(
+            configId: 'provider-config',
+            modelId: 'vision-model',
+            images: const [],
+            instructionContent: 'Read the receipt using $credential',
+            saveFolder: 'receipts',
+          ).toMap(),
+        );
+
+        final updated = original.copyWith(
+          rawRequest: {
+            'headers': {'Authorization': 'Bearer $credential'},
+          },
+        );
+        final serializedRetryData = jsonEncode(updated.toMap()['retryData']);
+
+        expect(updated.retryData, isNotNull);
+        expect(
+          OcrRetrySnapshot.fromMap(updated.retryData!).configId,
+          'provider-config',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(updated.retryData!).modelId,
+          'vision-model',
+        );
+        expect(
+          OcrRetrySnapshot.fromMap(updated.retryData!).saveFolder,
+          'receipts',
+        );
+        expect(serializedRetryData, isNot(contains(credential)));
+      },
+    );
+
+    test('copyWith keeps retry data for unchanged and non-OCR contexts', () {
+      final ocrRetryData = OcrRetrySnapshot.capture(
+        images: const [],
+        instructionContent: 'Read the receipt total carefully',
+      ).toMap();
+      final ocrTask = BackgroundTask(
+        id: 'copywith-unchanged-ocr-retry-context',
+        type: BackgroundTaskType.ocr,
+        title: 'Failed OCR task',
+        retryData: ocrRetryData,
+      );
+      final unchangedOcrTask = ocrTask.copyWith(status: TaskStatus.failed);
+
+      final nonOcrTask = BackgroundTask(
+        id: 'copywith-non-ocr-retry-context',
+        type: BackgroundTaskType.asr,
+        title: 'Failed ASR task',
+        retryData: {'legacyRetry': 'retain this payload'},
+      );
+      final updatedNonOcrTask = nonOcrTask.copyWith(
+        rawRequest: {'requestId': 'new-asr-request'},
+      );
+
+      expect(unchangedOcrTask.retryData, ocrRetryData);
+      expect(
+        OcrRetrySnapshot.fromMap(unchangedOcrTask.retryData!)
+            .instructionContent,
+        'Read the receipt total carefully',
+      );
+      expect(updatedNonOcrTask.retryData, nonOcrTask.retryData);
+    });
+
+    test(
       'supported OCR retry data drops legacy Authorization echoes',
       () {
         const apiKey = 'supported-retry-api-key-7391';
