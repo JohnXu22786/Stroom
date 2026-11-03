@@ -63,15 +63,13 @@ void main() {
   });
 
   Future<
-    ({
-      Completer<void> readStarted,
-      Completer<void> releaseRead,
-      Completer<void> replacementReadStarted,
-      Completer<void> releaseReplacementRead,
-      List<MapEntry<String, Uint8List>>? Function() result,
-    })
-  >
-  openPickerWithBlockedRead(
+      ({
+        Completer<void> readStarted,
+        Completer<void> releaseRead,
+        Completer<void> replacementReadStarted,
+        Completer<void> releaseReplacementRead,
+        List<MapEntry<String, Uint8List>>? Function() result,
+      })> openPickerWithBlockedRead(
     WidgetTester tester, {
     bool failRead = false,
     bool includeReplacement = false,
