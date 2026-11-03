@@ -119,7 +119,8 @@ void main() {
       }
     });
 
-    test('OpenCode account mode does not select supplier or model protocol', () {
+    test('OpenCode account mode does not select supplier or model protocol',
+        () {
       for (final connector in ['opencode-go', 'opencode-zen']) {
         expect(
           builtinDefaultApiProtocolForConnector(connector),

@@ -1896,7 +1896,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _ => 'https://api.example.com/v1',
                   },
                   helperText: switch (_connectorType) {
-                    'opencode-go' || 'opencode-zen' =>
+                    'opencode-go' ||
+                    'opencode-zen' =>
                       '留空以使用此账号类型的官方模型目录和 API 端点。',
                     _ => null,
                   },

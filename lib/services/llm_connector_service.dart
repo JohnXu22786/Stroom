@@ -2757,10 +2757,7 @@ class LlmAccountConnectorService {
       LlmConnectorRegistry.isConversationalModel(modelId, metadata);
 
   static bool _isOpenCodeStandardGatewayModelId(String modelId) {
-    final normalized = modelId
-        .trim()
-        .toLowerCase()
-        .replaceFirst(
+    final normalized = modelId.trim().toLowerCase().replaceFirst(
           RegExp(r'^(?:opencode-go|opencode_go|opencode-zen|opencode)/'),
           '',
         );
@@ -3735,9 +3732,9 @@ class LlmNativeRequestBuilder {
             !account.models.any((model) => model.upstreamModelId == modelId))) {
       throw const LlmAccountConnectorException();
     }
-    if (const {'opencode-go', 'opencode-zen'}
-            .contains(account.connectorType) &&
-        !LlmAccountConnectorService._isOpenCodeStandardGatewayModelId(modelId)) {
+    if (const {'opencode-go', 'opencode-zen'}.contains(account.connectorType) &&
+        !LlmAccountConnectorService._isOpenCodeStandardGatewayModelId(
+            modelId)) {
       throw const LlmAccountConnectorException();
     }
     if ((account.connectorType == 'grok-cli' ||
@@ -4361,9 +4358,8 @@ class LlmNativeRequestBuilder {
           }
           path = '/v1/messages';
         } else {
-          path = nativeFormat == 'responses'
-              ? '/responses'
-              : '/chat/completions';
+          path =
+              nativeFormat == 'responses' ? '/responses' : '/chat/completions';
         }
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
@@ -4642,6 +4638,11 @@ class LlmNativeRequestBuilder {
     final host = base.host.toLowerCase();
     final hasCustomBaseUrl =
         _configString(account.endpointConfig, 'baseUrl') != null;
+    if (hasCustomBaseUrl &&
+        {'opencode-go', 'opencode-zen'}.contains(account.connectorType) &&
+        base.scheme != 'https') {
+      throw const LlmAccountConnectorException();
+    }
     final supportsCustomApiKeyEndpoint = account.authType == 'api_key' &&
         {
           'codex',

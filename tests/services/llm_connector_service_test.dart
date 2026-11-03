@@ -467,7 +467,28 @@ void main() {
   });
 
   group('OpenCode Go and Zen account modes', () {
-    test('discovers each account catalog with its own endpoint and key', () async {
+    test('requires HTTPS for custom account endpoints', () {
+      for (final connectorType in ['opencode-go', 'opencode-zen']) {
+        expect(
+          () => LlmNativeRequestBuilder().build(
+            account: LlmAccount(
+              id: 'insecure-$connectorType',
+              connectorType: connectorType,
+              authType: 'api_key',
+              displayName: connectorType,
+              endpointConfig: const {'baseUrl': 'http://localhost:1234/v1'},
+            ),
+            credential: 'private-$connectorType-key',
+            modelId: 'model',
+            body: const {'model': 'model', 'messages': []},
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      }
+    });
+
+    test('discovers each account catalog with its own endpoint and key',
+        () async {
       for (final (connectorType, expectedUrl) in [
         ('opencode-go', 'https://opencode.ai/zen/go/v1/models'),
         ('opencode-zen', 'https://opencode.ai/zen/v1/models'),
@@ -6135,7 +6156,8 @@ void main() {
       expect(requests, hasLength(scenarios.length));
       for (final provider in ['opencode-go', 'opencode-zen']) {
         final request = requests.singleWhere(
-          (request) => request.uri.host == 'opencode.ai' &&
+          (request) =>
+              request.uri.host == 'opencode.ai' &&
               request.uri.path.startsWith(
                 provider == 'opencode-go' ? '/zen/go/' : '/zen/v1/',
               ) &&
