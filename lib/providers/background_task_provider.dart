@@ -1070,10 +1070,9 @@ bool _legacyOcrHasCredentialUseContext(
         r'[\p{L}\p{M}\p{N}_/+~-]',
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
-  final shortNaturalWordEcho =
-      prefix.length < 8 &&
-          _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) &&
-          !explicitCredentialTarget;
+  final shortNaturalWordEcho = prefix.length < 8 &&
+      _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) &&
+      !explicitCredentialTarget;
   final isNaturalContinuation = _legacyOcrHasNaturalAlphaContinuation(suffix);
   final isNaturalWordContinuation = _legacyOcrHasNaturalWordContinuation(
     prefix,
