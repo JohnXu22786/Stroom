@@ -46,15 +46,14 @@ class LlmConnectorHttpClient {
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: const Duration(seconds: 10),
-               receiveTimeout: const Duration(seconds: 60),
-             ),
-           ),
-       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+  })  : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 60),
+              ),
+            ),
+        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -79,15 +78,14 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker =
-          Future<void>.sync(() async {
-            await onRequestSent?.call();
-          }).then<void>(
-            (_) {},
-            onError: (Object _, StackTrace _) {
-              requestSentMarkerFailed = true;
-            },
-          );
+      requestSentMarker = Future<void>.sync(() async {
+        await onRequestSent?.call();
+      }).then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          requestSentMarkerFailed = true;
+        },
+      );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -213,8 +211,8 @@ class LlmConnectorHttpClient {
           code: error.code == 'unsupported_images'
               ? 'cursor_inline_images_only'
               : error.code.startsWith('unsupported_')
-              ? 'unsupported_capability'
-              : 'invalid_request',
+                  ? 'unsupported_capability'
+                  : 'invalid_request',
         );
       } catch (_) {
         throw const LlmConnectorHttpException();
@@ -330,8 +328,7 @@ class LlmConnectorHttpClient {
             throw const LlmConnectorRequestCancelled();
           }
           throw LlmConnectorHttpException(
-            code:
-                error.code == 'http2_unavailable' ||
+            code: error.code == 'http2_unavailable' ||
                     error.code == 'transport_error'
                 ? 'connection_error'
                 : 'upstream_error',
@@ -405,8 +402,8 @@ class LlmConnectorHttpClient {
           final responseBytes = responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-              ? await _readResponseStream(responseData)
-              : responseData;
+                  ? await _readResponseStream(responseData)
+                  : responseData;
           if (responseBytes is! Uint8List && responseBytes is! List<int>) {
             throw const LlmConnectorHttpException();
           }
@@ -433,21 +430,19 @@ class LlmConnectorHttpClient {
           final message = choice['message'] as Map;
           final messageToolCalls = message['tool_calls'];
           final toolCalls = messageToolCalls is Iterable
-              ? messageToolCalls.indexed
-                    .map((entry) {
-                      final item = entry.$2 as Map;
-                      final fn = item['function'] as Map;
-                      return {
-                        'index': entry.$1,
-                        'id': item['id'],
-                        'type': 'function',
-                        'function': {
-                          'name': fn['name'],
-                          'arguments': fn['arguments'],
-                        },
-                      };
-                    })
-                    .toList(growable: false)
+              ? messageToolCalls.indexed.map((entry) {
+                  final item = entry.$2 as Map;
+                  final fn = item['function'] as Map;
+                  return {
+                    'index': entry.$1,
+                    'id': item['id'],
+                    'type': 'function',
+                    'function': {
+                      'name': fn['name'],
+                      'arguments': fn['arguments'],
+                    },
+                  };
+                }).toList(growable: false)
               : null;
           final chunk = {
             'id': decoded['id'],
@@ -480,8 +475,8 @@ class LlmConnectorHttpClient {
           final responseStream = responseData is ResponseBody
               ? responseData.stream
               : responseData is Stream<List<int>>
-              ? responseData
-              : null;
+                  ? responseData
+                  : null;
           if (stream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
@@ -548,36 +543,34 @@ class LlmConnectorHttpClient {
         final rawResponse = responseData is ResponseBody
             ? await _readResponseStream(responseData.stream)
             : responseData is Stream<List<int>>
-            ? await _readResponseStream(responseData)
-            : responseData;
-        final isSseResponse =
-            response.headers
+                ? await _readResponseStream(responseData)
+                : responseData;
+        final isSseResponse = response.headers
                 .value('content-type')
                 ?.toLowerCase()
                 .contains('text/event-stream') ??
             false;
-        final decoded =
-            !stream &&
+        final decoded = !stream &&
                 storedAccount.connectorType == 'ghe-copilot' &&
                 isSseResponse
             ? nativeFormat == 'anthropic'
-                  ? _bufferAnthropicMessagesSse(rawResponse)
-                  : nativeFormat == 'responses' ||
+                ? _bufferAnthropicMessagesSse(rawResponse)
+                : nativeFormat == 'responses' ||
                         (nativeFormat == null &&
                             modelId.toLowerCase().contains('codex'))
-                  ? _bufferOpenAiResponsesSse(rawResponse)
-                  : _bufferOpenAiChatSse(rawResponse)
+                    ? _bufferOpenAiResponsesSse(rawResponse)
+                    : _bufferOpenAiChatSse(rawResponse)
             : !stream &&
-                  const {
-                    'codebuddy-cn',
-                    'codebuddy-intl',
-                    'workbuddy',
-                    'cline',
-                    'clinepass',
-                  }.contains(storedAccount.connectorType) &&
-                  isSseResponse
-            ? _bufferOpenAiChatSse(rawResponse)
-            : _decodeResponseBody(rawResponse);
+                    const {
+                      'codebuddy-cn',
+                      'codebuddy-intl',
+                      'workbuddy',
+                      'cline',
+                      'clinepass',
+                    }.contains(storedAccount.connectorType) &&
+                    isSseResponse
+                ? _bufferOpenAiChatSse(rawResponse)
+                : _decodeResponseBody(rawResponse);
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
                 parseLlmConnectorObservation(
@@ -695,9 +688,9 @@ class LlmConnectorHttpClient {
   }
 
   static bool _isCursorComposerModel(String modelId) => RegExp(
-    r'^composer(?:-|$)',
-    caseSensitive: false,
-  ).hasMatch(modelId.split('/').last);
+        r'^composer(?:-|$)',
+        caseSensitive: false,
+      ).hasMatch(modelId.split('/').last);
 
   static bool _canRefresh(LlmAccount account) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
@@ -903,9 +896,8 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes = data is Uint8List
-          ? data
-          : Uint8List.fromList(data as List<int>);
+      final bytes =
+          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {
@@ -927,8 +919,8 @@ class LlmConnectorHttpClient {
     final bytes = data is Uint8List
         ? data
         : data is List<int>
-        ? Uint8List.fromList(data)
-        : null;
+            ? Uint8List.fromList(data)
+            : null;
     if (bytes == null) throw const LlmConnectorHttpException();
     final text = utf8.decode(bytes, allowMalformed: true);
     final content = StringBuffer();
@@ -1029,8 +1021,8 @@ class LlmConnectorHttpClient {
     final bytes = data is Uint8List
         ? data
         : data is List<int>
-        ? Uint8List.fromList(data)
-        : null;
+            ? Uint8List.fromList(data)
+            : null;
     if (bytes == null) throw const LlmConnectorHttpException();
     final text = utf8.decode(bytes, allowMalformed: true);
     final blocks = <int, Map<String, dynamic>>{};
@@ -1140,8 +1132,8 @@ class LlmConnectorHttpClient {
     final bytes = data is Uint8List
         ? data
         : data is List<int>
-        ? Uint8List.fromList(data)
-        : null;
+            ? Uint8List.fromList(data)
+            : null;
     if (bytes == null) throw const LlmConnectorHttpException();
     final text = utf8.decode(bytes, allowMalformed: true);
     for (final line in const LineSplitter().convert(text)) {

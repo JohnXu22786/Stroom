@@ -66,9 +66,8 @@ class LlmOAuthTokenClient {
         ),
       );
       final envelope = _jsonObject(response.data);
-      final token = envelope['data'] is Map
-          ? _jsonObject(envelope['data'])
-          : envelope;
+      final token =
+          envelope['data'] is Map ? _jsonObject(envelope['data']) : envelope;
       final accessToken = _nonEmptyString(
         token['accessToken'] ?? token['access_token'],
       );
@@ -147,14 +146,13 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-            ),
-          );
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            );
 
   LlmCursorOAuthSession startCursorAuthorization() =>
       LlmCursorOAuthSession.create();
@@ -166,8 +164,7 @@ class LlmOAuthTokenClient {
   }) async {
     try {
       final base = _githubOAuthBase(connectorType, enterpriseUrl);
-      final selectedClientId =
-          _nonEmptyString(clientId) ??
+      final selectedClientId = _nonEmptyString(clientId) ??
           _nonEmptyString(
             const String.fromEnvironment('GHE_COPILOT_OAUTH_CLIENT_ID'),
           ) ??
@@ -193,9 +190,8 @@ class LlmOAuthTokenClient {
       final parsedInterval = rawInterval is num
           ? rawInterval.toInt()
           : int.tryParse('$rawInterval');
-      final interval = parsedInterval != null && parsedInterval >= 0
-          ? parsedInterval
-          : 5;
+      final interval =
+          parsedInterval != null && parsedInterval > 0 ? parsedInterval : 5;
       if (deviceCode == null ||
           userCode == null ||
           verification == null ||
@@ -232,8 +228,7 @@ class LlmOAuthTokenClient {
         throw const LlmOAuthFlowException();
       }
       final base = _githubOAuthBase(connectorType, enterpriseUrl);
-      final selectedClientId =
-          _nonEmptyString(clientId) ??
+      final selectedClientId = _nonEmptyString(clientId) ??
           _nonEmptyString(
             const String.fromEnvironment('GHE_COPILOT_OAUTH_CLIENT_ID'),
           ) ??
@@ -340,8 +335,7 @@ class LlmOAuthTokenClient {
               : DateTime.tryParse(copilotExpiry)?.toUtc();
           final parsedOAuthExpiry = DateTime.parse(oauthExpiry);
           bundle['oauth_expires_at'] = oauthExpiry;
-          bundle['expires_at'] =
-              parsedCopilotExpiry != null &&
+          bundle['expires_at'] = parsedCopilotExpiry != null &&
                   parsedCopilotExpiry.isBefore(parsedOAuthExpiry)
               ? parsedCopilotExpiry.toIso8601String()
               : oauthExpiry;
@@ -373,13 +367,13 @@ class LlmOAuthTokenClient {
       '${base.path.replaceFirst(RegExp(r'/+$'), '')}$suffix';
 
   static Map<String, String> _githubCopilotHeaders(String accessToken) => {
-    'Authorization': 'Bearer $accessToken',
-    'Accept': 'application/json',
-    'X-GitHub-Api-Version': '2026-08-01',
-    'User-Agent': 'GitHubCopilotChat/1.0.91',
-    'Editor-Version': 'copilot/1.0.91',
-    'Editor-Plugin-Version': 'copilot-chat/1.0.91',
-  };
+        'Authorization': 'Bearer $accessToken',
+        'Accept': 'application/json',
+        'X-GitHub-Api-Version': '2026-08-01',
+        'User-Agent': 'GitHubCopilotChat/1.0.91',
+        'Editor-Version': 'copilot/1.0.91',
+        'Editor-Plugin-Version': 'copilot-chat/1.0.91',
+      };
 
   static String? _safeHttpsEndpoint(Object? value) {
     final uri = Uri.tryParse(_nonEmptyString(value) ?? '');
@@ -748,8 +742,8 @@ class LlmOAuthTokenClient {
         final expiresIn = token['expiresIn'] is num
             ? (token['expiresIn'] as num).toInt()
             : connectorType == 'workbuddy'
-            ? 31104000
-            : 86400;
+                ? 31104000
+                : 86400;
         if (expiresIn <= 0) throw const LlmOAuthFlowException();
         return {
           'access_token': accessToken,
@@ -770,11 +764,11 @@ class LlmOAuthTokenClient {
   }
 
   static String _tencentHost(String connectorType) => switch (connectorType) {
-    'codebuddy-cn' => _tencentCodeBuddyCnHost,
-    'codebuddy-intl' => _tencentCodeBuddyIntlHost,
-    'workbuddy' => _tencentWorkBuddyHost,
-    _ => throw const LlmOAuthFlowException(),
-  };
+        'codebuddy-cn' => _tencentCodeBuddyCnHost,
+        'codebuddy-intl' => _tencentCodeBuddyIntlHost,
+        'workbuddy' => _tencentWorkBuddyHost,
+        _ => throw const LlmOAuthFlowException(),
+      };
 
   static Future<void> _waitForTencentPollingInterval(
     Duration interval,
@@ -979,8 +973,7 @@ class LlmOAuthTokenClient {
       final token = _jsonObject(response.data);
       final bundle = _credentialBundle(token)
         ..['client_id'] = LlmOAuthAuthorizationAttempt.openferenceClientId
-        ..['scope'] =
-            _nonEmptyString(token['scope']) ??
+        ..['scope'] = _nonEmptyString(token['scope']) ??
             LlmOAuthAuthorizationAttempt.openferenceScope
         ..['oauth_contract'] = 'openference-pkce-v1';
       return bundle;
@@ -1005,8 +998,8 @@ class LlmOAuthTokenClient {
       );
       final userInfoUri =
           LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-            configuration['userInfoUrl'] ?? '',
-          );
+        configuration['userInfoUrl'] ?? '',
+      );
       if (clientId.isEmpty ||
           clientSecret.isEmpty ||
           callback.clientId != clientId ||
@@ -1044,9 +1037,8 @@ class LlmOAuthTokenClient {
         ),
       );
       final envelope = _jsonObject(userInfoResponse.data);
-      final userInfo = envelope['success'] == true
-          ? _jsonObject(envelope['data'])
-          : null;
+      final userInfo =
+          envelope['success'] == true ? _jsonObject(envelope['data']) : null;
       final apiKey = _nonEmptyString(userInfo?['apiKey']);
       if (apiKey == null) throw const LlmOAuthFlowException();
       final bundle = _qoderCredentialBundle(tokens)
@@ -1055,19 +1047,17 @@ class LlmOAuthTokenClient {
         ..['client_secret'] = clientSecret
         ..['authorize_url'] =
             LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-              configuration['authorizeUrl'] ?? '',
-            ).toString()
+          configuration['authorizeUrl'] ?? '',
+        ).toString()
         ..['token_url'] = tokenUri.toString()
         ..['user_info_url'] =
             LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-              configuration['userInfoUrl'] ?? '',
-            ).toString()
+          configuration['userInfoUrl'] ?? '',
+        ).toString()
         ..['oauth_contract'] = 'qoder-admin-code-v1';
-      final identity =
-          _nonEmptyString(userInfo?['email']) ??
+      final identity = _nonEmptyString(userInfo?['email']) ??
           _nonEmptyString(userInfo?['phone']);
-      final displayName =
-          _nonEmptyString(userInfo?['nickname']) ??
+      final displayName = _nonEmptyString(userInfo?['nickname']) ??
           _nonEmptyString(userInfo?['name']);
       if (identity != null) bundle['email'] = identity;
       if (displayName != null) bundle['display_name'] = displayName;
@@ -1241,7 +1231,8 @@ class LlmOAuthTokenClient {
   static Uint8List? _firstBytesField(
     List<_DevinProtoField> fields,
     int number,
-  ) => fields.where((field) => field.number == number).firstOrNull?.bytes;
+  ) =>
+      fields.where((field) => field.number == number).firstOrNull?.bytes;
 
   static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
       fields.where((field) => field.number == number).firstOrNull?.value;
@@ -1314,13 +1305,13 @@ class LlmOAuthTokenClient {
   }
 
   static String _devinOsName(TargetPlatform platform) => switch (platform) {
-    TargetPlatform.android => 'android',
-    TargetPlatform.iOS => 'ios',
-    TargetPlatform.linux => 'linux',
-    TargetPlatform.macOS => 'darwin',
-    TargetPlatform.windows => 'windows',
-    TargetPlatform.fuchsia => 'fuchsia',
-  };
+        TargetPlatform.android => 'android',
+        TargetPlatform.iOS => 'ios',
+        TargetPlatform.linux => 'linux',
+        TargetPlatform.macOS => 'darwin',
+        TargetPlatform.windows => 'windows',
+        TargetPlatform.fuchsia => 'fuchsia',
+      };
 
   static String _devenFingerprint(String seed) {
     final value = StringBuffer();
@@ -1353,8 +1344,7 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _kimiVerificationUri(
+      final complete = _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -1465,8 +1455,7 @@ class LlmOAuthTokenClient {
       final verification = _metaMuseVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _metaMuseVerificationUri(
+      final complete = _metaMuseVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -1642,8 +1631,7 @@ class LlmOAuthTokenClient {
       final deviceCode = _nonEmptyString(data['device_code']);
       final userCode = _nonEmptyString(data['user_code']);
       final verification = _xaiVerificationUri(data['verification_uri']);
-      final complete =
-          _xaiVerificationUri(data['verification_uri_complete']) ??
+      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
           verification;
       final expiresIn = _seconds(data['expires_in']);
       final interval = _seconds(data['interval']);
@@ -1776,12 +1764,12 @@ class LlmOAuthTokenClient {
   }
 
   static Map<String, String> _kimiDeviceHeaders(String deviceId) => {
-    'X-Msh-Platform': 'CLIProxyAPI',
-    'X-Msh-Version': 'stroom',
-    'X-Msh-Device-Name': 'Stroom',
-    'X-Msh-Device-Model': 'Stroom',
-    'X-Msh-Device-Id': deviceId,
-  };
+        'X-Msh-Platform': 'CLIProxyAPI',
+        'X-Msh-Version': 'stroom',
+        'X-Msh-Device-Name': 'Stroom',
+        'X-Msh-Device-Model': 'Stroom',
+        'X-Msh-Device-Id': deviceId,
+      };
 
   static Future<void> _waitForXaiPollingInterval(
     Duration interval,
@@ -1955,8 +1943,8 @@ class LlmOAuthTokenClient {
   static int _seconds(Object? value) => value is num
       ? value.toInt()
       : value is String
-      ? int.tryParse(value) ?? 0
-      : 0;
+          ? int.tryParse(value) ?? 0
+          : 0;
 
   Future<Map<String, dynamic>> _verifyOpenAiIdentity({
     required String idToken,
@@ -2028,8 +2016,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-        ? int.tryParse(expiresIn)
-        : null;
+            ? int.tryParse(expiresIn)
+            : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,
@@ -2048,8 +2036,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-        ? int.tryParse(expiresIn)
-        : null;
+            ? int.tryParse(expiresIn)
+            : null;
     final refreshToken = _nonEmptyString(token['refresh_token']);
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
