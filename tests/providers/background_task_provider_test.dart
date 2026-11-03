@@ -15896,6 +15896,96 @@ void main() {
       },
     );
 
+    for (final (action, instruction) in [
+      ('OCR', 'Use opaque-user-secret-87 to OCR this image.'),
+      ('decode', 'Use opaque-user-secret-87 to decode this image.'),
+    ]) {
+      test(
+        'legacy OCR instruction migration preserves use prompts with echoed keys before $action actions',
+        () {
+          const apiKey = 'opaque-user-secret-87';
+          final expectedInstruction =
+              instruction.replaceFirst(apiKey, '[redacted]');
+          final task = BackgroundTask.fromMap({
+            'id': 'legacy-ocr-use-echo-before-${action.toLowerCase()}-action',
+            'type': 'ocr',
+            'title': 'legacy OCR request',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'rawRequest': {
+              'url': 'https://api.example.com/v1/chat/completions',
+              'headers': {'Authorization': 'Bearer opaque-user-…'},
+              'body': {
+                'model': 'vision-model',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {'type': 'text', 'text': instruction},
+                    ],
+                  },
+                ],
+              },
+            },
+          });
+          final persisted = jsonEncode(task.toMap());
+          final migratedInstruction = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent;
+
+          expect(migratedInstruction, expectedInstruction);
+          expect(persisted, contains(expectedInstruction));
+          expect(migratedInstruction, isNot(contains(apiKey)));
+          expect(persisted, isNot(contains(apiKey)));
+        },
+      );
+    }
+
+    test(
+      'legacy OCR instruction migration still rejects a use prompt with an unmasked credential',
+      () {
+        const apiKey = 'opaque-user-secret-87';
+        const residualCredential = 'sk-testkey123456';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-use-echo-with-residual-credential',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {
+              'Authorization': 'Bearer opaque-user-…',
+              'X-Api-Key': residualCredential,
+            },
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text':
+                          'Use $apiKey to OCR this image and include $residualCredential.',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          isEmpty,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(residualCredential)));
+      },
+    );
+
     test(
       'legacy OCR instruction migration redacts repeated hyphenated echoes after structured masks',
       () {
