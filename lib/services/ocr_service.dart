@@ -71,16 +71,17 @@ class OcrConfig {
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
     int? requestSizeBudgetBytes,
-  }) => OcrConfig(
-    model: model ?? this.model,
-    apiKey: apiKey ?? this.apiKey,
-    host: host ?? this.host,
-    systemPrompt: systemPrompt ?? this.systemPrompt,
-    typeConfig: typeConfig ?? this.typeConfig,
-    customParams: customParams ?? this.customParams,
-    requestSizeBudgetBytes:
-        requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
-  );
+  }) =>
+      OcrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        systemPrompt: systemPrompt ?? this.systemPrompt,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
+        requestSizeBudgetBytes:
+            requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
+      );
 }
 
 // ============================================================================
@@ -183,14 +184,12 @@ class OcrService {
             (entry.key as String).toLowerCase() != 'authorization') {
           continue;
         }
-        final rawValues = entry.value is List
-            ? entry.value as List
-            : [entry.value];
+        final rawValues =
+            entry.value is List ? entry.value as List : [entry.value];
         for (final rawValue in rawValues) {
           if (rawValue is! String) continue;
-          final credential = RegExp(r'^\S+\s+(\S+)')
-              .firstMatch(rawValue.trim())
-              ?.group(1);
+          final credential =
+              RegExp(r'^\S+\s+(\S+)').firstMatch(rawValue.trim())?.group(1);
           if (credential != null && credential.isNotEmpty) {
             values.add(credential);
           }
@@ -209,27 +208,27 @@ class OcrService {
   }
 
   List<String> get _diagnosticRequestCredentialValues => {
-    ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-      'headers': lastRequestHeaders,
-      'url': lastRequestUrl,
-      'body': lastRequestBody,
-    }),
-    ..._lastRequestCredentialValues,
-  }.toList(growable: false);
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'headers': lastRequestHeaders,
+          'url': lastRequestUrl,
+          'body': lastRequestBody,
+        }),
+        ..._lastRequestCredentialValues,
+      }.toList(growable: false);
 
   List<String> get _diagnosticCredentialValues => [
-    config.apiKey,
-    ..._diagnosticRequestCredentialValues,
-  ];
+        config.apiKey,
+        ..._diagnosticRequestCredentialValues,
+      ];
 
   Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
-    url: lastRequestUrl,
-    imageCount: _lastImageCount,
-    imageBytes: _lastImageBytes,
-    durationMs: _lastDurationMs,
-    requestId: _lastRequestId,
-    excludedValues: _diagnosticCredentialValues,
-  );
+        url: lastRequestUrl,
+        imageCount: _lastImageCount,
+        imageBytes: _lastImageBytes,
+        durationMs: _lastDurationMs,
+        requestId: _lastRequestId,
+        excludedValues: _diagnosticCredentialValues,
+      );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
       OcrDiagnosticSnapshot.response(
@@ -257,23 +256,22 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
-  }) : _sendTimeoutOverride = sendTimeout,
-       _usesInjectedDio = dio != null,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               headers: {
-                 'Content-Type': 'application/json',
-                 if (config.apiKey.isNotEmpty)
-                   'Authorization': 'Bearer ${config.apiKey}',
-                 ...openRouterAppHeaders,
-               },
-               connectTimeout: connectTimeout ?? connectTimeoutDefault,
-               sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
-               receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
-             ),
-           ) {
+  })  : _sendTimeoutOverride = sendTimeout,
+        _usesInjectedDio = dio != null,
+        _dio = dio ??
+            Dio(
+              BaseOptions(
+                headers: {
+                  'Content-Type': 'application/json',
+                  if (config.apiKey.isNotEmpty)
+                    'Authorization': 'Bearer ${config.apiKey}',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: connectTimeout ?? connectTimeoutDefault,
+                sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+                receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+              ),
+            ) {
     _dio.options.connectTimeout =
         connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
     _dio.options.receiveTimeout =
@@ -396,8 +394,7 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '${response.data}'};
       lastResponseHeaders = response.headers.map;
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -498,8 +495,7 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '${response.data}'};
       lastResponseHeaders = response.headers.map;
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -588,13 +584,12 @@ class OcrService {
   }
 
   Options _requestOptions({required int encodedBytes}) => Options(
-    headers: _requestAuthorizationHeaders,
-    sendTimeout:
-        _sendTimeoutOverride ??
-        (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
-        sendTimeoutForBytes(encodedBytes),
-    receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
-  );
+        headers: _requestAuthorizationHeaders,
+        sendTimeout: _sendTimeoutOverride ??
+            (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
+            sendTimeoutForBytes(encodedBytes),
+        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+      );
 
   Map<String, dynamic>? get _requestAuthorizationHeaders {
     final hasCallerAuthorization = _dio.options.headers.keys.any(
@@ -607,13 +602,14 @@ class OcrService {
   ProgressCallback _uploadProgress(
     ProgressCallback? progress,
     void Function(OcrRequestStage)? stage,
-  ) => (sent, total) {
-    stage?.call(OcrRequestStage.uploading);
-    progress?.call(sent, total);
-    if (total > 0 && sent >= total) {
-      stage?.call(OcrRequestStage.waiting);
-    }
-  };
+  ) =>
+      (sent, total) {
+        stage?.call(OcrRequestStage.uploading);
+        progress?.call(sent, total);
+        if (total > 0 && sent >= total) {
+          stage?.call(OcrRequestStage.waiting);
+        }
+      };
 
   /// Capture response-level diagnostic fields from a [DioException].
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
@@ -635,8 +631,7 @@ class OcrService {
     }
     lastResponseStatusCode = e.response?.statusCode;
     lastResponseHeaders = e.response?.headers.map;
-    _lastRequestId =
-        OcrDiagnosticSnapshot.requestIdFromHeaders(
+    _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         ) ??
@@ -714,12 +709,12 @@ class OcrService {
       final rawValue = param.type == 'json'
           ? param.defaultValue
           : param.options.isNotEmpty
-          ? param.options.first
-          : param.defaultValue.trim().isNotEmpty
-          ? param.defaultValue
-          : param.type == 'boolean'
-          ? 'true'
-          : '';
+              ? param.options.first
+              : param.defaultValue.trim().isNotEmpty
+                  ? param.defaultValue
+                  : param.type == 'boolean'
+                      ? 'true'
+                      : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (const {'max_tokens', 'temperature', 'top_p'}.contains(name)) {

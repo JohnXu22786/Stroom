@@ -46,14 +46,13 @@ class _SuccessInterceptor extends Interceptor {
 /// a default success response.
 class _InterceptorWithCallback extends Interceptor {
   final void Function(RequestOptions options, RequestInterceptorHandler handler)
-  _callback;
+      _callback;
 
   _InterceptorWithCallback({
     required void Function(
       RequestOptions options,
       RequestInterceptorHandler handler,
-    )
-    callback,
+    ) callback,
   }) : _callback = callback;
 
   @override
@@ -398,7 +397,9 @@ void main() {
           throwsArgumentError,
         );
       });
-      test('encoded JSON request budget accepts its boundary and rejects one byte over before send', () async {
+      test(
+          'encoded JSON request budget accepts its boundary and rejects one byte over before send',
+          () async {
         final bytes = Uint8List.fromList([1, 2, 3, 4]);
         final baseConfig = _testOcrConfig.copyWith(
           typeConfig: {'userInstruction': '识别页码：一'},
@@ -1049,7 +1050,9 @@ void main() {
         expect(result.imageCount, equals(2));
       });
 
-      test('recognizeBatch retains text and marks a content-filtered result incomplete', () async {
+      test(
+          'recognizeBatch retains text and marks a content-filtered result incomplete',
+          () async {
         final dio = _mockDioWithSuccess({
           'choices': [
             {
@@ -1100,7 +1103,8 @@ void main() {
         );
       }
 
-      test('recognizeBatch retains text and marks an unlisted finish reason '
+      test(
+          'recognizeBatch retains text and marks an unlisted finish reason '
           'incomplete', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
@@ -1481,9 +1485,8 @@ void main() {
             imageFormat: 'jpeg',
           );
           final messages = capturedBody?['messages'] as List?;
-          final userContent =
-              messages?.lastWhere((m) => m['role'] == 'user')['content']
-                  as List;
+          final userContent = messages
+              ?.lastWhere((m) => m['role'] == 'user')['content'] as List;
           // Official qwen-vl-ocr / DeepSeek-OCR examples put the image first,
           // the instruction text after it.
           expect(userContent.length, equals(2));
@@ -1495,7 +1498,8 @@ void main() {
         },
       );
 
-      test('batch with userInstruction sends instruction after all images '
+      test(
+          'batch with userInstruction sends instruction after all images '
           'without per-image labels', () async {
         Map<String, dynamic>? capturedBody;
         final dio = Dio()
@@ -1543,9 +1547,8 @@ void main() {
           userContent[2],
           equals({'type': 'text', 'text': '提取每张图片中的全部文字'}),
         );
-        final textParts = userContent
-            .where((c) => c['type'] == 'text')
-            .toList();
+        final textParts =
+            userContent.where((c) => c['type'] == 'text').toList();
         expect(textParts.length, equals(1));
       });
 
@@ -2321,50 +2324,46 @@ void main() {
           const safeRequestId = 'req-safe-after-overlapping-credential-91';
           final firstRequestStarted = Completer<void>();
           final finishFirstRequest = Completer<void>();
-          final dio =
-              Dio(
-                  BaseOptions(
-                    headers: {'Authorization': 'Bearer $firstCredential'},
-                  ),
-                )
-                ..interceptors.add(
-                  _InterceptorWithCallback(
-                    callback: (options, handler) {
-                      final isFirstRequest =
-                          options.headers['Authorization'] ==
-                          'Bearer $firstCredential';
-                      final response = Response(
-                        requestOptions: options,
-                        statusCode: 200,
-                        data: {
-                          'request_id': isFirstRequest
-                              ? firstCredential
-                              : secondCredential,
-                          'id': safeRequestId,
-                          'choices': [
-                            {
-                              'message': {'content': 'recognized'},
-                            },
-                          ],
+          final dio = Dio(
+            BaseOptions(
+              headers: {'Authorization': 'Bearer $firstCredential'},
+            ),
+          )..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  final isFirstRequest = options.headers['Authorization'] ==
+                      'Bearer $firstCredential';
+                  final response = Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'request_id':
+                          isFirstRequest ? firstCredential : secondCredential,
+                      'id': safeRequestId,
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
                         },
-                        headers: Headers.fromMap({
-                          'x-request-id': [
-                            isFirstRequest ? firstCredential : secondCredential,
-                            safeRequestId,
-                          ],
-                        }),
-                      );
-                      if (isFirstRequest) {
-                        firstRequestStarted.complete();
-                        finishFirstRequest.future.then(
-                          (_) => handler.resolve(response),
-                        );
-                      } else {
-                        handler.resolve(response);
-                      }
+                      ],
                     },
-                  ),
-                );
+                    headers: Headers.fromMap({
+                      'x-request-id': [
+                        isFirstRequest ? firstCredential : secondCredential,
+                        safeRequestId,
+                      ],
+                    }),
+                  );
+                  if (isFirstRequest) {
+                    firstRequestStarted.complete();
+                    finishFirstRequest.future.then(
+                      (_) => handler.resolve(response),
+                    );
+                  } else {
+                    handler.resolve(response);
+                  }
+                },
+              ),
+            );
           final service = OcrService(config: _testOcrConfig, dio: dio);
           final imageBytes = Uint8List.fromList([1, 2, 3]);
 
@@ -2381,7 +2380,9 @@ void main() {
         },
       );
 
-      test('diagnostics exclude Authorization credentials added by Dio interceptors', () async {
+      test(
+          'diagnostics exclude Authorization credentials added by Dio interceptors',
+          () async {
         const safeRequestId = 'req-safe-after-interceptor-credential-91';
         final cases = [
           (
