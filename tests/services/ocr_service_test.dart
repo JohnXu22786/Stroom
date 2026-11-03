@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/ocr_service.dart';
@@ -2252,6 +2253,137 @@ void main() {
         expect(service.diagnosticRequest['requestId'], isNull);
         expect(service.diagnosticResponse()['requestId'], isNull);
       });
+
+      test(
+        'diagnostics exclude injected Dio Authorization credentials',
+        () async {
+          const safeRequestId = 'req-safe-after-injected-credential-91';
+          final cases = [
+            (
+              'Authorization',
+              'Bearer injected-dio-secret-91',
+              'injected-dio-secret-91',
+            ),
+            (
+              'authorization',
+              'bEaReR injected-dio-secret-92',
+              'injected-dio-secret-92',
+            ),
+            (
+              'AUTHORIZATION',
+              'Basic injected-dio-secret-93',
+              'injected-dio-secret-93',
+            ),
+          ];
+
+          for (final (headerName, headerValue, credential) in cases) {
+            final dio = Dio(BaseOptions(headers: {headerName: headerValue}))
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    handler.resolve(
+                      Response(
+                        requestOptions: options,
+                        statusCode: 200,
+                        data: {
+                          'request_id': credential,
+                          'id': safeRequestId,
+                          'choices': [
+                            {
+                              'message': {'content': 'recognized'},
+                            },
+                          ],
+                        },
+                        headers: Headers.fromMap({
+                          'x-request-id': [credential, safeRequestId],
+                        }),
+                      ),
+                    );
+                  },
+                ),
+              );
+            final service = OcrService(config: _testOcrConfig, dio: dio);
+
+            await service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+              imageFormat: 'jpeg',
+            );
+            dio.options.headers.clear();
+
+            final diagnostics = jsonEncode({
+              'request': service.diagnosticRequest,
+              'response': service.diagnosticResponse(),
+            });
+            expect(service.diagnosticResponse()['requestId'], safeRequestId);
+            expect(
+              service.lastRequestHeaders.toString(),
+              isNot(contains(credential)),
+            );
+            expect(diagnostics, isNot(contains(credential)));
+          }
+        },
+      );
+
+      test(
+        'overlapping OCR requests keep their Authorization exclusions paired',
+        () async {
+          const firstCredential = 'overlapping-dio-secret-a-91';
+          const secondCredential = 'overlapping-dio-secret-b-91';
+          const safeRequestId = 'req-safe-after-overlapping-credential-91';
+          final firstRequestStarted = Completer<void>();
+          final finishFirstRequest = Completer<void>();
+          final dio = Dio(
+            BaseOptions(headers: {'Authorization': 'Bearer $firstCredential'}),
+          )..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  final isFirstRequest =
+                      options.headers['Authorization'] ==
+                      'Bearer $firstCredential';
+                  final response = Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'request_id':
+                          isFirstRequest ? firstCredential : secondCredential,
+                      'id': safeRequestId,
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                    headers: Headers.fromMap({
+                      'x-request-id': [
+                        isFirstRequest ? firstCredential : secondCredential,
+                        safeRequestId,
+                      ],
+                    }),
+                  );
+                  if (isFirstRequest) {
+                    firstRequestStarted.complete();
+                    finishFirstRequest.future.then((_) => handler.resolve(response));
+                  } else {
+                    handler.resolve(response);
+                  }
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+          final imageBytes = Uint8List.fromList([1, 2, 3]);
+
+          final firstRequest = service.recognize(imageBytes: imageBytes);
+          await firstRequestStarted.future;
+          dio.options.headers['Authorization'] = 'Bearer $secondCredential';
+          await service.recognize(imageBytes: imageBytes);
+          finishFirstRequest.complete();
+          await firstRequest;
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(firstCredential)));
+        },
+      );
 
       test(
         'success diagnostics omit image signatures in provider metadata',
