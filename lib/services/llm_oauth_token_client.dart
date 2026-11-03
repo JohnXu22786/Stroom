@@ -153,6 +153,105 @@ class LlmOAuthTokenClient {
               ),
             );
 
+  LlmCursorOAuthSession startCursorAuthorization() =>
+      LlmCursorOAuthSession.create();
+
+  /// Performs one Cursor auth poll. `null` means approval is still pending.
+  Future<Map<String, dynamic>?> pollCursorAuthorization(
+    LlmCursorOAuthSession session, {
+    CancelToken? cancelToken,
+  }) async {
+    if (session.isExpired() || (cancelToken?.isCancelled ?? false)) {
+      throw const LlmOAuthFlowException();
+    }
+    try {
+      final response = await _dio.getUri<Object?>(
+        Uri.https('api2.cursor.sh', '/auth/poll', {
+          'uuid': session.uuid,
+          'verifier': session.verifier,
+        }),
+        options: Options(
+          responseType: ResponseType.json,
+          validateStatus: (_) => true,
+        ),
+        cancelToken: cancelToken,
+      );
+      if (response.statusCode == 404) return null;
+      if (response.statusCode != 200) throw const LlmOAuthFlowException();
+      final token = _jsonObject(response.data);
+      final accessToken = _nonEmptyString(token['accessToken']);
+      final refreshToken = _nonEmptyString(token['refreshToken']);
+      if (accessToken == null || refreshToken == null) {
+        throw const LlmOAuthFlowException();
+      }
+      return {
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'expires_at': _cursorTokenExpiry(accessToken).toIso8601String(),
+        'oauth_contract': 'cursor-deep-control-v1',
+      };
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  Future<Map<String, dynamic>> refreshCursorAuthorization(
+    String refreshToken, {
+    CancelToken? cancelToken,
+  }) async {
+    if (refreshToken.trim().isEmpty) throw const LlmOAuthFlowException();
+    try {
+      final response = await _dio.postUri<Object?>(
+        Uri.https('api2.cursor.sh', '/auth/exchange_user_api_key'),
+        data: const <String, Object?>{},
+        options: Options(
+          headers: {'Authorization': 'Bearer $refreshToken'},
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.json,
+        ),
+        cancelToken: cancelToken,
+      );
+      final token = _jsonObject(response.data);
+      final accessToken = _nonEmptyString(token['accessToken']);
+      if (accessToken == null) throw const LlmOAuthFlowException();
+      return {
+        'access_token': accessToken,
+        'refresh_token': _nonEmptyString(token['refreshToken']) ?? refreshToken,
+        'expires_at': _cursorTokenExpiry(accessToken).toIso8601String(),
+        'oauth_contract': 'cursor-deep-control-v1',
+      };
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmOAuthFlowException();
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static DateTime _cursorTokenExpiry(String token) {
+    try {
+      final segments = token.split('.');
+      if (segments.length == 3) {
+        final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(segments[1]))),
+        );
+        final exp = payload is Map ? payload['exp'] : null;
+        if (exp is num) {
+          return DateTime.fromMillisecondsSinceEpoch(
+            (exp * 1000).round(),
+            isUtc: true,
+          ).subtract(const Duration(minutes: 5));
+        }
+      }
+    } catch (_) {
+      // Cursor may return an opaque token; use the source's one-hour fallback.
+    }
+    return DateTime.now().toUtc().add(const Duration(hours: 1));
+  }
+
   Future<LlmTencentDeviceCode> startTencentDeviceAuthorization({
     required String connectorType,
   }) async {

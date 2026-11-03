@@ -9,6 +9,94 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('Cursor deep-control OAuth keeps PKCE verifier off the login URL', () {
+    final session = LlmCursorOAuthSession.create(
+      now: DateTime.utc(2026, 11, 3),
+      uuid: 'cursor-test-uuid',
+      verifier: _cursorVerifier,
+    );
+
+    expect(session.authorizationUri.origin, 'https://cursor.com');
+    expect(session.authorizationUri.path, '/loginDeepControl');
+    expect(session.authorizationUri.queryParameters['challenge'], isNotEmpty);
+    expect(
+      session.authorizationUri.queryParameters['uuid'],
+      'cursor-test-uuid',
+    );
+    expect(session.authorizationUri.queryParameters['mode'], 'login');
+    expect(session.authorizationUri.queryParameters['redirectTarget'], 'cli');
+    expect(
+      session.authorizationUri.toString(),
+      isNot(contains(session.verifier)),
+    );
+    expect(session.isExpired(DateTime.utc(2026, 11, 3, 0, 14, 59)), isFalse);
+    expect(session.isExpired(DateTime.utc(2026, 11, 3, 0, 15)), isTrue);
+  });
+
+  test(
+    'Cursor poll treats 404 as pending and validates the returned token pair',
+    () async {
+      var poll = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          expect(request.uri.origin, 'https://api2.cursor.sh');
+          expect(request.uri.path, '/auth/poll');
+          expect(request.uri.queryParameters['uuid'], 'poll-uuid');
+          expect(request.uri.queryParameters['verifier'], _cursorVerifier);
+          poll++;
+          if (poll == 1) return ResponseBody.fromString('', 404);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'accessToken': 'cursor-access',
+              'refreshToken': 'cursor-refresh',
+            }),
+            200,
+          );
+        });
+      final session = LlmCursorOAuthSession.create(
+        uuid: 'poll-uuid',
+        verifier: _cursorVerifier,
+      );
+      final client = LlmOAuthTokenClient(dio: dio);
+
+      expect(await client.pollCursorAuthorization(session), isNull);
+      final bundle = await client.pollCursorAuthorization(session);
+      expect(bundle?['access_token'], 'cursor-access');
+      expect(bundle?['refresh_token'], 'cursor-refresh');
+      expect(bundle?['oauth_contract'], 'cursor-deep-control-v1');
+      expect(poll, 2);
+    },
+  );
+
+  test(
+    'Cursor refresh sends bearer refresh token and keeps it when not rotated',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((options) async {
+          request = options;
+          return ResponseBody.fromString(
+            jsonEncode({'accessToken': 'cursor-next-access'}),
+            200,
+          );
+        });
+
+      final bundle = await LlmOAuthTokenClient(
+        dio: dio,
+      ).refreshCursorAuthorization('cursor-refresh');
+
+      expect(
+        request?.uri.toString(),
+        'https://api2.cursor.sh/auth/exchange_user_api_key',
+      );
+      expect(request?.method, 'POST');
+      expect(request?.headers['Authorization'], 'Bearer cursor-refresh');
+      expect(request?.data, isA<Map>());
+      expect(bundle['access_token'], 'cursor-next-access');
+      expect(bundle['refresh_token'], 'cursor-refresh');
+    },
+  );
+
   test('Cline WorkOS OAuth uses the extension callback contract', () {
     final redirectUri = Uri(
       scheme: 'http',
@@ -51,9 +139,7 @@ void main() {
     );
     expect(
       () => freshAttempt.consumeCallback(
-        Uri.parse(
-          'http://127.0.0.1:43127/auth/callback?code=forged-code',
-        ),
+        Uri.parse('http://127.0.0.1:43127/auth/callback?code=forged-code'),
       ),
       throwsA(isA<LlmOAuthFlowException>()),
     );
@@ -98,9 +184,7 @@ void main() {
         attempt.redirectUri.replace(queryParameters: {'code': token}),
       );
 
-      final credentials = await LlmOAuthTokenClient(
-        dio: dio,
-      ).exchangeClineCode(
+      final credentials = await LlmOAuthTokenClient(dio: dio).exchangeClineCode(
         attempt: attempt,
         callback: callback,
         provider: 'cline',
@@ -145,9 +229,7 @@ void main() {
         attempt.redirectUri.replace(queryParameters: {'code': 'opaque-code'}),
       );
 
-      final credentials = await LlmOAuthTokenClient(
-        dio: dio,
-      ).exchangeClineCode(
+      final credentials = await LlmOAuthTokenClient(dio: dio).exchangeClineCode(
         attempt: attempt,
         callback: callback,
         provider: 'clinepass',
@@ -1925,6 +2007,8 @@ Uint8List _devinStatusResponse({required String userId, required String plan}) {
   }
   return Uint8List.fromList(_protoBytes(1, status));
 }
+
+final _cursorVerifier = List.filled(43, 'v').join();
 
 List<int> _protoBytes(int field, List<int> bytes) => [
       ..._protoVarint((field << 3) | 2),

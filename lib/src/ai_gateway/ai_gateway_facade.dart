@@ -843,6 +843,28 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthCursorAuthorization> beginCursorAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (account.connectorType != 'cursor' ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider('cursor').supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      final session = _tokenClient.startCursorAuthorization();
+      return _LlmCursorOAuthAuthorization(
+        account: account,
+        session: session,
+        tokenClient: _tokenClient,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<AiGatewayOAuthDeviceAuthorization> beginKiloDeviceAuthorization(
     AiGatewayAccount account,
   ) async {
@@ -1251,6 +1273,98 @@ class _LlmKimiCodeDeviceAuthorization
         ),
         secret: jsonEncode(tokenBundle),
       );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+class _LlmCursorOAuthAuthorization
+    implements AiGatewayOAuthCursorAuthorization {
+  final AiGatewayAccount _account;
+  final LlmCursorOAuthSession _session;
+  final LlmOAuthTokenClient _tokenClient;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmCursorOAuthAuthorization({
+    required AiGatewayAccount account,
+    required LlmCursorOAuthSession session,
+    required LlmOAuthTokenClient tokenClient,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _session = session,
+        _tokenClient = tokenClient,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get authorizationUri => _session.authorizationUri;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      while (!_session.isExpired()) {
+        if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+        final credentials = await _tokenClient.pollCursorAuthorization(
+          _session,
+          cancelToken: _cancelToken,
+        );
+        if (credentials != null) {
+          if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+          final models = _account.models.isNotEmpty
+              ? _account.models
+              : [
+                  for (var index = 0;
+                      index < kPinnedCursorModels.length;
+                      index++)
+                    AiGatewayUpstreamModel(
+                      id: '${_account.id}:catalog:$index',
+                      upstreamModelId: kPinnedCursorModels[index],
+                      displayName: kPinnedCursorModels[index],
+                      capabilities: const {
+                        'chat': true,
+                        'streaming': true,
+                        'vision': true,
+                      },
+                      config: const {
+                        'catalogSource': 'cursor_provider_registry',
+                        'imageInputSupport':
+                            'Inline PNG, JPEG, GIF, or WebP data only; maximum 12 images at 1 MiB each. Remote URLs and other image representations are unsupported.',
+                      },
+                    ),
+                ];
+          return await _accountManagement.saveAuthorizedOAuthAccount(
+            AiGatewayAccount(
+              id: _account.id,
+              connectorType: 'cursor',
+              authType: 'oauth',
+              displayName: _account.displayName,
+              status: AiGatewayAccountStatus.ready,
+              hasCredential: true,
+              credentialRef: _account.credentialRef,
+              endpointConfig: _account.endpointConfig,
+              models: models,
+              policy: _account.policy,
+              usageByWindow: _account.usageByWindow,
+              remainingQuota: _account.remainingQuota,
+              quotaSignals: _account.quotaSignals,
+            ),
+            secret: jsonEncode(credentials),
+          );
+        }
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+      throw const AiGatewayOAuthException();
     } catch (_) {
       throw const AiGatewayOAuthException();
     }

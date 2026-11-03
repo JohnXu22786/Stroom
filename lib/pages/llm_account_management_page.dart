@@ -10,6 +10,7 @@ import '../services/llm_connector_model_catalog.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
 import '../services/llm_oauth_flow.dart';
+import 'browser_page.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -239,6 +240,20 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       return gateway.accountManagement.saveAccount(
         result.account,
         secret: result.secret.isEmpty ? null : result.secret,
+      );
+    }
+    if (result.account.connectorType == 'cursor') {
+      final authorization = await gateway.oauthAuthorization
+          .beginCursorAuthorization(result.account);
+      if (!mounted) {
+        authorization.cancel();
+        return null;
+      }
+      return showDialog<AiGatewayAccount>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) =>
+            _CursorOAuthAuthorizationDialog(authorization: authorization),
       );
     }
     if (result.account.connectorType == 'kilocode') {
@@ -688,6 +703,67 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       ],
     );
   }
+}
+
+class _CursorOAuthAuthorizationDialog extends StatelessWidget {
+  final AiGatewayOAuthCursorAuthorization authorization;
+
+  const _CursorOAuthAuthorizationDialog({required this.authorization});
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Connect Cursor'),
+          content: FutureBuilder<AiGatewayAccount>(
+            future: authorization.completed,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text(
+                  'Cursor sign-in could not be completed. Cancel and start again.',
+                );
+              }
+              if (snapshot.hasData) {
+                return const Text('Cursor is connected.');
+              }
+              return const Text(
+                'Complete sign-in in Stroom’s in-app browser, then return here. '
+                'Stroom checks authorization directly with Cursor and does not '
+                'read or import another browser session.',
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            FutureBuilder<AiGatewayAccount>(
+              future: authorization.completed,
+              builder: (context, snapshot) => TextButton(
+                onPressed: snapshot.hasData
+                    ? () => Navigator.of(context).pop(snapshot.data)
+                    : snapshot.hasError
+                        ? null
+                        : () async {
+                            await Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) => BrowserPage(
+                                  initialUrl:
+                                      authorization.authorizationUri.toString(),
+                                ),
+                              ),
+                            );
+                          },
+                child: Text(snapshot.hasData ? 'Finish' : 'Open sign-in'),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _KimiCodeDeviceAuthorizationDialog extends StatefulWidget {
@@ -2012,9 +2088,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   _connectorType == 'openference-api')
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    '可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。',
-                  ),
+                  child: Text('可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。'),
                 ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(

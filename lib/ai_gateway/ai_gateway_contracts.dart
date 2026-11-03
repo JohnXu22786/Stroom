@@ -85,8 +85,11 @@ class AiGatewayExecutionException implements Exception {
 
   @override
   String toString() {
+    if (code == 'cursor_inline_images_only') {
+      return 'Cursor supports inline PNG, JPEG, GIF, or WebP image data only, with a maximum of 12 images at 1 MiB each. Remote URLs and other image representations are unsupported.';
+    }
     if (code == 'unsupported_capability') {
-      return 'This Devin CLI capability is not supported.';
+      return 'This provider capability is not supported by this chat flow.';
     }
     if (code == 'unsupported_acp_protocol') {
       return 'This Devin CLI ACP protocol version is not supported.';
@@ -499,6 +502,10 @@ abstract interface class AiGatewayOAuthAuthorization {
     AiGatewayAccount account,
   );
 
+  Future<AiGatewayOAuthCursorAuthorization> beginCursorAuthorization(
+    AiGatewayAccount account,
+  );
+
   Future<void> revoke(AiGatewayAccount account);
 
   /// Deletes an OAuth account before attempting provider revocation. Returns
@@ -512,6 +519,14 @@ abstract interface class AiGatewayOAuthDeviceAuthorization {
   Uri get verificationUri;
   Uri get verificationUriComplete;
   String get userCode;
+  Future<AiGatewayAccount> get completed;
+  void cancel();
+}
+
+/// Cursor's PKCE login exposes a browser URL while the verifier and token
+/// polling remain inside the Gateway.
+abstract interface class AiGatewayOAuthCursorAuthorization {
+  Uri get authorizationUri;
   Future<AiGatewayAccount> get completed;
   void cancel();
 }

@@ -15,9 +15,77 @@ import 'package:stroom/services/qoder_cli_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/aws_sigv4.dart';
+import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test('Cursor unsupported image forms get an inline-only user message', () {
+    final error = AiGatewayExecutionException(
+      kind: AiGatewayFailureKind.request,
+      code: 'cursor_inline_images_only',
+    );
+    expect(error.toString(), contains('inline PNG, JPEG, GIF, or WebP'));
+    expect(error.toString(), contains('Remote URLs'));
+  });
+
+  test(
+    'Cursor is a provider-owned OAuth adapter, not a selectable API protocol',
+    () {
+      final connector = LlmConnectorRegistry.find('cursor')!;
+      expect(connector.authTypes, {'oauth'});
+      expect(connector.protocol, LlmNativeProtocol.cursorAgentConnectRpc);
+      expect(connector.canRefreshCredentials, isTrue);
+      expect(connector.modelCatalog, hasLength(242));
+      expect(connector.modelCatalog, contains('claude-sonnet-5-high'));
+      expect(connector.modelCatalog, isNot(contains('claude-sonnet-5-5')));
+      expect(
+        connector.modelCatalog,
+        contains('cursor-grok-4.7-xhigh-fast-500k'),
+      );
+      expect(connector.modelCatalog, contains('claude-opus-5-thinking-max-1m'));
+      expect(
+        supportedApiProtocolsForSupplier(null, connectorType: 'cursor'),
+        kCustomHttpApiProtocols,
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('cursor'),
+        'openai.chat_completions',
+      );
+
+      final request = LlmNativeRequestBuilder().build(
+        account: _account(
+          'cursor-account',
+          'cursor',
+          authType: 'oauth',
+          models: [_upstreamModel('claude-sonnet-5-high')],
+        ),
+        credential: jsonEncode({'access_token': 'cursor-secret'}),
+        modelId: 'claude-sonnet-5-high',
+        conversationId: 'conversation-1',
+        body: const {
+          'messages': [
+            {'role': 'system', 'content': 'Keep the answer concise.'},
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+      );
+      expect(request.uri.origin, 'https://api2.cursor.sh');
+      expect(
+        request.uri.path,
+        '/aiserver.v1.ServerConfigService/GetServerConfig',
+      );
+      expect(request.headers.keys, isNot(contains('Authorization')));
+      expect(request.toString(), isNot(contains('cursor-secret')));
+      expect(request.requestBlobs, hasLength(1));
+      expect(
+        request.requestBlobs.values.single,
+        utf8.encode(
+          jsonEncode({'role': 'system', 'content': 'Keep the answer concise.'}),
+        ),
+      );
+    },
+  );
+
   test('Cline and ClinePass register distinct OAuth and direct-key owners', () {
     for (final connectorId in ['cline', 'clinepass']) {
       final connector = LlmConnectorRegistry.find(connectorId)!;
@@ -162,52 +230,55 @@ void main() {
   );
 
   test(
-      'Cline fallback models retain unknown availability after catalog failure',
-      () async {
-    final dio = Dio()
-      ..httpClientAdapter = _FunctionalAdapter((options) async {
-        throw DioException(
-          requestOptions: options,
-          type: DioExceptionType.connectionError,
-        );
-      });
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentials(),
-      dio: dio,
-    );
-    final account = await service.saveAccount(
-      LlmAccount(
-        id: 'cline-offline-catalog',
-        connectorType: 'cline',
-        authType: 'api_key',
-        displayName: 'Cline offline catalog',
-        status: LlmAccountStatus.ready,
-        models: [
-          LlmUpstreamModel(
-            id: 'saved-cline-model',
-            upstreamModelId: kPinnedClineModels.first,
-            displayName: 'Saved name',
-            capabilities: const {'chat': true},
-            config: const {'availability': 'entitled', 'userSetting': 'keep'},
-          ),
-        ],
-      ),
-      secret: 'cline-private-key',
-    );
+    'Cline fallback models retain unknown availability after catalog failure',
+    () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionError,
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'cline-offline-catalog',
+          connectorType: 'cline',
+          authType: 'api_key',
+          displayName: 'Cline offline catalog',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: 'saved-cline-model',
+              upstreamModelId: kPinnedClineModels.first,
+              displayName: 'Saved name',
+              capabilities: const {'chat': true},
+              config: const {'availability': 'entitled', 'userSetting': 'keep'},
+            ),
+          ],
+        ),
+        secret: 'cline-private-key',
+      );
 
-    final discovered =
-        await service.discoverModels(account, refreshRemote: true);
-    final fallback = discovered.singleWhere(
-      (model) => model.upstreamModelId == kPinnedClineModels.first,
-    );
+      final discovered = await service.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+      final fallback = discovered.singleWhere(
+        (model) => model.upstreamModelId == kPinnedClineModels.first,
+      );
 
-    expect(fallback.id, 'saved-cline-model');
-    expect(fallback.displayName, 'Saved name');
-    expect(fallback.config['availability'], 'unknown');
-    expect(fallback.config['catalogSource'], 'provider-fallback');
-    expect(fallback.config['userSetting'], 'keep');
-  });
+      expect(fallback.id, 'saved-cline-model');
+      expect(fallback.displayName, 'Saved name');
+      expect(fallback.config['availability'], 'unknown');
+      expect(fallback.config['catalogSource'], 'provider-fallback');
+      expect(fallback.config['userSetting'], 'keep');
+    },
+  );
 
   test('Cline auth shapes route only to streaming Chat Completions', () {
     final builder = LlmNativeRequestBuilder();
@@ -2640,6 +2711,43 @@ void main() {
     });
 
     test(
+      'Cursor fallback catalog exposes chat, streaming, and inline vision capabilities',
+      () async {
+        final catalogService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+
+        final models = await catalogService.discoverModels(
+          _account('cursor-catalog', 'cursor', authType: 'oauth'),
+        );
+
+        expect(models, isNotEmpty);
+        expect(models.map((model) => model.upstreamModelId), contains('auto'));
+        expect(
+          models.every((model) => model.capabilities['chat'] == true),
+          isTrue,
+        );
+        expect(
+          models.every((model) => model.capabilities['streaming'] == true),
+          isTrue,
+        );
+        expect(
+          models.every((model) => model.capabilities['vision'] == true),
+          isTrue,
+        );
+        expect(
+          models.first.config['catalogSource'],
+          'cursor_provider_registry',
+        );
+        expect(
+          models.first.config['imageInputSupport'],
+          contains('Inline PNG, JPEG, GIF, or WebP data only'),
+        );
+      },
+    );
+
+    test(
       'discovers entitled Grok and xAI OAuth models from their own hosts',
       () async {
         for (final connectorType in ['grok-cli', 'xai-oauth']) {
@@ -4448,6 +4556,59 @@ void main() {
         expect(refreshed['access_token'], 'fresh-access-token');
         expect(refreshed['refresh_token'], 'fresh-refresh-token');
         expect(storedAccounts, isNot(contains('fresh-access-token')));
+      },
+    );
+
+    test(
+      'retries Cursor refresh after transient network and server failures',
+      () async {
+        var attempt = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            attempt++;
+            if (attempt == 1) {
+              throw DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+              );
+            }
+            if (attempt == 2) {
+              return ResponseBody.fromString(
+                jsonEncode({'error': 'temporarily unavailable'}),
+                503,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            return ResponseBody.fromString(
+              jsonEncode({'accessToken': 'cursor-retried-access'}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final refreshService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await refreshService.saveAccount(
+          _account('cursor-retry', 'cursor', authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'cursor-old-access',
+            'refresh_token': 'cursor-refresh-token',
+          }),
+        );
+
+        expect(await refreshService.refreshCredential(account), isTrue);
+        expect(attempt, 3);
+        final refreshed =
+            jsonDecode((await refreshService.readCredential(account.id))!)
+                as Map;
+        expect(refreshed['access_token'], 'cursor-retried-access');
+        expect(refreshed['refresh_token'], 'cursor-refresh-token');
       },
     );
 
@@ -6485,8 +6646,10 @@ void main() {
         captured?.uri.toString(),
         'https://api.cline.bot/api/v1/chat/completions',
       );
-      expect(captured?.headers['Authorization'],
-          'Bearer workos:cline-private-token');
+      expect(
+        captured?.headers['Authorization'],
+        'Bearer workos:cline-private-token',
+      );
       expect(captured?.headers['Accept'], 'text/event-stream');
       expect(captured?.data['stream'], isTrue);
       expect(response.body, isA<Map>());

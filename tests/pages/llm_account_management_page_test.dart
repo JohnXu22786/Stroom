@@ -23,6 +23,51 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  test(
+    'Cursor OAuth fallback models preserve inline vision metadata',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          expect(options.uri.path, '/auth/poll');
+          return ResponseBody.fromString(
+            jsonEncode({
+              'accessToken': 'cursor-access-token',
+              'refreshToken': 'cursor-refresh-token',
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final gateway = _testGateway(service, oauthDio: dio);
+      final authorization =
+          await gateway.oauthAuthorization.beginCursorAuthorization(
+        AiGatewayAccount(
+          id: 'cursor-vision-oauth',
+          connectorType: 'cursor',
+          authType: 'oauth',
+          displayName: 'Cursor',
+        ),
+      );
+
+      final account = await authorization.completed;
+      expect(account.models, isNotEmpty);
+      expect(
+        account.models.every((model) => model.capabilities['vision'] == true),
+        isTrue,
+      );
+      expect(
+        account.models.first.config['imageInputSupport'],
+        contains('Inline PNG, JPEG, GIF, or WebP data only'),
+      );
+    },
+  );
+
   testWidgets('Cline and ClinePass expose separate OAuth and API-key choices', (
     tester,
   ) async {
@@ -47,9 +92,9 @@ void main() {
         of: connector,
         matching: find.byType(DropdownButton<String>),
       );
-      tester
-          .widget<DropdownButton<String>>(connectorButton)
-          .onChanged!(connectorId);
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        connectorId,
+      );
       await tester.pumpAndSettle();
 
       final auth = find.byType(DropdownButtonFormField<String>).at(1);
@@ -59,7 +104,9 @@ void main() {
       );
       final items = tester.widget<DropdownButton<String>>(authButton).items!;
       expect(
-          items.map((item) => item.value), containsAll(['api_key', 'oauth']));
+        items.map((item) => item.value),
+        containsAll(['api_key', 'oauth']),
+      );
       expect(
         items.map((item) => (item.child as Text).data),
         containsAll(expectedLabels),
@@ -1147,55 +1194,56 @@ void main() {
     expect(await service.listAccounts(), isEmpty);
   });
 
-  test('Kilo chat-completions models support streaming group routing',
-      () async {
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentialStore(),
-    );
-    const accountId = 'kilo-streaming-anonymous';
-    await service.saveAccount(
-      LlmAccount(
-        id: accountId,
-        connectorType: 'kilocode',
-        authType: 'none',
-        displayName: 'Kilo anonymous',
-        status: LlmAccountStatus.ready,
-        models: const [
-          LlmUpstreamModel(
-            id: 'kilo-free',
-            upstreamModelId: 'openrouter/free',
-            displayName: 'Kilo free',
-          ),
-        ],
-      ),
-    );
-    await service.saveModelGroup(
-      LlmModelGroup(
-        id: 'kilo-streaming-group',
-        displayName: 'Kilo streaming',
-        members: const [
-          LlmModelGroupMember(
-            accountId: accountId,
-            upstreamModelId: 'openrouter/free',
-            localModelId: 'kilo-free',
-          ),
-        ],
-      ),
-    );
+  test(
+    'Kilo chat-completions models support streaming group routing',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'kilo-streaming-anonymous';
+      await service.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'kilocode',
+          authType: 'none',
+          displayName: 'Kilo anonymous',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'kilo-free',
+              upstreamModelId: 'openrouter/free',
+              displayName: 'Kilo free',
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: 'kilo-streaming-group',
+          displayName: 'Kilo streaming',
+          members: const [
+            LlmModelGroupMember(
+              accountId: accountId,
+              upstreamModelId: 'openrouter/free',
+              localModelId: 'kilo-free',
+            ),
+          ],
+        ),
+      );
 
-    final models = await _testGateway(
-      service,
-    ).modelDiscovery.discoverGroupModels(
-      groupId: 'kilo-streaming-group',
-      localModelId: 'kilo-free',
-      requiredCapabilities: {'streaming'},
-    );
+      final models =
+          await _testGateway(service).modelDiscovery.discoverGroupModels(
+        groupId: 'kilo-streaming-group',
+        localModelId: 'kilo-free',
+        requiredCapabilities: {'streaming'},
+      );
 
-    expect(models.map((model) => model.id), ['kilo-free']);
-    expect(models.single.upstreamModelId, 'openrouter/free');
-    expect(models.single.capabilities, isEmpty);
-  });
+      expect(models.map((model) => model.id), ['kilo-free']);
+      expect(models.single.upstreamModelId, 'openrouter/free');
+      expect(models.single.capabilities, isEmpty);
+    },
+  );
 
   testWidgets('Kilo Code exposes OAuth, key, and anonymous free-only modes', (
     tester,
@@ -4146,6 +4194,14 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
       userCode: 'TENCENT-1234',
     );
   }
+
+  @override
+  Future<AiGatewayOAuthCursorAuthorization> beginCursorAuthorization(
+    AiGatewayAccount account,
+  ) async =>
+      throw UnsupportedError(
+        'Cursor authorization is not configured in this test.',
+      );
 
   @override
   Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;

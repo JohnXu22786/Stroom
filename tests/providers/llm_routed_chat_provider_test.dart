@@ -154,6 +154,16 @@ void main() {
     );
   });
 
+  test('includes account-owned Cursor transport in default Chat selectors', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypesForModelOverride(null),
+      contains('cursor'),
+    );
+    expect(llmRoutedChatSupportedConnectorTypes('cursor.agent_connect_rpc'), {
+      'cursor',
+    });
+  });
+
   test('routes Command Code models through each declared HTTP protocol', () {
     for (final protocol in const [
       'openai.chat_completions',

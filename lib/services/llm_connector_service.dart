@@ -18,6 +18,8 @@ import 'llm_connector_model_catalog.dart';
 import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
 import 'qoder_cli_service.dart';
+import 'cursor_connect_rpc.dart';
+import 'cursor_http2_transport.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -251,6 +253,7 @@ enum LlmNativeProtocol {
   xaiOAuthResponses,
   devinConnectRpc,
   devinCliAcp,
+  cursorAgentConnectRpc,
   metaResponses,
   geminiGenerateContent,
   geminiInteractions,
@@ -415,6 +418,15 @@ abstract final class LlmConnectorRegistry {
       protocol: LlmNativeProtocol.devinCliAcp,
       authTypes: {'cli_session'},
       modelCatalog: kPinnedDevinCliModels,
+    ),
+    LlmConnectorDefinition(
+      id: 'cursor',
+      displayName: 'Cursor',
+      protocol: LlmNativeProtocol.cursorAgentConnectRpc,
+      authTypes: {'oauth'},
+      modelCatalog: kPinnedCursorModels,
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
       id: 'meta',
@@ -694,6 +706,7 @@ abstract final class LlmConnectorRegistry {
         'ollama' => 'ollama.chat',
         'devin' => 'devin.connect_rpc',
         'devin-cli-agentic' => 'devin.acp',
+        'cursor' => 'cursor.agent_connect_rpc',
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
@@ -734,6 +747,7 @@ abstract final class LlmConnectorRegistry {
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       'devin-cli-agentic' => authType == 'cli_session',
+      'cursor' => authType == 'oauth',
       'qoder' => {'api_key', 'oauth', 'pat'}.contains(authType),
       _ => true,
     };
@@ -1673,6 +1687,9 @@ class LlmAccountConnectorService {
           displayName: connector.modelCatalog[index],
           capabilities: switch (connector.id) {
             'devin-cli-agentic' => const {'chat': true, 'streaming': true},
+            // The Cursor adapter maps Stroom's supported inline image blocks;
+            // remote or unsupported image representations fail explicitly.
+            'cursor' => const {'chat': true, 'streaming': true, 'vision': true},
             'codebuddy-cn' ||
             'codebuddy-intl' =>
               _staticTencentModelCapabilities(
@@ -1693,12 +1710,20 @@ class LlmAccountConnectorService {
               },
             _ => const {},
           },
-          config: connector.id == 'devin-cli-agentic'
-              ? const {'catalogSource': 'devin_cli_acp_default'}
-              : const {
-                  'catalogSource':
-                      'CLIProxyAPI@$kLlmConnectorReferenceRevision',
-                },
+          config: switch (connector.id) {
+            'devin-cli-agentic' => const {
+                'catalogSource': 'devin_cli_acp_default',
+              },
+            'cursor' => const {
+                'catalogSource': 'cursor_provider_registry',
+                'imageInputSupport':
+                    'Inline PNG, JPEG, GIF, or WebP data only; maximum 12 images at 1 MiB each. Remote URLs and other image representations are unsupported.',
+              },
+            _ => const {
+                'catalogSource':
+                    'pinned_provider_registry@$kLlmConnectorReferenceRevision',
+              },
+          },
         ),
     ]);
   }
@@ -1815,16 +1840,18 @@ class LlmAccountConnectorService {
     final spec = _refreshRequest(account, bundle, refreshToken);
     if (spec == null) return false;
     try {
-      final response = await _dio.postUri<Object?>(
-        spec.uri,
-        data: spec.body,
-        options: Options(
-          headers: spec.headers,
-          contentType: spec.contentType,
-          responseType: ResponseType.json,
-        ),
-        cancelToken: cancelToken,
-      );
+      final response = account.connectorType == 'cursor'
+          ? await _postCursorRefreshWithRetries(spec, cancelToken: cancelToken)
+          : await _dio.postUri<Object?>(
+              spec.uri,
+              data: spec.body,
+              options: Options(
+                headers: spec.headers,
+                contentType: spec.contentType,
+                responseType: ResponseType.json,
+              ),
+              cancelToken: cancelToken,
+            );
       if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       final outerTokenResponse = _asJsonMap(response.data);
       final nestedTokenData = outerTokenResponse?['data'];
@@ -1875,6 +1902,10 @@ class LlmAccountConnectorService {
       if (_firstString(updated, const ['refresh_token', 'refreshToken']) ==
           null) {
         updated['refresh_token'] = refreshToken;
+      }
+      if (account.connectorType == 'cursor') {
+        updated['oauth_contract'] = 'cursor-deep-control-v1';
+        updated['expires_at'] = _cursorAccessTokenExpiry(accessToken);
       }
       if (account.connectorType == 'cline' ||
           account.connectorType == 'clinepass') {
@@ -2105,6 +2136,68 @@ class LlmAccountConnectorService {
     }
   }
 
+  Future<Response<Object?>> _postCursorRefreshWithRetries(
+    _LlmTokenRefreshRequest spec, {
+    CancelToken? cancelToken,
+  }) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+      late final Response<Object?> response;
+      try {
+        response = await _dio.postUri<Object?>(
+          spec.uri,
+          data: spec.body,
+          options: Options(
+            headers: spec.headers,
+            contentType: spec.contentType,
+            responseType: ResponseType.json,
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) rethrow;
+        if (attempt == 2) throw const LlmAccountConnectorException();
+        await _waitBeforeCursorRefreshRetry(attempt, cancelToken);
+        continue;
+      }
+
+      final status = response.statusCode ?? 0;
+      if (status >= 200 && status < 300) return response;
+      if (status == 401 || status == 403) {
+        throw const LlmAccountConnectorException();
+      }
+      final retryable = status == 429 ||
+          status == 500 ||
+          status == 502 ||
+          status == 503 ||
+          status == 504;
+      if (!retryable || attempt == 2) {
+        throw const LlmAccountConnectorException();
+      }
+      await _waitBeforeCursorRefreshRetry(attempt, cancelToken);
+    }
+    throw const LlmAccountConnectorException();
+  }
+
+  Future<void> _waitBeforeCursorRefreshRetry(
+    int attempt,
+    CancelToken? cancelToken,
+  ) async {
+    final delay = Future<void>.delayed(
+      Duration(milliseconds: 300 * (1 << attempt)),
+    );
+    if (cancelToken == null) {
+      await delay;
+      return;
+    }
+    await Future.any<void>([
+      delay,
+      cancelToken.whenCancel.then<void>((_) => throw cancelToken.cancelError!),
+    ]);
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+  }
+
   Future<bool> _refreshVertexServiceAccount(
     LlmAccount account,
     Map<String, dynamic> bundle,
@@ -2206,6 +2299,13 @@ class LlmAccountConnectorService {
   ) {
     const formContentType = 'application/x-www-form-urlencoded';
     switch (account.connectorType) {
+      case 'cursor':
+        return _LlmTokenRefreshRequest(
+          uri: Uri.parse('https://api2.cursor.sh/auth/exchange_user_api_key'),
+          body: const <String, Object?>{},
+          contentType: Headers.jsonContentType,
+          headers: {'Authorization': 'Bearer $refreshToken'},
+        );
       case 'codex':
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
         if (clientId == null) return null;
@@ -4181,13 +4281,16 @@ class LlmPreparedNativeRequest {
   final String method;
   final Map<String, String> headers;
   final Object? body;
+  final Map<String, Uint8List> requestBlobs;
 
   LlmPreparedNativeRequest({
     required this.uri,
     required this.method,
     required Map<String, String> headers,
     required this.body,
-  }) : headers = Map.unmodifiable(headers);
+    Map<String, Uint8List> requestBlobs = const {},
+  })  : headers = Map.unmodifiable(headers),
+        requestBlobs = Map.unmodifiable(requestBlobs);
 
   @override
   String toString() {
@@ -4211,6 +4314,12 @@ class LlmNativeRequestBuilder {
     'Content-Type': 'application/json',
   };
 
+  static String? credentialBundleString(
+    String? credential,
+    List<String> keys,
+  ) =>
+      _credentialBundleString(credential, keys);
+
   LlmPreparedNativeRequest build({
     required LlmAccount account,
     required String? credential,
@@ -4222,6 +4331,41 @@ class LlmNativeRequestBuilder {
     String? nativeFormat,
   }) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
+    if (account.connectorType == 'cursor') {
+      final accessToken = _credentialBundleString(credential, const [
+        'access_token',
+        'accessToken',
+      ]);
+      if (account.authType != 'oauth' ||
+          nativeFormat != null ||
+          !account.models.any((model) => model.upstreamModelId == modelId) ||
+          !kPinnedCursorModels.contains(modelId) ||
+          accessToken == null ||
+          body is! Map) {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        final requestBlobs = <String, Uint8List>{};
+        final requestBody = CursorConnectFrameDecoder.encodeRequest(
+          modelId: modelId,
+          conversationId: conversationId?.trim().isNotEmpty == true
+              ? conversationId!.trim()
+              : const Uuid().v4(),
+          body: Map<String, dynamic>.from(body),
+          blobStore: requestBlobs,
+        );
+        return LlmPreparedNativeRequest(
+          // The runtime resolves the assigned Agent URL before opening HTTP/2.
+          uri: Uri.parse(cursorServerConfigUrl),
+          method: 'POST',
+          headers: const {'content-type': 'application/connect+proto'},
+          body: requestBody,
+          requestBlobs: requestBlobs,
+        );
+      } on CursorConnectRpcException {
+        rethrow;
+      }
+    }
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
@@ -5416,6 +5560,27 @@ class LlmAccountConnectorException implements Exception {
 
   @override
   String toString() => 'LLM connector operation could not be completed.';
+}
+
+String _cursorAccessTokenExpiry(String token) {
+  try {
+    final parts = token.split('.');
+    if (parts.length == 3) {
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final exp = payload is Map ? payload['exp'] : null;
+      if (exp is num) {
+        return DateTime.fromMillisecondsSinceEpoch(
+          (exp * 1000).round(),
+          isUtc: true,
+        ).subtract(const Duration(minutes: 5)).toIso8601String();
+      }
+    }
+  } catch (_) {
+    // Cursor may return an opaque token; use its one-hour fallback.
+  }
+  return DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String();
 }
 
 class _LlmTokenRefreshRequest {

@@ -17,6 +17,7 @@ import '../services/reasoning_replay_cache.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
+      'cursor.agent_connect_rpc' => const {'cursor'},
       'anthropic' || 'anthropic.messages' => const {
           'openai-compatibility',
           'claude',
@@ -87,6 +88,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'ollama.chat',
       'devin.connect_rpc',
       'devin.acp',
+      'cursor.agent_connect_rpc',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
   };
@@ -104,6 +106,9 @@ String llmRoutedChatProtocolForAccountModel({
   String? apiProtocol,
   String? apiProtocolOverride,
 }) {
+  // Cursor's source-owned transport is selected by account ownership. The
+  // model's generic API protocol continues to govern other providers.
+  if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
   String protocol;
   if (apiProtocolOverride?.isNotEmpty == true) {
     protocol = apiProtocolOverride!;
@@ -284,7 +289,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           );
           _lastResponseStatusCode = response.statusCode;
           _lastResponseHeaders = response.headers;
-          final completionProtocol = protocolId == 'devin.acp'
+          final completionProtocol = protocolId == 'devin.acp' ||
+                  protocolId == 'cursor.agent_connect_rpc'
               ? 'openai.chat_completions'
               : protocolId;
           final result = _readCompletion(response.body, completionProtocol);
@@ -466,7 +472,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 progress,
                 runtime: runtime,
                 accountId: candidate.account.id,
-                protocolId: protocolId == 'devin.acp'
+                protocolId: protocolId == 'devin.acp' ||
+                        protocolId == 'cursor.agent_connect_rpc'
                     ? 'openai.chat_completions'
                     : protocolId,
                 returnedResponsesOutputItems: returnedResponsesOutputItems,
@@ -720,10 +727,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String? system,
     Map<String, dynamic>? extraParams,
   }) async {
-    final requestProtocolId =
-        protocolId == 'devin.connect_rpc' || protocolId == 'devin.acp'
-            ? 'openai.chat_completions'
-            : protocolId;
+    final requestProtocolId = protocolId == 'devin.connect_rpc' ||
+            protocolId == 'devin.acp' ||
+            protocolId == 'cursor.agent_connect_rpc'
+        ? 'openai.chat_completions'
+        : protocolId;
     final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
     if (bridge == null) {
       throw StateError('No internal protocol bridge for $protocolId.');
