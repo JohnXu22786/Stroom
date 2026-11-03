@@ -9,11 +9,13 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'dart:async';
 import 'dart:io' show exit, Platform;
 
+import 'l10n/app_localizations.dart';
 import 'pages/home_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/background_task_provider.dart';
@@ -76,6 +78,7 @@ class _ApplicationState extends ConsumerState<Application>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(ref.read(localeProvider.notifier).load());
 
     // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
     // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
@@ -371,6 +374,7 @@ class _ApplicationState extends ConsumerState<Application>
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
+    final locale = ref.watch(localeProvider);
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
@@ -533,15 +537,15 @@ class _ApplicationState extends ConsumerState<Application>
                 ),
                 themeMode: themeMode,
                 localizationsDelegates: const [
+                  AppLocalizations.delegate,
                   GlobalMaterialLocalizations.delegate,
                   GlobalWidgetsLocalizations.delegate,
                   GlobalCupertinoLocalizations.delegate,
                 ],
-                supportedLocales: const [
-                  Locale('zh', 'CN'),
-                  Locale('en', 'US'),
-                ],
-                locale: const Locale('zh', 'CN'),
+                supportedLocales: supportedAppLocales,
+                locale: locale,
+                localeResolutionCallback: (deviceLocale, _) =>
+                    resolveSystemLocale(deviceLocale ?? const Locale('en')),
                 home: const HomePage(),
                 routes: {
                   '/home': (context) => const HomePage(),
