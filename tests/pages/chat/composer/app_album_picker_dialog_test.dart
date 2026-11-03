@@ -73,6 +73,7 @@ void main() {
     WidgetTester tester, {
     bool failRead = false,
     bool includeReplacement = false,
+    bool blockReplacementRead = false,
   }) async {
     final png = await tester.runAsync(_createEnginePng);
     await tester.runAsync(() async {
@@ -137,7 +138,7 @@ void main() {
         if (failRead) throw StateError('simulated image read failure');
       } else if (fileName == 'replacement-read.png') {
         replacementReadStarted.complete();
-        await releaseReplacementRead.future;
+        if (blockReplacementRead) await releaseReplacementRead.future;
       }
     };
     await tester.tap(find.text('pending-read.png'));
@@ -330,6 +331,7 @@ void main() {
           tester,
           failRead: true,
           includeReplacement: true,
+          blockReplacementRead: true,
         );
 
         await tester.tap(find.text('replacement-read.png'));
