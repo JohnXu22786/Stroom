@@ -121,6 +121,21 @@ const kPinnedCodeBuddyIntlModels = <String>[
   'deepseek-v4.1-flash',
 ];
 
+// Conversational models published by the pinned Qoder provider registry.
+// The Qoder PAT catalog is discovered through qodercli; this list is the
+// source-declared fallback for account setup and DashScope-backed accounts.
+const kPinnedQoderModels = <String>[
+  'qwen3.8-max-preview',
+  'qwen3.7-max',
+  'qwen3.7-plus',
+  'kimi-k3',
+  'kimi-k2.7-code',
+  'glm-5.2',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
+  'minimax-m3',
+];
+
 const kPinnedXaiModels = <String>[
   'grok-4.7',
   'grok-4.7-build-fast',

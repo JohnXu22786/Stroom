@@ -9,6 +9,7 @@ import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
+import '../services/llm_oauth_flow.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -1305,6 +1306,12 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'qoder' && type == 'oauth') {
+    return 'Qoder 管理员配置 OAuth';
+  }
+  if (connectorType == 'qoder' && type == 'pat') {
+    return 'Qoder Personal Access Token';
+  }
   if (type == 'oauth' && connectorType == 'codebuddy-cn') {
     return 'CodeBuddy 国内设备 OAuth';
   }
@@ -1321,7 +1328,8 @@ String _authLabel(String type, {String? connectorType}) {
     return 'Claude Code OAuth';
   }
   return switch (type) {
-    'api_key' => 'API Key',
+    'api_key' => connectorType == 'qoder' ? 'DashScope API Key' : 'API Key',
+    'pat' => 'Personal Access Token',
     'oauth' => '订阅 OAuth',
     'setup_token' => 'Setup Token',
     'service_account' => 'Google 服务账号',
@@ -1542,6 +1550,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _models;
   late final TextEditingController _oauthClientId;
   late final TextEditingController _oauthClientSecret;
+  late final TextEditingController _qoderAuthorizeUrl;
+  late final TextEditingController _qoderTokenUrl;
+  late final TextEditingController _qoderUserInfoUrl;
   late final TextEditingController _googleCloudProjectId;
   late final TextEditingController _devinCliExecutable;
   String? _initialDevinCliExecutable;
@@ -1607,11 +1618,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       text: projectId is String ? projectId : '',
     );
     _credential = TextEditingController();
-    final oauthClientId = account?.endpointConfig['clientId'];
+    final oauthClientId = account?.endpointConfig['clientId'] ??
+        account?.endpointConfig['qoderClientId'];
     _oauthClientId = TextEditingController(
       text: oauthClientId is String ? oauthClientId : '',
     );
     _oauthClientSecret = TextEditingController();
+    _qoderAuthorizeUrl = TextEditingController(
+      text: account?.endpointConfig['qoderLoginUrl'] as String? ?? '',
+    );
+    _qoderTokenUrl = TextEditingController(
+      text: account?.endpointConfig['qoderExchangeUrl'] as String? ?? '',
+    );
+    _qoderUserInfoUrl = TextEditingController(
+      text: account?.endpointConfig['qoderUserInfoUrl'] as String? ?? '',
+    );
     final googleCloudProjectId =
         account?.endpointConfig['googleCloudProjectId'];
     _googleCloudProjectId = TextEditingController(
@@ -1659,6 +1680,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _credential.dispose();
     _oauthClientId.dispose();
     _oauthClientSecret.dispose();
+    _qoderAuthorizeUrl.dispose();
+    _qoderTokenUrl.dispose();
+    _qoderUserInfoUrl.dispose();
     _googleCloudProjectId.dispose();
     _devinCliExecutable.dispose();
     _models.dispose();
@@ -1791,6 +1815,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     }
                     if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
+                    } else if (value == 'qoder') {
+                      _models.text = kPinnedQoderModels.join('\n');
                     } else if (value == 'kimi-coding') {
                       _models.text = kPinnedKimiCodeModels.join('\n');
                     } else if (previousConnectorType == 'kimi-coding') {
@@ -1944,6 +1970,56 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     '旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。',
                   ),
                 ),
+              if (_connectorType == 'qoder' && _authType == 'oauth') ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Qoder OAuth 需要服务管理员提供完整的 OAuth authorize、token、user-info URL 和 client credentials。授权后只将 DashScope API key 与敏感 OAuth 凭据保存在平台安全存储中；不会使用浏览器 Cookie。上游未定义 refresh grant；凭据失效时请重新授权。',
+                ),
+                TextField(
+                  controller: _qoderAuthorizeUrl,
+                  decoration: const InputDecoration(
+                    labelText: 'QODER_OAUTH_AUTHORIZE_URL',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _qoderTokenUrl,
+                  decoration: const InputDecoration(
+                    labelText: 'QODER_OAUTH_TOKEN_URL',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _qoderUserInfoUrl,
+                  decoration: const InputDecoration(
+                    labelText: 'QODER_OAUTH_USER_INFO_URL',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _oauthClientId,
+                  decoration: const InputDecoration(
+                    labelText: 'QODER_OAUTH_CLIENT_ID',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _oauthClientSecret,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'QODER_OAUTH_CLIENT_SECRET',
+                    helperText: '只提交到平台安全存储；留空以保留现有 OAuth client secret。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
+              if (_connectorType == 'qoder' && _authType == 'pat')
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    '输入以 pt- 开头的 Qoder Personal Access Token。通过本机 qodercli 调用；仅支持文本聊天，不支持调用方 tools，响应会缓冲后返回，单次请求最多 45 秒。',
+                  ),
+                ),
               if ((_connectorType == 'gemini' ||
                       _connectorType == 'aistudio') &&
                   _authType == 'oauth') ...[
@@ -1980,9 +2056,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               TextField(
                 controller: _endpoint,
                 enabled: _connectorType != 'devin-cli-agentic' &&
-                    _connectorType != 'command-code',
+                    _connectorType != 'command-code' &&
+                    _connectorType != 'qoder',
                 decoration: InputDecoration(
-                  labelText: '端点地址（连接器需要时填写）',
+                  labelText: _connectorType == 'qoder'
+                      ? 'Qoder 使用固定服务端点'
+                      : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
@@ -2038,7 +2117,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
-              if (!(_authType == 'oauth' && oauthLimitation != null)) ...[
+              if (!(_authType == 'oauth' &&
+                  (oauthLimitation != null || _connectorType == 'qoder'))) ...[
                 const SizedBox(height: 8),
                 TextField(
                   controller: _credential,
@@ -2076,7 +2156,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                               'Qwen Cloud Token Plan API Key',
                                             _ => '凭据',
                                           }
-                                        : '凭据',
+                                        : _connectorType == 'qoder' &&
+                                                _authType == 'pat'
+                                            ? 'Qoder PAT（pt-…）'
+                                            : '凭据',
                     hintText: _authType == 'aws_credential_chain'
                         ? '使用运行环境的 AWS 默认凭据链'
                         : !widget.hasCredential
@@ -2149,10 +2232,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   initialValue: selectedCommandCodeProtocol,
                   decoration: const InputDecoration(labelText: '模型 API 协议'),
                   items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('继承账号默认协议'),
-                    ),
+                    const DropdownMenuItem(value: '', child: Text('继承账号默认协议')),
                     for (final protocol in commandCodeProtocols)
                       DropdownMenuItem(
                         value: protocol,
@@ -2323,11 +2403,54 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _oauthClientSecret.text.trim().isNotEmpty;
+    final qoderOAuthConfigurationChanged =
+        widget.account?.connectorType == 'qoder' &&
+            widget.account?.authType == 'oauth' &&
+            _connectorType == 'qoder' &&
+            _authType == 'oauth' &&
+            (widget.account!.endpointConfig['qoderLoginUrl'] !=
+                    _qoderAuthorizeUrl.text.trim() ||
+                widget.account!.endpointConfig['qoderExchangeUrl'] !=
+                    _qoderTokenUrl.text.trim() ||
+                widget.account!.endpointConfig['qoderUserInfoUrl'] !=
+                    _qoderUserInfoUrl.text.trim() ||
+                widget.account!.endpointConfig['qoderClientId'] !=
+                    _oauthClientId.text.trim() ||
+                _oauthClientSecret.text.trim().isNotEmpty);
+    final qoderOAuthClientChanged = widget.account?.connectorType == 'qoder' &&
+        widget.account?.authType == 'oauth' &&
+        widget.account!.endpointConfig['qoderClientId'] !=
+            _oauthClientId.text.trim();
     final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
             geminiOAuthClientChanged ||
-            geminiOAuthClientSecretChanged);
+            geminiOAuthClientSecretChanged ||
+            qoderOAuthConfigurationChanged);
+    if (_connectorType == 'qoder' && _authType == 'oauth') {
+      try {
+        for (final value in [
+          _qoderAuthorizeUrl.text,
+          _qoderTokenUrl.text,
+          _qoderUserInfoUrl.text,
+        ]) {
+          LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(value);
+        }
+      } catch (_) {
+        setState(() => _error = '请输入有效的 HTTPS Qoder OAuth 管理员端点。');
+        return;
+      }
+      final needsSecret = widget.account == null ||
+          widget.account?.authType != 'oauth' ||
+          !widget.hasCredential ||
+          qoderOAuthClientChanged ||
+          _oauthClientSecret.text.trim().isNotEmpty;
+      if (_oauthClientId.text.trim().isEmpty ||
+          (needsSecret && _oauthClientSecret.text.trim().isEmpty)) {
+        setState(() => _error = '请输入 QODER_OAUTH_CLIENT_ID 和 client secret。');
+        return;
+      }
+    }
     if (_authType == 'oauth' && oauthLimitation != null) {
       setState(() => _error = '$oauthLimitation\n请选择受支持的认证方式后再保存此账号。');
       return;
@@ -2434,8 +2557,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         newModelId = '$id:model:${++suffix}';
       }
       if (existing == null) usedModelIds.add(newModelId);
-      final modelConfig =
-          Map<String, dynamic>.from(existing?.config ?? const {});
+      final modelConfig = Map<String, dynamic>.from(
+        existing?.config ?? const {},
+      );
       if (_connectorType == 'command-code') {
         modelConfig.remove('apiProtocolOverride');
         if (apiProtocolOverride != null) {
@@ -2509,6 +2633,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig['googleCloudProjectId'] =
           _googleCloudProjectId.text.trim();
     }
+    if (_connectorType == 'qoder' && _authType == 'oauth') {
+      endpointConfig['qoderLoginUrl'] = _qoderAuthorizeUrl.text.trim();
+      endpointConfig['qoderExchangeUrl'] = _qoderTokenUrl.text.trim();
+      endpointConfig['qoderUserInfoUrl'] = _qoderUserInfoUrl.text.trim();
+      endpointConfig['qoderClientId'] = _oauthClientId.text.trim();
+      endpointConfig.remove('baseUrl');
+      endpointConfig.remove('host');
+      endpointConfig.remove('apiBase');
+    } else if (widget.account?.connectorType == 'qoder') {
+      endpointConfig.remove('qoderLoginUrl');
+      endpointConfig.remove('qoderExchangeUrl');
+      endpointConfig.remove('qoderUserInfoUrl');
+      endpointConfig.remove('qoderClientId');
+    }
     final previousEndpoint = widget.account?.endpointConfig['baseUrl'] ??
         widget.account?.endpointConfig['host'] ??
         widget.account?.endpointConfig['apiBase'];
@@ -2577,6 +2715,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         'clientId': _oauthClientId.text.trim(),
       if (_oauthClientSecret.text.trim().isNotEmpty)
         'clientSecret': _oauthClientSecret.text.trim(),
+      if (_connectorType == 'qoder') ...{
+        'authorizeUrl': _qoderAuthorizeUrl.text.trim(),
+        'tokenUrl': _qoderTokenUrl.text.trim(),
+        'userInfoUrl': _qoderUserInfoUrl.text.trim(),
+      },
     };
     if (_connectorType == 'aistudio' && _authType == 'relay') {
       setState(

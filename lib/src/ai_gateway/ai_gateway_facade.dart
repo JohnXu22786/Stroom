@@ -11,6 +11,7 @@ import '../../models/llm_account.dart';
 import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
 import '../../services/devin_cli_acp_service.dart';
+import '../../services/qoder_cli_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_connector_model_catalog.dart';
 import '../../services/llm_credential_store.dart';
@@ -70,6 +71,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   @override
   final AiGatewayAccountManagement accountManagement;
   final DevinCliAcpService _devinCliAcp;
+  final QoderCliService _qoderCli;
   @override
   late final AiGatewayLocalCliAuthentication localCliAuthentication =
       _devinCliAcp;
@@ -93,6 +95,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   late final AiGatewayExecutor executor = _LlmGatewayExecutor(
     _connectorClient,
     _devinCliAcp,
+    _qoderCli,
   );
 
   LlmChatRoutingRuntime({
@@ -102,10 +105,13 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     Dio? oauthDio,
     AiGatewayOAuthAuthorization? oauthAuthorization,
     DevinCliAcpService? devinCliAcpService,
+    QoderCliService? qoderCliService,
   })  : _accountService = accountService,
         _oauthDio = oauthDio,
         _oauthAuthorizationOverride = oauthAuthorization,
         _devinCliAcp = devinCliAcpService ?? DevinCliAcpService(),
+        _qoderCli = qoderCliService ??
+            QoderCliService(readCredential: accountService.readCredential),
         accountManagement = _LlmGatewayAccountManagement(accountService),
         _routingService = routingService,
         _connectorClient = connectorClient ??
@@ -597,7 +603,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           account.connectorType == 'aistudio';
       final isClaude = account.connectorType == 'claude';
       final isDevin = account.connectorType == 'devin';
-      if (!isOpenAi && !isGemini && !isClaude && !isDevin) {
+      final isQoder = account.connectorType == 'qoder';
+      if (!isOpenAi && !isGemini && !isClaude && !isDevin && !isQoder) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -620,9 +627,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
-      final previousBundle = isGemini || isOpenAi || isClaude || isDevin
-          ? await _existingOAuthBundle(account)
-          : null;
+      final previousBundle =
+          isGemini || isOpenAi || isClaude || isDevin || isQoder
+              ? await _existingOAuthBundle(account)
+              : null;
       final previousOpenAiBundle =
           previousBundle?['oauth_contract'] == 'openai-siwc-v1'
               ? previousBundle
@@ -645,6 +653,22 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         );
       } else if (isDevin) {
         attempt = LlmOAuthAuthorizationAttempt.devin(redirectUri: redirectUri);
+      } else if (isQoder) {
+        final authorizeUrl = (configuration['authorizeUrl'] ??
+                previousBundle?['authorize_url'] as String? ??
+                account.endpointConfig['qoderLoginUrl'] as String? ??
+                '')
+            .trim();
+        final clientId = (configuration['clientId'] ??
+                previousBundle?['client_id'] as String? ??
+                account.endpointConfig['qoderClientId'] as String? ??
+                '')
+            .trim();
+        attempt = LlmOAuthAuthorizationAttempt.qoder(
+          redirectUri: listener.redirectUri,
+          authorizeUrl: authorizeUrl,
+          clientId: clientId,
+        );
       } else {
         attempt = LlmOAuthAuthorizationAttempt.claudeCode(
           redirectUri: redirectUri,
@@ -682,6 +706,33 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           accountId: account.id,
           expectedUserId: previousBundle?['user_id'] as String?,
         );
+      } else if (isQoder) {
+        final qoderConfiguration = <String, String>{
+          'authorizeUrl': configuration['authorizeUrl'] ??
+              previousBundle?['authorize_url'] as String? ??
+              account.endpointConfig['qoderLoginUrl'] as String? ??
+              '',
+          'tokenUrl': configuration['tokenUrl'] ??
+              previousBundle?['token_url'] as String? ??
+              account.endpointConfig['qoderExchangeUrl'] as String? ??
+              '',
+          'userInfoUrl': configuration['userInfoUrl'] ??
+              previousBundle?['user_info_url'] as String? ??
+              account.endpointConfig['qoderUserInfoUrl'] as String? ??
+              '',
+          'clientId': configuration['clientId'] ??
+              previousBundle?['client_id'] as String? ??
+              account.endpointConfig['qoderClientId'] as String? ??
+              '',
+          'clientSecret': configuration['clientSecret'] ??
+              previousBundle?['client_secret'] as String? ??
+              '',
+        };
+        tokenBundle = await _tokenClient.exchangeQoderCode(
+          attempt: attempt,
+          callback: callback,
+          configuration: qoderConfiguration,
+        );
       } else {
         tokenBundle = await _tokenClient.exchangeClaudeCode(
           attempt: attempt,
@@ -695,7 +746,12 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           authType: account.authType,
           displayName: isDevin
               ? _devinAccountDisplayName(account.displayName, tokenBundle)
-              : account.displayName,
+              : isQoder
+                  ? (tokenBundle['display_name'] is String &&
+                          (tokenBundle['display_name'] as String).isNotEmpty
+                      ? tokenBundle['display_name'] as String
+                      : account.displayName)
+                  : account.displayName,
           status: AiGatewayAccountStatus.ready,
           hasCredential: true,
           credentialRef: account.credentialRef,
@@ -1905,8 +1961,9 @@ bool _hasRequiredModelCapabilities(
 class _LlmGatewayExecutor implements AiGatewayExecutor {
   final LlmConnectorHttpClient _client;
   final DevinCliAcpService _devinCliAcp;
+  final QoderCliService _qoderCli;
 
-  const _LlmGatewayExecutor(this._client, this._devinCliAcp);
+  const _LlmGatewayExecutor(this._client, this._devinCliAcp, this._qoderCli);
 
   @override
   Future<AiGatewayResponse> request({
@@ -1923,6 +1980,47 @@ class _LlmGatewayExecutor implements AiGatewayExecutor {
     Duration? sendTimeout,
     Duration? receiveTimeout,
   }) async {
+    if (account.connectorType == 'qoder' && account.authType == 'pat') {
+      try {
+        final responseBody = await _qoderCli.request(
+          accountId: account.id,
+          modelId: modelId,
+          body: body,
+          stream: stream,
+          cancelToken: cancelToken,
+        );
+        return AiGatewayResponse(
+          statusCode: 200,
+          headers: const {},
+          body: responseBody,
+        );
+      } on QoderCliAuthenticationException {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.authenticationRequired,
+        );
+      } on QoderCliRequestCancelled {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.cancelled);
+      } on QoderCliTimeoutException {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          statusCode: 504,
+          code: 'qoder_cli_timeout',
+        );
+      } on QoderCliUpstreamBusyException {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          statusCode: 503,
+          code: 'upstream_busy',
+        );
+      } on QoderCliRequestException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: error is QoderCliToolsUnsupportedException
+              ? 'unsupported_capability'
+              : 'qoder_cli_error',
+        );
+      }
+    }
     if (account.connectorType == 'devin-cli-agentic') {
       try {
         return await _devinCliAcp.request(

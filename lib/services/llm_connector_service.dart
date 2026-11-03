@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:googleapis_auth/googleapis_auth.dart'
     show ServiceAccountCredentials;
 import 'package:uuid/uuid.dart';
@@ -16,6 +17,7 @@ import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
 import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
+import 'qoder_cli_service.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -45,6 +47,13 @@ const _commandCodeProtocolByEndpoint = <String, String>{
   '/responses': 'openai.responses',
   '/messages': 'anthropic.messages',
 };
+
+String _qoderRuntimeArchitecture() {
+  final match = RegExp(r'\bon "([^"]+)"').firstMatch(Platform.version);
+  final runtimeId = match?.group(1) ?? '';
+  final separator = runtimeId.lastIndexOf('_');
+  return separator < 0 ? '' : runtimeId.substring(separator + 1);
+}
 
 const _qwenCloudRegions = {
   'ap-southeast-1',
@@ -120,11 +129,7 @@ void _addConversationHeaders(
   final map = body is Map ? body : const <Object?, Object?>{};
   String key = conversationId?.trim().isNotEmpty == true
       ? conversationId!.trim()
-      : [
-          map['session_id'],
-          map['prompt_cache_key'],
-          map['conversation_id'],
-        ]
+      : [map['session_id'], map['prompt_cache_key'], map['conversation_id']]
           .whereType<String>()
           .map((value) => value.trim())
           .firstWhere((value) => value.isNotEmpty, orElse: () => '');
@@ -452,6 +457,13 @@ abstract final class LlmConnectorRegistry {
       canRefreshCredentials: true,
     ),
     LlmConnectorDefinition(
+      id: 'qoder',
+      displayName: 'Qoder',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key', 'oauth', 'pat'},
+      modelCatalog: kPinnedQoderModels,
+    ),
+    LlmConnectorDefinition(
       id: 'gemini',
       displayName: 'Google Gemini API',
       protocol: LlmNativeProtocol.geminiGenerateContent,
@@ -627,7 +639,8 @@ abstract final class LlmConnectorRegistry {
         'muse-code' ||
         'codebuddy-cn' ||
         'codebuddy-intl' ||
-        'workbuddy' =>
+        'workbuddy' ||
+        'qoder' =>
           'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
@@ -677,6 +690,7 @@ abstract final class LlmConnectorRegistry {
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       'devin-cli-agentic' => authType == 'cli_session',
+      'qoder' => {'api_key', 'oauth', 'pat'}.contains(authType),
       _ => true,
     };
   }
@@ -705,12 +719,17 @@ class LlmAccountConnectorService {
   final LlmAccountPreferences preferences;
   final LlmCredentialStore credentialStore;
   final Dio _dio;
+  final QoderCliService? _qoderCliOverride;
+  late final QoderCliService _qoderCli =
+      _qoderCliOverride ?? QoderCliService(readCredential: readCredential);
 
   LlmAccountConnectorService({
     required this.preferences,
     required this.credentialStore,
     Dio? dio,
-  }) : _dio = dio ??
+    QoderCliService? qoderCliService,
+  })  : _qoderCliOverride = qoderCliService,
+        _dio = dio ??
             Dio(
               BaseOptions(
                 connectTimeout: const Duration(seconds: 10),
@@ -723,7 +742,32 @@ class LlmAccountConnectorService {
         await LlmAccountMigrationService.acquireCredentialTransaction();
     try {
       final records = await _readAccounts();
-      return records.map(LlmAccount.fromMap).toList(growable: false);
+      final accounts = records.map(LlmAccount.fromMap).toList();
+      for (var index = 0; index < accounts.length; index++) {
+        final account = accounts[index];
+        if (account.connectorType != 'qoder' ||
+            account.authType != 'oauth' ||
+            account.status == LlmAccountStatus.paused ||
+            account.status == LlmAccountStatus.needsAttention ||
+            !await _qoderOAuthNeedsReauthorization(account)) {
+          continue;
+        }
+        accounts[index] = LlmAccount(
+          id: account.id,
+          connectorType: account.connectorType,
+          authType: account.authType,
+          displayName: account.displayName,
+          status: LlmAccountStatus.needsAttention,
+          credentialRef: account.credentialRef,
+          endpointConfig: account.endpointConfig,
+          models: account.models,
+          policy: account.policy,
+          usageByWindow: account.usageByWindow,
+          remainingQuota: account.remainingQuota,
+          quotaSignals: account.quotaSignals,
+        );
+      }
+      return accounts;
     } on LlmAccountConnectorException {
       rethrow;
     } catch (_) {
@@ -739,6 +783,42 @@ class LlmAccountConnectorService {
       if (account.id == accountId) return account;
     }
     return null;
+  }
+
+  Future<bool> _qoderOAuthNeedsReauthorization(LlmAccount account) async {
+    final reference = account.credentialRef;
+    if (reference == null) return true;
+    final secret = await _readSecureValue(reference);
+    if (secret == null || secret.trim().isEmpty) return true;
+    final bundle = _decodeCredentialBundle(secret);
+    if (LlmNativeRequestBuilder._credentialBundleString(
+              secret,
+              const ['access_token', 'accessToken'],
+            ) ==
+            null ||
+        LlmNativeRequestBuilder._credentialBundleString(
+              secret,
+              const ['api_key', 'apiKey'],
+            ) ==
+            null) {
+      return true;
+    }
+    final expiryValue = bundle['expires_at'] ?? bundle['expired'];
+    if (expiryValue == null) return false;
+    final expiry = expiryValue is String
+        ? DateTime.tryParse(expiryValue)
+        : expiryValue is num
+            ? DateTime.fromMillisecondsSinceEpoch(
+                expiryValue > 100000000000
+                    ? expiryValue.toInt()
+                    : expiryValue.toInt() * 1000,
+                isUtc: true,
+              )
+            : null;
+    return expiry == null ||
+        !expiry.isAfter(
+          DateTime.now().toUtc().add(const Duration(seconds: 30)),
+        );
   }
 
   Future<List<LlmModelGroup>> listModelGroups() async {
@@ -1409,6 +1489,26 @@ class LlmAccountConnectorService {
     }
     final accountEntitlementCatalog = account.connectorType == 'grok-cli' ||
         account.connectorType == 'xai-oauth';
+    if (account.connectorType == 'qoder' &&
+        account.authType == 'pat' &&
+        refreshRemote) {
+      final token = await readCredential(account.id);
+      if (token == null || !token.startsWith('pt-')) {
+        throw const LlmAccountConnectorException();
+      }
+      final discoveredIds = await _qoderCli.listModels(token: token);
+      final discovered = [
+        for (final (index, modelId) in discoveredIds.indexed)
+          LlmUpstreamModel(
+            id: '${account.id}:qoder-cli:$index',
+            upstreamModelId: modelId,
+            displayName: modelId,
+            capabilities: const {'chat': true, 'streaming': true},
+            config: const {'catalogSource': 'qodercli'},
+          ),
+      ];
+      return _mergeModelMappings(discovered, account.models);
+    }
     if (account.connectorType == 'muse-code' &&
         account.models.isNotEmpty &&
         !refreshRemote) {
@@ -2512,8 +2612,10 @@ class LlmAccountConnectorService {
               !supportsImagenPredict) {
             continue;
           }
-          if (const {'opencode-go', 'opencode-zen'}
-                  .contains(account.connectorType) &&
+          if (const {
+                'opencode-go',
+                'opencode-zen',
+              }.contains(account.connectorType) &&
               !_isOpenCodeStandardGatewayModelId(modelId)) {
             continue;
           }
@@ -2555,8 +2657,10 @@ class LlmAccountConnectorService {
                   'chat': true,
                   'streaming': true,
                 },
-                if (const {'opencode-go', 'opencode-zen'}
-                    .contains(account.connectorType)) ...{
+                if (const {
+                  'opencode-go',
+                  'opencode-zen',
+                }.contains(account.connectorType)) ...{
                   'chat': true,
                   'streaming': true,
                 },
@@ -3543,6 +3647,7 @@ class LlmAccountConnectorService {
       authType == 'api_key' ||
       authType == 'oauth' ||
       authType == 'setup_token' ||
+      authType == 'pat' ||
       authType == 'service_account' ||
       authType == 'session_token' ||
       authType == 'aws_credentials';
@@ -3558,6 +3663,30 @@ class LlmAccountConnectorService {
       throw const LlmAccountConnectorException();
     }
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'qoder' && account.authType == 'oauth') {
+      try {
+        for (final key in const [
+          'qoderLoginUrl',
+          'qoderExchangeUrl',
+          'qoderUserInfoUrl',
+        ]) {
+          final value = account.endpointConfig[key];
+          if (value is! String) throw const FormatException();
+          LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(value);
+        }
+        final clientId = account.endpointConfig['qoderClientId'];
+        if (clientId is! String || clientId.trim().isEmpty) {
+          throw const FormatException();
+        }
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+    }
+    if (account.connectorType == 'qoder' &&
+        account.authType == 'pat' &&
+        account.endpointConfig.containsKey('baseUrl')) {
       throw const LlmAccountConnectorException();
     }
     _validateSafeConfig(account.endpointConfig);
@@ -3583,6 +3712,12 @@ class LlmAccountConnectorService {
   }
 
   static void _validateCredential(LlmAccount account, String secret) {
+    if (account.connectorType == 'qoder' && account.authType == 'pat') {
+      if (!secret.trim().startsWith('pt-')) {
+        throw const LlmAccountConnectorException();
+      }
+      return;
+    }
     if (account.connectorType == 'bedrock' &&
         account.authType == 'aws_credentials') {
       try {
@@ -3788,6 +3923,7 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        (account.connectorType == 'qoder' && account.authType == 'pat') ||
         (stream &&
             account.connectorType == 'devin' &&
             account.authType != 'oauth') ||
@@ -3821,7 +3957,8 @@ class LlmNativeRequestBuilder {
     }
     if (const {'opencode-go', 'opencode-zen'}.contains(account.connectorType) &&
         !LlmAccountConnectorService._isOpenCodeStandardGatewayModelId(
-            modelId)) {
+          modelId,
+        )) {
       throw const LlmAccountConnectorException();
     }
     if (account.connectorType == 'command-code') {
@@ -3967,6 +4104,47 @@ class LlmNativeRequestBuilder {
           body: body,
           conversationId: conversationId,
         );
+        break;
+      case 'qoder':
+        if (account.authType == 'pat') {
+          throw const LlmAccountConnectorException();
+        }
+        headers['Authorization'] = 'Bearer $secret';
+        final runtimePlatform = switch (defaultTargetPlatform) {
+          TargetPlatform.android => 'android',
+          TargetPlatform.iOS => 'ios',
+          TargetPlatform.macOS => 'darwin',
+          TargetPlatform.windows => 'win32',
+          TargetPlatform.linux => 'linux',
+          TargetPlatform.fuchsia => 'fuchsia',
+        };
+        final runtimeArch = _qoderRuntimeArchitecture();
+        final userAgent = 'QwenCode/0.19.3 ($runtimePlatform; $runtimeArch)';
+        final stainlessOs = switch (runtimePlatform) {
+          'android' => 'Android',
+          'ios' => 'iOS',
+          'darwin' => 'MacOS',
+          'win32' => 'Windows',
+          'linux' => 'Linux',
+          _ => 'Other:$runtimePlatform',
+        };
+        final stainlessArch = switch (runtimeArch) {
+          'x86_64' || 'x64' => 'x64',
+          'aarch64' || 'arm64' => 'arm64',
+          'x32' => 'x32',
+          'arm' => 'arm',
+          '' => 'unknown',
+          _ => 'other:$runtimeArch',
+        };
+        headers.addAll({
+          'x-dashscope-authtype': 'qwen-oauth',
+          'x-dashscope-cachecontrol': 'enable',
+          'user-agent': userAgent,
+          'x-dashscope-useragent': userAgent,
+          'x-stainless-arch': stainlessArch,
+          'x-stainless-lang': 'js',
+          'x-stainless-os': stainlessOs,
+        });
         break;
       case 'antigravity':
         headers['Authorization'] = 'Bearer $secret';
@@ -4151,7 +4329,8 @@ class LlmNativeRequestBuilder {
         'glm' ||
         'deepseek' ||
         'minimax' ||
-        'qwen' =>
+        'qwen' ||
+        'qoder' =>
           true,
         'vertex' => _usesVertexInteractions(config, nativeFormat),
         _ => false,
@@ -4179,12 +4358,14 @@ class LlmNativeRequestBuilder {
             'access_token',
             'accessToken',
           ],
-        'oauth' => account.connectorType == 'devin'
-            ? const ['session_token']
-            : account.connectorType == 'meta' ||
-                    account.connectorType == 'muse-code'
-                ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
-                : const ['access_token', 'accessToken'],
+        'oauth' => account.connectorType == 'qoder'
+            ? const ['api_key', 'apiKey']
+            : account.connectorType == 'devin'
+                ? const ['session_token']
+                : account.connectorType == 'meta' ||
+                        account.connectorType == 'muse-code'
+                    ? const ['api_key', 'apiKey', 'access_token', 'accessToken']
+                    : const ['access_token', 'accessToken'],
         'session_token' => const [
             'session_token',
             'sessionToken',
@@ -4425,6 +4606,9 @@ class LlmNativeRequestBuilder {
         path = '/chat/completions';
       case 'workbuddy':
         baseUrl = _baseUrl(config, 'https://www.workbuddy.ai/v2');
+        path = '/chat/completions';
+      case 'qoder':
+        baseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
         path = '/chat/completions';
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
@@ -4777,6 +4961,7 @@ class LlmNativeRequestBuilder {
       'codebuddy-cn' => host == 'copilot.tencent.com',
       'codebuddy-intl' => host == 'www.codebuddy.ai',
       'workbuddy' => host == 'www.workbuddy.ai',
+      'qoder' => host == 'dashscope.aliyuncs.com',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
       'meta' || 'muse-code' => host == 'api.meta.ai',

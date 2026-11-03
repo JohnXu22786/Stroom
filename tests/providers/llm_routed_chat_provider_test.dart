@@ -18,6 +18,35 @@ import 'package:stroom/services/llm_routing_service.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test('Qoder Chat route accepts only the source-supported chat protocol', () {
+    final account = AiGatewayAccount(
+      id: 'qoder-account',
+      connectorType: 'qoder',
+      authType: 'api_key',
+      displayName: 'Qoder',
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'qwen3.7-max',
+        endpointType: 'openai.chat_completions',
+      ),
+      'openai.chat_completions',
+    );
+    expect(
+      () => llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'qwen3.7-max',
+        endpointType: 'openai.chat_completions',
+        apiProtocolOverride: 'openai.responses',
+      ),
+      throwsStateError,
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.responses'),
+      isNot(contains('qoder')),
+    );
+  });
   test(
     'invokes Claude OAuth and Setup Token accounts through Anthropic Chat',
     () async {

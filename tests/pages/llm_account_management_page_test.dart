@@ -23,6 +23,141 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('reauthorizes Qoder OAuth when the admin client secret changes', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'qoder-oauth-secret-change',
+        connectorType: 'qoder',
+        authType: 'oauth',
+        displayName: 'Qoder OAuth account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'qoderLoginUrl': 'https://login.example.test/authorize',
+          'qoderExchangeUrl': 'https://login.example.test/token',
+          'qoderUserInfoUrl': 'https://login.example.test/user',
+          'qoderClientId': 'qoder-client',
+        },
+      ),
+      secret: jsonEncode({
+        'api_key': 'old-dashscope-key',
+        'access_token': 'old-qoder-access',
+        'refresh_token': 'old-qoder-refresh',
+        'client_id': 'qoder-client',
+        'client_secret': 'old-qoder-secret',
+        'oauth_contract': 'qoder-admin-code-v1',
+      }),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway:
+              _testGateway(service, oauthAuthorization: oauthAuthorization),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'QODER_OAUTH_CLIENT_SECRET',
+      ),
+      'new-qoder-secret',
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.configurations, hasLength(1));
+    expect(
+      oauthAuthorization.configurations.single['clientSecret'],
+      'new-qoder-secret',
+    );
+  });
+
+  testWidgets('Qoder account editor exposes PAT, API key and admin OAuth setup',
+      (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!('qoder');
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    final authButton = find.descendant(
+      of: authDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(authButton)
+          .items!
+          .map((item) => item.value),
+      containsAll(['api_key', 'oauth', 'pat']),
+    );
+    tester.widget<DropdownButton<String>>(authButton).onChanged!('api_key');
+    await tester.pumpAndSettle();
+    expect(find.text('DashScope API Key'), findsOneWidget);
+    tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: authDropdown,
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .onChanged!('oauth');
+    await tester.pumpAndSettle();
+    expect(find.text('QODER_OAUTH_AUTHORIZE_URL'), findsOneWidget);
+    expect(find.text('QODER_OAUTH_TOKEN_URL'), findsOneWidget);
+    expect(find.text('QODER_OAUTH_USER_INFO_URL'), findsOneWidget);
+    expect(find.text('QODER_OAUTH_CLIENT_ID'), findsOneWidget);
+    final clientSecret = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'QODER_OAUTH_CLIENT_SECRET',
+      ),
+    );
+    expect(clientSecret.obscureText, isTrue);
+
+    tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: authDropdown,
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .onChanged!('pat');
+    await tester.pumpAndSettle();
+    expect(find.text('Qoder Personal Access Token'), findsOneWidget);
+    expect(find.textContaining('45 秒'), findsOneWidget);
+  });
   testWidgets(
       'Command Code account keeps supplier and model protocols separate', (
     tester,
