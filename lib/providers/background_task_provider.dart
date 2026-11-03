@@ -2133,6 +2133,14 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeExplicitCredentialTargetUseLead = RegExp(
+    r'^\s*(?:please\s+)?use\s+\[redacted\]\s+as\s+'
+    r'(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?'
+    r'(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer)\s+)*'
+    r'(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)'
+    r'\s*[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(text);
   final safeReceiptUseLead = RegExp(
     r'^\s*(?:please\s+)?use\s+\[redacted\].*\bfor (?:this|the) receipt\b',
     caseSensitive: false,
@@ -2165,6 +2173,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
       (safeUseLead && safeRequestUseLead) ||
+      safeExplicitCredentialTargetUseLead ||
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeImageContext ||

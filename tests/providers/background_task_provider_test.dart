@@ -15154,7 +15154,7 @@ void main() {
         const echoedCredential = 'documentation';
         const instruction = 'Use documentation as the API key';
         final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-documentation-as-api-key-short-mask',
+          'id': 'legacy-ocr-explicit-target-short-mask',
           'type': 'ocr',
           'title': 'legacy OCR request',
           'status': 'failed',
