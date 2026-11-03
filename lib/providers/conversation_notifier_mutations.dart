@@ -422,8 +422,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       if (inputTokens != null) c.lastInputTokens = inputTokens;
       if (outputTokens != null) c.lastOutputTokens = outputTokens;
       if (costIncrement != 0) {
-        c.totalCost =
-            (c.totalCost + costIncrement).clamp(0.0, double.infinity).toDouble();
+        c.totalCost = (c.totalCost + costIncrement)
+            .clamp(0.0, double.infinity)
+            .toDouble();
       }
       c.updatedAt = DateTime.now();
       return c;

@@ -272,16 +272,20 @@ void chatAgentSemanticsGroup8() {
       final manager = container.read(chatStreamManagerProvider);
       final provider = _UsageQueueProvider([
         [
-          AIStreamEvent('', usage: {
-            'inputTokens': 100,
-            'outputTokens': 1,
-            'cost': 0.0003,
-          }, usageCostIncrement: 0.0003),
-          AIStreamEvent('', usage: {
-            'inputTokens': 100,
-            'outputTokens': 10,
-            'cost': 0.0002,
-          }, usageCostIncrement: -0.0001),
+          AIStreamEvent('',
+              usage: {
+                'inputTokens': 100,
+                'outputTokens': 1,
+                'cost': 0.0003,
+              },
+              usageCostIncrement: 0.0003),
+          AIStreamEvent('',
+              usage: {
+                'inputTokens': 100,
+                'outputTokens': 10,
+                'cost': 0.0002,
+              },
+              usageCostIncrement: -0.0001),
           AIStreamEvent('完成'),
         ],
       ]);

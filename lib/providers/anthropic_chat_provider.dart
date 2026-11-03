@@ -349,12 +349,9 @@ class AnthropicChatProvider extends BaseChatProvider {
 
     AIStreamEvent usageUpdate() {
       final snapshot = Map<String, dynamic>.from(localUsage!);
-      final totalCost = snapshot['cost'] is num
-          ? (snapshot['cost'] as num).toDouble()
-          : null;
-      final costIncrement = totalCost == null
-          ? null
-          : totalCost - emittedCost;
+      final totalCost =
+          snapshot['cost'] is num ? (snapshot['cost'] as num).toDouble() : null;
+      final costIncrement = totalCost == null ? null : totalCost - emittedCost;
       if (totalCost != null) emittedCost = totalCost;
       usageEmitted = true;
       return AIStreamEvent(
