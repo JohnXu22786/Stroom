@@ -3275,6 +3275,52 @@ void main() {
     );
 
     test(
+      'legacy OCR migration preserves tokenomics prompt and redacts token echo',
+      () {
+        const instruction = 'Summarize the tokenomics report';
+        const credential = 'tokenOpaqueCredential987';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-tokenomics-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer token…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                    {
+                      'type': 'text',
+                      'text': 'Use $credential to process this image',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final restored = BackgroundTask.fromMap(
+          jsonDecode(persisted) as Map<String, dynamic>,
+        );
+        final restoredInstruction = OcrRetrySnapshot.fromMap(
+          restored.retryData!,
+        ).instructionContent!;
+
+        expect(restoredInstruction, contains(instruction));
+        expect(persisted, contains(instruction));
+        expect(restoredInstruction, isNot(contains(credential)));
+        expect(persisted, isNot(contains(credential)));
+      },
+    );
+
+    test(
       'legacy OCR retry preserves dotted token properties and redacts token echoes',
       () {
         const instruction = 'Use configuration.token for request';
