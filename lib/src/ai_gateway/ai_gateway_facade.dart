@@ -604,7 +604,13 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isClaude = account.connectorType == 'claude';
       final isDevin = account.connectorType == 'devin';
       final isQoder = account.connectorType == 'qoder';
-      if (!isOpenAi && !isGemini && !isClaude && !isDevin && !isQoder) {
+      final isOpenference = account.connectorType == 'openference';
+      if (!isOpenAi &&
+          !isGemini &&
+          !isClaude &&
+          !isDevin &&
+          !isQoder &&
+          !isOpenference) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -618,19 +624,29 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       listener = await LlmOAuthLoopback.bind(
         isGemini
             ? '/'
-            : isClaude || isDevin
+            : isOpenference
                 ? '/callback'
-                : '/auth/callback',
+                : isClaude || isDevin
+                    ? '/callback'
+                    : '/auth/callback',
         host: isClaude ? 'localhost' : '127.0.0.1',
-        port: isClaude ? 54545 : 0,
+        port: isClaude
+            ? 54545
+            : isOpenference
+                ? 56123
+                : 0,
       );
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
-      final previousBundle =
-          isGemini || isOpenAi || isClaude || isDevin || isQoder
-              ? await _existingOAuthBundle(account)
-              : null;
+      final previousBundle = isGemini ||
+              isOpenAi ||
+              isClaude ||
+              isDevin ||
+              isQoder ||
+              isOpenference
+          ? await _existingOAuthBundle(account)
+          : null;
       final previousOpenAiBundle =
           previousBundle?['oauth_contract'] == 'openai-siwc-v1'
               ? previousBundle
@@ -668,6 +684,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           redirectUri: listener.redirectUri,
           authorizeUrl: authorizeUrl,
           clientId: clientId,
+        );
+      } else if (isOpenference) {
+        attempt = LlmOAuthAuthorizationAttempt.openference(
+          redirectUri: listener.redirectUri,
         );
       } else {
         attempt = LlmOAuthAuthorizationAttempt.claudeCode(
@@ -732,6 +752,11 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           attempt: attempt,
           callback: callback,
           configuration: qoderConfiguration,
+        );
+      } else if (isOpenference) {
+        tokenBundle = await _tokenClient.exchangeOpenferenceCode(
+          attempt: attempt,
+          callback: callback,
         );
       } else {
         tokenBundle = await _tokenClient.exchangeClaudeCode(

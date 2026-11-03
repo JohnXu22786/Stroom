@@ -23,6 +23,94 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets(
+    'Openference OAuth and API-key accounts are distinct in the editor',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final gateway = _testGateway(service);
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final oauthProvider = gateway.providerCatalog.findProvider(
+        'openference',
+      )!;
+      final apiProvider = gateway.providerCatalog.findProvider(
+        'openference-api',
+      )!;
+      expect(oauthProvider.displayName, 'Openference');
+      expect(oauthProvider.supportedAuthTypes, {'oauth'});
+      expect(apiProvider.displayName, 'Openference API');
+      expect(apiProvider.supportedAuthTypes, {'api_key'});
+      expect(oauthProvider.supportsChatAdapter, isTrue);
+      expect(apiProvider.supportsChatAdapter, isTrue);
+
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connectorDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      final connectorMenu = tester.widget<DropdownButton<String>>(
+        connectorButton,
+      );
+      expect(
+        connectorMenu.items!.map((item) => item.value),
+        containsAll(['openference', 'openference-api']),
+      );
+      connectorMenu.onChanged!('openference');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。'),
+        findsOneWidget,
+      );
+      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+      final oauthAuth = find.byType(DropdownButtonFormField<String>).at(1);
+      final oauthButton = find.descendant(
+        of: oauthAuth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(oauthButton)
+            .items!
+            .map((item) => item.value),
+        ['oauth'],
+      );
+
+      final updatedConnectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: updatedConnectorDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('openference-api');
+      await tester.pumpAndSettle();
+      final apiAuth = find.byType(DropdownButtonFormField<String>).at(1);
+      final apiButton = find.descendant(
+        of: apiAuth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(apiButton)
+            .items!
+            .map((item) => item.value),
+        ['api_key'],
+      );
+      expect(find.text('Openference API Key'), findsOneWidget);
+    },
+  );
+
   testWidgets('reauthorizes Qoder OAuth when the admin client secret changes', (
     tester,
   ) async {

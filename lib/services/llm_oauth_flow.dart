@@ -60,6 +60,10 @@ class LlmOAuthProviderPolicy {
       providerId: 'workbuddy',
       supported: true,
     ),
+    'openference': LlmOAuthProviderPolicy._(
+      providerId: 'openference',
+      supported: true,
+    ),
     'qoder': LlmOAuthProviderPolicy._(providerId: 'qoder', supported: true),
     'kilocode': LlmOAuthProviderPolicy._(
       providerId: 'kilocode',
@@ -334,6 +338,9 @@ class LlmXaiDeviceCode {
 /// memory until the matching loopback response is consumed.
 class LlmOAuthAuthorizationAttempt {
   static const kimiCodeClientId = '17e5f671-d194-4dfb-9706-5516cb48c098';
+  static const openferenceClientId = 'omniroute';
+  static const openferenceScope =
+      'openid profile email model:invoke offline_access';
   static const openAiIssuer = 'https://auth.openai.com';
   static const openAiResource = 'https://api.openai.com/v1';
   static const openAiDynamicClientId = 'dynamic_agent_client';
@@ -512,6 +519,31 @@ class LlmOAuthAuthorizationAttempt {
       existingClientId: null,
       isOpenAiRegistration: false,
       isDevin: true,
+    );
+  }
+
+  /// Openference's public installed-app flow uses a fixed-port loopback
+  /// callback and PKCE S256. The client id is public and is not a secret.
+  factory LlmOAuthAuthorizationAttempt.openference({required Uri redirectUri}) {
+    _validateLoopbackRedirect(redirectUri, '/callback', port: 56123);
+    final state = _secureValue();
+    final verifier = _secureValue();
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https('openference.com', '/app/oauth/authorize', {
+        'response_type': 'code',
+        'client_id': openferenceClientId,
+        'redirect_uri': redirectUri.toString(),
+        'scope': openferenceScope,
+        'code_challenge': _challenge(verifier),
+        'code_challenge_method': 'S256',
+        'state': state,
+      }),
+      state: state,
+      nonce: '',
+      codeVerifier: verifier,
+      existingClientId: openferenceClientId,
+      isOpenAiRegistration: false,
     );
   }
 

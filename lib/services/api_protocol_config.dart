@@ -78,6 +78,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'opencode-zen' ||
       'command-code' =>
         'openai.chat_completions',
+      'openference' || 'openference-api' => 'openai.chat_completions',
       'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
@@ -128,6 +129,10 @@ Set<String> supportedApiProtocolsForSupplier(
     'kimi.ai' ||
     'kimi-coding' =>
       kCustomHttpApiProtocols,
+    'openference' || 'openference-api' => const {
+        'openai.chat_completions',
+        'openai.responses',
+      },
     _ => null,
   };
   if (builtinProtocols != null) return builtinProtocols;
