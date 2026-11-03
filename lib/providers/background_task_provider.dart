@@ -2550,7 +2550,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 caseSensitive: false,
               ).hasMatch(beforeEcho) &&
               RegExp(
-                r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b',
+                r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify|ocr|decode)\b',
                 caseSensitive: false,
               ).hasMatch(sanitized.substring(match.end));
       final rawEcho = match.group(1)!;
