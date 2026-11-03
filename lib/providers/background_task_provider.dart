@@ -4767,12 +4767,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
   }) {
-    BackgroundTask? oldTask;
+    BackgroundTask? updatedTask;
     state = state.map((t) {
       if (t.id != taskId) return t;
-      oldTask = t;
       final shouldClearError = error == null && status == TaskStatus.completed;
-      return t.copyWith(
+      final updated = t.copyWith(
         status: status,
         error: error,
         clearError: shouldClearError,
@@ -4785,13 +4784,18 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 ? DateTime.now()
                 : null,
       );
+      updatedTask = updated;
+      return updated;
     }).toList();
     _persistTasks();
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
-        oldTask != null) {
-      _sendTaskNotification(oldTask!, status, error);
+        updatedTask != null) {
+      final notificationError = updatedTask!.type == BackgroundTaskType.ocr
+          ? updatedTask!.error
+          : error;
+      _sendTaskNotification(updatedTask!, status, notificationError);
     }
     _syncIosContinuedTask();
   }
