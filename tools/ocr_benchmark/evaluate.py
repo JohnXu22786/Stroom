@@ -1194,6 +1194,7 @@ def _plain_text_for_cer(
     table_text: str | None = None,
     formula_text: str | None = None,
     *,
+    gold_text: str | None = None,
     strip_markdown_markup: bool = False,
 ) -> str:
     text = value
@@ -1201,17 +1202,41 @@ def _plain_text_for_cer(
         annotated_table_rows = set(_table_rows(table_text))
         if annotated_table_rows:
             expected_column_count = max(map(len, annotated_table_rows))
+            known_prose_rows = set()
+            for line in (gold_text or "").splitlines():
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_unframed_shape_without_context=True,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if parsed_rows and parsed_rows[0] not in annotated_table_rows:
+                    known_prose_rows.add(parsed_rows[0])
             lines = []
             source_lines = (
                 text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
             )
-            for index, line in enumerate(source_lines):
+            parsed_rows_by_index = {}
+            table_row_indices = set()
+            separator_row_indices = {
+                index
+                for index in range(len(source_lines))
                 if _is_markdown_separator_row_at(
                     source_lines,
                     index,
                     expected_column_count,
                     matching_rows=annotated_table_rows,
-                ):
+                )
+            }
+            structural_table_context_indices = {
+                neighbor
+                for index in separator_row_indices
+                for neighbor in (index - 1, index + 1)
+                if 0 <= neighbor < len(source_lines)
+            }
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
                     continue
                 parsed_rows = _table_rows(
                     line,
@@ -1229,7 +1254,34 @@ def _plain_text_for_cer(
                     None,
                 )
                 if normalized_row is not None:
-                    line = " ".join(normalized_row)
+                    parsed_rows_by_index[index] = normalized_row
+                    if (
+                        normalized_row in annotated_table_rows
+                        or (
+                            normalized_row not in known_prose_rows
+                            and index in structural_table_context_indices
+                        )
+                    ):
+                        table_row_indices.add(index)
+            while True:
+                additional_table_rows = {
+                    index
+                    for index, row in parsed_rows_by_index.items()
+                    if index not in table_row_indices
+                    and row not in known_prose_rows
+                    and any(
+                        neighbor in table_row_indices
+                        for neighbor in (index - 1, index + 1)
+                    )
+                }
+                if not additional_table_rows:
+                    break
+                table_row_indices.update(additional_table_rows)
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
+                    continue
+                if index in table_row_indices:
+                    line = " ".join(parsed_rows_by_index[index])
                 lines.append(line)
             text = "\n".join(lines)
     if output_format in {"markdown", "table"}:
@@ -1811,6 +1863,7 @@ def evaluate_predictions(
                 run["output_format"],
                 fixture.get("table_text"),
                 fixture.get("formula_text"),
+                    gold_text=expected_value,
                 strip_markdown_markup=True,
             )
             if actual_value is not None
@@ -1821,6 +1874,7 @@ def evaluate_predictions(
             run["output_format"],
             fixture.get("table_text"),
             fixture.get("formula_text"),
+            gold_text=expected_value,
         )
         edit_distance += levenshtein_distance(expected, actual)
         reference_characters += len(expected)

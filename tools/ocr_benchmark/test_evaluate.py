@@ -2105,6 +2105,89 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_plain_text_cer_preserves_pipe_in_unframed_prose(self):
+        table_text = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-pipe-prose",
+                    "gold_text": f"{table_text}\nSet relation x | y",
+                    "table_text": table_text,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-pipe-prose",
+                    "text": f"{table_text}\nSet relation x y",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["edit_distance"], 2
+        )
+
+    def test_plain_text_cer_normalizes_structurally_matching_extra_table_row(self):
+        expected = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-extra-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-extra-row",
+                    "text": expected + "\nSecond | 2",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["edit_distance"],
+            len(" Second 2"),
+        )
+
+    def test_plain_text_cer_keeps_normalizing_annotated_table_rows(self):
+        expected = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-row-framing",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-row-framing",
+                    "text": "| Name | Value |\n| First | 1 |",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_extra_table_row_reduces_table_fidelity(self):
         expected = "Code | Count | Total\nP-12 | 3 | 15.00\nQ-07 | 2 | 8.00"
         manifest = {
