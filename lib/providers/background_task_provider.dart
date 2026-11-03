@@ -3036,20 +3036,6 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
-dynamic _withoutOcrCredentialFields(dynamic value) {
-  if (value is Map) {
-    return {
-      for (final entry in value.entries)
-        if (!_isOcrCredentialField(entry.key))
-          entry.key: _withoutOcrCredentialFields(entry.value),
-    };
-  }
-  if (value is List) {
-    return [for (final item in value) _withoutOcrCredentialFields(item)];
-  }
-  return value;
-}
-
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
   String taskId,
   Map<String, dynamic> malformedRetryData, {
@@ -3092,10 +3078,6 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
     taskId: taskId,
     imageCount: imageCount,
   )['images'] as List;
-  final parsedImagesByIndex = <int, OcrRetryImage>{
-    for (var index = 0; index < snapshot.images.length; index++)
-      snapshot.imageEntryIndices[index]: snapshot.images[index],
-  };
   final images = <Map<String, dynamic>>[];
   for (var index = 0; index < imageCount; index++) {
     final rawImage =
@@ -3104,16 +3086,11 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
         fallbackImages is List && index < fallbackImages.length
             ? fallbackImages[index]
             : null;
-    final parsedImage = parsedImagesByIndex[index];
     final placeholder =
         Map<String, dynamic>.from(unavailableImages[index] as Map);
     final image = <String, dynamic>{
-      if (parsedImage?.bytes != null)
-        'bytes': base64Encode(parsedImage!.bytes!),
-      if (parsedImage?.storageRef != null)
-        'storageRef': parsedImage!.storageRef,
-      'format': parsedImage?.format ?? 'jpeg',
-      if (parsedImage?.name != null) 'name': parsedImage!.name,
+      'storageRef': placeholder['storageRef'],
+      'format': 'jpeg',
     };
 
     final sourceImage = rawImage is Map ? rawImage : fallbackImage;
@@ -3133,10 +3110,6 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
           !_legacyOcrTextContainsCredential(name, unsafeCredentialValues)) {
         image['name'] = name;
       }
-    }
-
-    if (parsedImage == null && image['storageRef'] == null) {
-      image['storageRef'] = placeholder['storageRef'];
     }
     images.add(image);
   }
@@ -3194,22 +3167,6 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
       malformedSnapshot.version == 2 ||
       malformedSnapshot.version == OcrRetrySnapshot.currentVersion;
   if (!supportedVersion) {
-    if (malformedRetryData['version'] is int) {
-      final safeFutureData = _withoutCredentialEchoes(
-        _withoutOcrCredentialFields(malformedRetryData),
-        safeCredentialValues,
-      );
-      try {
-        // Keep forward-compatible fields opaque for future app versions. The
-        // integer version still prevents this app from treating them as
-        // executable retry input.
-        jsonEncode(safeFutureData);
-        return Map<String, dynamic>.from(safeFutureData as Map);
-      } on Object {
-        // Fall back to the known-safe subset if the future payload cannot be
-        // represented in persisted task JSON.
-      }
-    }
     return _safeUnsupportedOcrRetryData(
       taskId,
       malformedRetryData,

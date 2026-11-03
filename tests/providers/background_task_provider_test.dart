@@ -1849,7 +1849,7 @@ void main() {
     );
 
     test(
-      'unsupported OCR retry data preserves safe extensions and strips credentials',
+      'unsupported OCR retry data preserves known fields and strips extensions',
       () {
         const apiKey = 'unsupported-retry-api-key-4812';
         final storageRef = 'ocr_retry_cache/${'b' * 64}.bin';
@@ -1899,9 +1899,9 @@ void main() {
         expect(snapshot.images.single.storageRef, storageRef);
         expect(snapshot.instructionContent, 'Read the invoice total carefully');
         expect(retryData.containsKey('apiKey'), isFalse);
-        expect(retryData['futureMetadata'], 'unknown extension');
+        expect(retryData.containsKey('futureMetadata'), isFalse);
         expect(persisted, isNot(contains(apiKey)));
-        expect(persisted, contains('futureMetadata'));
+        expect(persisted, isNot(contains('unknown extension')));
       },
     );
 
@@ -2199,11 +2199,18 @@ void main() {
         'retryData': retryData,
       });
 
-      expect(task.retryData, retryData);
+      final restoredRetryData = task.retryData!;
+      expect(restoredRetryData['version'], 99);
+      expect(restoredRetryData['modelRef'], retryData['modelRef']);
+      expect(restoredRetryData['instructionContent'], 'Read this image');
+      final images = (restoredRetryData['images'] as List).cast<Map>();
+      expect(images, hasLength(2));
+      expect(images.every((image) => !image.containsKey('bytes')), isTrue);
+      expect(images.last['storageRef'], storageRef);
     });
 
     test(
-      'safe future OCR retry fields survive task persistence while remaining unsupported',
+      'unsupported OCR retry data keeps known fields and drops future extensions',
       () {
         final storageRef = 'ocr_retry_cache/${'e' * 64}.bin';
         final task = BackgroundTask.fromMap({
@@ -2239,16 +2246,13 @@ void main() {
         final snapshot = OcrRetrySnapshot.fromMap(retryData);
 
         expect(retryData['version'], 99);
-        expect(retryData['futureSettings'], {
-          'recognitionMode': 'highAccuracy',
-          'includeRegions': true,
-        });
+        expect(retryData.containsKey('futureSettings'), isFalse);
         expect(retryData.containsKey('futureAuth'), isFalse);
-        expect(retryData['futureService'], isEmpty);
+        expect(retryData.containsKey('futureService'), isFalse);
         expect(persisted, isNot(contains('future-credential-value')));
         expect(persisted, isNot(contains('opaque-x-api-key-value')));
         expect(snapshot.version, 99);
-        expect(snapshot.hasUnknownFields, isTrue);
+        expect(snapshot.hasUnknownFields, isFalse);
         expect(snapshot.images.single.storageRef, storageRef);
         expect(snapshot.version, isNot(OcrRetrySnapshot.currentVersion));
       },
@@ -2309,10 +2313,8 @@ void main() {
         expect(task.ocrPageOutcomes.single.imageIndex, 0);
         expect(task.ocrPageOutcomes.single.error, isNot(contains(credential)));
         expect(retryData['version'], 99);
-        expect(retryData['futureSettings'], {
-          'recognitionMode': 'highAccuracy',
-        });
-        expect(retryData['futureService'], isEmpty);
+        expect(retryData.containsKey('futureSettings'), isFalse);
+        expect(retryData.containsKey('futureService'), isFalse);
         expect(snapshot.version, 99);
         expect(
           snapshot.images.single.storageRef,
@@ -20719,37 +20721,52 @@ void main() {
       () async {
         final file = _tasksFileIn(testDir.path);
         final encodedImage = base64Encode(List<int>.filled(64 * 1024, 0x5a));
+        const nestedPayload = 'bmVzdGVkLWRvY3VtZW50LWJhc2U2NC1wYXlsb2Fk';
         await file.parent.create(recursive: true);
-        await file.writeAsString(
-          jsonEncode([
-            {
-              'id': 'unsupported-retry',
-              'type': 'ocr',
-              'title': 'unsupported OCR retry',
-              'status': 'failed',
-              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-              'steps': [],
-              'retryData': {
-                'type': 'ocr',
-                'version': 99,
-                'modelRef': {
-                  'configId': 'saved-config',
-                  'modelId': 'saved-model',
-                },
-                'instructionContent': 'saved prompt',
-                'images': [
-                  {'bytes': encodedImage, 'format': 'png'},
-                  {'bytes': encodedImage, 'format': 'png'},
-                ],
-              },
+        final taskRecord = <String, dynamic>{
+          'id': 'unsupported-retry',
+          'type': 'ocr',
+          'title': 'unsupported OCR retry',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [],
+          'retryData': {
+            'type': 'ocr',
+            'version': 99,
+            'modelRef': {
+              'configId': 'saved-config',
+              'modelId': 'saved-model',
             },
-          ]),
-        );
+            'instructionContent': 'saved prompt',
+            'imageData': encodedImage,
+            'futureMetadata': {
+              'document': {'base64': nestedPayload},
+            },
+            'images': [
+              {'bytes': encodedImage, 'format': 'png'},
+              {'bytes': encodedImage, 'format': 'png'},
+            ],
+          },
+        };
+        await file.writeAsString(jsonEncode([taskRecord]));
+
+        final directlyRestored = BackgroundTask.fromMap(taskRecord);
+        final directRetryData = directlyRestored.retryData!;
+        expect(directRetryData, isNot(contains('imageData')));
+        expect(directRetryData, isNot(contains('futureMetadata')));
+        expect(directRetryData['modelRef'], {
+          'configId': 'saved-config',
+          'modelId': 'saved-model',
+        });
+        expect(directRetryData['instructionContent'], 'saved prompt');
+        expect(directRetryData['images'], hasLength(2));
+        expect(jsonEncode(directRetryData), isNot(contains(encodedImage)));
+        expect(jsonEncode(directRetryData), isNot(contains(nestedPayload)));
 
         final notifier = BackgroundTaskNotifier();
         try {
           await notifier.restoreFromPersistence();
-          final restored = notifier.state.single;
+          final restored = notifier.taskById('unsupported-retry')!;
           final retryData = restored.retryData;
           expect(retryData, isNotNull);
           expect(retryData!['version'], OcrRetrySnapshot.currentVersion);
@@ -20758,6 +20775,8 @@ void main() {
             'modelId': 'saved-model',
           });
           expect(retryData['instructionContent'], 'saved prompt');
+          expect(retryData, isNot(contains('imageData')));
+          expect(retryData, isNot(contains('futureMetadata')));
           final images = (retryData['images'] as List).cast<Map>();
           expect(images, hasLength(2));
           expect(
@@ -20770,6 +20789,19 @@ void main() {
           await notifier.pendingPersistence;
           final persisted = await file.readAsString();
           expect(persisted, isNot(contains(encodedImage)));
+          expect(persisted, isNot(contains(nestedPayload)));
+          final persistedTask =
+              (jsonDecode(persisted) as List).single as Map<String, dynamic>;
+          final persistedRetryData =
+              persistedTask['retryData'] as Map<String, dynamic>;
+          expect(persistedRetryData, isNot(contains('imageData')));
+          expect(persistedRetryData, isNot(contains('futureMetadata')));
+          expect(persistedRetryData['instructionContent'], 'saved prompt');
+          expect(persistedRetryData['modelRef'], {
+            'configId': 'saved-config',
+            'modelId': 'saved-model',
+          });
+          expect(persistedRetryData['images'], hasLength(2));
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
