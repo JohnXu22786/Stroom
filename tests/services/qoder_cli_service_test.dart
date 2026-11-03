@@ -69,6 +69,31 @@ void main() {
     );
   });
 
+  test('PAT plan rejects legacy caller function fields', () {
+    for (final toolField in ['functions', 'function_call']) {
+      expect(
+        () => QoderCliPlan.chat(
+          token: 'pt-account-token',
+          modelId: 'qwen3.8-max-preview',
+          body: {
+            'messages': [
+              {'role': 'user', 'content': 'Hello'},
+            ],
+            toolField: toolField == 'functions'
+                ? [
+                    {'name': 'lookup'},
+                  ]
+                : 'auto',
+          },
+          configDirectory: '/tmp/qoder-account-work',
+        ),
+        throwsA(isA<QoderCliToolsUnsupportedException>()),
+        reason:
+            'PAT mode must reject $toolField instead of silently ignoring it',
+      );
+    }
+  });
+
   test(
     'PAT streaming wraps the buffered result as a complete SSE response',
     () async {

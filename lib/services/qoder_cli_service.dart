@@ -153,7 +153,9 @@ class QoderCliPlan {
   }) {
     if (body is! Map ||
         (body['tools'] is Iterable && (body['tools'] as Iterable).isNotEmpty) ||
-        body['tool_choice'] != null) {
+        body['tool_choice'] != null ||
+        body['functions'] != null ||
+        body['function_call'] != null) {
       throw const QoderCliToolsUnsupportedException();
     }
     final messages = body['messages'];
