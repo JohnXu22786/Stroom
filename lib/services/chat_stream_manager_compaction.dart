@@ -151,8 +151,10 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       convId: convId,
     );
     if (requestSvc == null) return false;
-    requestSvc.onUsageEvent = (usage, {required bool recordInput}) {
-      _commitUsage(convId, usage, recordInput: recordInput);
+    requestSvc.onUsageEvent =
+        (usage, {required bool recordInput, double? costIncrement}) {
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
     };
     String summary;
     try {

@@ -52,8 +52,10 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 该对话的计费事实：usage 数据返回后立即累加（事件驱动、
       // per-request 隔离，不会与主请求张冠李戴）。输入/输出计量不写入
       // （标题输入仅一条消息，写入会污染上下文显示与压缩触发判断）。
-      svc.onUsageEvent = (usage, {required bool recordInput}) {
-        _commitUsage(convId, usage, recordInput: recordInput);
+      svc.onUsageEvent =
+          (usage, {required bool recordInput, double? costIncrement}) {
+        _commitUsage(convId, usage,
+            recordInput: recordInput, costIncrementOverride: costIncrement);
       };
 
       String title;

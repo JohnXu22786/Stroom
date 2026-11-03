@@ -92,8 +92,8 @@ class AnthropicChatProvider extends BaseChatProvider {
   /// - 输入 = input_tokens + cache_read + cache_creation（缓存 token
   ///   同样占用上下文）；仅当 > 0 时写入（message_delta 无输入字段）。
   /// - 输出 = output_tokens。
-  /// - cost：兼容 num 与数字字符串（部分网关）；两端点重复上报
-  ///   total_cost 时取较大值而非累加，避免双计。
+  /// - cost：兼容 num 与数字字符串（部分网关）；重复上报时以后到的
+  ///   usage 快照为准，绝不把同一请求的多次 total_cost 相加。
   @visibleForTesting
   static void mergeAnthropicUsage(Map<String, dynamic> localUsage, Map usage) {
     final input = usageNumberToDouble(usage['input_tokens'])?.toInt() ?? 0;
@@ -107,12 +107,7 @@ class AnthropicChatProvider extends BaseChatProvider {
     if (output != null) localUsage['outputTokens'] = output;
     final cost = usageNumberToDouble(usage['total_cost']) ??
         usageNumberToDouble(usage['cost']);
-    if (cost != null) {
-      final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
-      if (cost > existing) {
-        localUsage['cost'] = cost;
-      }
-    }
+    if (cost != null) localUsage['cost'] = cost;
   }
 
   // TODO: 可从 CustomParam 中提取模型列表，目前暂无可信数据源，留空。
@@ -349,6 +344,25 @@ class AnthropicChatProvider extends BaseChatProvider {
     final acc = AnthropicStreamAccumulator();
     // 本次请求的 usage（局部收集，per-request 隔离）
     Map<String, dynamic>? localUsage;
+    var usageEmitted = false;
+    var emittedCost = 0.0;
+
+    AIStreamEvent usageUpdate() {
+      final snapshot = Map<String, dynamic>.from(localUsage!);
+      final totalCost = snapshot['cost'] is num
+          ? (snapshot['cost'] as num).toDouble()
+          : null;
+      final costIncrement = totalCost == null
+          ? null
+          : totalCost - emittedCost;
+      if (totalCost != null) emittedCost = totalCost;
+      usageEmitted = true;
+      return AIStreamEvent(
+        '',
+        usage: snapshot,
+        usageCostIncrement: costIncrement,
+      );
+    }
 
     try {
       _lastResponseStatusCode = 200;
@@ -387,12 +401,14 @@ class AnthropicChatProvider extends BaseChatProvider {
             if (usage is Map) {
               localUsage ??= {};
               mergeAnthropicUsage(localUsage, usage);
+              yield usageUpdate();
             }
           } else if (data['type'] == 'message_delta') {
             final usage = data['usage'];
             if (usage is Map) {
               localUsage ??= {};
               mergeAnthropicUsage(localUsage, usage);
+              yield usageUpdate();
             }
           }
 
@@ -446,6 +462,8 @@ class AnthropicChatProvider extends BaseChatProvider {
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛
       if (localUsage != null && localUsage.isNotEmpty) {
         _lastUsage = localUsage;
+      }
+      if (localUsage != null && localUsage.isNotEmpty && !usageEmitted) {
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
@@ -453,10 +471,11 @@ class AnthropicChatProvider extends BaseChatProvider {
 
     // 流结束后：产出 usage 计量（per-request 隔离），
     // 同时填充诊断槽（与 lastResponseData 同语义）
-    if (localUsage != null && localUsage.isNotEmpty) {
+    if (localUsage != null && localUsage.isNotEmpty && !usageEmitted) {
       _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
+    if (localUsage != null && localUsage.isNotEmpty) _lastUsage = localUsage;
 
     // 流结束后：产出 thinking 签名（供下一轮链重建续接 extended thinking）
     // 防御规则（避免下一轮 400）：

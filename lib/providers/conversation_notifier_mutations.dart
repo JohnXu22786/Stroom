@@ -409,8 +409,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 更新对话的实际 token 计量与累计花费。
   ///
   /// [inputTokens]/[outputTokens] 来自 API 返回的 usage（非估算）；
-  /// [costIncrement] 为 API 返回的本次请求花费（如 OpenRouter
-  /// usage.total_cost），累加到 [Conversation.totalCost]。
+  /// [costIncrement] 为 API usage 快照相对上次快照的花费差额（如
+  /// OpenRouter usage.total_cost）；可能为负，用于应用后续修正。
   Future<void> updateUsage({
     required String conversationId,
     int? inputTokens,
@@ -421,7 +421,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       if (c.id != conversationId) return c;
       if (inputTokens != null) c.lastInputTokens = inputTokens;
       if (outputTokens != null) c.lastOutputTokens = outputTokens;
-      if (costIncrement > 0) c.totalCost += costIncrement;
+      if (costIncrement != 0) {
+        c.totalCost =
+            (c.totalCost + costIncrement).clamp(0.0, double.infinity).toDouble();
+      }
       c.updatedAt = DateTime.now();
       return c;
     }).toList();

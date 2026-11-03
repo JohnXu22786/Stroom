@@ -338,14 +338,16 @@ class ChatStreamManager {
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
-    // 每次请求的完整 usage 数据返回时（流末尾/错误轮的 usage 事件）
+    // 每次请求的 usage 数据返回时（包含流中间观察到的快照）
     // **立即**增量累加到对话，而非整次发送攒到流结束一次性提交：
     // - 重发/重试/编辑只会在累计值上继续增加，绝不重置、不从头重算；
     // - 每请求提交一次，service 复用/异常清理也不会重复提交（双计）。
     // 压缩请求运行在独立的瞬时 service 上（chat_stream_manager_
     // compaction.dart 中显式接线 _commitUsage），此回调只覆盖主请求。
-    snappedChatService?.onUsageEvent = (usage, {required bool recordInput}) {
-      _commitUsage(convId, usage, recordInput: recordInput);
+    snappedChatService?.onUsageEvent =
+        (usage, {required bool recordInput, double? costIncrement}) {
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
     };
 
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
@@ -521,8 +523,8 @@ class ChatStreamManager {
 
   /// 把一次请求的 usage 计量**立即**累加到对话（对话级累计）。
   ///
-  /// 由 ChatService.onUsageEvent 回调触发：每次请求的完整 usage 数据
-  /// 返回时增量提交（Conversation.totalCost += costIncrement），
+  /// 由 ChatService.onUsageEvent 回调触发：usage 快照返回时增量提交
+  /// （Conversation.totalCost += 新增的 cost），
   /// 绝不从头重算。重发/重试/编辑只会继续累加，不会重置。
   ///
   /// [recordInput] 为 false 时只累计 cost（压缩/标题等内部任务请求的
@@ -538,7 +540,7 @@ class ChatStreamManager {
   /// fire-and-forget（不 await）：幂等的增量累加 + 防抖持久化，
   /// 多请求并发提交安全。
   void _commitUsage(String convId, Map<String, dynamic> usage,
-      {required bool recordInput}) {
+      {required bool recordInput, double? costIncrementOverride}) {
     final ref = _ref;
     if (ref == null) return;
     try {
@@ -546,11 +548,11 @@ class ChatStreamManager {
       final outputTokens = usage['outputTokens'] as int?;
       // num 安全取值：cost 以 int（JSON 整数值反序列化）出现时
       // 也能累计——单个字段的类型异常不能把整次计量（含 tokens）丢弃。
-      final cost =
-          usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0;
+      final cost = costIncrementOverride ??
+          (usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0);
       final hasMetering =
           recordInput && (inputTokens != null || outputTokens != null);
-      if (!hasMetering && cost <= 0) return;
+      if (!hasMetering && cost == 0) return;
       unawaited(ref.read(conversationsProvider.notifier).updateUsage(
             conversationId: convId,
             inputTokens: recordInput ? inputTokens : null,
