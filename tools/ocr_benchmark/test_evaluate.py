@@ -114,6 +114,78 @@ class EvaluateTests(unittest.TestCase):
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
 
+    def test_cli_rejects_lone_surrogate_prediction_without_traceback_or_report(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "ordered-lines", "text": "\ud800"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            for output_path in (None, root / "report.json"):
+                with self.subTest(output_path=output_path):
+                    args = [
+                        sys.executable,
+                        str(ROOT / "evaluate.py"),
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                    if output_path is not None:
+                        args.extend(["--output", str(output_path)])
+                    result = subprocess.run(
+                        args, capture_output=True, text=True, check=False
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("evaluation error:", result.stderr)
+                    self.assertIn("valid Unicode scalar values", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    if output_path is not None:
+                        self.assertFalse(output_path.exists())
+
+    def test_cli_reports_lone_surrogate_in_report_metadata_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "\ud800"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            output_path = root / "report.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("evaluation error:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertFalse(output_path.exists())
+
     def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
         manifest = {
             "fixtures": [

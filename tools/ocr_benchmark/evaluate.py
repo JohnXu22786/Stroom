@@ -380,6 +380,13 @@ def _validated_run_and_predictions(
         text = prediction.get("text")
         if text is not None and not isinstance(text, str):
             raise EvaluationError(f"{fixture_id}: text must be a string or null")
+        if text is not None:
+            try:
+                text.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise EvaluationError(
+                    f"{fixture_id}: text must contain valid Unicode scalar values"
+                ) from error
         elapsed_ms = prediction.get("elapsed_ms")
         if elapsed_ms is not None:
             if isinstance(elapsed_ms, bool) or not isinstance(
@@ -2347,6 +2354,12 @@ def main(argv: list[str] | None = None) -> int:
                     "comparison": comparison,
                 }
         output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+        try:
+            output.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise EvaluationError(
+                "report contains invalid Unicode scalar values"
+            ) from error
         if args.output:
             try:
                 args.output.write_text(output + "\n", encoding="utf-8")
