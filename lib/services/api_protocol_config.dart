@@ -74,6 +74,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
+      'opencode-go' || 'opencode-zen' => 'openai.chat_completions',
       'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
@@ -103,6 +104,7 @@ Set<String> supportedApiProtocolsForSupplier(
 }) {
   final builtinProtocols = switch (connectorType) {
     'openai-api' => const {'openai.chat_completions', 'openai.responses'},
+    'opencode-go' || 'opencode-zen' => kCustomHttpApiProtocols,
     'qwen-cloud' || 'qwen-cloud-token-plan' => const {
         'openai.chat_completions',
         'openai.responses',

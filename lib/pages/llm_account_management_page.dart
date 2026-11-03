@@ -1888,9 +1888,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               TextField(
                 controller: _endpoint,
                 enabled: _connectorType != 'devin-cli-agentic',
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '端点地址（连接器需要时填写）',
-                  hintText: 'https://api.example.com/v1',
+                  hintText: switch (_connectorType) {
+                    'opencode-go' => 'https://opencode.ai/zen/go/v1',
+                    'opencode-zen' => 'https://opencode.ai/zen/v1',
+                    _ => 'https://api.example.com/v1',
+                  },
+                  helperText: switch (_connectorType) {
+                    'opencode-go' ||
+                    'opencode-zen' =>
+                      '留空以使用此账号类型的官方模型目录和 API 端点。',
+                    _ => null,
+                  },
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),
@@ -1961,6 +1971,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                               'GLM Coding (China) API Key',
                                             'minimax-cn' =>
                                               'MiniMax (China) API Key',
+                                            'opencode-go' =>
+                                              'OpenCode Go API Key',
+                                            'opencode-zen' =>
+                                              'OpenCode Zen API Key',
                                             'qwen-cloud' =>
                                               'Qwen Cloud API Key',
                                             'qwen-cloud-token-plan' =>

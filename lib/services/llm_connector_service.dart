@@ -34,6 +34,11 @@ const _grokBuildClientHeaders = <String, String>{
 
 const kLlmAntigravityRequestUserAgent = 'antigravity/hub/2.9.1 darwin/arm64';
 
+const _openCodeGoBaseUrl = 'https://opencode.ai/zen/go/v1';
+const _openCodeGoAnthropicBaseUrl = 'https://opencode.ai/zen/go';
+const _openCodeZenBaseUrl = 'https://opencode.ai/zen/v1';
+const _openCodeZenAnthropicBaseUrl = 'https://opencode.ai/zen';
+
 const _qwenCloudRegions = {
   'ap-southeast-1',
   'cn-beijing',
@@ -438,6 +443,18 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'opencode-go',
+      displayName: 'OpenCode Go',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+    ),
+    LlmConnectorDefinition(
+      id: 'opencode-zen',
+      displayName: 'OpenCode Zen',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+    ),
+    LlmConnectorDefinition(
       id: 'moonshot',
       displayName: 'Moonshot AI (Kimi API)',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -592,6 +609,8 @@ abstract final class LlmConnectorRegistry {
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
+        'opencode-go' ||
+        'opencode-zen' ||
         'moonshot' ||
         'kimi-coding' ||
         'glm' ||
@@ -1328,6 +1347,8 @@ class LlmAccountConnectorService {
     final hasRemoteCatalog = {
       'openai-compatibility',
       'openai-api',
+      'opencode-go',
+      'opencode-zen',
       if (account.connectorType == 'claude' && account.authType == 'api_key')
         'claude',
       'gemini',
@@ -2077,6 +2098,8 @@ class LlmAccountConnectorService {
     }
     final fallbackBase = switch (account.connectorType) {
       'openai-api' => 'https://api.openai.com/v1',
+      'opencode-go' => _openCodeGoBaseUrl,
+      'opencode-zen' => _openCodeZenBaseUrl,
       'claude' => 'https://api.anthropic.com/v1',
       'gemini' ||
       'aistudio' ||
@@ -2406,6 +2429,11 @@ class LlmAccountConnectorService {
               !supportsImagenPredict) {
             continue;
           }
+          if (const {'opencode-go', 'opencode-zen'}
+                  .contains(account.connectorType) &&
+              !_isOpenCodeStandardGatewayModelId(modelId)) {
+            continue;
+          }
           if (!_isChatModel(modelId, map) && !supportsImagenPredict) continue;
           models.add(
             LlmUpstreamModel(
@@ -2437,6 +2465,11 @@ class LlmAccountConnectorService {
                   'qwen-cloud',
                   'qwen-cloud-token-plan',
                 }.contains(account.connectorType)) ...{
+                  'chat': true,
+                  'streaming': true,
+                },
+                if (const {'opencode-go', 'opencode-zen'}
+                    .contains(account.connectorType)) ...{
                   'chat': true,
                   'streaming': true,
                 },
@@ -2722,6 +2755,14 @@ class LlmAccountConnectorService {
 
   static bool _isChatModel(String modelId, Map<String, dynamic> metadata) =>
       LlmConnectorRegistry.isConversationalModel(modelId, metadata);
+
+  static bool _isOpenCodeStandardGatewayModelId(String modelId) {
+    final normalized = modelId.trim().toLowerCase().replaceFirst(
+          RegExp(r'^(?:opencode-go|opencode_go|opencode-zen|opencode)/'),
+          '',
+        );
+    return !normalized.startsWith('gemini-') && !normalized.startsWith('jev-');
+  }
 
   static bool _catalogImpliesToolSupport(String connectorType, String modelId) {
     if (connectorType == 'openai-api') {
@@ -3691,6 +3732,11 @@ class LlmNativeRequestBuilder {
             !account.models.any((model) => model.upstreamModelId == modelId))) {
       throw const LlmAccountConnectorException();
     }
+    if (const {'opencode-go', 'opencode-zen'}.contains(account.connectorType) &&
+        !LlmAccountConnectorService._isOpenCodeStandardGatewayModelId(
+            modelId)) {
+      throw const LlmAccountConnectorException();
+    }
     if ((account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth') &&
         !account.models.any((model) => model.upstreamModelId == modelId)) {
@@ -3748,6 +3794,14 @@ class LlmNativeRequestBuilder {
           headers.remove('Authorization');
           headers['x-api-key'] = secret;
           headers['anthropic-version'] = '2023-06-01';
+        } else {
+          headers['Authorization'] = 'Bearer $secret';
+        }
+        break;
+      case 'opencode-go' || 'opencode-zen':
+        if (nativeFormat == 'anthropic') {
+          headers.remove('Authorization');
+          headers['x-api-key'] = secret;
         } else {
           headers['Authorization'] = 'Bearer $secret';
         }
@@ -3989,6 +4043,8 @@ class LlmNativeRequestBuilder {
         'gemini-interactions' ||
         'openai-compatibility' ||
         'openai-api' ||
+        'opencode-go' ||
+        'opencode-zen' ||
         'moonshot' ||
         'glm' ||
         'deepseek' ||
@@ -4285,6 +4341,26 @@ class LlmNativeRequestBuilder {
       case 'openai-api':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
         path = nativeFormat == 'responses' ? '/responses' : '/chat/completions';
+      case 'opencode-go' || 'opencode-zen':
+        final isGo = account.connectorType == 'opencode-go';
+        final isAnthropic = nativeFormat == 'anthropic';
+        final defaultBase = switch ((isGo, isAnthropic)) {
+          (true, true) => _openCodeGoAnthropicBaseUrl,
+          (true, false) => _openCodeGoBaseUrl,
+          (false, true) => _openCodeZenAnthropicBaseUrl,
+          (false, false) => _openCodeZenBaseUrl,
+        };
+        baseUrl = _baseUrl(config, defaultBase);
+        if (isAnthropic) {
+          final endpointPath = Uri.tryParse(baseUrl)?.path ?? '';
+          if (endpointPath.replaceFirst(RegExp(r'/+$'), '').endsWith('/v1')) {
+            baseUrl = baseUrl.replaceFirst(RegExp(r'/v1/?$'), '');
+          }
+          path = '/v1/messages';
+        } else {
+          path =
+              nativeFormat == 'responses' ? '/responses' : '/chat/completions';
+        }
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
         path = '/chat/completions';
@@ -4562,8 +4638,19 @@ class LlmNativeRequestBuilder {
     final host = base.host.toLowerCase();
     final hasCustomBaseUrl =
         _configString(account.endpointConfig, 'baseUrl') != null;
+    if (hasCustomBaseUrl &&
+        {'opencode-go', 'opencode-zen'}.contains(account.connectorType) &&
+        base.scheme != 'https') {
+      throw const LlmAccountConnectorException();
+    }
     final supportsCustomApiKeyEndpoint = account.authType == 'api_key' &&
-        {'codex', 'claude', 'vertex'}.contains(account.connectorType);
+        {
+          'codex',
+          'claude',
+          'opencode-go',
+          'opencode-zen',
+          'vertex',
+        }.contains(account.connectorType);
     if (account.connectorType == 'ollama' && hasCustomBaseUrl) return;
     if (hasCustomBaseUrl && supportsCustomApiKeyEndpoint) return;
     final location = _vertexLocation(account.endpointConfig) ?? 'us-central1';
@@ -4589,6 +4676,7 @@ class LlmNativeRequestBuilder {
       'aistudio' =>
         host == 'generativelanguage.googleapis.com',
       'openai-api' => host == 'api.openai.com',
+      'opencode-go' || 'opencode-zen' => host == 'opencode.ai',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',
