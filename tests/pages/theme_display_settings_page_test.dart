@@ -85,6 +85,21 @@ void main() {
         isNull,
       );
     });
+
+    test('selection made during preference loading is not overwritten',
+        () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(localeProvider.notifier);
+      final loading = controller.load();
+      final selecting = controller.setLocaleCode('zh_CN');
+      await Future.wait([loading, selecting]);
+      expect(container.read(localeProvider), const Locale('zh', 'CN'));
+      expect(
+        (await SharedPreferences.getInstance()).getString(localePreferenceKey),
+        'zh_CN',
+      );
+    });
   });
 
   testWidgets('theme mode and language options update', (tester) async {
