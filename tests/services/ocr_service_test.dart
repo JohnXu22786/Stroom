@@ -2400,6 +2400,11 @@ void main() {
             'Digest username="user", realm="ocr", response="digest-secret-93", nonce="n"',
             'digest-secret-93',
           ),
+          (
+            'Authorization',
+            'Digest response="digest,secret-94", nonce="n"',
+            'digest,secret-94',
+          ),
         ];
 
         for (final (headerName, headerValue, credential) in cases) {

@@ -194,10 +194,18 @@ class OcrService {
             values.add(credential);
           }
           for (final match in RegExp(
-            r'''(?:^|[, \t])[A-Za-z0-9_-]+\s*=\s*"?([^",\s]+)"?''',
+            r'''(?:^|[, \t])([A-Za-z0-9_-]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^,\s]+))''',
           ).allMatches(rawValue)) {
-            final authParameter = match.group(1);
-            if (authParameter != null && authParameter.isNotEmpty) {
+            final name = match.group(1)?.toLowerCase();
+            final authParameter = (match.group(2) ?? match.group(3))
+                ?.replaceAllMapped(
+                    RegExp(r'\\(.)'), (match) => match.group(1)!);
+            if (authParameter != null &&
+                authParameter.isNotEmpty &&
+                (name == 'response' ||
+                    RegExp(
+                      r'(?:access[_-]?token|token|password|secret|credential|signature|(?:api[_-]?)?key)',
+                    ).hasMatch(name ?? ''))) {
               values.add(authParameter);
             }
           }
