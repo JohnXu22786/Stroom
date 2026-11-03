@@ -6571,6 +6571,81 @@ void main() {
       expect(museRequest.headers['User-Agent'], contains('muse-build/1.3.0'));
     });
 
+    test('Qoder API-key and OAuth streaming set the body stream option',
+        () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            'data: {"choices":[{"index":0,"delta":{"content":"reply"},"finish_reason":null}]}\n\n'
+            'data: [DONE]\n\n',
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
+      final qoderOAuthSecret = jsonEncode({
+        'access_token': 'qoder-access-token',
+        'api_key': 'qoder-oauth-api-key',
+        'client_id': 'qoder-client',
+        'client_secret': 'qoder-secret',
+        'authorize_url': 'https://login.example.test/authorize',
+        'token_url': 'https://login.example.test/token',
+        'user_info_url': 'https://login.example.test/user',
+        'oauth_contract': 'qoder-admin-code-v1',
+      });
+      final scenarios = [
+        (
+          _account('qoder-stream-api-key', 'qoder'),
+          'qoder-api-key',
+          'Bearer qoder-api-key',
+        ),
+        (
+          LlmAccount(
+            id: 'qoder-stream-oauth',
+            connectorType: 'qoder',
+            authType: 'oauth',
+            displayName: 'Qoder OAuth',
+            endpointConfig: const {
+              'qoderLoginUrl': 'https://login.example.test/authorize',
+              'qoderExchangeUrl': 'https://login.example.test/token',
+              'qoderUserInfoUrl': 'https://login.example.test/user',
+              'qoderClientId': 'qoder-client',
+            },
+          ),
+          qoderOAuthSecret,
+          'Bearer qoder-oauth-api-key',
+        ),
+      ];
+
+      for (final (account, secret, authorization) in scenarios) {
+        final saved = await accounts.saveAccount(account, secret: secret);
+        final response = await client.request(
+          account: saved,
+          modelId: 'qwen3.8-max-preview',
+          body: const {
+            'model': 'qwen3.8-max-preview',
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+          stream: true,
+        );
+
+        expect(requests.last.headers['Authorization'], authorization);
+        expect(requests.last.headers['accept'], contains('text/event-stream'));
+        expect((requests.last.data as Map)['stream'], isTrue);
+        await (response.body as Stream<List<int>>).drain<void>();
+      }
+    });
+
     test(
       'does not allow legacy Meta API-key accounts to use OAuth credentials',
       () async {

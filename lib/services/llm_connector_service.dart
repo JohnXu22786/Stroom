@@ -4268,7 +4268,8 @@ class LlmNativeRequestBuilder {
         'glm' ||
         'deepseek' ||
         'minimax' ||
-        'qwen' =>
+        'qwen' ||
+        'qoder' =>
           true,
         'vertex' => _usesVertexInteractions(config, nativeFormat),
         _ => false,
