@@ -3681,7 +3681,10 @@ class BackgroundTask {
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
-      retryDataAlreadySanitized: retryData == null,
+      retryDataAlreadySanitized: retryData == null &&
+          rawRequest == null &&
+          !clearRawRequest &&
+          ocrCredentialValuesForSanitization.isEmpty,
     );
     _generationTokens[copy] = _generationTokenFor(this);
     return copy;
