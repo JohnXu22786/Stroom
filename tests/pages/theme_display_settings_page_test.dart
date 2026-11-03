@@ -1,32 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/pages/theme_display_settings_page.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
 void main() {
-  testWidgets('theme mode options update and language displays Chinese', (
-    tester,
-  ) async {
+  testWidgets('theme mode and language options update', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
-        child: MaterialApp(
-          home: Scaffold(
-            body: Column(
-              children: [
-                const Expanded(child: ThemeDisplaySettingsPage()),
-                Consumer(
-                  builder: (context, ref, _) => Text(
-                    ref.watch(themeProvider).name,
-                    key: const Key('selected-theme-mode'),
+        child: Consumer(
+          builder: (context, ref, _) => MaterialApp(
+            locale: ref.watch(localeProvider),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  const Expanded(child: ThemeDisplaySettingsPage()),
+                  Consumer(
+                    builder: (context, ref, _) => Text(
+                      ref.watch(themeProvider).name,
+                      key: const Key('selected-theme-mode'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -36,10 +47,10 @@ void main() {
 
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
-    expect(find.text('跟随系统'), findsOneWidget);
-    expect(find.text('语言'), findsOneWidget);
-    expect(find.text('简体中文（简体中文）'), findsOneWidget);
-    expect(find.text('zh-cn'), findsOneWidget);
+    expect(find.text('Follow system'), findsOneWidget);
+    expect(find.text('Language'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Chinese (Simplified)'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byType(Card), findsNWidgets(2));
@@ -50,19 +61,16 @@ void main() {
 
     expect(find.text('dark'), findsOneWidget);
 
-    final searchField = find.byKey(const Key('language-search-field'));
-    await tester.enterText(searchField, '简体');
+    await tester.tap(find.text('Chinese (Simplified)'));
     await tester.pumpAndSettle();
-    expect(find.text('简体中文（简体中文）'), findsOneWidget);
-
-    await tester.enterText(searchField, 'ZH-CN');
-    await tester.pumpAndSettle();
-    expect(find.text('简体中文（简体中文）'), findsOneWidget);
-
-    await tester.enterText(searchField, 'english');
-    await tester.pumpAndSettle();
-    expect(find.text('简体中文（简体中文）'), findsNothing);
-    expect(find.text('没有匹配的语言'), findsOneWidget);
+    expect(
+      (await SharedPreferences.getInstance()).getString(localePreferenceKey),
+      'zh_CN',
+    );
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('zh', 'CN'),
+    );
   });
 
   testWidgets('settings entry opens the titled theme and display page', (
@@ -88,7 +96,16 @@ void main() {
           }),
           updateProvider.overrideWith((ref) => UpdateNotifier()),
         ],
-        child: const MaterialApp(home: SettingsPage()),
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SettingsPage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -114,7 +131,7 @@ void main() {
     expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byTooltip('Back'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
-    expect(find.text('简体中文（简体中文）'), findsOneWidget);
-    expect(find.text('zh-cn'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Chinese (Simplified)'), findsOneWidget);
   });
 }
