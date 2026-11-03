@@ -241,6 +241,20 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
         secret: result.secret.isEmpty ? null : result.secret,
       );
     }
+    if (result.account.connectorType == 'kilocode') {
+      final authorization = await gateway.oauthAuthorization
+          .beginKiloDeviceAuthorization(result.account);
+      if (!mounted) {
+        authorization.cancel();
+        return null;
+      }
+      return showDialog<AiGatewayAccount>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) =>
+            _KiloDeviceAuthorizationDialog(authorization: authorization),
+      );
+    }
     if (result.account.connectorType != 'kimi-coding') {
       if ({
         'codebuddy-cn',
@@ -736,6 +750,79 @@ class _KimiCodeDeviceAuthorizationDialogState
                 );
               },
               child: const Text('打开 Kimi'),
+            ),
+            TextButton(
+              onPressed: () {
+                widget.authorization.cancel();
+                Navigator.of(context).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+}
+
+class _KiloDeviceAuthorizationDialog extends StatefulWidget {
+  final AiGatewayOAuthDeviceAuthorization authorization;
+
+  const _KiloDeviceAuthorizationDialog({required this.authorization});
+
+  @override
+  State<_KiloDeviceAuthorizationDialog> createState() =>
+      _KiloDeviceAuthorizationDialogState();
+}
+
+class _KiloDeviceAuthorizationDialogState
+    extends State<_KiloDeviceAuthorizationDialog> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authorization.completed.then(
+      (account) {
+        if (mounted) Navigator.of(context).pop(account);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _error = 'Kilo Code 授权失败，请重新开始登录。');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) widget.authorization.cancel();
+        },
+        child: AlertDialog(
+          title: const Text('登录 Kilo Code'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('打开 Kilo Code 验证页面并输入代码。授权完成后 Stroom 会自动保存账号。'),
+              const SizedBox(height: 12),
+              SelectableText(widget.authorization.userCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                widget.authorization.verificationUriComplete.toString(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await launchUrl(
+                  widget.authorization.verificationUriComplete,
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('打开 Kilo Code'),
             ),
             TextButton(
               onPressed: () {
@@ -1306,6 +1393,15 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'kilocode' && type == 'oauth') {
+    return 'Kilo Code 设备 OAuth';
+  }
+  if (connectorType == 'kilocode' && type == 'api_key') {
+    return 'Kilo Code API Key';
+  }
+  if (connectorType == 'kilocode' && type == 'none') {
+    return '匿名（仅免费模型）';
+  }
   if (connectorType == 'qoder' && type == 'oauth') {
     return 'Qoder 管理员配置 OAuth';
   }
@@ -1819,7 +1915,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _models.text = kPinnedQoderModels.join('\n');
                     } else if (value == 'kimi-coding') {
                       _models.text = kPinnedKimiCodeModels.join('\n');
+                    } else if (value == 'kilocode') {
+                      _models.text = _authType == 'none'
+                          ? kKiloCodeAnonymousFreeModelIds.join('\n')
+                          : kPinnedKiloCodeModels.join('\n');
                     } else if (previousConnectorType == 'kimi-coding') {
+                      _models.clear();
+                    } else if (previousConnectorType == 'kilocode') {
                       _models.clear();
                     }
                     if (value == 'bedrock' &&
@@ -1855,6 +1957,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         _authType == 'relay' ||
                         _authType == 'aws_credential_chain') {
                       _credential.clear();
+                    }
+                    if (_connectorType == 'kilocode') {
+                      _models.text = _authType == 'none'
+                          ? kKiloCodeAnonymousFreeModelIds.join('\n')
+                          : kPinnedKiloCodeModels.join('\n');
                     }
                   });
                 },
@@ -1897,9 +2004,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         value == 'aws_credential_chain') {
                       _credential.clear();
                     }
+                    if (_connectorType == 'kilocode') {
+                      _models.text = value == 'none'
+                          ? kKiloCodeAnonymousFreeModelIds.join('\n')
+                          : kPinnedKiloCodeModels.join('\n');
+                    }
                   });
                 },
               ),
+              if (_connectorType == 'kilocode')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'API Key 可添加为多个独立连接并通过模型组轮询。匿名模式只显示并调用已确认的免费模型；不会使用账号目录。',
+                  ),
+                ),
               if (_connectorType == 'devin-cli-agentic')
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
@@ -2057,11 +2176,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _endpoint,
                 enabled: _connectorType != 'devin-cli-agentic' &&
                     _connectorType != 'command-code' &&
-                    _connectorType != 'qoder',
+                    _connectorType != 'qoder' &&
+                    _connectorType != 'kilocode',
                 decoration: InputDecoration(
-                  labelText: _connectorType == 'qoder'
-                      ? 'Qoder 使用固定服务端点'
-                      : '端点地址（连接器需要时填写）',
+                  labelText: _connectorType == 'kilocode'
+                      ? 'Kilo Code 使用固定服务端点'
+                      : _connectorType == 'qoder'
+                          ? 'Qoder 使用固定服务端点'
+                          : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
@@ -2073,6 +2195,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'opencode-zen' =>
                       '留空以使用此账号类型的官方模型目录和 API 端点。',
                     'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
+                    'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
                     _ => null,
                   },
                 ),
@@ -2251,6 +2374,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 maxLines: 7,
                 readOnly: _connectorType == 'devin-cli-agentic' ||
                     _connectorType == 'kimi-coding' ||
+                    _connectorType == 'kilocode' ||
                     _connectorType == 'grok-cli' ||
                     _connectorType == 'xai-oauth' ||
                     _connectorType == 'muse-code' ||
@@ -2258,22 +2382,27 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
-                  helperText: _connectorType == 'command-code'
-                      ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
-                      : _connectorType == 'devin-cli-agentic'
-                          ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
-                          : _connectorType == 'kimi-coding'
-                              ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                              : _connectorType == 'grok-cli'
-                                  ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                                  : _connectorType == 'xai-oauth'
-                                      ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                                      : _connectorType == 'muse-code'
-                                          ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                          : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  helperText: _connectorType == 'kilocode'
+                      ? _authType == 'none'
+                          ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
+                          : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
+                      : _connectorType == 'command-code'
+                          ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
+                          : _connectorType == 'devin-cli-agentic'
+                              ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                              : _connectorType == 'kimi-coding'
+                                  ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                                  : _connectorType == 'grok-cli'
+                                      ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                                      : _connectorType == 'xai-oauth'
+                                          ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                                          : _connectorType == 'muse-code'
+                                              ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                              : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
                 onChanged: _connectorType == 'devin-cli-agentic' ||
                         _connectorType == 'kimi-coding' ||
+                        _connectorType == 'kilocode' ||
                         _connectorType == 'grok-cli' ||
                         _connectorType == 'xai-oauth' ||
                         _connectorType == 'muse-code'

@@ -61,6 +61,10 @@ class LlmOAuthProviderPolicy {
       supported: true,
     ),
     'qoder': LlmOAuthProviderPolicy._(providerId: 'qoder', supported: true),
+    'kilocode': LlmOAuthProviderPolicy._(
+      providerId: 'kilocode',
+      supported: true,
+    ),
     'devin': LlmOAuthProviderPolicy._(providerId: 'devin', supported: true),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
@@ -158,6 +162,41 @@ class LlmKimiDeviceCode {
     required this.expiresIn,
     required this.interval,
   }) : _deviceCode = deviceCode;
+}
+
+/// Verification details from Kilo's custom device-code flow. The device code
+/// is kept out of UI-facing account data and is never persisted.
+class LlmKiloDeviceCode {
+  final String _deviceCode;
+  final String userCode;
+  final Uri verificationUri;
+  final Uri verificationUriComplete;
+  final Duration interval;
+
+  String get deviceCode => _deviceCode;
+
+  const LlmKiloDeviceCode._({
+    required String deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.verificationUriComplete,
+    required this.interval,
+  }) : _deviceCode = deviceCode;
+
+  factory LlmKiloDeviceCode.fromResponse({
+    required String deviceCode,
+    required String userCode,
+    required Uri verificationUri,
+    required Uri verificationUriComplete,
+    required Duration interval,
+  }) =>
+      LlmKiloDeviceCode._(
+        deviceCode: deviceCode,
+        userCode: userCode,
+        verificationUri: verificationUri,
+        verificationUriComplete: verificationUriComplete,
+        interval: interval,
+      );
 }
 
 /// Secret device state for the Tencent desktop CLI authorization flow.

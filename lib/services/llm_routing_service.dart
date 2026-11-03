@@ -2683,6 +2683,7 @@ bool _supportsModelCapability(
         LlmNativeProtocol.geminiGenerateContent,
         LlmNativeProtocol.geminiInteractions,
         LlmNativeProtocol.openAIChatCompletions,
+        LlmNativeProtocol.kiloCodeChatCompletions,
         LlmNativeProtocol.ollamaChat,
         LlmNativeProtocol.kimiChatCompletions,
         LlmNativeProtocol.xaiResponses,

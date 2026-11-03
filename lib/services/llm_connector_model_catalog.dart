@@ -136,6 +136,28 @@ const kPinnedQoderModels = <String>[
   'minimax-m3',
 ];
 
+/// Models listed by the provider's pinned conversational catalog.
+const kPinnedKiloCodeModels = <String>[
+  'openrouter/free',
+  'openai/gpt-5.6-sol',
+  'openai/gpt-5.6-terra',
+  'openai/gpt-5.6-luna',
+  'anthropic/claude-opus-5',
+  'anthropic/claude-sonnet-5',
+  'anthropic/claude-haiku-4.5',
+  'google/gemini-3.1-pro-preview',
+  'google/gemini-3.7-flash',
+  'google/gemini-3.5-flash-lite',
+  'qwen/qwen3.8-max',
+  'qwen/qwen3.7-plus',
+  'deepseek/deepseek-v4-pro-0813',
+  'deepseek/deepseek-v4-flash-0731',
+  'moonshotai/kimi-k3',
+];
+
+/// Exact source-declared model IDs safe for Kilo's anonymous fallback.
+const kKiloCodeAnonymousFreeModelIds = <String>{'openrouter/free'};
+
 const kPinnedXaiModels = <String>[
   'grok-4.7',
   'grok-4.7-build-fast',

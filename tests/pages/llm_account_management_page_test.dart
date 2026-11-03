@@ -57,8 +57,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: LlmAccountManagementPage(
-          gateway:
-              _testGateway(service, oauthAuthorization: oauthAuthorization),
+          gateway: _testGateway(
+            service,
+            oauthAuthorization: oauthAuthorization,
+          ),
         ),
       ),
     );
@@ -86,184 +88,189 @@ void main() {
     );
   });
 
-  testWidgets('Qoder account editor exposes PAT, API key and admin OAuth setup',
-      (
-    tester,
-  ) async {
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentialStore(),
-    );
-    final gateway = _testGateway(service);
-    await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('添加账号'));
-    await tester.pumpAndSettle();
-
-    final connector = find.byType(DropdownButtonFormField<String>).at(0);
-    final connectorButton = find.descendant(
-      of: connector,
-      matching: find.byType(DropdownButton<String>),
-    );
-    tester.widget<DropdownButton<String>>(connectorButton).onChanged!('qoder');
-    await tester.pumpAndSettle();
-    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
-    final authButton = find.descendant(
-      of: authDropdown,
-      matching: find.byType(DropdownButton<String>),
-    );
-    expect(
-      tester
-          .widget<DropdownButton<String>>(authButton)
-          .items!
-          .map((item) => item.value),
-      containsAll(['api_key', 'oauth', 'pat']),
-    );
-    tester.widget<DropdownButton<String>>(authButton).onChanged!('api_key');
-    await tester.pumpAndSettle();
-    expect(find.text('DashScope API Key'), findsOneWidget);
-    tester
-        .widget<DropdownButton<String>>(
-          find.descendant(
-            of: authDropdown,
-            matching: find.byType(DropdownButton<String>),
-          ),
-        )
-        .onChanged!('oauth');
-    await tester.pumpAndSettle();
-    expect(find.text('QODER_OAUTH_AUTHORIZE_URL'), findsOneWidget);
-    expect(find.text('QODER_OAUTH_TOKEN_URL'), findsOneWidget);
-    expect(find.text('QODER_OAUTH_USER_INFO_URL'), findsOneWidget);
-    expect(find.text('QODER_OAUTH_CLIENT_ID'), findsOneWidget);
-    final clientSecret = tester.widget<TextField>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField &&
-            widget.decoration?.labelText == 'QODER_OAUTH_CLIENT_SECRET',
-      ),
-    );
-    expect(clientSecret.obscureText, isTrue);
-
-    tester
-        .widget<DropdownButton<String>>(
-          find.descendant(
-            of: authDropdown,
-            matching: find.byType(DropdownButton<String>),
-          ),
-        )
-        .onChanged!('pat');
-    await tester.pumpAndSettle();
-    expect(find.text('Qoder Personal Access Token'), findsOneWidget);
-    expect(find.textContaining('45 秒'), findsOneWidget);
-  });
   testWidgets(
-      'Command Code account keeps supplier and model protocols separate', (
-    tester,
-  ) async {
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentialStore(),
-    );
-    await service.saveAccount(
-      LlmAccount(
-        id: 'command-code-protocol-ui',
-        connectorType: 'command-code',
-        authType: 'api_key',
-        displayName: 'Command Code',
-        endpointConfig: const {'apiProtocol': 'openai.responses'},
-        models: const [
-          LlmUpstreamModel(
-            id: 'claude-model',
-            upstreamModelId: 'claude-sonnet-4-6',
-            displayName: 'Claude model',
-            capabilities: {
-              'chat': true,
-              'streaming': true,
-              'supportedApiProtocols': [
-                'anthropic.messages',
-                'openai.responses',
-              ],
-            },
-            config: {'apiProtocolOverride': 'anthropic.messages'},
-          ),
-        ],
-      ),
-      secret: 'private-command-code-key',
-    );
+    'Qoder account editor exposes PAT, API key and admin OAuth setup',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final gateway = _testGateway(service);
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(PopupMenuButton<String>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('编辑账号'));
-    await tester.pumpAndSettle();
-
-    final defaultProtocol = find.byWidgetPredicate(
-      (widget) =>
-          widget is DropdownButtonFormField<String> &&
-          widget.decoration.labelText == '默认 API 协议',
-    );
-    expect(defaultProtocol, findsOneWidget);
-    final protocolsField = tester.widget<DropdownButtonFormField<String>>(
-      defaultProtocol,
-    );
-    expect(protocolsField.initialValue, 'openai.responses');
-    protocolsField.onChanged!('openai.chat_completions');
-    await tester.pumpAndSettle();
-
-    final modelsField = tester.widget<TextField>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
-      ),
-    );
-    expect(modelsField.controller!.text,
-        contains('apiProtocolOverride=anthropic.messages'));
-    expect(modelsField.decoration?.helperText, contains('为每个模型选择'));
-    final modelProtocol = find.byWidgetPredicate(
-      (widget) =>
-          widget is DropdownButtonFormField<String> &&
-          widget.decoration.labelText == '模型 API 协议',
-    );
-    final modelProtocolField = tester.widget<DropdownButtonFormField<String>>(
-      modelProtocol,
-    );
-    expect(modelProtocolField.initialValue, 'anthropic.messages');
-    await tester.ensureVisible(modelProtocol);
-    await tester.pumpAndSettle();
-    await tester.tap(modelProtocol);
-    await tester.pumpAndSettle();
-    Finder menuItem(String value) => find.byWidgetPredicate(
+      final connector = find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connector,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        'qoder',
+      );
+      await tester.pumpAndSettle();
+      final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+      final authButton = find.descendant(
+        of: authDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(authButton)
+            .items!
+            .map((item) => item.value),
+        containsAll(['api_key', 'oauth', 'pat']),
+      );
+      tester.widget<DropdownButton<String>>(authButton).onChanged!('api_key');
+      await tester.pumpAndSettle();
+      expect(find.text('DashScope API Key'), findsOneWidget);
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: authDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('oauth');
+      await tester.pumpAndSettle();
+      expect(find.text('QODER_OAUTH_AUTHORIZE_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_TOKEN_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_USER_INFO_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_CLIENT_ID'), findsOneWidget);
+      final clientSecret = tester.widget<TextField>(
+        find.byWidgetPredicate(
           (widget) =>
-              widget is DropdownMenuItem<String> && widget.value == value,
-        );
-    expect(menuItem(''), findsOneWidget);
-    expect(menuItem('anthropic.messages'), findsAtLeastNWidgets(1));
-    expect(menuItem('openai.responses'), findsAtLeastNWidgets(1));
-    // Chat Completions is present only in the supplier default dropdown.
-    expect(menuItem('openai.chat_completions'), findsOneWidget);
-    await tester.tap(find.text('OpenAI Responses').last);
-    await tester.pumpAndSettle();
+              widget is TextField &&
+              widget.decoration?.labelText == 'QODER_OAUTH_CLIENT_SECRET',
+        ),
+      );
+      expect(clientSecret.obscureText, isTrue);
 
-    await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: authDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('pat');
+      await tester.pumpAndSettle();
+      expect(find.text('Qoder Personal Access Token'), findsOneWidget);
+      expect(find.textContaining('45 秒'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'Command Code account keeps supplier and model protocols separate',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'command-code-protocol-ui',
+          connectorType: 'command-code',
+          authType: 'api_key',
+          displayName: 'Command Code',
+          endpointConfig: const {'apiProtocol': 'openai.responses'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'claude-model',
+              upstreamModelId: 'claude-sonnet-4-6',
+              displayName: 'Claude model',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'supportedApiProtocols': [
+                  'anthropic.messages',
+                  'openai.responses',
+                ],
+              },
+              config: {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        ),
+        secret: 'private-command-code-key',
+      );
 
-    final saved = (await service.listAccounts()).single;
-    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
-    expect(saved.models.single.capabilities['supportedApiProtocols'], [
-      'anthropic.messages',
-      'openai.responses',
-    ]);
-    expect(
-      saved.models.single.config['apiProtocolOverride'],
-      'openai.responses',
-    );
-  });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final defaultProtocol = find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '默认 API 协议',
+      );
+      expect(defaultProtocol, findsOneWidget);
+      final protocolsField = tester.widget<DropdownButtonFormField<String>>(
+        defaultProtocol,
+      );
+      expect(protocolsField.initialValue, 'openai.responses');
+      protocolsField.onChanged!('openai.chat_completions');
+      await tester.pumpAndSettle();
+
+      final modelsField = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+        ),
+      );
+      expect(
+        modelsField.controller!.text,
+        contains('apiProtocolOverride=anthropic.messages'),
+      );
+      expect(modelsField.decoration?.helperText, contains('为每个模型选择'));
+      final modelProtocol = find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '模型 API 协议',
+      );
+      final modelProtocolField = tester.widget<DropdownButtonFormField<String>>(
+        modelProtocol,
+      );
+      expect(modelProtocolField.initialValue, 'anthropic.messages');
+      await tester.ensureVisible(modelProtocol);
+      await tester.pumpAndSettle();
+      await tester.tap(modelProtocol);
+      await tester.pumpAndSettle();
+      Finder menuItem(String value) => find.byWidgetPredicate(
+            (widget) =>
+                widget is DropdownMenuItem<String> && widget.value == value,
+          );
+      expect(menuItem(''), findsOneWidget);
+      expect(menuItem('anthropic.messages'), findsAtLeastNWidgets(1));
+      expect(menuItem('openai.responses'), findsAtLeastNWidgets(1));
+      // Chat Completions is present only in the supplier default dropdown.
+      expect(menuItem('openai.chat_completions'), findsOneWidget);
+      await tester.tap(find.text('OpenAI Responses').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(saved.models.single.capabilities['supportedApiProtocols'], [
+        'anthropic.messages',
+        'openai.responses',
+      ]);
+      expect(
+        saved.models.single.config['apiProtocolOverride'],
+        'openai.responses',
+      );
+    },
+  );
 
   testWidgets('editing a Devin CLI account does not restart CLI login', (
     tester,
@@ -1008,6 +1015,223 @@ void main() {
     expect(await service.listAccounts(), isEmpty);
   });
 
+  test('Kilo chat-completions models support streaming group routing',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    const accountId = 'kilo-streaming-anonymous';
+    await service.saveAccount(
+      LlmAccount(
+        id: accountId,
+        connectorType: 'kilocode',
+        authType: 'none',
+        displayName: 'Kilo anonymous',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'kilo-free',
+            upstreamModelId: 'openrouter/free',
+            displayName: 'Kilo free',
+          ),
+        ],
+      ),
+    );
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: 'kilo-streaming-group',
+        displayName: 'Kilo streaming',
+        members: const [
+          LlmModelGroupMember(
+            accountId: accountId,
+            upstreamModelId: 'openrouter/free',
+            localModelId: 'kilo-free',
+          ),
+        ],
+      ),
+    );
+
+    final models = await _testGateway(
+      service,
+    ).modelDiscovery.discoverGroupModels(
+      groupId: 'kilo-streaming-group',
+      localModelId: 'kilo-free',
+      requiredCapabilities: {'streaming'},
+    );
+
+    expect(models.map((model) => model.id), ['kilo-free']);
+    expect(models.single.upstreamModelId, 'openrouter/free');
+    expect(models.single.capabilities, isEmpty);
+  });
+
+  testWidgets('Kilo Code exposes OAuth, key, and anonymous free-only modes', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('kilocode')!;
+    expect(provider.supportedAuthTypes, {'oauth', 'api_key', 'none'});
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    final authButton = find.descendant(
+      of: authDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(authButton)
+          .items!
+          .map((item) => item.value),
+      containsAll({'oauth', 'api_key', 'none'}),
+    );
+    expect(find.textContaining('多个独立连接'), findsOneWidget);
+
+    tester.widget<DropdownButtonFormField<String>>(authDropdown).onChanged!(
+      'none',
+    );
+    await tester.pumpAndSettle();
+    final modelField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelField.readOnly, isTrue);
+    expect(modelField.controller!.text, 'openrouter/free');
+    expect(find.textContaining('只允许 openrouter/free'), findsOneWidget);
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '账号名称',
+      ),
+      'Kilo anonymous free models',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final savedAnonymous = (await service.listAccounts()).single;
+    expect(savedAnonymous.connectorType, 'kilocode');
+    expect(savedAnonymous.authType, 'none');
+    expect(savedAnonymous.models.map((model) => model.upstreamModelId), [
+      'openrouter/free',
+    ]);
+    expect(await service.readCredential(savedAnonymous.id), isNull);
+    expect(oauthAuthorization.kiloDeviceAuthorizationAccounts, isEmpty);
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final secondConnector = find.byType(DropdownButtonFormField<String>).at(0);
+    final secondButton = find.descendant(
+      of: secondConnector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(secondButton).onChanged!(provider.id);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '账号名称',
+      ),
+      'Kilo key account',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.obscureText,
+      ),
+      'kilo-secret-api-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final savedKey = (await service.listAccounts()).singleWhere(
+      (account) => account.displayName == 'Kilo key account',
+    );
+    expect(savedKey.authType, 'api_key');
+    expect(await service.readCredential(savedKey.id), 'kilo-secret-api-key');
+    expect(savedKey.endpointConfig, isNot(contains('apiKey')));
+  });
+
+  testWidgets('Kilo Code OAuth launches its device-code authorization', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final provider = gateway.providerCatalog.findProvider('kilocode')!;
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byType(DropdownButtonFormField<String>).at(1),
+        )
+        .onChanged!('oauth');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '账号名称',
+      ),
+      'Kilo OAuth account',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.kiloDeviceAuthorizationAccounts, hasLength(1));
+    expect(find.text('KILO-1234'), findsOneWidget);
+    expect(find.text('https://app.kilo.ai/device-auth'), findsOneWidget);
+    expect(await service.listAccounts(), isEmpty);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+  });
+
   testWidgets('Meta Muse OAuth is separately addable from its API key', (
     tester,
   ) async {
@@ -1656,10 +1880,7 @@ void main() {
         displayName: 'Existing WorkBuddy',
         status: LlmAccountStatus.ready,
       );
-      await service.saveAccount(
-        originalAccount,
-        secret: originalCredential,
-      );
+      await service.saveAccount(originalAccount, secret: originalCredential);
       final oauthDio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           if (options.uri.path.endsWith('/state')) {
@@ -3726,6 +3947,7 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   final tencentDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final kiloDeviceAuthorizationAccounts = <AiGatewayAccount>[];
   _PendingOAuthDeviceAuthorization? deviceAuthorization;
 
   @override
@@ -3747,6 +3969,17 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   ) async {
     deviceAuthorizationAccounts.add(account);
     return deviceAuthorization = _PendingOAuthDeviceAuthorization();
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKiloDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    kiloDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://app.kilo.ai/device-auth'),
+      userCode: 'KILO-1234',
+    );
   }
 
   @override

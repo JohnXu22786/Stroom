@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/llm_connector_model_catalog.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/qoder_cli_service.dart';
@@ -16,28 +17,88 @@ import 'package:stroom/services/aws_sigv4.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
-  test('Qoder PAT model discovery uses qodercli with the account token',
-      () async {
-    final runner = _QoderModelListRunner();
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentials(),
-      qoderCliService: QoderCliService(runner: runner),
-    );
-    final account = await service.saveAccount(
-      _account('qoder-cli-catalog', 'qoder', authType: 'pat'),
-      secret: 'pt-account-token',
-    );
+  test(
+    'Qoder PAT model discovery uses qodercli with the account token',
+    () async {
+      final runner = _QoderModelListRunner();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        qoderCliService: QoderCliService(runner: runner),
+      );
+      final account = await service.saveAccount(
+        _account('qoder-cli-catalog', 'qoder', authType: 'pat'),
+        secret: 'pt-account-token',
+      );
 
-    final models = await service.discoverModels(account, refreshRemote: true);
+      final models = await service.discoverModels(account, refreshRemote: true);
 
-    expect(runner.lastEnvironment['QODER_PERSONAL_ACCESS_TOKEN'],
-        'pt-account-token');
-    expect(runner.lastArguments, contains('--list-models'));
-    expect(
-        models.map((model) => model.upstreamModelId), ['qwen3.8-max-preview']);
-    expect(models.single.config['catalogSource'], 'qodercli');
-  });
+      expect(
+        runner.lastEnvironment['QODER_PERSONAL_ACCESS_TOKEN'],
+        'pt-account-token',
+      );
+      expect(runner.lastArguments, contains('--list-models'));
+      expect(models.map((model) => model.upstreamModelId), [
+        'qwen3.8-max-preview',
+      ]);
+      expect(models.single.config['catalogSource'], 'qodercli');
+    },
+  );
+
+  test(
+    'Kilo anonymous discovery filters while account discovery stays scoped',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'openrouter/free', 'name': 'Free model router'},
+                {'id': 'openai/gpt-5.6-sol', 'name': 'Account model'},
+              ],
+            }),
+            200,
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final anonymous = await service.saveAccount(
+        _account('kilo-anon-catalog', 'kilocode', authType: 'none'),
+      );
+      final anonymousModels = await service.discoverModels(
+        anonymous,
+        refreshRemote: true,
+      );
+      final account = await service.saveAccount(
+        _account('kilo-key-catalog', 'kilocode', authType: 'api_key'),
+        secret: 'kilo-account-key',
+      );
+      final accountModels = await service.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(requests.map((request) => request.uri.path), [
+        '/api/openrouter/models',
+        '/api/openrouter/models',
+      ]);
+      expect(requests.first.headers['Authorization'], 'Bearer anonymous');
+      expect(requests.first.headers['X-KILOCODE-EDITORNAME'], 'Stroom');
+      expect(requests.last.headers['Authorization'], 'Bearer kilo-account-key');
+      expect(anonymousModels.map((model) => model.upstreamModelId), [
+        'openrouter/free',
+      ]);
+      expect(accountModels.map((model) => model.upstreamModelId), [
+        'openrouter/free',
+        'openai/gpt-5.6-sol',
+      ]);
+    },
+  );
   group('LlmConnectorRegistry', () {
     test('covers the pinned core auth and executor provider identifiers', () {
       final ids = LlmConnectorRegistry.all.map((item) => item.id).toSet();
@@ -76,15 +137,29 @@ void main() {
           'minimax-cn',
           'qwen-cloud',
           'qwen-cloud-token-plan',
+          'kilocode',
         }),
+      );
+      final kilo = LlmConnectorRegistry.find('kilocode')!;
+      expect(kilo.authTypes, {'oauth', 'api_key', 'none'});
+      expect(kilo.canRefreshCredentials, isFalse);
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported('kilocode', 'none'),
+        isTrue,
+      );
+      expect(
+        kKiloCodeAnonymousFreeModelIds,
+        {'openrouter/free'},
+        reason: 'anonymous fallback must be limited to the pinned free router',
       );
       final qoder = LlmConnectorRegistry.find('qoder')!;
       expect(qoder.authTypes, containsAll({'api_key', 'oauth', 'pat'}));
       expect(qoder.modelCatalog, contains('qwen3.8-max-preview'));
       expect(qoder.canRefreshCredentials, isFalse);
       expect(
-          LlmConnectorRegistry.isChatAdapterAuthTypeSupported('qoder', 'pat'),
-          isTrue);
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported('qoder', 'pat'),
+        isTrue,
+      );
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
       expect(LlmConnectorRegistry.find('glmt'), isNull);
       expect(LlmConnectorRegistry.canonicalId('glmt'), 'glm');
@@ -501,8 +576,10 @@ void main() {
       final connector = LlmConnectorRegistry.find('command-code')!;
       expect(connector.displayName, 'Command Code');
       expect(connector.authTypes, {'api_key'});
-      expect(LlmConnectorRegistry.chatAdapterEndpointType('command-code'),
-          'openai');
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('command-code'),
+        'openai',
+      );
       expect(
         LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
           'command-code',
@@ -534,86 +611,88 @@ void main() {
       }
     });
 
-    test('discovers each account catalog with its own endpoint and key',
-        () async {
-      for (final (connectorType, expectedUrl) in [
-        ('opencode-go', 'https://opencode.ai/zen/go/v1/models'),
-        ('opencode-zen', 'https://opencode.ai/zen/v1/models'),
-      ]) {
-        RequestOptions? captured;
-        final dio = Dio()
-          ..httpClientAdapter = _FunctionalAdapter((options) async {
-            captured = options;
-            return ResponseBody.fromString(
-              jsonEncode({
-                'data': [
-                  {
-                    'id': 'catalog-model',
-                    'capabilities': {'chat': true, 'streaming': true},
-                  },
-                  {
-                    'id': 'vision-model',
-                    'capabilities': {'vision': true},
-                  },
-                  {'id': 'model-with-unknown-capabilities'},
-                  {'id': 'gemini-3.1-pro'},
-                  {'id': 'jev-score-model'},
-                  {'id': 'text-embedding-v4'},
-                ],
-              }),
-              200,
-              headers: const {
-                'content-type': ['application/json'],
-              },
-            );
+    test(
+      'discovers each account catalog with its own endpoint and key',
+      () async {
+        for (final (connectorType, expectedUrl) in [
+          ('opencode-go', 'https://opencode.ai/zen/go/v1/models'),
+          ('opencode-zen', 'https://opencode.ai/zen/v1/models'),
+        ]) {
+          RequestOptions? captured;
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter((options) async {
+              captured = options;
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'data': [
+                    {
+                      'id': 'catalog-model',
+                      'capabilities': {'chat': true, 'streaming': true},
+                    },
+                    {
+                      'id': 'vision-model',
+                      'capabilities': {'vision': true},
+                    },
+                    {'id': 'model-with-unknown-capabilities'},
+                    {'id': 'gemini-3.1-pro'},
+                    {'id': 'jev-score-model'},
+                    {'id': 'text-embedding-v4'},
+                  ],
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            });
+          final preferences = _MemoryPreferences();
+          final service = LlmAccountConnectorService(
+            preferences: preferences,
+            credentialStore: _MemoryCredentials(),
+            dio: dio,
+          );
+          final account = await service.saveAccount(
+            _account('catalog-$connectorType', connectorType),
+            secret: 'private-$connectorType-key',
+          );
+
+          final models = await service.discoverModels(
+            account,
+            refreshRemote: true,
+          );
+
+          expect(captured?.uri.toString(), expectedUrl);
+          expect(
+            captured?.headers['Authorization'],
+            'Bearer private-$connectorType-key',
+          );
+          expect(
+            await service.readCredential(account.id),
+            'private-$connectorType-key',
+          );
+          expect(
+            jsonEncode(account.toMap()),
+            isNot(contains('private-$connectorType-key')),
+          );
+          expect(
+            preferences.values.values.join(),
+            isNot(contains('private-$connectorType-key')),
+          );
+          expect(models.map((model) => model.upstreamModelId), [
+            'catalog-model',
+            'vision-model',
+            'model-with-unknown-capabilities',
+          ]);
+          expect(models[0].capabilities, {'chat': true, 'streaming': true});
+          expect(models[1].capabilities, {
+            'chat': true,
+            'streaming': true,
+            'vision': true,
           });
-        final preferences = _MemoryPreferences();
-        final service = LlmAccountConnectorService(
-          preferences: preferences,
-          credentialStore: _MemoryCredentials(),
-          dio: dio,
-        );
-        final account = await service.saveAccount(
-          _account('catalog-$connectorType', connectorType),
-          secret: 'private-$connectorType-key',
-        );
-
-        final models = await service.discoverModels(
-          account,
-          refreshRemote: true,
-        );
-
-        expect(captured?.uri.toString(), expectedUrl);
-        expect(
-          captured?.headers['Authorization'],
-          'Bearer private-$connectorType-key',
-        );
-        expect(
-          await service.readCredential(account.id),
-          'private-$connectorType-key',
-        );
-        expect(
-          jsonEncode(account.toMap()),
-          isNot(contains('private-$connectorType-key')),
-        );
-        expect(
-          preferences.values.values.join(),
-          isNot(contains('private-$connectorType-key')),
-        );
-        expect(models.map((model) => model.upstreamModelId), [
-          'catalog-model',
-          'vision-model',
-          'model-with-unknown-capabilities',
-        ]);
-        expect(models[0].capabilities, {'chat': true, 'streaming': true});
-        expect(models[1].capabilities, {
-          'chat': true,
-          'streaming': true,
-          'vision': true,
-        });
-        expect(models[2].capabilities, {'chat': true, 'streaming': true});
-      }
-    });
+          expect(models[2].capabilities, {'chat': true, 'streaming': true});
+        }
+      },
+    );
 
     test('builds all verified protocol requests on each provider endpoint', () {
       const cases = [
@@ -739,10 +818,7 @@ void main() {
               'data': [
                 {
                   'id': '$accountId/open-model',
-                  'supported_endpoints': [
-                    '/chat/completions',
-                    '/responses',
-                  ],
+                  'supported_endpoints': ['/chat/completions', '/responses'],
                   'capabilities': {'vision': true},
                 },
                 {
@@ -759,7 +835,7 @@ void main() {
             }),
             200,
             headers: const {
-              'content-type': ['application/json']
+              'content-type': ['application/json'],
             },
           );
         });
@@ -779,10 +855,14 @@ void main() {
         _account('command-code-second', 'command-code'),
         secret: 'private-second-command-key',
       );
-      final firstModels =
-          await service.discoverModels(first, refreshRemote: true);
-      final secondModels =
-          await service.discoverModels(second, refreshRemote: true);
+      final firstModels = await service.discoverModels(
+        first,
+        refreshRemote: true,
+      );
+      final secondModels = await service.discoverModels(
+        second,
+        refreshRemote: true,
+      );
 
       expect(observed.map((request) => request.uri.toString()), [
         'https://api.commandcode.ai/provider/v1/models',
@@ -796,25 +876,32 @@ void main() {
         'command-code-first/open-model',
         'command-code-first/claude-sonnet-4-6',
       ]);
-      expect(
-        firstModels.first.capabilities['supportedApiProtocols'],
-        ['openai.chat_completions', 'openai.responses'],
-      );
+      expect(firstModels.first.capabilities['supportedApiProtocols'], [
+        'openai.chat_completions',
+        'openai.responses',
+      ]);
       expect(firstModels.first.capabilities['vision'], isTrue);
       expect(firstModels.first.capabilities['streaming'], isNull);
-      expect(
-        firstModels.last.capabilities['supportedApiProtocols'],
-        ['anthropic.messages'],
-      );
+      expect(firstModels.last.capabilities['supportedApiProtocols'], [
+        'anthropic.messages',
+      ]);
       expect(firstModels.last.capabilities['streaming'], isTrue);
       expect(
-          secondModels.first.upstreamModelId, 'command-code-second/open-model');
+        secondModels.first.upstreamModelId,
+        'command-code-second/open-model',
+      );
       expect(
-          await service.readCredential(first.id), 'private-first-command-key');
-      expect(await service.readCredential(second.id),
-          'private-second-command-key');
-      expect(jsonEncode(first.toMap()),
-          isNot(contains('private-first-command-key')));
+        await service.readCredential(first.id),
+        'private-first-command-key',
+      );
+      expect(
+        await service.readCredential(second.id),
+        'private-second-command-key',
+      );
+      expect(
+        jsonEncode(first.toMap()),
+        isNot(contains('private-first-command-key')),
+      );
       expect(
         preferences.values.values.join(),
         isNot(contains('private-first-command-key')),
@@ -840,7 +927,7 @@ void main() {
             }),
             200,
             headers: const {
-              'content-type': ['application/json']
+              'content-type': ['application/json'],
             },
           );
         });
@@ -987,39 +1074,41 @@ void main() {
       );
     });
 
-    test('does not expose the API key when catalog authentication fails',
-        () async {
-      RequestOptions? captured;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured = options;
-          return ResponseBody.fromString(
-            '{"error":"private-command-key is invalid"}',
-            401,
-            headers: const {
-              'content-type': ['application/json']
-            },
-          );
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await service.saveAccount(
-        _account('command-code-catalog-error', 'command-code'),
-        secret: 'private-command-key',
-      );
+    test(
+      'does not expose the API key when catalog authentication fails',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              '{"error":"private-command-key is invalid"}',
+              401,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account('command-code-catalog-error', 'command-code'),
+          secret: 'private-command-key',
+        );
 
-      try {
-        await service.discoverModels(account, refreshRemote: true);
-        fail('Expected the rejected catalog request to fail.');
-      } on LlmAccountConnectorException catch (error) {
-        expect(error.toString(), isNot(contains('private-command-key')));
-      }
-      expect(captured?.uri.host, 'api.commandcode.ai');
-      expect(captured?.followRedirects, isFalse);
-    });
+        try {
+          await service.discoverModels(account, refreshRemote: true);
+          fail('Expected the rejected catalog request to fail.');
+        } on LlmAccountConnectorException catch (error) {
+          expect(error.toString(), isNot(contains('private-command-key')));
+        }
+        expect(captured?.uri.host, 'api.commandcode.ai');
+        expect(captured?.followRedirects, isFalse);
+      },
+    );
   });
 
   group('LlmAccountConnectorService', () {
@@ -4148,6 +4237,53 @@ void main() {
       expect(request.toString(), contains('api.example.test'));
     });
 
+    test('Kilo Code separates anonymous free routing from account auth', () {
+      final anonymous = builder.build(
+        account: _account('kilo-anonymous', 'kilocode', authType: 'none'),
+        credential: null,
+        modelId: 'openrouter/free',
+        body: const {
+          'model': 'openrouter/free',
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+        stream: true,
+      );
+      expect(anonymous.uri.origin, 'https://api.kilo.ai');
+      expect(anonymous.uri.path, '/api/openrouter/chat/completions');
+      expect(anonymous.headers['Authorization'], 'Bearer anonymous');
+      expect(anonymous.headers['X-KILOCODE-EDITORNAME'], 'Stroom');
+      expect(anonymous.headers['Accept'], 'text/event-stream');
+
+      expect(
+        () => builder.build(
+          account: _account('kilo-anonymous', 'kilocode', authType: 'none'),
+          credential: null,
+          modelId: 'openai/gpt-5.6-sol',
+          body: const {'model': 'openai/gpt-5.6-sol', 'messages': []},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+
+      final directKey = builder.build(
+        account: _account('kilo-key', 'kilocode', authType: 'api_key'),
+        credential: 'kilo-direct-key',
+        modelId: 'openai/gpt-5.6-sol',
+        body: const {'model': 'openai/gpt-5.6-sol', 'messages': []},
+      );
+      expect(directKey.headers['Authorization'], 'Bearer kilo-direct-key');
+
+      final oauth = builder.build(
+        account: _account('kilo-oauth', 'kilocode', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'kilo-oauth-token'}),
+        modelId: 'openai/gpt-5.6-sol',
+        body: const {'model': 'openai/gpt-5.6-sol', 'messages': []},
+      );
+      expect(oauth.headers['Authorization'], 'Bearer kilo-oauth-token');
+      expect(oauth.headers['X-KILOCODE-EDITORNAME'], 'Stroom');
+    });
+
     test('rejects OAuth bundles without an access token', () {
       expect(
         () => builder.build(
@@ -6535,8 +6671,10 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
-      final qoderRequest = requests.singleWhere((request) =>
-          request.headers['Authorization'] == 'Bearer qoder-test-key');
+      final qoderRequest = requests.singleWhere(
+        (request) =>
+            request.headers['Authorization'] == 'Bearer qoder-test-key',
+      );
       expect(qoderRequest.headers['Authorization'], 'Bearer qoder-test-key');
       expect(qoderRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
       expect(qoderRequest.headers['x-dashscope-cachecontrol'], 'enable');
@@ -6548,8 +6686,10 @@ void main() {
             request.headers['Authorization'] == 'Bearer qoder-oauth-api-key',
       );
       expect(qoderOAuthRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
-      expect(qoderOAuthRequest.headers['Authorization'],
-          isNot('Bearer qoder-oauth-token'));
+      expect(
+        qoderOAuthRequest.headers['Authorization'],
+        isNot('Bearer qoder-oauth-token'),
+      );
       for (final provider in ['opencode-go', 'opencode-zen']) {
         final request = requests.singleWhere(
           (request) =>
@@ -6571,48 +6711,109 @@ void main() {
       expect(museRequest.headers['User-Agent'], contains('muse-build/1.3.0'));
     });
 
-    test('Qoder API-key and OAuth streaming set the body stream option',
-        () async {
-      final requests = <RequestOptions>[];
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requests.add(options);
-          return ResponseBody.fromString(
-            'data: {"choices":[{"index":0,"delta":{"content":"reply"},"finish_reason":null}]}\n\n'
-            'data: [DONE]\n\n',
-            200,
-            headers: const {
-              'content-type': ['text/event-stream'],
-            },
-          );
+    test(
+      'Qoder API-key and OAuth streaming set the body stream option',
+      () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            return ResponseBody.fromString(
+              'data: {"choices":[{"index":0,"delta":{"content":"reply"},"finish_reason":null}]}\n\n'
+              'data: [DONE]\n\n',
+              200,
+              headers: const {
+                'content-type': ['text/event-stream'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+        final qoderOAuthSecret = jsonEncode({
+          'access_token': 'qoder-access-token',
+          'api_key': 'qoder-oauth-api-key',
+          'client_id': 'qoder-client',
+          'client_secret': 'qoder-secret',
+          'authorize_url': 'https://login.example.test/authorize',
+          'token_url': 'https://login.example.test/token',
+          'user_info_url': 'https://login.example.test/user',
+          'oauth_contract': 'qoder-admin-code-v1',
         });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
-      final qoderOAuthSecret = jsonEncode({
-        'access_token': 'qoder-access-token',
-        'api_key': 'qoder-oauth-api-key',
-        'client_id': 'qoder-client',
-        'client_secret': 'qoder-secret',
-        'authorize_url': 'https://login.example.test/authorize',
-        'token_url': 'https://login.example.test/token',
-        'user_info_url': 'https://login.example.test/user',
-        'oauth_contract': 'qoder-admin-code-v1',
-      });
-      final scenarios = [
-        (
-          _account('qoder-stream-api-key', 'qoder'),
-          'qoder-api-key',
-          'Bearer qoder-api-key',
-        ),
-        (
+        final scenarios = [
+          (
+            _account('qoder-stream-api-key', 'qoder'),
+            'qoder-api-key',
+            'Bearer qoder-api-key',
+          ),
+          (
+            LlmAccount(
+              id: 'qoder-stream-oauth',
+              connectorType: 'qoder',
+              authType: 'oauth',
+              displayName: 'Qoder OAuth',
+              endpointConfig: const {
+                'qoderLoginUrl': 'https://login.example.test/authorize',
+                'qoderExchangeUrl': 'https://login.example.test/token',
+                'qoderUserInfoUrl': 'https://login.example.test/user',
+                'qoderClientId': 'qoder-client',
+              },
+            ),
+            qoderOAuthSecret,
+            'Bearer qoder-oauth-api-key',
+          ),
+        ];
+
+        for (final (account, secret, authorization) in scenarios) {
+          final saved = await accounts.saveAccount(account, secret: secret);
+          final response = await client.request(
+            account: saved,
+            modelId: 'qwen3.8-max-preview',
+            body: const {
+              'model': 'qwen3.8-max-preview',
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+            },
+            stream: true,
+          );
+
+          expect(requests.last.headers['Authorization'], authorization);
+          expect(
+            requests.last.headers['accept'],
+            contains('text/event-stream'),
+          );
+          expect((requests.last.data as Map)['stream'], isTrue);
+          await (response.body as Stream<List<int>>).drain<void>();
+        }
+      },
+    );
+
+    test(
+      'expired Qoder OAuth requires reauthorization before routing',
+      () async {
+        var requestsSent = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
           LlmAccount(
-            id: 'qoder-stream-oauth',
+            id: 'qoder-expired-oauth',
             connectorType: 'qoder',
             authType: 'oauth',
-            displayName: 'Qoder OAuth',
+            displayName: 'Expired Qoder OAuth',
+            status: LlmAccountStatus.ready,
             endpointConfig: const {
               'qoderLoginUrl': 'https://login.example.test/authorize',
               'qoderExchangeUrl': 'https://login.example.test/token',
@@ -6620,91 +6821,40 @@ void main() {
               'qoderClientId': 'qoder-client',
             },
           ),
-          qoderOAuthSecret,
-          'Bearer qoder-oauth-api-key',
-        ),
-      ];
-
-      for (final (account, secret, authorization) in scenarios) {
-        final saved = await accounts.saveAccount(account, secret: secret);
-        final response = await client.request(
-          account: saved,
-          modelId: 'qwen3.8-max-preview',
-          body: const {
-            'model': 'qwen3.8-max-preview',
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-          stream: true,
+          secret: jsonEncode({
+            'access_token': 'expired-qoder-access-token',
+            'api_key': 'expired-qoder-api-key',
+            'client_id': 'qoder-client',
+            'client_secret': 'qoder-secret',
+            'authorize_url': 'https://login.example.test/authorize',
+            'token_url': 'https://login.example.test/token',
+            'user_info_url': 'https://login.example.test/user',
+            'oauth_contract': 'qoder-admin-code-v1',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .subtract(const Duration(minutes: 2))
+                .toIso8601String(),
+          }),
         );
 
-        expect(requests.last.headers['Authorization'], authorization);
-        expect(requests.last.headers['accept'], contains('text/event-stream'));
-        expect((requests.last.data as Map)['stream'], isTrue);
-        await (response.body as Stream<List<int>>).drain<void>();
-      }
-    });
-
-    test('expired Qoder OAuth requires reauthorization before routing',
-        () async {
-      var requestsSent = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requestsSent++;
-          return ResponseBody.fromString('{}', 200);
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'qoder-expired-oauth',
-          connectorType: 'qoder',
-          authType: 'oauth',
-          displayName: 'Expired Qoder OAuth',
-          status: LlmAccountStatus.ready,
-          endpointConfig: const {
-            'qoderLoginUrl': 'https://login.example.test/authorize',
-            'qoderExchangeUrl': 'https://login.example.test/token',
-            'qoderUserInfoUrl': 'https://login.example.test/user',
-            'qoderClientId': 'qoder-client',
-          },
-        ),
-        secret: jsonEncode({
-          'access_token': 'expired-qoder-access-token',
-          'api_key': 'expired-qoder-api-key',
-          'client_id': 'qoder-client',
-          'client_secret': 'qoder-secret',
-          'authorize_url': 'https://login.example.test/authorize',
-          'token_url': 'https://login.example.test/token',
-          'user_info_url': 'https://login.example.test/user',
-          'oauth_contract': 'qoder-admin-code-v1',
-          'expires_at': DateTime.now()
-              .toUtc()
-              .subtract(const Duration(minutes: 2))
-              .toIso8601String(),
-        }),
-      );
-
-      final listedAccount = (await accounts.listAccounts()).single;
-      expect(listedAccount.status, LlmAccountStatus.needsAttention);
-      await expectLater(
-        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'qwen3.8-max-preview',
-          body: const {
-            'model': 'qwen3.8-max-preview',
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-        ),
-        throwsA(isA<LlmConnectorAuthenticationRequired>()),
-      );
-      expect(requestsSent, 0);
-    });
+        final listedAccount = (await accounts.listAccounts()).single;
+        expect(listedAccount.status, LlmAccountStatus.needsAttention);
+        await expectLater(
+          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+            account: account,
+            modelId: 'qwen3.8-max-preview',
+            body: const {
+              'model': 'qwen3.8-max-preview',
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+            },
+          ),
+          throwsA(isA<LlmConnectorAuthenticationRequired>()),
+        );
+        expect(requestsSent, 0);
+      },
+    );
 
     test(
       'does not allow legacy Meta API-key accounts to use OAuth credentials',

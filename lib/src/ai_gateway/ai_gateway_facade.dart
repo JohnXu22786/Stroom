@@ -801,6 +801,28 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   }
 
   @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKiloDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    if (account.connectorType != 'kilocode' ||
+        account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    try {
+      final deviceCode = await _tokenClient.startKiloDeviceAuthorization();
+      return _LlmKiloDeviceAuthorization(
+        account: account,
+        deviceCode: deviceCode,
+        tokenClient: _tokenClient,
+        accountManagement: _accountManagement,
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
   Future<AiGatewayOAuthDeviceAuthorization> beginMetaMuseDeviceAuthorization(
     AiGatewayAccount account,
   ) async {
@@ -1167,6 +1189,86 @@ class _LlmKimiCodeDeviceAuthorization
                     'catalogSource':
                         'CLIProxyAPI@$kLlmConnectorReferenceRevision',
                   },
+                ),
+            ];
+      return await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: _account.id,
+          connectorType: _account.connectorType,
+          authType: _account.authType,
+          displayName: _account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: _account.credentialRef,
+          endpointConfig: _account.endpointConfig,
+          models: models,
+          policy: _account.policy,
+          usageByWindow: _account.usageByWindow,
+          remainingQuota: _account.remainingQuota,
+          quotaSignals: _account.quotaSignals,
+        ),
+        secret: jsonEncode(tokenBundle),
+      );
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+}
+
+class _LlmKiloDeviceAuthorization implements AiGatewayOAuthDeviceAuthorization {
+  final AiGatewayAccount _account;
+  final LlmKiloDeviceCode _deviceCode;
+  final LlmOAuthTokenClient _tokenClient;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final CancelToken _cancelToken = CancelToken();
+  late final Future<AiGatewayAccount> _completed;
+
+  _LlmKiloDeviceAuthorization({
+    required AiGatewayAccount account,
+    required LlmKiloDeviceCode deviceCode,
+    required LlmOAuthTokenClient tokenClient,
+    required _LlmGatewayAccountManagement accountManagement,
+  })  : _account = account,
+        _deviceCode = deviceCode,
+        _tokenClient = tokenClient,
+        _accountManagement = accountManagement {
+    _completed = _complete();
+  }
+
+  @override
+  Uri get verificationUri => _deviceCode.verificationUri;
+
+  @override
+  Uri get verificationUriComplete => _deviceCode.verificationUriComplete;
+
+  @override
+  String get userCode => _deviceCode.userCode;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completed;
+
+  @override
+  void cancel() {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('User cancelled');
+  }
+
+  Future<AiGatewayAccount> _complete() async {
+    try {
+      final tokenBundle = await _tokenClient.pollKiloDeviceAuthorization(
+        _deviceCode,
+        cancelToken: _cancelToken,
+      );
+      if (_cancelToken.isCancelled) throw const AiGatewayOAuthException();
+      final models = _account.models.isNotEmpty
+          ? _account.models
+          : [
+              for (var index = 0; index < kPinnedKiloCodeModels.length; index++)
+                AiGatewayUpstreamModel(
+                  id: '${_account.id}:catalog:$index',
+                  upstreamModelId: kPinnedKiloCodeModels[index],
+                  displayName: kPinnedKiloCodeModels[index],
+                  capabilities: const {'chat': true, 'streaming': true},
+                  config: const {'catalogSource': 'provider_model_registry'},
                 ),
             ];
       return await _accountManagement.saveAuthorizedOAuthAccount(
@@ -1886,6 +1988,7 @@ bool _hasRequiredModelCapabilities(
     LlmNativeProtocol.geminiGenerateContent,
     LlmNativeProtocol.geminiInteractions,
     LlmNativeProtocol.openAIChatCompletions,
+    LlmNativeProtocol.kiloCodeChatCompletions,
     LlmNativeProtocol.ollamaChat,
     LlmNativeProtocol.kimiChatCompletions,
     LlmNativeProtocol.xaiResponses,
