@@ -20,6 +20,7 @@ import '../services/ocr_service.dart';
 import '../services/ocr_retry_storage.dart';
 import '../services/ocr_task_runner.dart';
 import '../utils/data_sanitizer.dart';
+import '../utils/ocr_diagnostics.dart';
 import '../utils/ocr_image_payload.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
@@ -705,6 +706,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _legacyModelConfirmationPending = false;
   }
 
+  void _clearOcrErrorDetails() {
+    _lastRawRequest = null;
+    _lastRawResponse = null;
+  }
+
   Widget _buildModelSelector(ColorScheme cs) {
     final modelOptions = _getOcrModelOptions(ref);
 
@@ -845,6 +851,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                                 setState(() {
                                   _selectModelOption(modelOptions[idx], idx);
                                   _errorMessage = null;
+                                  _clearOcrErrorDetails();
                                 });
                               },
                     items: List.generate(modelOptions.length, (i) {
@@ -1508,6 +1515,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       // newIndex is the visual grid position from DragTarget;
       // after removeAt, the list shrinks, so insert directly at newIndex.
       _selectedImages.insert(newIndex, item);
+      _clearOcrErrorDetails();
       _dragIndex = null;
       _dragTargetIndex = null;
     });
@@ -1689,8 +1697,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
               onPressed: () => setState(() {
                 _errorMessage = null;
-                _lastRawRequest = null;
-                _lastRawResponse = null;
+                _clearOcrErrorDetails();
               }),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
@@ -1975,6 +1982,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             // Camera: temp file, no source name
           ),
         );
+        _clearOcrErrorDetails();
         if (_errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -1983,6 +1991,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
+        setState(_clearOcrErrorDetails);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e is FormatException ? e.message : '拍照失败: $e'),
@@ -2065,6 +2074,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
+        _clearOcrErrorDetails();
         _errorMessage = firstError ??
             (_retryImagesUnavailable
                 ? (_requiredRetryImageCount == null
@@ -2084,6 +2094,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
+        setState(_clearOcrErrorDetails);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
@@ -2160,6 +2171,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             sourceName: fileName, // App album file has original name
           ),
         );
+        _clearOcrErrorDetails();
         if (_errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -2171,6 +2183,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (mounted && importGeneration == _imageImportGeneration) {
         final message = e is FormatException ? e.message : '处理图片失败: $e';
         setState(() {
+          _clearOcrErrorDetails();
           _errorMessage = message;
           _lastImageImportErrorMessage = message;
         });
@@ -2191,6 +2204,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       // onReorderItem 的 newIndex 已是移除后的索引，直接使用
       final item = _selectedImages.removeAt(oldIndex);
       _selectedImages.insert(newIndex, item);
+      _clearOcrErrorDetails();
     });
   }
 
@@ -2277,6 +2291,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       setState(() {
         _selectedImages[currentIndex] =
             _selectedImages[currentIndex].withEditedPayload(payload);
+        _clearOcrErrorDetails();
       });
     } on FormatException catch (error) {
       if (mounted) {
@@ -2294,6 +2309,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     setState(() {
       _selectedImages.removeAt(index);
+      _clearOcrErrorDetails();
       _updateRetryImageReselectionState();
     });
   }
@@ -2342,6 +2358,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _invalidateImageImports();
     setState(() {
       _selectedImages.clear();
+      _clearOcrErrorDetails();
       if (resetReusableResults) _retryPageOutcomes.clear();
       _retryImageCountUnknown = false;
       _isRetryImageReselectionPending = _requiredRetryImageCount != null;
@@ -2419,6 +2436,33 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     }
     return null;
+  }
+
+  void _captureImagePreparationErrorDetails({
+    required _ModelOption option,
+    required List<SelectedImage> images,
+    required Object error,
+  }) {
+    final excludedValues = [option.apiKey];
+    _lastRawRequest = OcrDiagnosticSnapshot.request(
+      url: option.host,
+      imageCount: images.length,
+      imageBytes: images.fold<int>(
+        0,
+        (sum, image) => sum + image.bytes.length,
+      ),
+      durationMs: null,
+      requestId: null,
+      excludedValues: excludedValues,
+    );
+    _lastRawResponse = OcrDiagnosticSnapshot.response(
+      statusCode: null,
+      finishReason: null,
+      durationMs: null,
+      requestId: null,
+      errorType: error.runtimeType.toString(),
+      excludedValues: excludedValues,
+    );
   }
 
   Future<bool?> _showRequestSizeLimitDialog({
@@ -2511,6 +2555,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     setState(() {
       _ocrStarting = true;
       _errorMessage = null;
+      _clearOcrErrorDetails();
     });
     final sourceImages = List<SelectedImage>.of(_selectedImages);
     final images = <SelectedImage>[];
@@ -2544,6 +2589,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           setState(() {
             _ocrStarting = false;
             _errorMessage = error.message;
+            _captureImagePreparationErrorDetails(
+              option: modelOptions[modelIndex],
+              images: sourceImages,
+              error: error,
+            );
           });
         } else {
           setState(() {
@@ -2556,6 +2606,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             _errorMessage = retryImageCount == 0
                 ? _retryImageCountUnknownMessage
                 : '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试';
+            _captureImagePreparationErrorDetails(
+              option: modelOptions[modelIndex],
+              images: sourceImages,
+              error: error,
+            );
           });
         }
       }
@@ -2565,6 +2620,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         setState(() {
           _ocrStarting = false;
           _errorMessage = '处理 OCR 图片失败，请重试';
+          _captureImagePreparationErrorDetails(
+            option: modelOptions[modelIndex],
+            images: sourceImages,
+            error: error,
+          );
         });
       }
       debugPrint('[OCR] Image preparation failed: ${error.runtimeType}');

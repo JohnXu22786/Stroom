@@ -1114,10 +1114,30 @@ void main() {
         expect(find.text('已选 1 张图片'), findsOneWidget);
         expect(find.text('开始识别'), findsOneWidget);
         expect(notifier.tasksForTest, isEmpty);
+        expect(find.text('查看详细错误'), findsOneWidget);
+
+        await tester.tap(find.text('查看详细错误'));
+        await tester.pumpAndSettle();
+        expect(find.text('错误详情'), findsOneWidget);
+        expect(find.textContaining('imageCount'), findsOneWidget);
+        expect(find.textContaining('StateError'), findsOneWidget);
+        expect(find.textContaining('test-key'), findsNothing);
+        expect(find.textContaining('imageData'), findsNothing);
+
+        await tester.tap(find.byIcon(Icons.close).last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byType(DropdownButton<int>).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
+        await tester.pumpAndSettle();
+        expect(find.text('查看详细错误'), findsNothing);
 
         await tester.tap(find.text('开始识别'));
         await tester.pump();
         await preparationStarted.future;
+
+        expect(find.text('查看详细错误'), findsNothing);
 
         expect(find.text('准备图片中...'), findsOneWidget);
         expect(
@@ -1155,6 +1175,50 @@ void main() {
         await tester.pump();
       },
     );
+
+    testWidgets('replaces stale OCR error details after changing models', (
+      tester,
+    ) async {
+      var preparationAttempts = 0;
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          testImages: [_createTestImage()],
+          testImagePayloadPreparer: (_) async {
+            preparationAttempts++;
+            if (preparationAttempts == 1) {
+              throw StateError('first preparation failure');
+            }
+            throw FormatException('second preparation failure');
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('查看详细错误'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('StateError'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close).last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<int>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
+      await tester.pumpAndSettle();
+      expect(find.text('查看详细错误'), findsNothing);
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+      expect(find.text('second preparation failure'), findsOneWidget);
+      await tester.tap(find.text('查看详细错误'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('FormatException'), findsOneWidget);
+      expect(find.textContaining('StateError'), findsNothing);
+      expect(find.textContaining('test-key'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
 
     testWidgets('waits for retry image caching before adding a task', (
       tester,
