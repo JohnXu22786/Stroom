@@ -1196,7 +1196,9 @@ bool _legacyOcrCanMatchOpenMaskPrefixWithinToken(String prefix) {
       _legacyOcrHasLongConsonantRun(prefix)) {
     return true;
   }
-  if (prefix.length == 9) return false;
+  if (prefix.length == 9) {
+    return _legacyOcrHasAscendingAlphabetRun(prefix);
+  }
   return _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
       _legacyOcrHasHighAlphabeticEntropy(
         prefix,

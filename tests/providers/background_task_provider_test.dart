@@ -8874,6 +8874,46 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts embedded plain nine-letter mask prefixes',
+      () {
+        const apiKey = 'xabcdefghi_7Aq9pLm2';
+        const safePrompt = 'Read the receipt total carefully';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-plain-nine-letter-alpha-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abcdefghi…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': safePrompt},
+                    {'type': 'text', 'text': 'Use $apiKey for the request'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, safePrompt);
+        expect(persisted, contains(safePrompt));
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration treats whitespace after masks as open ended',
       () {
         const apiKey = 'abc1234567890abcdef';
