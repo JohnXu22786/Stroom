@@ -9,6 +9,169 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('Cline WorkOS OAuth uses the extension callback contract', () {
+    final redirectUri = Uri(
+      scheme: 'http',
+      host: '127.0.0.1',
+      port: 43127,
+      path: LlmOAuthAuthorizationAttempt.newClineCallbackPath(),
+    );
+    final attempt = LlmOAuthAuthorizationAttempt.cline(
+      redirectUri: redirectUri,
+    );
+
+    expect(attempt.authorizationUri.origin, 'https://api.cline.bot');
+    expect(attempt.authorizationUri.path, '/api/v1/auth/authorize');
+    expect(attempt.authorizationUri.queryParameters, {
+      'client_type': 'extension',
+      'callback_url': attempt.redirectUri.toString(),
+      'redirect_uri': attempt.redirectUri.toString(),
+    });
+    expect(attempt.redirectUri.path, startsWith('/auth/callback/'));
+    final callback = attempt.consumeCallback(
+      attempt.redirectUri.replace(
+        queryParameters: {'code': 'base64-workos-token'},
+      ),
+    );
+    expect(callback.code, 'base64-workos-token');
+    expect(callback.clientId, isNull);
+    expect(
+      () => LlmOAuthAuthorizationAttempt.cline(
+        redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    final freshAttempt = LlmOAuthAuthorizationAttempt.cline(
+      redirectUri: Uri(
+        scheme: 'http',
+        host: '127.0.0.1',
+        port: 43127,
+        path: LlmOAuthAuthorizationAttempt.newClineCallbackPath(),
+      ),
+    );
+    expect(
+      () => freshAttempt.consumeCallback(
+        Uri.parse(
+          'http://127.0.0.1:43127/auth/callback?code=forged-code',
+        ),
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+    expect(
+      () => attempt.consumeCallback(
+        attempt.redirectUri.replace(
+          queryParameters: {'code': 'base64-workos-token'},
+        ),
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+  });
+
+  test(
+    'Cline OAuth code can carry a base64 token bundle without a network call',
+    () async {
+      final token = base64Encode(
+        utf8.encode(
+          jsonEncode({
+            'accessToken': 'cline-access-secret',
+            'refreshToken': 'cline-refresh-secret',
+            'email': 'cline@example.test',
+            'firstName': 'Cline',
+            'lastName': 'User',
+            'expiresAt': '2026-11-04T12:00:00Z',
+          }),
+        ),
+      );
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          fail('embedded token codes must not be exchanged over the network');
+        });
+      final attempt = LlmOAuthAuthorizationAttempt.cline(
+        redirectUri: Uri(
+          scheme: 'http',
+          host: '127.0.0.1',
+          port: 43127,
+          path: LlmOAuthAuthorizationAttempt.newClineCallbackPath(),
+        ),
+      );
+      final callback = attempt.consumeCallback(
+        attempt.redirectUri.replace(queryParameters: {'code': token}),
+      );
+
+      final credentials = await LlmOAuthTokenClient(
+        dio: dio,
+      ).exchangeClineCode(
+        attempt: attempt,
+        callback: callback,
+        provider: 'cline',
+      );
+
+      expect(credentials['access_token'], 'cline-access-secret');
+      expect(credentials['refresh_token'], 'cline-refresh-secret');
+      expect(credentials['email'], 'cline@example.test');
+      expect(credentials['expires_at'], '2026-11-04T12:00:00Z');
+      expect(jsonEncode(credentials), isNot(contains('workos:')));
+    },
+  );
+
+  test(
+    'Cline OAuth exchanges opaque authorization codes with extension fields',
+    () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _OAuthAdapter((request) async {
+          captured = request;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': {
+                'accessToken': 'cline-access-secret',
+                'refreshToken': 'cline-refresh-secret',
+                'userInfo': {'email': 'cline@example.test'},
+                'expiresAt': '2026-11-04T12:00:00Z',
+              },
+            }),
+            200,
+          );
+        });
+      final attempt = LlmOAuthAuthorizationAttempt.cline(
+        redirectUri: Uri(
+          scheme: 'http',
+          host: '127.0.0.1',
+          port: 43127,
+          path: LlmOAuthAuthorizationAttempt.newClineCallbackPath(),
+        ),
+      );
+      final callback = attempt.consumeCallback(
+        attempt.redirectUri.replace(queryParameters: {'code': 'opaque-code'}),
+      );
+
+      final credentials = await LlmOAuthTokenClient(
+        dio: dio,
+      ).exchangeClineCode(
+        attempt: attempt,
+        callback: callback,
+        provider: 'clinepass',
+      );
+
+      expect(
+        captured?.uri.toString(),
+        'https://api.cline.bot/api/v1/auth/token',
+      );
+      expect(captured?.method, 'POST');
+      expect(captured?.contentType, Headers.jsonContentType);
+      expect(captured?.data, {
+        'grant_type': 'authorization_code',
+        'code': 'opaque-code',
+        'client_type': 'extension',
+        'redirect_uri': attempt.redirectUri.toString(),
+        'provider': 'clinepass',
+      });
+      expect(credentials['access_token'], 'cline-access-secret');
+      expect(credentials['refresh_token'], 'cline-refresh-secret');
+      expect(credentials['email'], 'cline@example.test');
+    },
+  );
+
   test('Openference OAuth uses the pinned PKCE loopback contract', () {
     final attempt = LlmOAuthAuthorizationAttempt.openference(
       redirectUri: Uri.parse('http://127.0.0.1:56123/callback'),

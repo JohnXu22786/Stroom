@@ -31,6 +31,116 @@ class LlmOAuthTokenClient {
   static const _tencentCodeBuddyIntlHost = 'www.codebuddy.ai';
   static const _tencentWorkBuddyHost = 'www.workbuddy.ai';
   static const _kiloHost = 'api.kilo.ai';
+  static const _clineTokenUri = 'https://api.cline.bot/api/v1/auth/token';
+
+  /// Completes Cline's WorkOS authorization-code callback. Cline normally
+  /// embeds its token payload in the code; the published token endpoint is the
+  /// fallback for opaque codes.
+  Future<Map<String, dynamic>> exchangeClineCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+    required String provider,
+  }) async {
+    if (callback.code.trim().isEmpty ||
+        !const {'cline', 'clinepass'}.contains(provider)) {
+      throw const LlmOAuthFlowException();
+    }
+    final embedded = _decodeClineCode(callback.code);
+    if (embedded != null) return embedded;
+
+    try {
+      final response = await _dio.postUri<Object?>(
+        Uri.parse(_clineTokenUri),
+        data: {
+          'grant_type': 'authorization_code',
+          'code': callback.code,
+          'client_type': 'extension',
+          'redirect_uri': attempt.redirectUri.toString(),
+          'provider': provider,
+        },
+        options: Options(
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+        ),
+      );
+      final envelope = _jsonObject(response.data);
+      final token =
+          envelope['data'] is Map ? _jsonObject(envelope['data']) : envelope;
+      final accessToken = _nonEmptyString(
+        token['accessToken'] ?? token['access_token'],
+      );
+      if (accessToken == null) throw const LlmOAuthFlowException();
+      final userInfo = token['userInfo'] is Map
+          ? _jsonObject(token['userInfo'])
+          : const <String, dynamic>{};
+      return _clineCredentialBundle(
+        accessToken: accessToken,
+        refreshToken: _nonEmptyString(
+          token['refreshToken'] ?? token['refresh_token'],
+        ),
+        email: _nonEmptyString(token['email'] ?? userInfo['email']),
+        firstName: _nonEmptyString(token['firstName']),
+        lastName: _nonEmptyString(token['lastName']),
+        expiresAt: _nonEmptyString(token['expiresAt'] ?? token['expires_at']),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static Map<String, dynamic>? _decodeClineCode(String code) {
+    try {
+      var encoded = code.trim();
+      try {
+        encoded = Uri.decodeComponent(encoded);
+      } catch (_) {
+        // Already decoded by the loopback URI parser.
+      }
+      encoded = encoded
+          .replaceAll(' ', '+')
+          .replaceAll('+', '-')
+          .replaceAll('/', '_');
+      final decoded = utf8.decode(
+        base64Url.decode(base64Url.normalize(encoded)),
+      );
+      final end = decoded.lastIndexOf('}');
+      if (end < 0) return null;
+      final token = _jsonObject(jsonDecode(decoded.substring(0, end + 1)));
+      final accessToken = _nonEmptyString(token['accessToken']);
+      if (accessToken == null) return null;
+      return _clineCredentialBundle(
+        accessToken: accessToken,
+        refreshToken: _nonEmptyString(token['refreshToken']),
+        email: _nonEmptyString(token['email']),
+        firstName: _nonEmptyString(token['firstName']),
+        lastName: _nonEmptyString(token['lastName']),
+        expiresAt: _nonEmptyString(token['expiresAt']),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic> _clineCredentialBundle({
+    required String accessToken,
+    String? refreshToken,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? expiresAt,
+  }) {
+    final bundle = <String, dynamic>{
+      'access_token': accessToken,
+      'oauth_contract': 'cline-workos-v1',
+    };
+    if (refreshToken != null) bundle['refresh_token'] = refreshToken;
+    if (email != null) bundle['email'] = email;
+    if (firstName != null) bundle['first_name'] = firstName;
+    if (lastName != null) bundle['last_name'] = lastName;
+    if (expiresAt != null) bundle['expires_at'] = expiresAt;
+    return bundle;
+  }
 
   final Dio _dio;
 

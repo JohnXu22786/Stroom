@@ -2,6 +2,43 @@
 // omitted because the snapshot has no corresponding authenticator/executor.
 // Refresh this catalog only when the selected upstream reference revision changes.
 
+/// Offline fallback IDs from the pinned Cline provider catalog. These IDs do
+/// not imply that the connected account has plan access to every model.
+const kPinnedClineModels = <String>[
+  'z-ai/glm-5.2',
+  'x-ai/grok-4.5',
+  'openai/gpt-5.6-sol',
+  'moonshotai/kimi-k3',
+  'anthropic/claude-opus-4.8',
+  'cline-free/deepseek-v4.1-flash',
+  'cline-free/mimo-v2.6-flash',
+  'cline-free/muse-spark-1.3-contributor',
+  'stealth/space-bunny-alpha',
+  'openrouter/free',
+  'deepseek/deepseek-v4-flash',
+  'tencent/hy3:free',
+  'stepfun/step-3.7-flash',
+  'poolside/laguna-m.1:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'minimax/minimax-m3',
+];
+
+/// Offline fallback IDs from the pinned ClinePass `clinePass` catalog bucket.
+const kPinnedClinePassModels = <String>[
+  'cline-pass/glm-5.2',
+  'cline-pass/minimax-m3',
+  'cline-pass/deepseek-v4-pro',
+  'cline-pass/deepseek-v4-flash',
+  'cline-pass/kimi-k3',
+  'cline-pass/kimi-k2.7-code',
+  'cline-pass/mimo-v2.5-pro',
+  'cline-pass/mimo-v2.5',
+  'cline-pass/qwen3.8-max',
+  'cline-pass/qwen3.7-max',
+  'cline-pass/qwen3.7-plus',
+];
+
 const kPinnedCodexModels = <String>[
   'gpt-6-luna',
   'gpt-5.5',

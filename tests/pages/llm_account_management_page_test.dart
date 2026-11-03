@@ -23,6 +23,50 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('Cline and ClinePass expose separate OAuth and API-key choices', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    for (final (connectorId, expectedLabels) in [
+      ('cline', ['Cline WorkOS OAuth', 'Cline API Key']),
+      ('clinepass', ['ClinePass via Cline OAuth', 'ClinePass API Key']),
+    ]) {
+      final connector = find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connector,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester
+          .widget<DropdownButton<String>>(connectorButton)
+          .onChanged!(connectorId);
+      await tester.pumpAndSettle();
+
+      final auth = find.byType(DropdownButtonFormField<String>).at(1);
+      final authButton = find.descendant(
+        of: auth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      final items = tester.widget<DropdownButton<String>>(authButton).items!;
+      expect(
+          items.map((item) => item.value), containsAll(['api_key', 'oauth']));
+      expect(
+        items.map((item) => (item.child as Text).data),
+        containsAll(expectedLabels),
+      );
+    }
+  });
+
   testWidgets(
     'Openference OAuth and API-key accounts are distinct in the editor',
     (tester) async {
