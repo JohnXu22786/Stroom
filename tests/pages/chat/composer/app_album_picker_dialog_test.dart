@@ -66,8 +66,15 @@ void main() {
       ({
         Completer<void> readStarted,
         Completer<void> releaseRead,
+        Completer<void> replacementReadStarted,
+        Completer<void> releaseReplacementRead,
         List<MapEntry<String, Uint8List>>? Function() result,
-      })> openPickerWithBlockedRead(WidgetTester tester) async {
+      })> openPickerWithBlockedRead(
+    WidgetTester tester, {
+    bool failRead = false,
+    bool includeReplacement = false,
+    bool blockReplacementRead = false,
+  }) async {
     final png = await tester.runAsync(_createEnginePng);
     await tester.runAsync(() async {
       await ImageManifest.writeFile('pending-read.png', png!);
@@ -82,6 +89,20 @@ void main() {
           folder: '',
         ),
       );
+      if (includeReplacement) {
+        await ImageManifest.writeFile('replacement-read.png', png);
+        await ImageManifest.addRecord(
+          ImageRecord(
+            id: 'replacement-read',
+            name: 'replacement-read',
+            hash: 'replacement-read',
+            format: 'png',
+            createdAt: DateTime.now(),
+            size: png.length,
+            folder: '',
+          ),
+        );
+      }
     });
 
     List<MapEntry<String, Uint8List>>? pickerResult;
@@ -108,10 +129,16 @@ void main() {
 
     final readStarted = Completer<void>();
     final releaseRead = Completer<void>();
+    final replacementReadStarted = Completer<void>();
+    final releaseReplacementRead = Completer<void>();
     beforeAppAlbumPickerReadForTesting = (fileName) async {
       if (fileName == 'pending-read.png' && !readStarted.isCompleted) {
         readStarted.complete();
         await releaseRead.future;
+        if (failRead) throw StateError('simulated image read failure');
+      } else if (fileName == 'replacement-read.png') {
+        replacementReadStarted.complete();
+        if (blockReplacementRead) await releaseReplacementRead.future;
       }
     };
     await tester.tap(find.text('pending-read.png'));
@@ -125,6 +152,8 @@ void main() {
     return (
       readStarted: readStarted,
       releaseRead: releaseRead,
+      replacementReadStarted: replacementReadStarted,
+      releaseReplacementRead: releaseReplacementRead,
       result: () => pickerResult,
     );
   }
@@ -255,6 +284,78 @@ void main() {
       expect(picker.result()!.single.key, 'pending-read.png');
       expect(picker.result()!.single.value, isNotEmpty);
     });
+
+    testWidgets(
+      'failed read during confirmation keeps picker open for replacement',
+      (tester) async {
+        final picker = await openPickerWithBlockedRead(
+          tester,
+          failRead: true,
+          includeReplacement: true,
+        );
+
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await tester.pump();
+        expect(picker.result(), isNull);
+
+        picker.releaseRead.complete();
+        await _pumpUntil(
+          tester,
+          () => find.text('无法读取文件').evaluate().isNotEmpty,
+        );
+        expect(
+          find.text('应用内相册'),
+          findsOneWidget,
+          reason:
+              'a failed pending read must cancel confirmation, not return an empty list',
+        );
+        expect(picker.result(), isNull);
+
+        await tester.tap(find.text('replacement-read.png'));
+        await _pumpUntil(
+          tester,
+          () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
+        );
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await _pumpUntil(tester, () => picker.result() != null);
+
+        expect(picker.result()!.single.key, 'replacement-read.png');
+        expect(picker.result()!.single.value, isNotEmpty);
+      },
+    );
+
+    testWidgets(
+      'clearing after a failed read still confirms an empty selection',
+      (tester) async {
+        final picker = await openPickerWithBlockedRead(
+          tester,
+          failRead: true,
+          includeReplacement: true,
+          blockReplacementRead: true,
+        );
+
+        await tester.tap(find.text('replacement-read.png'));
+        await tester.pump();
+        expect(picker.replacementReadStarted.isCompleted, isTrue);
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await tester.pump();
+
+        picker.releaseRead.complete();
+        await _pumpUntil(
+          tester,
+          () => find.text('无法读取文件').evaluate().isNotEmpty,
+        );
+        expect(picker.result(), isNull);
+
+        await tester.tap(find.byKey(const Key('album_picker_clear_btn')));
+        await _pumpUntil(tester, () => picker.result() != null);
+        expect(picker.result(), isEmpty);
+
+        picker.releaseReplacementRead.complete();
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('confirm resumes when its pending selection is toggled off', (
       tester,

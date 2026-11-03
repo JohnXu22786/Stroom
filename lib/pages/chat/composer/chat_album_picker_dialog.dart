@@ -64,6 +64,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   final Map<String, Future<void>> _pendingReads = {};
   Completer<void> _pendingSelectionChanged = Completer<void>();
   bool _confirmingSelection = false;
+  bool _confirmationFailedRead = false;
   bool _isClosing = false;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
@@ -225,6 +226,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         );
       } else {
         _selectionOrder.remove(record.id);
+        if (_confirmingSelection) _confirmationFailedRead = true;
       }
     });
     _notifyPendingSelectionChanged();
@@ -242,13 +244,17 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       _selectionOrder.clear();
       _pendingSelections.clear();
       _pendingReads.clear();
+      _confirmationFailedRead = false;
     });
     _notifyPendingSelectionChanged();
   }
 
   Future<void> _confirmSelection() async {
     if (_confirmingSelection) return;
-    setState(() => _confirmingSelection = true);
+    setState(() {
+      _confirmingSelection = true;
+      _confirmationFailedRead = false;
+    });
     while (_pendingReads.isNotEmpty) {
       await Future.any<void>([
         Future.wait<void>(List<Future<void>>.of(_pendingReads.values)),
@@ -257,6 +263,13 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       if (!mounted || _isClosing) return;
     }
     if (!mounted || _isClosing) return;
+    if (_confirmationFailedRead) {
+      setState(() {
+        _confirmingSelection = false;
+        _confirmationFailedRead = false;
+      });
+      return;
+    }
     Navigator.of(context).pop(
       _orderedSelectedItems.map((entry) => entry.value).toList(),
     );
