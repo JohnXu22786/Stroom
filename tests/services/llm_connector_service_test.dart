@@ -16,7 +16,8 @@ import 'package:stroom/services/aws_sigv4.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
-  test('Qoder PAT model discovery uses qodercli with the account token', () async {
+  test('Qoder PAT model discovery uses qodercli with the account token',
+      () async {
     final runner = _QoderModelListRunner();
     final service = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
@@ -30,9 +31,11 @@ void main() {
 
     final models = await service.discoverModels(account, refreshRemote: true);
 
-    expect(runner.lastEnvironment['QODER_PERSONAL_ACCESS_TOKEN'], 'pt-account-token');
+    expect(runner.lastEnvironment['QODER_PERSONAL_ACCESS_TOKEN'],
+        'pt-account-token');
     expect(runner.lastArguments, contains('--list-models'));
-    expect(models.map((model) => model.upstreamModelId), ['qwen3.8-max-preview']);
+    expect(
+        models.map((model) => model.upstreamModelId), ['qwen3.8-max-preview']);
     expect(models.single.config['catalogSource'], 'qodercli');
   });
   group('LlmConnectorRegistry', () {
@@ -79,7 +82,9 @@ void main() {
       expect(qoder.authTypes, containsAll({'api_key', 'oauth', 'pat'}));
       expect(qoder.modelCatalog, contains('qwen3.8-max-preview'));
       expect(qoder.canRefreshCredentials, isFalse);
-      expect(LlmConnectorRegistry.isChatAdapterAuthTypeSupported('qoder', 'pat'), isTrue);
+      expect(
+          LlmConnectorRegistry.isChatAdapterAuthTypeSupported('qoder', 'pat'),
+          isTrue);
       expect(LlmConnectorRegistry.find('gemini-cli'), isNull);
       expect(LlmConnectorRegistry.find('glmt'), isNull);
       expect(LlmConnectorRegistry.canonicalId('glmt'), 'glm');
@@ -6530,7 +6535,8 @@ void main() {
         );
       }
       expect(requests, hasLength(scenarios.length));
-      final qoderRequest = requests.singleWhere((request) => request.headers['Authorization'] == 'Bearer qoder-test-key');
+      final qoderRequest = requests.singleWhere((request) =>
+          request.headers['Authorization'] == 'Bearer qoder-test-key');
       expect(qoderRequest.headers['Authorization'], 'Bearer qoder-test-key');
       expect(qoderRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
       expect(qoderRequest.headers['x-dashscope-cachecontrol'], 'enable');
@@ -6538,10 +6544,12 @@ void main() {
       expect(qoderRequest.headers['x-stainless-lang'], 'js');
       expect(qoderRequest.headers['x-stainless-arch'], isNot('unknown'));
       final qoderOAuthRequest = requests.singleWhere(
-        (request) => request.headers['Authorization'] == 'Bearer qoder-oauth-api-key',
+        (request) =>
+            request.headers['Authorization'] == 'Bearer qoder-oauth-api-key',
       );
       expect(qoderOAuthRequest.headers['x-dashscope-authtype'], 'qwen-oauth');
-      expect(qoderOAuthRequest.headers['Authorization'], isNot('Bearer qoder-oauth-token'));
+      expect(qoderOAuthRequest.headers['Authorization'],
+          isNot('Bearer qoder-oauth-token'));
       for (final provider in ['opencode-go', 'opencode-zen']) {
         final request = requests.singleWhere(
           (request) =>
@@ -8351,7 +8359,6 @@ class _FunctionalAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
-
 
 class _QoderModelListRunner implements QoderCliRunner {
   List<String> lastArguments = const [];

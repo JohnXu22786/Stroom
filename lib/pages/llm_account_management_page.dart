@@ -314,12 +314,12 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _deleteAccount(AiGatewayAccount account) async {
-    final deletionMessage = switch (account.authType == 'oauth'
-        ? account.connectorType
-        : '') {
+    final deletionMessage =
+        switch (account.authType == 'oauth' ? account.connectorType : '') {
       'codex' ||
       'gemini' ||
-      'aistudio' => '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
+      'aistudio' =>
+        '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
       _ => '删除“${account.displayName}”并从模型组中移除该账号？',
     };
     final confirmed = await _confirm(title: '删除账号', message: deletionMessage);
@@ -338,8 +338,8 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
               .toList()
           : const <AiGatewayModelGroup>[];
       if (account.authType == 'oauth' && account.hasCredential) {
-        revocationFailed = !await gateway.oauthAuthorization
-            .deleteAccountAndRevoke(account);
+        revocationFailed =
+            !await gateway.oauthAuthorization.deleteAccountAndRevoke(account);
       } else {
         await gateway.accountManagement.deleteAccount(account.id);
       }
@@ -639,8 +639,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
               itemBuilder: (context, index) => _ModelGroupCard(
                 group: data.groups[index],
                 accounts: data.accounts,
-                localUsage:
-                    data.runtimeUsageByGroup[data.groups[index].id] ??
+                localUsage: data.runtimeUsageByGroup[data.groups[index].id] ??
                     const <String, num>{},
                 runtimeUsageAvailable: data.runtimeUsageAvailable,
                 onEdit: () => _editGroup(data.groups[index], data.accounts),
@@ -722,7 +721,10 @@ class _KimiCodeDeviceAuthorizationDialogState
               SelectableText(
                 widget.authorization.verificationUriComplete.toString(),
               ),
-          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
             ],
           ),
           actions: [
@@ -792,7 +794,10 @@ class _MetaMuseDeviceAuthorizationDialogState
               SelectableText(
                 widget.authorization.verificationUriComplete.toString(),
               ),
-          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
             ],
           ),
           actions: [
@@ -868,7 +873,10 @@ class _XaiDeviceAuthorizationDialogState
               SelectableText(
                 widget.authorization.verificationUriComplete.toString(),
               ),
-          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
             ],
           ),
           actions: [
@@ -1277,11 +1285,7 @@ String _capabilitiesLabel(Map<String, dynamic> capabilities) {
   return capabilities.entries
       .map(
         (entry) =>
-            '${entry.key} ${entry.value == true
-                ? '支持'
-                : entry.value == false
-                ? '不支持'
-                : '未知'}',
+            '${entry.key} ${entry.value == true ? '支持' : entry.value == false ? '不支持' : '未知'}',
       )
       .join('、');
 }
@@ -1394,7 +1398,10 @@ class _TencentDeviceAuthorizationDialogState
               SelectableText(
                 widget.authorization.verificationUriComplete.toString(),
               ),
-          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!)
+              ],
             ],
           ),
           actions: [
@@ -1423,13 +1430,11 @@ String _authSourceLabel(
 ) {
   final provider = connector?.displayName ?? account.connectorType;
   return switch (account.authType) {
-    'oauth' =>
-      account.connectorType == 'vertex'
+    'oauth' => account.connectorType == 'vertex'
         ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
         : '$provider OAuth',
     'setup_token' => '$provider Setup Token',
-    'api_key' =>
-      account.connectorType == 'openai-compatibility'
+    'api_key' => account.connectorType == 'openai-compatibility'
         ? '用户提供的上游 API Key'
         : '$provider API Key',
     'service_account' => '$provider 企业服务凭据',
@@ -1570,8 +1575,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _connectorType = account?.connectorType ?? 'openai-compatibility';
     _authType = account?.authType ?? 'api_key';
     final configuredProtocol = account?.endpointConfig['apiProtocol'];
-    _apiProtocol =
-        configuredProtocol is String &&
+    _apiProtocol = configuredProtocol is String &&
             kCustomHttpApiProtocols.contains(configuredProtocol)
         ? configuredProtocol
         : builtinDefaultApiProtocolForConnector(_connectorType);
@@ -1584,8 +1588,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     _status = account?.status ?? AiGatewayAccountStatus.unknown;
     _name = TextEditingController(text: account?.displayName ?? '');
-    final endpoint =
-        account?.endpointConfig['baseUrl'] ??
+    final endpoint = account?.endpointConfig['baseUrl'] ??
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
@@ -1601,8 +1604,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             ? configuredRegion
             : null;
     _region = TextEditingController(
-      text:
-          region ??
+      text: region ??
           (account?.connectorType == 'bedrock'
               ? 'us-east-1'
               : account?.connectorType == 'vertex'
@@ -1638,9 +1640,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     );
     final devinCliExecutable =
         account?.endpointConfig[DevinCliAcpLaunch.executablePathKey];
-    _initialDevinCliExecutable = devinCliExecutable is String
-        ? devinCliExecutable
-        : null;
+    _initialDevinCliExecutable =
+        devinCliExecutable is String ? devinCliExecutable : null;
     _devinCliExecutable = TextEditingController(
       text: _initialDevinCliExecutable ?? '',
     );
@@ -1834,8 +1835,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         previousConnectorType == 'qwen-cloud') {
                       _region.clear();
                     }
-                    final available =
-                        widget.providerCatalog
+                    final available = widget.providerCatalog
                         .findProvider(value)!
                         .supportedAuthTypes
                         .toList()
@@ -1879,8 +1879,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   for (final type in authTypes)
                     DropdownMenuItem(
                       value: type,
-                      enabled:
-                          type != 'relay' &&
+                      enabled: type != 'relay' &&
                           (type != 'oauth' ||
                               connector.authTypeLimitations[type] == null),
                       child: Text(
@@ -2056,8 +2055,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _endpoint,
-                enabled:
-                    _connectorType != 'devin-cli-agentic' &&
+                enabled: _connectorType != 'devin-cli-agentic' &&
                     _connectorType != 'command-code' &&
                     _connectorType != 'qoder',
                 decoration: InputDecoration(
@@ -2072,7 +2070,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   },
                   helperText: switch (_connectorType) {
                     'opencode-go' ||
-                    'opencode-zen' => '留空以使用此账号类型的官方模型目录和 API 端点。',
+                    'opencode-zen' =>
+                      '留空以使用此账号类型的官方模型目录和 API 端点。',
                     'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
                     _ => null,
                   },
@@ -2085,9 +2084,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 TextField(
                   controller: _region,
                   decoration: InputDecoration(
-                    labelText: _connectorType == 'bedrock'
-                        ? 'AWS 区域'
-                        : 'Vertex 区域',
+                    labelText:
+                        _connectorType == 'bedrock' ? 'AWS 区域' : 'Vertex 区域',
                     hintText: _connectorType == 'bedrock'
                         ? 'us-east-1'
                         : 'us-central1',
@@ -2124,15 +2122,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _credential,
-                  enabled:
-                      _authType != 'none' &&
+                  enabled: _authType != 'none' &&
                       _authType != 'relay' &&
                       _authType != 'cli_session' &&
                       _authType != 'aws_credential_chain',
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText:
-                        _authType == 'none' ||
+                    labelText: _authType == 'none' ||
                             _authType == 'relay' ||
                             _authType == 'cli_session' ||
                             _authType == 'aws_credential_chain'
@@ -2146,18 +2142,24 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                     ? 'Claude Setup Token'
                                     : _authType == 'api_key'
                                         ? switch (_connectorType) {
-                            'glm-cn' => 'GLM Coding (China) API Key',
-                            'minimax-cn' => 'MiniMax (China) API Key',
-                            'opencode-go' => 'OpenCode Go API Key',
-                            'opencode-zen' => 'OpenCode Zen API Key',
-                            'qwen-cloud' => 'Qwen Cloud API Key',
+                                            'glm-cn' =>
+                                              'GLM Coding (China) API Key',
+                                            'minimax-cn' =>
+                                              'MiniMax (China) API Key',
+                                            'opencode-go' =>
+                                              'OpenCode Go API Key',
+                                            'opencode-zen' =>
+                                              'OpenCode Zen API Key',
+                                            'qwen-cloud' =>
+                                              'Qwen Cloud API Key',
                                             'qwen-cloud-token-plan' =>
                                               'Qwen Cloud Token Plan API Key',
                                             _ => '凭据',
                                           }
-                        : _connectorType == 'qoder' && _authType == 'pat'
-                        ? 'Qoder PAT（pt-…）'
-                                        : '凭据',
+                                        : _connectorType == 'qoder' &&
+                                                _authType == 'pat'
+                                            ? 'Qoder PAT（pt-…）'
+                                            : '凭据',
                     hintText: _authType == 'aws_credential_chain'
                         ? '使用运行环境的 AWS 默认凭据链'
                         : !widget.hasCredential
@@ -2247,8 +2249,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _models,
                 minLines: 3,
                 maxLines: 7,
-                readOnly:
-                    _connectorType == 'devin-cli-agentic' ||
+                readOnly: _connectorType == 'devin-cli-agentic' ||
                     _connectorType == 'kimi-coding' ||
                     _connectorType == 'grok-cli' ||
                     _connectorType == 'xai-oauth' ||
@@ -2271,8 +2272,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                           ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
                                           : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
-                onChanged:
-                    _connectorType == 'devin-cli-agentic' ||
+                onChanged: _connectorType == 'devin-cli-agentic' ||
                         _connectorType == 'kimi-coding' ||
                         _connectorType == 'grok-cli' ||
                         _connectorType == 'xai-oauth' ||
@@ -2283,8 +2283,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed:
-                      widget.account != null &&
+                  onPressed: widget.account != null &&
                           !_draftChanged &&
                           !{
                             'kimi-coding',
@@ -2394,14 +2393,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final wasGoogleGenerativeLanguageAccount =
         widget.account?.connectorType == 'gemini' ||
             widget.account?.connectorType == 'aistudio';
-    final geminiOAuthClientChanged =
-        wasGoogleGenerativeLanguageAccount &&
+    final geminiOAuthClientChanged = wasGoogleGenerativeLanguageAccount &&
         widget.account?.authType == 'oauth' &&
         isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         previousGoogleClientId != _oauthClientId.text.trim();
-    final geminiOAuthClientSecretChanged =
-        wasGoogleGenerativeLanguageAccount &&
+    final geminiOAuthClientSecretChanged = wasGoogleGenerativeLanguageAccount &&
         widget.account?.authType == 'oauth' &&
         isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
@@ -2420,13 +2417,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 widget.account!.endpointConfig['qoderClientId'] !=
                     _oauthClientId.text.trim() ||
                 _oauthClientSecret.text.trim().isNotEmpty);
-    final qoderOAuthClientChanged =
-        widget.account?.connectorType == 'qoder' &&
-            widget.account?.authType == 'oauth' &&
-            widget.account!.endpointConfig['qoderClientId'] !=
-                _oauthClientId.text.trim();
-    final credentialIdentityChanged =
-        widget.account != null &&
+    final qoderOAuthClientChanged = widget.account?.connectorType == 'qoder' &&
+        widget.account?.authType == 'oauth' &&
+        widget.account!.endpointConfig['qoderClientId'] !=
+            _oauthClientId.text.trim();
+    final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
             geminiOAuthClientChanged ||
@@ -2445,8 +2440,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         setState(() => _error = '请输入有效的 HTTPS Qoder OAuth 管理员端点。');
         return;
       }
-      final needsSecret =
-          widget.account == null ||
+      final needsSecret = widget.account == null ||
           widget.account?.authType != 'oauth' ||
           !widget.hasCredential ||
           qoderOAuthClientChanged ||
@@ -2636,8 +2630,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _googleCloudProjectId.text.trim().isNotEmpty) {
-      endpointConfig['googleCloudProjectId'] = _googleCloudProjectId.text
-          .trim();
+      endpointConfig['googleCloudProjectId'] =
+          _googleCloudProjectId.text.trim();
     }
     if (_connectorType == 'qoder' && _authType == 'oauth') {
       endpointConfig['qoderLoginUrl'] = _qoderAuthorizeUrl.text.trim();
@@ -2653,8 +2647,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('qoderUserInfoUrl');
       endpointConfig.remove('qoderClientId');
     }
-    final previousEndpoint =
-        widget.account?.endpointConfig['baseUrl'] ??
+    final previousEndpoint = widget.account?.endpointConfig['baseUrl'] ??
         widget.account?.endpointConfig['host'] ??
         widget.account?.endpointConfig['apiBase'];
     if (endpointConfig['legacyOcrFullEndpoint'] == true &&
@@ -2706,19 +2699,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       models: parsedModels,
       policy: widget.account?.policy,
       usageByWindow: widget.account?.usageByWindow,
-      remainingQuota:
-          widget.account?.remainingQuota ??
+      remainingQuota: widget.account?.remainingQuota ??
           const AiGatewayMetricObservation.unknown(),
       quotaSignals: widget.account?.quotaSignals ?? const {},
     );
-    final secret =
-        _authType == 'none' ||
+    final secret = _authType == 'none' ||
             _authType == 'relay' ||
             _authType == 'aws_credential_chain'
         ? ''
         : _credential.text.trim();
-    final requiresOAuthAuthorization =
-        _authType == 'oauth' &&
+    final requiresOAuthAuthorization = _authType == 'oauth' &&
         (widget.account == null || reconnectOAuth || credentialIdentityChanged);
     final oauthConfiguration = <String, String>{
       if (_oauthClientId.text.trim().isNotEmpty)
@@ -2772,8 +2762,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         secret,
         oauthConfiguration: oauthConfiguration,
         requiresOAuthAuthorization: requiresOAuthAuthorization,
-        requiresCliLogin:
-            account.connectorType == 'devin-cli-agentic' &&
+        requiresCliLogin: account.connectorType == 'devin-cli-agentic' &&
             (widget.account?.connectorType != 'devin-cli-agentic' ||
                 _reconnectCli),
       ),
@@ -2990,8 +2979,7 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
       context: context,
       builder: (_) => _AddModelGroupMemberDialog(
         accounts: widget.accounts,
-        defaultLocalModelId:
-            _members.firstOrNull?.localModelId ??
+        defaultLocalModelId: _members.firstOrNull?.localModelId ??
             widget.group.members.firstOrNull?.localModelId ??
             stableLlmModelGroupLocalModelId(widget.group.id) ??
             widget.group.id,
@@ -3271,7 +3259,8 @@ class _RoutingPolicyEditorDialogState
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ),
               ],
@@ -3378,9 +3367,8 @@ class _RoutingPolicyEditorDialogState
                   controller: draft.unit,
                   enabled: draft.kind == AiGatewayLimitKind.fixed,
                   decoration: InputDecoration(
-                    labelText: draft.kind == AiGatewayLimitKind.fixed
-                        ? '单位'
-                        : '%',
+                    labelText:
+                        draft.kind == AiGatewayLimitKind.fixed ? '单位' : '%',
                   ),
                 ),
               ),
@@ -3393,9 +3381,8 @@ class _RoutingPolicyEditorDialogState
 
   void _save() {
     final concurrencyText = _concurrency.text.trim();
-    final concurrency = concurrencyText.isEmpty
-        ? null
-        : int.tryParse(concurrencyText);
+    final concurrency =
+        concurrencyText.isEmpty ? null : int.tryParse(concurrencyText);
     if (concurrencyText.isNotEmpty &&
         (concurrency == null || concurrency <= 0)) {
       setState(() => _error = '并发上限必须是正整数，或留空表示不限。');

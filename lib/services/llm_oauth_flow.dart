@@ -140,7 +140,8 @@ class LlmKimiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmKimiDeviceCode._(
+  }) =>
+      LlmKimiDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -186,7 +187,8 @@ class LlmTencentDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmTencentDeviceCode._(
+  }) =>
+      LlmTencentDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -224,7 +226,8 @@ class LlmMetaMuseDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmMetaMuseDeviceCode._(
+  }) =>
+      LlmMetaMuseDeviceCode._(
         deviceCode: deviceCode,
         userCode: userCode,
         verificationUri: verificationUri,
@@ -273,7 +276,8 @@ class LlmXaiDeviceCode {
     required Uri verificationUriComplete,
     required Duration expiresIn,
     required Duration interval,
-  }) => LlmXaiDeviceCode._(
+  }) =>
+      LlmXaiDeviceCode._(
         deviceCode: deviceCode,
         tokenEndpoint: tokenEndpoint,
         issuer: issuer,
@@ -303,8 +307,7 @@ class LlmOAuthAuthorizationAttempt {
       'user:profile user:inference user:sessions:claude_code '
       'user:mcp_servers user:file_upload';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope =
-      'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;
@@ -331,8 +334,8 @@ class LlmOAuthAuthorizationAttempt {
     bool isDevin = false,
     bool isQoder = false,
   })  : _isClaudeCode = isClaudeCode,
-       _isDevin = isDevin,
-       _isQoder = isQoder;
+        _isDevin = isDevin,
+        _isQoder = isQoder;
 
   factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
     required Uri redirectUri,

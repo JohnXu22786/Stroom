@@ -57,7 +57,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: LlmAccountManagementPage(
-          gateway: _testGateway(service, oauthAuthorization: oauthAuthorization),
+          gateway:
+              _testGateway(service, oauthAuthorization: oauthAuthorization),
         ),
       ),
     );
@@ -85,7 +86,8 @@ void main() {
     );
   });
 
-  testWidgets('Qoder account editor exposes PAT, API key and admin OAuth setup', (
+  testWidgets('Qoder account editor exposes PAT, API key and admin OAuth setup',
+      (
     tester,
   ) async {
     final service = LlmAccountConnectorService(
@@ -113,19 +115,23 @@ void main() {
       matching: find.byType(DropdownButton<String>),
     );
     expect(
-      tester.widget<DropdownButton<String>>(authButton).items!
+      tester
+          .widget<DropdownButton<String>>(authButton)
+          .items!
           .map((item) => item.value),
       containsAll(['api_key', 'oauth', 'pat']),
     );
     tester.widget<DropdownButton<String>>(authButton).onChanged!('api_key');
     await tester.pumpAndSettle();
     expect(find.text('DashScope API Key'), findsOneWidget);
-    tester.widget<DropdownButton<String>>(
-      find.descendant(
-        of: authDropdown,
-        matching: find.byType(DropdownButton<String>),
-      ),
-    ).onChanged!('oauth');
+    tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: authDropdown,
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .onChanged!('oauth');
     await tester.pumpAndSettle();
     expect(find.text('QODER_OAUTH_AUTHORIZE_URL'), findsOneWidget);
     expect(find.text('QODER_OAUTH_TOKEN_URL'), findsOneWidget);
@@ -140,12 +146,14 @@ void main() {
     );
     expect(clientSecret.obscureText, isTrue);
 
-    tester.widget<DropdownButton<String>>(
-      find.descendant(
-        of: authDropdown,
-        matching: find.byType(DropdownButton<String>),
-      ),
-    ).onChanged!('pat');
+    tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: authDropdown,
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .onChanged!('pat');
     await tester.pumpAndSettle();
     expect(find.text('Qoder Personal Access Token'), findsOneWidget);
     expect(find.textContaining('45 秒'), findsOneWidget);

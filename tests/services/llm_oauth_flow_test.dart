@@ -225,7 +225,8 @@ void main() {
     },
   );
 
-  test('Devin OAuth exchanges, verifies identity and checks plan status', () async {
+  test('Devin OAuth exchanges, verifies identity and checks plan status',
+      () async {
     final requests = <RequestOptions>[];
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((request) async {
@@ -532,15 +533,13 @@ void main() {
         'aud': LlmOAuthTokenClient.xaiClientId,
         'email': 'xai@example.test',
         'email_verified': true,
-        'exp':
-            DateTime.now()
+        'exp': DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 5))
                 .millisecondsSinceEpoch ~/
             1000,
       };
-      final validIdToken =
-          (JsonWebSignatureBuilder()
+      final validIdToken = (JsonWebSignatureBuilder()
             ..jsonContent = claims
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -665,8 +664,7 @@ void main() {
         client.pollXaiDeviceAuthorization(deviceCode: code),
         throwsA(isA<LlmOAuthFlowException>()),
       );
-      final nullAzpToken =
-          (JsonWebSignatureBuilder()
+      final nullAzpToken = (JsonWebSignatureBuilder()
             ..jsonContent = {...claims, 'azp': null}
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -679,8 +677,7 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       returnedIdToken = validIdToken;
-      final conflictingAzpToken =
-          (JsonWebSignatureBuilder()
+      final conflictingAzpToken = (JsonWebSignatureBuilder()
             ..jsonContent = {...claims, 'azp': 'another-client'}
             ..setProtectedHeader('typ', 'JWT')
             ..setProtectedHeader('kid', 'xai-signing-key')
@@ -966,8 +963,7 @@ void main() {
         throwsA(isA<LlmOAuthFlowException>()),
       );
       expect(
-        () =>
-            LlmOAuthAuthorizationAttempt.openAiChatGpt(
+        () => LlmOAuthAuthorizationAttempt.openAiChatGpt(
           redirectUri: redirect,
           hostId: 'urn:uuid:host',
         ).consumeCallback(
@@ -1278,8 +1274,7 @@ void main() {
               jsonEncode({
                 'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
                 'aud': 'registered-openai-client',
-                'exp':
-                    DateTime.now()
+                'exp': DateTime.now()
                         .toUtc()
                         .add(const Duration(minutes: 5))
                         .millisecondsSinceEpoch ~/
@@ -1358,8 +1353,7 @@ void main() {
           'iss': LlmOAuthAuthorizationAttempt.openAiIssuer,
           'sub': subject,
           'aud': clientId,
-          'exp':
-              DateTime.now()
+          'exp': DateTime.now()
                   .toUtc()
                   .add(const Duration(minutes: 5))
                   .millisecondsSinceEpoch ~/
@@ -1371,8 +1365,7 @@ void main() {
           privateKey: generatedKey.cryptoKeyPair.privateKey,
           keyId: 'signing-key',
         );
-        final idToken =
-            (JsonWebSignatureBuilder()
+        final idToken = (JsonWebSignatureBuilder()
               ..jsonContent = claims
               ..setProtectedHeader('typ', 'JWT')
               ..setProtectedHeader('kid', 'signing-key')
@@ -1463,8 +1456,8 @@ void main() {
         ),
       );
 
-      final bundle = await LlmOAuthTokenClient(dio: dio)
-          .exchangeGeminiDeveloperApi(
+      final bundle =
+          await LlmOAuthTokenClient(dio: dio).exchangeGeminiDeveloperApi(
         attempt: attempt,
         callback: callback,
         clientSecret: 'desktop-client-secret',
@@ -1479,7 +1472,8 @@ void main() {
       expect(bundle['oauth_contract'], 'google-gemini-developer-api-v1');
     },
   );
-  test('Qoder OAuth exchanges configured endpoints and returns a DashScope key', () async {
+  test('Qoder OAuth exchanges configured endpoints and returns a DashScope key',
+      () async {
     final requests = <RequestOptions>[];
     final dio = Dio()
       ..httpClientAdapter = _OAuthAdapter((options) async {
@@ -1495,7 +1489,9 @@ void main() {
                 },
               };
         return ResponseBody.fromString(jsonEncode(response), 200,
-            headers: const {'content-type': ['application/json']});
+            headers: const {
+              'content-type': ['application/json']
+            });
       });
     final attempt = LlmOAuthAuthorizationAttempt.qoder(
       redirectUri: Uri.parse('http://127.0.0.1:43127/auth/callback'),
@@ -1518,7 +1514,8 @@ void main() {
     );
     expect(requests, hasLength(2));
     expect(requests.first.uri.path, '/token');
-    expect((requests.first.data as Map)['client_secret'], 'qoder-client-secret');
+    expect(
+        (requests.first.data as Map)['client_secret'], 'qoder-client-secret');
     expect(requests.first.headers['Authorization'], startsWith('Basic '));
     expect(requests.last.uri.queryParameters['accessToken'], 'qoder-access');
     expect(bundle['api_key'], 'dashscope-account-key');
@@ -1526,7 +1523,6 @@ void main() {
     expect(bundle['oauth_contract'], 'qoder-admin-code-v1');
     expect(bundle['display_name'], 'Qoder User');
   });
-
 }
 
 class _OAuthAdapter implements HttpClientAdapter {
@@ -1539,7 +1535,8 @@ class _OAuthAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}

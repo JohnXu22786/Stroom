@@ -34,8 +34,7 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-    : _dio =
-          dio ??
+      : _dio = dio ??
             Dio(
               BaseOptions(
                 connectTimeout: const Duration(seconds: 10),
@@ -381,8 +380,8 @@ class LlmOAuthTokenClient {
       );
       final userInfoUri =
           LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-            configuration['userInfoUrl'] ?? '',
-          );
+        configuration['userInfoUrl'] ?? '',
+      );
       if (clientId.isEmpty ||
           clientSecret.isEmpty ||
           callback.clientId != clientId ||
@@ -420,9 +419,8 @@ class LlmOAuthTokenClient {
         ),
       );
       final envelope = _jsonObject(userInfoResponse.data);
-      final userInfo = envelope['success'] == true
-          ? _jsonObject(envelope['data'])
-          : null;
+      final userInfo =
+          envelope['success'] == true ? _jsonObject(envelope['data']) : null;
       final apiKey = _nonEmptyString(userInfo?['apiKey']);
       if (apiKey == null) throw const LlmOAuthFlowException();
       final bundle = _credentialBundle(tokens)
@@ -431,19 +429,17 @@ class LlmOAuthTokenClient {
         ..['client_secret'] = clientSecret
         ..['authorize_url'] =
             LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-              configuration['authorizeUrl'] ?? '',
-            ).toString()
+          configuration['authorizeUrl'] ?? '',
+        ).toString()
         ..['token_url'] = tokenUri.toString()
         ..['user_info_url'] =
             LlmOAuthAuthorizationAttempt.validateQoderOAuthEndpoint(
-              configuration['userInfoUrl'] ?? '',
-            ).toString()
+          configuration['userInfoUrl'] ?? '',
+        ).toString()
         ..['oauth_contract'] = 'qoder-admin-code-v1';
-      final identity =
-          _nonEmptyString(userInfo?['email']) ??
+      final identity = _nonEmptyString(userInfo?['email']) ??
           _nonEmptyString(userInfo?['phone']);
-      final displayName =
-          _nonEmptyString(userInfo?['nickname']) ??
+      final displayName = _nonEmptyString(userInfo?['nickname']) ??
           _nonEmptyString(userInfo?['name']);
       if (identity != null) bundle['email'] = identity;
       if (displayName != null) bundle['display_name'] = displayName;
@@ -617,7 +613,8 @@ class LlmOAuthTokenClient {
   static Uint8List? _firstBytesField(
     List<_DevinProtoField> fields,
     int number,
-  ) => fields.where((field) => field.number == number).firstOrNull?.bytes;
+  ) =>
+      fields.where((field) => field.number == number).firstOrNull?.bytes;
 
   static int? _firstVarintField(List<_DevinProtoField> fields, int number) =>
       fields.where((field) => field.number == number).firstOrNull?.value;
@@ -729,8 +726,7 @@ class LlmOAuthTokenClient {
       final verification = _kimiVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _kimiVerificationUri(
+      final complete = _kimiVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -841,8 +837,7 @@ class LlmOAuthTokenClient {
       final verification = _metaMuseVerificationUri(
         data['verification_uri'] ?? data['verification_url'],
       );
-      final complete =
-          _metaMuseVerificationUri(
+      final complete = _metaMuseVerificationUri(
             data['verification_uri_complete'] ??
                 data['verification_url_complete'],
           ) ??
@@ -1018,8 +1013,7 @@ class LlmOAuthTokenClient {
       final deviceCode = _nonEmptyString(data['device_code']);
       final userCode = _nonEmptyString(data['user_code']);
       final verification = _xaiVerificationUri(data['verification_uri']);
-      final complete =
-          _xaiVerificationUri(data['verification_uri_complete']) ??
+      final complete = _xaiVerificationUri(data['verification_uri_complete']) ??
           verification;
       final expiresIn = _seconds(data['expires_in']);
       final interval = _seconds(data['interval']);

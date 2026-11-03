@@ -82,18 +82,16 @@ void main() {
           timedOut: false,
         );
       final service = QoderCliService(runner: runner, tempDirectory: root);
-      final result =
-          await service.chat(
-                token: 'pt-stream-token',
-                modelId: 'qwen3.8-max-preview',
-                body: const {
-                  'messages': [
-                    {'role': 'user', 'content': 'Hello'},
-                  ],
-                },
-                stream: true,
-              )
-              as Stream<List<int>>;
+      final result = await service.chat(
+        token: 'pt-stream-token',
+        modelId: 'qwen3.8-max-preview',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
+        },
+        stream: true,
+      ) as Stream<List<int>>;
       final output = await result.transform(utf8.decoder).join();
       expect(output, contains('"role":"assistant"'));
       expect(output, contains('"content":"Reply"'));
@@ -103,7 +101,8 @@ void main() {
     },
   );
 
-  test('PAT CLI result parser handles successful output and upstream errors', () {
+  test('PAT CLI result parser handles successful output and upstream errors',
+      () {
     expect(
       QoderCliService.parseResult(
         '{"type":"result","is_error":false,"result":"Reply"}',

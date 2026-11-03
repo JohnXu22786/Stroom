@@ -30,11 +30,11 @@ const _qoderCliEnvironmentAllowlist = {
 };
 
 Map<String, String> _safeQoderCliEnvironment(Map<String, String> source) => {
-  for (final entry in source.entries)
-    if (_qoderCliEnvironmentAllowlist.contains(entry.key.toUpperCase()) &&
-        !entry.key.toUpperCase().startsWith('QODER_'))
-      entry.key: entry.value,
-};
+      for (final entry in source.entries)
+        if (_qoderCliEnvironmentAllowlist.contains(entry.key.toUpperCase()) &&
+            !entry.key.toUpperCase().startsWith('QODER_'))
+          entry.key: entry.value,
+    };
 
 const _qoderModelLevels = <String, String>{
   'qwen3.8-max-preview': 'qmodel_preview',
@@ -177,8 +177,7 @@ class QoderCliPlan {
       parentEnvironment ?? Platform.environment,
     );
     env['QODER_PERSONAL_ACCESS_TOKEN'] = token;
-    final executable =
-        parentEnvironment?['CLI_QODER_BIN'] ??
+    final executable = parentEnvironment?['CLI_QODER_BIN'] ??
         Platform.environment['CLI_QODER_BIN'] ??
         'qodercli';
     return QoderCliPlan(
@@ -211,8 +210,8 @@ class QoderCliService {
     QoderCliRunner? runner,
     Directory? tempDirectory,
     this.readCredential,
-  }) : runner = runner ?? const IoQoderCliRunner(),
-       tempDirectory = tempDirectory ?? Directory.systemTemp;
+  })  : runner = runner ?? const IoQoderCliRunner(),
+        tempDirectory = tempDirectory ?? Directory.systemTemp;
 
   Future<List<String>> listModels({required String token}) async {
     final workspace = await tempDirectory.createTemp('stroom-qoder-');
@@ -458,7 +457,7 @@ class QoderCliRequestException implements Exception {
 
 class QoderCliAuthenticationException extends QoderCliRequestException {
   const QoderCliAuthenticationException()
-    : super('Qoder PAT authentication failed.');
+      : super('Qoder PAT authentication failed.');
 }
 
 class QoderCliTimeoutException extends QoderCliRequestException {
@@ -467,7 +466,7 @@ class QoderCliTimeoutException extends QoderCliRequestException {
 
 class QoderCliToolsUnsupportedException extends QoderCliRequestException {
   const QoderCliToolsUnsupportedException()
-    : super('Qoder PAT mode does not support caller tools.');
+      : super('Qoder PAT mode does not support caller tools.');
 }
 
 class QoderCliUpstreamBusyException extends QoderCliRequestException {

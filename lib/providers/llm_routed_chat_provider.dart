@@ -108,18 +108,18 @@ String llmRoutedChatProtocolForAccountModel({
   if (apiProtocolOverride?.isNotEmpty == true) {
     protocol = apiProtocolOverride!;
   } else {
-  final accountModel = account.models
-      .where((model) => model.upstreamModelId == upstreamModelId)
-      .firstOrNull;
-  final modelConfig = accountModel?.config;
-  final modelOverride =
-      modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
-  if (modelOverride is String && modelOverride.isNotEmpty) {
+    final accountModel = account.models
+        .where((model) => model.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final modelConfig = accountModel?.config;
+    final modelOverride =
+        modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
+    if (modelOverride is String && modelOverride.isNotEmpty) {
       protocol = apiProtocolFromLegacyEndpointType(modelOverride);
     } else {
-  final accountProtocol = account.endpointConfig['apiProtocol'] ??
-      account.endpointConfig['chatProtocol'] ??
-      account.endpointConfig['endpointType'];
+      final accountProtocol = account.endpointConfig['apiProtocol'] ??
+          account.endpointConfig['chatProtocol'] ??
+          account.endpointConfig['endpointType'];
       protocol = accountProtocol is String && accountProtocol.isNotEmpty
           ? apiProtocolFromLegacyEndpointType(accountProtocol)
           : apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
