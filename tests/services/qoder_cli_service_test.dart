@@ -129,6 +129,25 @@ void main() {
     );
   });
 
+  test('PAT model discovery strips ANSI styling before matching rows',
+      () async {
+    final root = await Directory.systemTemp.createTemp('qoder-cli-models-');
+    addTearDown(() => root.delete(recursive: true));
+    final runner = _FakeQoderCliRunner()
+      ..result = const QoderCliRunResult(
+        stdout: '\x1B[38;5;128mQwen 3.8 Max Preview\x1B[0m (default)',
+        stderr: '',
+        exitCode: 0,
+        timedOut: false,
+      );
+    final service = QoderCliService(runner: runner, tempDirectory: root);
+
+    expect(await service.listModels(token: 'pt-list-token'), [
+      'qwen3.8-max-preview',
+    ]);
+    expect(root.listSync(), isEmpty);
+  });
+
   test(
     'PAT workspace is removed after request completion and CLI failure',
     () async {

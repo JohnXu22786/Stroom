@@ -48,6 +48,8 @@ const _qoderModelLevels = <String, String>{
   'minimax-m3': 'mmodel',
 };
 
+final _ansiEscapePattern = RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]');
+
 abstract interface class QoderCliRunner {
   Future<QoderCliRunResult> run({
     required String executable,
@@ -230,7 +232,8 @@ class QoderCliService {
       }
       if (result.exitCode != 0) throw QoderCliRequestException(result.stderr);
       final found = <String>[];
-      for (final line in result.stdout.split('\n')) {
+      final output = result.stdout.replaceAll(_ansiEscapePattern, '');
+      for (final line in output.split('\n')) {
         final value = line.trim();
         final normalizedValue = _normalizeModelName(
           value.replaceFirst(
