@@ -2026,6 +2026,92 @@ void main() {
       notifier.dispose();
     });
 
+    for (final importMethod in ['camera', 'app album']) {
+      testWidgets(
+        'successful $importMethod replacement clears unknown retry reset warning',
+        (tester) async {
+          final replacementImage = _createValidOcrTestImage();
+          if (importMethod == 'app album') {
+            await tester.runAsync(
+              () => _storeAppAlbumImage(
+                name: 'replacement',
+                hash: 'ocr_unknown_retry_reset_$importMethod',
+                bytes: replacementImage.bytes,
+              ),
+            );
+          }
+
+          await tester.pumpWidget(
+            _buildTestApp(
+              testImages: [_createValidOcrTestImage()],
+              retryTaskId: 'unknown-image-count-$importMethod',
+              testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                  XFile.fromData(
+                replacementImage.bytes,
+                name: 'replacement.png',
+              ),
+              testImagePayloadPreparer: (_) async =>
+                  prepareOcrImagePayloadSync(replacementImage.bytes),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await _tapClearAndConfirm(tester);
+          const resetWarning = '已重置原重试输入，请重新选择本次 OCR 的全部图片';
+          expect(find.text(resetWarning), findsOneWidget);
+
+          if (importMethod == 'camera') {
+            await tester.tap(find.text('拍照识别'));
+            await tester.pumpAndSettle();
+          } else {
+            await tester.tap(find.text('相册选择'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('从应用相册选择'));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 500));
+            await _pumpUntil(
+              tester,
+              () => find.text('replacement.png').evaluate().isNotEmpty,
+            );
+            await tester.tap(find.text('replacement.png'));
+            await _pumpUntil(
+              tester,
+              () => find.text('确定 (1)').evaluate().isNotEmpty,
+            );
+            await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+            await tester.pumpAndSettle();
+          }
+
+          expect(find.text(resetWarning), findsNothing);
+          expect(find.text('已选 1 张图片'), findsOneWidget);
+        },
+      );
+    }
+
+    testWidgets(
+      'failed replacement import keeps its current error after unknown retry reset',
+      (tester) async {
+        final replacementBytes = _createValidOcrTestImage().bytes;
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [_createValidOcrTestImage()],
+            retryTaskId: 'unknown-image-count-failed-import',
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                XFile.fromData(replacementBytes, name: 'replacement.png'),
+            testImagePayloadPreparer: (_) async =>
+                throw const FormatException('replacement import failed'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await _tapClearAndConfirm(tester);
+        await tester.tap(find.text('拍照识别'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('replacement import failed'), findsOneWidget);
+      },
+    );
+
     testWidgets('retry instruction load failure unlocks OCR start', (
       tester,
     ) async {
