@@ -39,15 +39,20 @@ final localeProvider = NotifierProvider<LocaleSelectionController, Locale?>(
 );
 
 class LocaleSelectionController extends Notifier<Locale?> {
+  var _selectionVersion = 0;
+
   @override
   Locale? build() => null;
 
   Future<void> load() async {
+    final version = _selectionVersion;
     final prefs = await SharedPreferences.getInstance();
+    if (version != _selectionVersion) return;
     state = localeFromCode(prefs.getString(localePreferenceKey));
   }
 
   Future<void> setLocaleCode(String code) async {
+    _selectionVersion++;
     final locale = localeFromCode(code);
     if (locale == null) {
       state = null;
@@ -62,6 +67,7 @@ class LocaleSelectionController extends Notifier<Locale?> {
   }
 
   Future<void> followSystem() async {
+    _selectionVersion++;
     state = null;
     await (await SharedPreferences.getInstance()).remove(localePreferenceKey);
   }
