@@ -17534,6 +17534,81 @@ void main() {
       expect(wrappedTask.error, wrappedLegacyError);
     });
 
+    test('task failure notifications use sanitized OCR errors only', () async {
+      const apiKey = 'test-notification-ocr-secret-827';
+      const ocrTaskId = 'ocr-failure-notification-sanitization';
+      const asrTaskId = 'asr-failure-notification-error-preservation';
+      SharedPreferences.setMockInitialValues({'notifications_enabled': true});
+      final notificationService = NotificationService();
+      final ocrNotification = Completer<NotificationPayload>();
+      final asrNotifications = [
+        Completer<NotificationPayload>(),
+        Completer<NotificationPayload>(),
+      ];
+      notificationService.onInAppNotification = (payload) {
+        if (payload.type != NotificationType.taskFailed) return;
+        if (payload.taskId == ocrTaskId && !ocrNotification.isCompleted) {
+          ocrNotification.complete(payload);
+        } else if (payload.taskId == asrTaskId) {
+          for (final notification in asrNotifications) {
+            if (!notification.isCompleted) {
+              notification.complete(payload);
+              break;
+            }
+          }
+        }
+      };
+      final notifier = BackgroundTaskNotifier();
+
+      try {
+        notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR notification sanitization',
+          startImmediately: false,
+          taskId: ocrTaskId,
+        );
+        notifier.failTask(
+          ocrTaskId,
+          error: 'Provider echoed $apiKey',
+          rawRequest: {
+            'headers': {'Authorization': 'Bearer $apiKey'},
+          },
+        );
+        await notifier.pendingPersistence;
+        final ocrPayload = await ocrNotification.future;
+
+        final sanitizedOcrError = notifier.taskById(ocrTaskId)!.error!;
+        expect(sanitizedOcrError, isNot(contains(apiKey)));
+        expect(ocrPayload.error, sanitizedOcrError);
+        expect(ocrPayload.error, isNot(contains(apiKey)));
+
+        notifier.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'ASR notification error preservation',
+          startImmediately: false,
+          taskId: asrTaskId,
+        );
+        const asrError = 'ASR provider reported a recoverable failure';
+        notifier.failTask(asrTaskId, error: asrError);
+        await notifier.pendingPersistence;
+        final asrPayload = await asrNotifications.first.future;
+
+        expect(asrPayload.error, asrError);
+
+        notifier.failTask(asrTaskId);
+        await notifier.pendingPersistence;
+        final repeatedAsrPayload = await asrNotifications.last.future;
+
+        expect(notifier.taskById(asrTaskId)!.error, asrError);
+        expect(repeatedAsrPayload.error, isNull);
+      } finally {
+        notificationService.onInAppNotification = null;
+        SharedPreferences.setMockInitialValues({});
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    });
+
     test(
       'legacy OCR task and step errors hide unclassified provider echoes',
       () {
