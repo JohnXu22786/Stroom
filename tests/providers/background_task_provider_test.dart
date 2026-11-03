@@ -8992,15 +8992,16 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration redacts natural words after long alpha masks',
+      'legacy OCR instruction migration preserves natural words after long alpha masks',
       () {
-        const promptsAndExpectedInstructions = {
-          'Read the characterization': 'Read the [redacted]',
-          'Read the characteristic carefully': 'Read the [redacted] carefully',
-        };
-        for (final entry in promptsAndExpectedInstructions.entries) {
+        const safePrompts = [
+          'Read the characterization',
+          'Read the characteristic carefully',
+        ];
+        for (var index = 0; index < safePrompts.length; index++) {
+          final safePrompt = safePrompts[index];
           final task = BackgroundTask.fromMap({
-            'id': 'legacy-ocr-natural-long-prefix-prompt',
+            'id': 'legacy-ocr-natural-long-prefix-prompt-$index',
             'type': 'ocr',
             'title': 'legacy OCR request',
             'status': 'failed',
@@ -9014,19 +9015,67 @@ void main() {
                   {
                     'role': 'user',
                     'content': [
-                      {'type': 'text', 'text': entry.key},
+                      {'type': 'text', 'text': safePrompt},
                     ],
                   },
                 ],
               },
             },
           });
+          final persisted = jsonEncode(task.toMap());
+          final serializedRetryData = (jsonDecode(persisted)
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
 
           expect(
             OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-            entry.value,
+            safePrompt,
           );
+          expect(serializedRetryData['instructionContent'], safePrompt);
+          expect(persisted, contains(safePrompt));
         }
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration still redacts character-prefixed credential echoes',
+      () {
+        const apiKey = 'characterQ7mN2vR9xK4pT8sD';
+        const instruction = 'Please use $apiKey for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-character-prefix-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer character…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Please use [redacted] for the request',
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          'Please use [redacted] for the request',
+        );
+        expect(persisted, isNot(contains(apiKey)));
       },
     );
 

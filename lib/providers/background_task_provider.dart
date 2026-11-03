@@ -1014,6 +1014,19 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
 bool _legacyOcrCanRedactShortNaturalWordEcho(String word) =>
     const {'documentation', 'obfuscated'}.contains(word);
 
+bool _legacyOcrIsNaturalReadCharacterPrompt(
+        String naturalWord, String before) =>
+    const {
+      'characteristic',
+      'characteristics',
+      'characterization',
+      'characterizations',
+    }.contains(naturalWord) &&
+    RegExp(
+      r'\b(?:please\s+)?read(?:\s+the)?\s*$',
+      caseSensitive: false,
+    ).hasMatch(before);
+
 final _legacyOcrNaturalSourcePhrasePattern = RegExp(
   r'^\s*from (?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its) )?(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*(?:\s+(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*(?=\s*[,;:.!?]|\s*$)',
   caseSensitive: false,
@@ -2603,8 +2616,12 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 r'^instructions?\b',
                 caseSensitive: false,
               ).hasMatch(afterEcho.trimLeft());
-      final ordinaryNaturalPromptContext =
-          naturalReadInstructionsPrompt && !hasCredentialUseContext;
+      final naturalReadCharacterPrompt = _legacyOcrIsNaturalReadCharacterPrompt(
+        '$prefix$echoSuffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase(),
+        beforeEcho,
+      );
+      final ordinaryNaturalPromptContext = !hasCredentialUseContext &&
+          (naturalReadInstructionsPrompt || naturalReadCharacterPrompt);
       if (ordinaryNaturalPromptContext) return match.group(0)!;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
@@ -2831,6 +2848,8 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide|instructions?)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final naturalReadCharacterPrompt =
+      _legacyOcrIsNaturalReadCharacterPrompt(naturalWord, before);
   final naturalNounInstructionPrompt = RegExp(
         r'\b(?:please\s+)?(?:describe|review|examine|include|provide|extract|read\s+about|use)(?:\s+(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
@@ -2871,6 +2890,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readDocumentationCarefullyPrompt ||
           readAuthenticationDocumentationPrompt ||
           naturalReadFromOcrSourcePrompt ||
+          naturalReadCharacterPrompt ||
           naturalCredentialProcessInstructionPrompt ||
           readHandwritingInstructionPrompt ||
           readNaturalNounInstructionPrompt ||
