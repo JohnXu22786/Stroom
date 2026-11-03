@@ -1140,7 +1140,7 @@ bool _legacyOcrHasCredentialUseContext(
           explicitCredentialTarget ||
           credentialHeaderTarget) &&
       RegExp(
-        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
+        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit|ocr|decode)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final useForReceiptContext = useVerb &&
