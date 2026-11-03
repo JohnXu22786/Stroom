@@ -213,6 +213,7 @@ class LlmConnectorHttpClient {
             // oversized error body can be cancelled before Dio buffers it.
             responseType: ResponseType.stream,
             validateStatus: (status) => status != null,
+            followRedirects: storedAccount.connectorType != 'command-code',
             connectTimeout: connectTimeout,
             sendTimeout: sendTimeout,
             receiveTimeout: receiveTimeout,

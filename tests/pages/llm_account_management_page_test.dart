@@ -23,6 +23,113 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets(
+      'Command Code account keeps supplier and model protocols separate', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'command-code-protocol-ui',
+        connectorType: 'command-code',
+        authType: 'api_key',
+        displayName: 'Command Code',
+        endpointConfig: const {'apiProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'claude-model',
+            upstreamModelId: 'claude-sonnet-4-6',
+            displayName: 'Claude model',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': [
+                'anthropic.messages',
+                'openai.responses',
+              ],
+            },
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'private-command-code-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final defaultProtocol = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          widget.decoration.labelText == '默认 API 协议',
+    );
+    expect(defaultProtocol, findsOneWidget);
+    final protocolsField = tester.widget<DropdownButtonFormField<String>>(
+      defaultProtocol,
+    );
+    expect(protocolsField.initialValue, 'openai.responses');
+    protocolsField.onChanged!('openai.chat_completions');
+    await tester.pumpAndSettle();
+
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text,
+        contains('apiProtocolOverride=anthropic.messages'));
+    expect(modelsField.decoration?.helperText, contains('为每个模型选择'));
+    final modelProtocol = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          widget.decoration.labelText == '模型 API 协议',
+    );
+    final modelProtocolField = tester.widget<DropdownButtonFormField<String>>(
+      modelProtocol,
+    );
+    expect(modelProtocolField.initialValue, 'anthropic.messages');
+    await tester.ensureVisible(modelProtocol);
+    await tester.pumpAndSettle();
+    await tester.tap(modelProtocol);
+    await tester.pumpAndSettle();
+    Finder menuItem(String value) => find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownMenuItem<String> && widget.value == value,
+        );
+    expect(menuItem(''), findsOneWidget);
+    expect(menuItem('anthropic.messages'), findsAtLeastNWidgets(1));
+    expect(menuItem('openai.responses'), findsAtLeastNWidgets(1));
+    // Chat Completions is present only in the supplier default dropdown.
+    expect(menuItem('openai.chat_completions'), findsOneWidget);
+    await tester.tap(find.text('OpenAI Responses').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(saved.models.single.capabilities['supportedApiProtocols'], [
+      'anthropic.messages',
+      'openai.responses',
+    ]);
+    expect(
+      saved.models.single.config['apiProtocolOverride'],
+      'openai.responses',
+    );
+  });
+
   testWidgets('editing a Devin CLI account does not restart CLI login', (
     tester,
   ) async {

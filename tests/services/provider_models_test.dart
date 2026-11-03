@@ -148,6 +148,48 @@ void main() {
     expect(config.models.single.apiProtocolOverride, 'anthropic.messages');
   });
 
+  test('Command Code groups preserve supplier and model protocol settings', () {
+    final account = LlmAccount(
+      id: 'command-code-protocol-account',
+      connectorType: 'command-code',
+      authType: 'api_key',
+      displayName: 'Command Code account',
+      endpointConfig: const {'apiProtocol': 'openai.responses'},
+      models: const [
+        LlmUpstreamModel(
+          id: 'claude-model',
+          upstreamModelId: 'claude-sonnet-4-6',
+          displayName: 'Claude model',
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'supportedApiProtocols': ['anthropic.messages'],
+          },
+          config: {'apiProtocolOverride': 'anthropic.messages'},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'command-code-model-group',
+      displayName: 'Claude model',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'command-code-protocol-account',
+          upstreamModelId: 'claude-sonnet-4-6',
+          localModelId: 'claude-model',
+        ),
+      ],
+    );
+
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+
+    expect(config.apiProtocol, 'openai.responses');
+    expect(config.models.single.apiProtocolOverride, 'anthropic.messages');
+  });
+
   test(
     'selectors expose stable groups while old model references still resolve',
     () {

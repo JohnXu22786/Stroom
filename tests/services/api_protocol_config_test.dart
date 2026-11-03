@@ -149,6 +149,34 @@ void main() {
       }
     });
 
+    test('Command Code API-key mode keeps model protocols account-independent',
+        () {
+      expect(
+        builtinDefaultApiProtocolForConnector('command-code'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'command-code',
+        ),
+        kCustomHttpApiProtocols,
+      );
+      expect(
+        resolveApiProtocol(
+          modelOverride: 'anthropic.messages',
+          supplierProtocol: 'openai.responses',
+          builtinDefault: builtinDefaultApiProtocolForConnector('command-code'),
+        ),
+        'anthropic.messages',
+      );
+      expect(
+        resolveConnectorProtocol('openai.responses', 'command-code'),
+        'openai.responses',
+        reason: 'the API-key account does not select a wire protocol',
+      );
+    });
+
     test(
       'GLM and MiniMax regional account IDs keep Chat protocol defaults',
       () {

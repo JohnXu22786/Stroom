@@ -46,6 +46,7 @@ void main() {
           'openai-compatibility',
           'opencode-go',
           'opencode-zen',
+          'command-code',
           'ollama',
           'glm-cn',
           'minimax-cn',
@@ -464,6 +465,21 @@ void main() {
       );
       expect(vertex.modelCatalog, contains('imagen-4.0-generate-001'));
     });
+
+    test('Command Code is a ChatAdapter API-key account mode', () {
+      final connector = LlmConnectorRegistry.find('command-code')!;
+      expect(connector.displayName, 'Command Code');
+      expect(connector.authTypes, {'api_key'});
+      expect(LlmConnectorRegistry.chatAdapterEndpointType('command-code'),
+          'openai');
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'command-code',
+          'api_key',
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('OpenCode Go and Zen account modes', () {
@@ -675,6 +691,304 @@ void main() {
         }
       },
     );
+  });
+
+  group('Command Code account mode', () {
+    test('discovers model protocols with the matching account key', () async {
+      final observed = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          observed.add(options);
+          final accountId = options.headers['Authorization'] ==
+                  'Bearer private-first-command-key'
+              ? 'command-code-first'
+              : 'command-code-second';
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {
+                  'id': '$accountId/open-model',
+                  'supported_endpoints': [
+                    '/chat/completions',
+                    '/responses',
+                  ],
+                  'capabilities': {'vision': true},
+                },
+                {
+                  'id': '$accountId/claude-sonnet-4-6',
+                  'supported_endpoints': ['/messages'],
+                  'capabilities': {'streaming': true},
+                },
+                {
+                  'id': '$accountId/unsupported',
+                  'supported_endpoints': ['/embeddings'],
+                },
+                {'id': '$accountId/no-protocols'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+
+      final first = await service.saveAccount(
+        _account('command-code-first', 'command-code'),
+        secret: 'private-first-command-key',
+      );
+      final second = await service.saveAccount(
+        _account('command-code-second', 'command-code'),
+        secret: 'private-second-command-key',
+      );
+      final firstModels =
+          await service.discoverModels(first, refreshRemote: true);
+      final secondModels =
+          await service.discoverModels(second, refreshRemote: true);
+
+      expect(observed.map((request) => request.uri.toString()), [
+        'https://api.commandcode.ai/provider/v1/models',
+        'https://api.commandcode.ai/provider/v1/models',
+      ]);
+      expect(observed.map((request) => request.headers['Authorization']), [
+        'Bearer private-first-command-key',
+        'Bearer private-second-command-key',
+      ]);
+      expect(firstModels.map((model) => model.upstreamModelId), [
+        'command-code-first/open-model',
+        'command-code-first/claude-sonnet-4-6',
+      ]);
+      expect(
+        firstModels.first.capabilities['supportedApiProtocols'],
+        ['openai.chat_completions', 'openai.responses'],
+      );
+      expect(firstModels.first.capabilities['vision'], isTrue);
+      expect(firstModels.first.capabilities['streaming'], isNull);
+      expect(
+        firstModels.last.capabilities['supportedApiProtocols'],
+        ['anthropic.messages'],
+      );
+      expect(firstModels.last.capabilities['streaming'], isTrue);
+      expect(
+          secondModels.first.upstreamModelId, 'command-code-second/open-model');
+      expect(
+          await service.readCredential(first.id), 'private-first-command-key');
+      expect(await service.readCredential(second.id),
+          'private-second-command-key');
+      expect(jsonEncode(first.toMap()),
+          isNot(contains('private-first-command-key')));
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('private-first-command-key')),
+      );
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('private-second-command-key')),
+      );
+    });
+
+    test('catalog refresh removes stale model capabilities', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'provider/model',
+                  'display_name': 'Upstream model',
+                  'supported_endpoints': ['/chat/completions'],
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = LlmAccount(
+        id: 'command-code-catalog-refresh',
+        connectorType: 'command-code',
+        authType: 'api_key',
+        displayName: 'Command Code',
+        models: const [
+          LlmUpstreamModel(
+            id: 'saved-model',
+            upstreamModelId: 'provider/model',
+            displayName: 'User model name',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'vision': true,
+              'supportedApiProtocols': [
+                'openai.chat_completions',
+                'openai.responses',
+              ],
+            },
+            config: {'apiProtocolOverride': 'openai.chat_completions'},
+          ),
+        ],
+      );
+      final savedAccount = await service.saveAccount(
+        account,
+        secret: 'private-command-code-key',
+      );
+
+      final models = await service.discoverModels(
+        savedAccount,
+        refreshRemote: true,
+      );
+
+      expect(models.single.id, 'saved-model');
+      expect(models.single.displayName, 'User model name');
+      expect(models.single.capabilities['vision'], isNull);
+      expect(models.single.capabilities['streaming'], isNull);
+      expect(models.single.capabilities['supportedApiProtocols'], [
+        'openai.chat_completions',
+      ]);
+      expect(
+        models.single.config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+    });
+
+    test('builds only the protocol declared for the selected model', () {
+      final account = LlmAccount(
+        id: 'command-code-request',
+        connectorType: 'command-code',
+        authType: 'api_key',
+        displayName: 'Command Code',
+        models: const [
+          LlmUpstreamModel(
+            id: 'open-model',
+            upstreamModelId: 'deepseek/deepseek-v4-flash',
+            displayName: 'Open model',
+            capabilities: {
+              'supportedApiProtocols': [
+                'openai.chat_completions',
+                'openai.responses',
+              ],
+            },
+          ),
+          LlmUpstreamModel(
+            id: 'claude-model',
+            upstreamModelId: 'claude-sonnet-4-6',
+            displayName: 'Claude model',
+            capabilities: {
+              'supportedApiProtocols': ['anthropic.messages'],
+            },
+          ),
+        ],
+      );
+      const cases = [
+        (
+          'deepseek/deepseek-v4-flash',
+          'openai.chat_completions',
+          'https://api.commandcode.ai/provider/v1/chat/completions',
+        ),
+        (
+          'deepseek/deepseek-v4-flash',
+          'openai.responses',
+          'https://api.commandcode.ai/provider/v1/responses',
+        ),
+        (
+          'claude-sonnet-4-6',
+          'anthropic.messages',
+          'https://api.commandcode.ai/provider/v1/messages',
+        ),
+      ];
+      for (final (modelId, protocol, expectedUrl) in cases) {
+        final request = LlmNativeRequestBuilder().build(
+          account: account,
+          credential: 'private-command-key',
+          modelId: modelId,
+          body: const {'model': 'preserve-original-model-id'},
+          stream: true,
+          nativeFormat: switch (protocol) {
+            'openai.responses' => 'responses',
+            'anthropic.messages' => 'anthropic',
+            _ => null,
+          },
+        );
+        expect(request.uri.toString(), expectedUrl, reason: protocol);
+        expect(request.headers['Authorization'], 'Bearer private-command-key');
+        expect((request.body as Map)['model'], 'preserve-original-model-id');
+      }
+
+      expect(
+        () => LlmNativeRequestBuilder().build(
+          account: account,
+          credential: 'private-command-key',
+          modelId: 'claude-sonnet-4-6',
+          body: const {'model': 'claude-sonnet-4-6'},
+          nativeFormat: 'responses',
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      expect(
+        () => LlmNativeRequestBuilder().build(
+          account: LlmAccount(
+            id: account.id,
+            connectorType: account.connectorType,
+            authType: account.authType,
+            displayName: account.displayName,
+            endpointConfig: const {'baseUrl': 'https://attacker.example/v1'},
+            models: account.models,
+          ),
+          credential: 'private-command-key',
+          modelId: 'deepseek/deepseek-v4-flash',
+          body: const {'model': 'deepseek/deepseek-v4-flash'},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+        reason: 'the API key stays bound to the documented service host',
+      );
+    });
+
+    test('does not expose the API key when catalog authentication fails',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            '{"error":"private-command-key is invalid"}',
+            401,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account('command-code-catalog-error', 'command-code'),
+        secret: 'private-command-key',
+      );
+
+      try {
+        await service.discoverModels(account, refreshRemote: true);
+        fail('Expected the rejected catalog request to fail.');
+      } on LlmAccountConnectorException catch (error) {
+        expect(error.toString(), isNot(contains('private-command-key')));
+      }
+      expect(captured?.uri.host, 'api.commandcode.ai');
+      expect(captured?.followRedirects, isFalse);
+    });
   });
 
   group('LlmAccountConnectorService', () {

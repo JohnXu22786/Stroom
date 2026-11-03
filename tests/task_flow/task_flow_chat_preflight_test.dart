@@ -367,6 +367,69 @@ void main() {
     },
   );
 
+  test(
+    'Command Code Task Flow inherits account protocol and preserves model override',
+    () async {
+      final account = LlmAccount(
+        id: 'command-code-task-flow',
+        connectorType: 'command-code',
+        authType: 'api_key',
+        displayName: 'Command Code',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'apiProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'command-code-claude',
+            upstreamModelId: 'claude-sonnet-4-6',
+            displayName: 'Claude model',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': ['anthropic.messages'],
+            },
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'command-code-task-flow-group',
+        displayName: 'Command Code group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'command-code-task-flow',
+            localModelId: 'command-code-claude',
+            upstreamModelId: 'claude-sonnet-4-6',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Command Code assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(config.apiProtocol, 'openai.responses');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'Summarize the input.')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
   test('Grok Build and xAI API OAuth are selectable in Task Flow', () async {
     for (final connectorType in ['grok-cli', 'xai-oauth']) {
       final account = LlmAccount(

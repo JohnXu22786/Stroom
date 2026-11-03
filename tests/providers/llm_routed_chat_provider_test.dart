@@ -125,6 +125,20 @@ void main() {
     );
   });
 
+  test('routes Command Code models through each declared HTTP protocol', () {
+    for (final protocol in const [
+      'openai.chat_completions',
+      'openai.responses',
+      'anthropic.messages',
+    ]) {
+      expect(
+        llmRoutedChatSupportedConnectorTypes(protocol),
+        contains('command-code'),
+        reason: protocol,
+      );
+    }
+  });
+
   test('routes the Devin CLI account only through local ACP', () {
     expect(llmRoutedChatSupportedConnectorTypes('devin.acp'), {
       'devin-cli-agentic',

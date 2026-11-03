@@ -38,6 +38,13 @@ const _openCodeGoBaseUrl = 'https://opencode.ai/zen/go/v1';
 const _openCodeGoAnthropicBaseUrl = 'https://opencode.ai/zen/go';
 const _openCodeZenBaseUrl = 'https://opencode.ai/zen/v1';
 const _openCodeZenAnthropicBaseUrl = 'https://opencode.ai/zen';
+const kCommandCodeBaseUrl = 'https://api.commandcode.ai/provider/v1';
+
+const _commandCodeProtocolByEndpoint = <String, String>{
+  '/chat/completions': 'openai.chat_completions',
+  '/responses': 'openai.responses',
+  '/messages': 'anthropic.messages',
+};
 
 const _qwenCloudRegions = {
   'ap-southeast-1',
@@ -177,6 +184,24 @@ Map<String, Object?> _staticTencentModelCapabilities(
     'reasoning': true,
     if (visualModels.contains(modelId)) 'vision': true,
   };
+}
+
+List<String>? _commandCodeProtocolsForModel(Map<String, dynamic> model) {
+  final endpoints = model['supported_endpoints'];
+  if (endpoints is! Iterable) return null;
+  final protocols = <String>[];
+  for (final endpoint in endpoints.whereType<String>()) {
+    final normalized = endpoint.trim().toLowerCase().replaceFirst(
+          RegExp(r'/+$'),
+          '',
+        );
+    for (final entry in _commandCodeProtocolByEndpoint.entries) {
+      if (normalized.endsWith(entry.key) && !protocols.contains(entry.value)) {
+        protocols.add(entry.value);
+      }
+    }
+  }
+  return protocols.isEmpty ? null : protocols;
 }
 
 String _qwenCloudBaseUrl(Map<String, dynamic> config) {
@@ -455,6 +480,12 @@ abstract final class LlmConnectorRegistry {
       authTypes: {'api_key'},
     ),
     LlmConnectorDefinition(
+      id: 'command-code',
+      displayName: 'Command Code',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+    ),
+    LlmConnectorDefinition(
       id: 'moonshot',
       displayName: 'Moonshot AI (Kimi API)',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -611,6 +642,7 @@ abstract final class LlmConnectorRegistry {
         'openai-api' ||
         'opencode-go' ||
         'opencode-zen' ||
+        'command-code' ||
         'moonshot' ||
         'kimi-coding' ||
         'glm' ||
@@ -1349,6 +1381,7 @@ class LlmAccountConnectorService {
       'openai-api',
       'opencode-go',
       'opencode-zen',
+      'command-code',
       if (account.connectorType == 'claude' && account.authType == 'api_key')
         'claude',
       'gemini',
@@ -1408,6 +1441,9 @@ class LlmAccountConnectorService {
               .where((model) => entitledIds.contains(model.upstreamModelId))
               .toList(),
         );
+      }
+      if (account.connectorType == 'command-code') {
+        return _mergeCommandCodeModelMappings(discovered, account.models);
       }
       if (account.connectorType == 'muse-code') {
         final entitledIds =
@@ -1471,6 +1507,33 @@ class LlmAccountConnectorService {
       merged[model.upstreamModelId] = model;
     }
     return List.unmodifiable(merged.values);
+  }
+
+  static List<LlmUpstreamModel> _mergeCommandCodeModelMappings(
+    List<LlmUpstreamModel> discovered,
+    List<LlmUpstreamModel> configured,
+  ) {
+    final configuredByModel = {
+      for (final model in configured) model.upstreamModelId: model,
+    };
+    final merged = <LlmUpstreamModel>[];
+    for (final upstream in discovered) {
+      final existing = configuredByModel[upstream.upstreamModelId];
+      if (existing == null) {
+        merged.add(upstream);
+        continue;
+      }
+      merged.add(
+        LlmUpstreamModel(
+          id: existing.id,
+          upstreamModelId: upstream.upstreamModelId,
+          displayName: existing.displayName,
+          capabilities: upstream.capabilities,
+          config: {...upstream.config, ...existing.config},
+        ),
+      );
+    }
+    return List.unmodifiable(merged);
   }
 
   /// Refreshes an OAuth credential using the provider's pinned refresh flow.
@@ -2100,6 +2163,7 @@ class LlmAccountConnectorService {
       'openai-api' => 'https://api.openai.com/v1',
       'opencode-go' => _openCodeGoBaseUrl,
       'opencode-zen' => _openCodeZenBaseUrl,
+      'command-code' => kCommandCodeBaseUrl,
       'claude' => 'https://api.anthropic.com/v1',
       'gemini' ||
       'aistudio' ||
@@ -2305,7 +2369,10 @@ class LlmAccountConnectorService {
         try {
           response = await _dio.getUri<Object?>(
             pageUri,
-            options: Options(headers: headers),
+            options: Options(
+              headers: headers,
+              followRedirects: account.connectorType != 'command-code',
+            ),
           );
         } on DioException catch (error) {
           if (error.response?.statusCode != 401 ||
@@ -2316,7 +2383,10 @@ class LlmAccountConnectorService {
           await refreshOAuthToken();
           response = await _dio.getUri<Object?>(
             pageUri,
-            options: Options(headers: headers),
+            options: Options(
+              headers: headers,
+              followRedirects: account.connectorType != 'command-code',
+            ),
           );
         }
         final data = _asJsonMap(response.data);
@@ -2349,6 +2419,13 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          final commandCodeProtocols = account.connectorType == 'command-code'
+              ? _commandCodeProtocolsForModel(map)
+              : null;
+          if (account.connectorType == 'command-code' &&
+              (commandCodeProtocols == null || commandCodeProtocols.isEmpty)) {
+            continue;
+          }
           if (account.connectorType == 'workbuddy') {
             final tags = map['tags'];
             const mediaOnlyTags = {
@@ -2387,7 +2464,13 @@ class LlmAccountConnectorService {
           final vertexSupportsStreaming = vertexActions.contains(
             'streamgeneratecontent',
           );
-          var modelExtensions = map;
+          var modelExtensions = account.connectorType == 'command-code'
+              ? <String, dynamic>{
+                  'supported_endpoints': map['supported_endpoints'],
+                  if (map['capabilities'] is Map)
+                    'capabilities': map['capabilities'],
+                }
+              : map;
           var providerCapabilities = map['capabilities'];
           if (account.connectorType == 'ollama') {
             try {
@@ -2452,6 +2535,10 @@ class LlmAccountConnectorService {
                   if (providerCapabilities is List &&
                       providerCapabilities.contains('vision'))
                     'vision': true,
+                },
+                if (commandCodeProtocols != null) ...{
+                  'chat': true,
+                  'supportedApiProtocols': commandCodeProtocols,
                 },
                 if (account.connectorType == 'codebuddy-cn' ||
                     account.connectorType == 'codebuddy-intl')
@@ -3737,6 +3824,21 @@ class LlmNativeRequestBuilder {
             modelId)) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'command-code') {
+      final model = account.models
+          .where((model) => model.upstreamModelId == modelId)
+          .firstOrNull;
+      final supportedProtocols = model?.capabilities['supportedApiProtocols'];
+      final protocol = switch (nativeFormat) {
+        'responses' => 'openai.responses',
+        'anthropic' => 'anthropic.messages',
+        _ => 'openai.chat_completions',
+      };
+      if (supportedProtocols is! Iterable ||
+          !supportedProtocols.whereType<String>().contains(protocol)) {
+        throw const LlmAccountConnectorException();
+      }
+    }
     if ((account.connectorType == 'grok-cli' ||
             account.connectorType == 'xai-oauth') &&
         !account.models.any((model) => model.upstreamModelId == modelId)) {
@@ -4361,6 +4463,13 @@ class LlmNativeRequestBuilder {
           path =
               nativeFormat == 'responses' ? '/responses' : '/chat/completions';
         }
+      case 'command-code':
+        baseUrl = _baseUrl(config, kCommandCodeBaseUrl);
+        path = switch (nativeFormat) {
+          'responses' => '/responses',
+          'anthropic' => '/messages',
+          _ => '/chat/completions',
+        };
       case 'moonshot':
         baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
         path = '/chat/completions';
@@ -4677,6 +4786,7 @@ class LlmNativeRequestBuilder {
         host == 'generativelanguage.googleapis.com',
       'openai-api' => host == 'api.openai.com',
       'opencode-go' || 'opencode-zen' => host == 'opencode.ai',
+      'command-code' => host == 'api.commandcode.ai',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',
