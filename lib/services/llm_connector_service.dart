@@ -256,6 +256,7 @@ enum LlmNativeProtocol {
   geminiInteractions,
   vertexGenerateContent,
   openAIChatCompletions,
+  kiloCodeChatCompletions,
   ollamaChat,
   bedrockConverse,
 }
@@ -464,6 +465,13 @@ abstract final class LlmConnectorRegistry {
       modelCatalog: kPinnedQoderModels,
     ),
     LlmConnectorDefinition(
+      id: 'kilocode',
+      displayName: 'Kilo Code',
+      protocol: LlmNativeProtocol.kiloCodeChatCompletions,
+      authTypes: {'oauth', 'api_key', 'none'},
+      modelCatalog: kPinnedKiloCodeModels,
+    ),
+    LlmConnectorDefinition(
       id: 'gemini',
       displayName: 'Google Gemini API',
       protocol: LlmNativeProtocol.geminiGenerateContent,
@@ -640,7 +648,8 @@ abstract final class LlmConnectorRegistry {
         'codebuddy-cn' ||
         'codebuddy-intl' ||
         'workbuddy' ||
-        'qoder' =>
+        'qoder' ||
+        'kilocode' =>
           'openai',
         'claude' => 'anthropic',
         'gemini' => 'google.gemini.generate_content',
@@ -791,15 +800,15 @@ class LlmAccountConnectorService {
     final secret = await _readSecureValue(reference);
     if (secret == null || secret.trim().isEmpty) return true;
     final bundle = _decodeCredentialBundle(secret);
-    if (LlmNativeRequestBuilder._credentialBundleString(
-              secret,
-              const ['access_token', 'accessToken'],
-            ) ==
+    if (LlmNativeRequestBuilder._credentialBundleString(secret, const [
+              'access_token',
+              'accessToken',
+            ]) ==
             null ||
-        LlmNativeRequestBuilder._credentialBundleString(
-              secret,
-              const ['api_key', 'apiKey'],
-            ) ==
+        LlmNativeRequestBuilder._credentialBundleString(secret, const [
+              'api_key',
+              'apiKey',
+            ]) ==
             null) {
       return true;
     }
@@ -1480,6 +1489,7 @@ class LlmAccountConnectorService {
       'xai-oauth',
       'muse-code',
       'workbuddy',
+      'kilocode',
       'bedrock',
       'vertex',
       'ollama',
@@ -1515,6 +1525,23 @@ class LlmAccountConnectorService {
       return List.unmodifiable(
         account.models.where(
           (model) => connector.modelCatalog.contains(model.upstreamModelId),
+        ),
+      );
+    }
+    if (account.connectorType == 'kilocode' && account.authType == 'none') {
+      if (account.models.isNotEmpty && !refreshRemote) {
+        return List.unmodifiable(
+          account.models.where(
+            (model) =>
+                kKiloCodeAnonymousFreeModelIds.contains(model.upstreamModelId),
+          ),
+        );
+      }
+      final discovered = await _discoverRemoteModels(account);
+      return List.unmodifiable(
+        discovered.where(
+          (model) =>
+              kKiloCodeAnonymousFreeModelIds.contains(model.upstreamModelId),
         ),
       );
     }
@@ -2285,15 +2312,18 @@ class LlmAccountConnectorService {
       'codebuddy-cn' => 'https://copilot.tencent.com/v2',
       'codebuddy-intl' => 'https://www.codebuddy.ai/v2',
       'workbuddy' => 'https://www.workbuddy.ai/v2',
+      'kilocode' => 'https://api.kilo.ai/api/openrouter',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       _ => null,
     };
-    final base = LlmNativeRequestBuilder._configString(
-          account.endpointConfig,
-          'baseUrl',
-        ) ??
-        fallbackBase;
+    final base = account.connectorType == 'kilocode'
+        ? fallbackBase
+        : LlmNativeRequestBuilder._configString(
+              account.endpointConfig,
+              'baseUrl',
+            ) ??
+            fallbackBase;
     if (base == null || base.isEmpty) {
       throw const LlmAccountConnectorException();
     }
@@ -2327,6 +2357,8 @@ class LlmAccountConnectorService {
         usesGeminiOAuth || usesXaiOAuth || usesTencentOAuth;
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
+    final usesKiloOAuth =
+        account.authType == 'oauth' && account.connectorType == 'kilocode';
     final configuredHeaders = account.endpointConfig['headers'];
     if (configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
@@ -2334,6 +2366,9 @@ class LlmAccountConnectorService {
           headers[entry.key as String] = entry.value as String;
         }
       }
+    }
+    if (account.connectorType == 'kilocode') {
+      headers['X-KILOCODE-EDITORNAME'] = 'Stroom';
     }
     if (account.authType == 'api_key') {
       if (secret == null || secret.isEmpty) {
@@ -2398,8 +2433,18 @@ class LlmAccountConnectorService {
       headers['User-Agent'] =
           'muse-build/1.3.0 (interactive; macos-aarch64; build ac7280f2aca67769d1455a8847bb502b617d50f6)';
       headers['X-Client-Id'] = 'tbh:tui';
+    } else if (usesKiloOAuth) {
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      headers['Authorization'] =
+          'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
+      headers['X-KILOCODE-EDITORNAME'] = 'Stroom';
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
+      if (account.connectorType == 'kilocode') {
+        headers['Authorization'] = 'Bearer anonymous';
+      }
     } else {
       throw const LlmAccountConnectorException();
     }
@@ -2519,6 +2564,11 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          if (account.connectorType == 'kilocode' &&
+              account.authType == 'none' &&
+              !kKiloCodeAnonymousFreeModelIds.contains(modelId)) {
+            continue;
+          }
           final commandCodeProtocols = account.connectorType == 'command-code'
               ? _commandCodeProtocolsForModel(map)
               : null;
@@ -3949,6 +3999,16 @@ class LlmNativeRequestBuilder {
             !kPinnedKimiCodeModels.contains(modelId))) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'kilocode' &&
+        account.authType == 'none' &&
+        !kKiloCodeAnonymousFreeModelIds.contains(modelId)) {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'kilocode' &&
+        nativeFormat != null &&
+        nativeFormat != 'openai.chat_completions') {
+      throw const LlmAccountConnectorException();
+    }
     if (account.connectorType == 'muse-code' &&
         (account.authType != 'oauth' ||
             !kPinnedMuseCodeModels.contains(modelId) ||
@@ -4017,6 +4077,11 @@ class LlmNativeRequestBuilder {
         headers['X-Msh-Device-Name'] = 'Stroom';
         headers['X-Msh-Device-Model'] = 'Stroom';
         headers['X-Msh-Device-Id'] = deviceId;
+        break;
+      case 'kilocode':
+        headers['Authorization'] =
+            'Bearer ${account.authType == 'none' ? 'anonymous' : secret}';
+        headers['X-KILOCODE-EDITORNAME'] = 'Stroom';
         break;
       case 'claude':
         if (account.authType == 'api_key') {
@@ -4171,7 +4236,7 @@ class LlmNativeRequestBuilder {
       headers['Accept'] = 'text/event-stream';
     }
 
-    final requestBody = account.connectorType == 'devin' &&
+    final baseRequestBody = account.connectorType == 'devin' &&
             account.authType == 'oauth'
         ? DevinConnectRpc.encodeChatRequest(
             sessionToken: secret,
@@ -4206,6 +4271,15 @@ class LlmNativeRequestBuilder {
                             stream: stream,
                             nativeFormat: nativeFormat,
                           );
+
+    Object? requestBody = baseRequestBody;
+    if (account.connectorType == 'kilocode' && account.authType == 'none') {
+      if (baseRequestBody is! Map) {
+        throw const LlmAccountConnectorException();
+      }
+      requestBody = Map<String, dynamic>.from(baseRequestBody)
+        ..['model'] = modelId;
+    }
 
     var requestHeaders = headers;
     if (account.connectorType == 'bedrock') {
@@ -4309,6 +4383,7 @@ class LlmNativeRequestBuilder {
         'codex' ||
         'claude' ||
         'kimi-coding' ||
+        'kilocode' ||
         'kimi' ||
         'kimi-ai' ||
         'kimi.ai' ||
@@ -4609,6 +4684,9 @@ class LlmNativeRequestBuilder {
         path = '/chat/completions';
       case 'qoder':
         baseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+        path = '/chat/completions';
+      case 'kilocode':
+        baseUrl = 'https://api.kilo.ai/api/openrouter';
         path = '/chat/completions';
       case 'devin':
         baseUrl = _baseUrl(config, 'https://server.codeium.com');
@@ -4962,6 +5040,7 @@ class LlmNativeRequestBuilder {
       'codebuddy-intl' => host == 'www.codebuddy.ai',
       'workbuddy' => host == 'www.workbuddy.ai',
       'qoder' => host == 'dashscope.aliyuncs.com',
+      'kilocode' => host == 'api.kilo.ai',
       'grok-cli' => host == 'cli-chat-proxy.grok.com',
       'devin' => host == 'server.codeium.com',
       'meta' || 'muse-code' => host == 'api.meta.ai',

@@ -30,6 +30,7 @@ class LlmOAuthTokenClient {
   static const _tencentCodeBuddyCnHost = 'copilot.tencent.com';
   static const _tencentCodeBuddyIntlHost = 'www.codebuddy.ai';
   static const _tencentWorkBuddyHost = 'www.workbuddy.ai';
+  static const _kiloHost = 'api.kilo.ai';
 
   final Dio _dio;
 
@@ -100,6 +101,123 @@ class LlmOAuthTokenClient {
     } catch (_) {
       throw const LlmOAuthFlowException();
     }
+  }
+
+  Future<LlmKiloDeviceCode> startKiloDeviceAuthorization() async {
+    try {
+      final response = await _dio.postUri<Object?>(
+        Uri.https(_kiloHost, '/api/device-auth/codes'),
+        options: Options(
+          headers: const {'Content-Type': 'application/json'},
+          responseType: ResponseType.json,
+        ),
+      );
+      final data = _jsonObject(response.data);
+      final code = _nonEmptyString(data['code']);
+      final verification = _kiloVerificationUri(data['verificationUrl']);
+      if (code == null || verification == null) {
+        throw const LlmOAuthFlowException();
+      }
+      return LlmKiloDeviceCode.fromResponse(
+        deviceCode: code,
+        userCode: code,
+        verificationUri: verification,
+        verificationUriComplete: verification,
+        interval: const Duration(seconds: 3),
+      );
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  /// Polls Kilo's custom endpoint until approval, expiry, or cancellation.
+  /// The source flow supplies no refresh token or advertised code lifetime.
+  Future<Map<String, dynamic>> pollKiloDeviceAuthorization(
+    LlmKiloDeviceCode deviceCode, {
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      if (deviceCode.deviceCode.trim().isEmpty) {
+        throw const LlmOAuthFlowException();
+      }
+      var firstPoll = true;
+      while (true) {
+        if (cancelToken?.isCancelled ?? false) {
+          throw cancelToken!.cancelError!;
+        }
+        if (!firstPoll) {
+          await _waitForKiloPollingInterval(deviceCode.interval, cancelToken);
+        }
+        firstPoll = false;
+        final uri = Uri.https(
+          _kiloHost,
+          '/api/device-auth/codes/${Uri.encodeComponent(deviceCode.deviceCode)}',
+        );
+        final response = await _dio.getUri<Object?>(
+          uri,
+          options: Options(
+            headers: const {'Accept': 'application/json'},
+            responseType: ResponseType.json,
+            validateStatus: (status) => status != null,
+          ),
+          cancelToken: cancelToken,
+        );
+        if (response.statusCode == 202) continue;
+        if (response.statusCode == 410) {
+          throw const LlmOAuthFlowException();
+        }
+        if (response.statusCode == null ||
+            response.statusCode! < 200 ||
+            response.statusCode! >= 300) {
+          throw const LlmOAuthFlowException();
+        }
+        final data = _jsonObject(response.data);
+        if (data['status'] == 'approved') {
+          final token = _nonEmptyString(data['token']);
+          if (token == null) throw const LlmOAuthFlowException();
+          final credentials = <String, String>{
+            'access_token': token,
+            'token_type': 'Bearer',
+          };
+          final email = _nonEmptyString(data['userEmail']);
+          if (email != null) credentials['email'] = email;
+          return credentials;
+        }
+        if (data['status'] == null || data['status'] == 'pending') continue;
+        throw const LlmOAuthFlowException();
+      }
+    } catch (_) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static Uri? _kiloVerificationUri(Object? value) {
+    if (value is! String || value.trim().isEmpty) return null;
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.toLowerCase() != 'app.kilo.ai' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment) {
+      return null;
+    }
+    return uri;
+  }
+
+  static Future<void> _waitForKiloPollingInterval(
+    Duration interval,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(interval);
+      return;
+    }
+    await Future.any<void>([
+      Future<void>.delayed(interval),
+      cancelToken.whenCancel.then<void>(
+        (_) => throw const LlmOAuthFlowException(),
+      ),
+    ]);
   }
 
   Future<Map<String, dynamic>> pollTencentDeviceAuthorization({
