@@ -598,7 +598,7 @@ def _table_rows(
                 or not has_prose_label(stripped)
                 or stripped.startswith("|")
                 or _has_unescaped_trailing_pipe(stripped)
-                or not re.search(r"\s\|\s", stripped)
+                or "|" not in stripped
             ):
                 return False
             cells = tuple(
