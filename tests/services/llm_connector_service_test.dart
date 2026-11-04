@@ -86,14 +86,14 @@ void main() {
         'current_file': {
           'file_name': 'snippet.txt',
           'content_above_cursor':
-              'System instructions:\nYou are helpful.\n\nExplain this code.',
+              'System instruction: You are helpful.\nUser: Explain this code.',
           'content_below_cursor': '',
         },
         'intent': 'generation',
         'generation_type': 'small_file',
         'stream': false,
         'user_instruction':
-            'System instructions:\nYou are helpful.\n\nExplain this code.',
+            'System instruction: You are helpful.\nUser: Explain this code.',
       });
 
       final oauth = builder.build(
@@ -114,6 +114,47 @@ void main() {
     },
   );
 
+  test('GitLab Duo preserves supported text conversation history in order', () {
+    final request = LlmNativeRequestBuilder().build(
+      account: _account('gitlab-history', 'gitlab-duo', authType: 'pat'),
+      credential: 'gitlab-pat-secret',
+      modelId: 'claude-sonnet-4-6',
+      body: const {
+        'messages': [
+          {'role': 'system', 'content': 'Follow the user carefully. '},
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': ' What does'},
+              {'type': 'input_text', 'text': ' this function do? '},
+            ],
+          },
+          {'role': 'developer', 'content': 'Keep the answer concise.'},
+          {
+            'role': 'assistant',
+            'content': [
+              {'type': 'text', 'text': 'It sorts'},
+              {'type': 'text', 'text': ' a list.'},
+            ],
+          },
+          {'role': 'user', 'content': 'Now explain its complexity. '},
+        ],
+      },
+    );
+
+    const expectedPrompt = 'System instruction: Follow the user carefully. \n'
+        'User:  What does this function do? \n'
+        'Developer instruction: Keep the answer concise.\n'
+        'Assistant: It sorts a list.\n'
+        'User: Now explain its complexity. ';
+    final requestBody = request.body as Map;
+    expect(requestBody['user_instruction'], expectedPrompt);
+    expect(
+      (requestBody['current_file'] as Map)['content_above_cursor'],
+      expectedPrompt,
+    );
+  });
+
   test('GitLab Duo rejects unsupported models, protocol shapes and tools', () {
     final builder = LlmNativeRequestBuilder();
     final account = _account('gitlab-limits', 'gitlab-duo', authType: 'pat');
@@ -125,6 +166,92 @@ void main() {
         body: const {
           'messages': [
             {'role': 'user', 'content': 'Hello'},
+          ],
+        },
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    for (final messages in const [
+      [
+        {'role': 'user', 'content': 'Hello'},
+        42,
+      ],
+      [
+        {'role': 'user', 'content': 'Hello'},
+        {'role': 'function', 'content': 'hidden response'},
+      ],
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {'messages': messages},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    for (final assistantCall in const [
+      {
+        'function_call': {'name': 'lookup'}
+      },
+      {'function_call': null},
+      {'tool_calls': 'malformed'},
+      {
+        'functions': [
+          {'name': 'lookup'}
+        ]
+      },
+      {'tools': []},
+      {'tool_choice': 'none'},
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'Calling a tool.',
+                ...assistantCall
+              },
+              {'role': 'user', 'content': 'Continue.'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    for (final role in const ['user', 'system']) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {'role': role, 'content': 'Text', 'tool_calls': []},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'messages': [
+            {
+              'role': 'assistant',
+              'content': 'Calling a tool.',
+              'parallel_tool_calls': true,
+            },
+            {'role': 'user', 'content': 'Continue.'},
           ],
         },
       ),
@@ -144,6 +271,36 @@ void main() {
       ),
       throwsA(isA<LlmAccountConnectorException>()),
     );
+    for (final unsupportedMetadata in const [
+      {'tools': []},
+      {'tool_choice': 'none'},
+      {'tool_calls': []},
+      {'function_call': null},
+      {
+        'functions': [
+          {'name': 'lookup'}
+        ]
+      },
+      {'parallel_tool_calls': true},
+      {
+        'function_call': {'name': 'lookup'}
+      },
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {'role': 'user', 'content': 'Hello'},
+            ],
+            ...unsupportedMetadata,
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
     expect(
       () => builder.build(
         account: account,
@@ -278,7 +435,7 @@ void main() {
         'gitlab-duo',
         authType: 'oauth',
         endpointConfig: const {
-          'baseUrl': 'https://gitlab.example.com',
+          'baseUrl': 'https://gitlab.example.com/gitlab',
           'clientId': 'registered-client',
         },
       ),
@@ -289,13 +446,13 @@ void main() {
         'expires_at': DateTime.utc(2020).toIso8601String(),
         'client_id': 'registered-client',
         'client_secret': 'registered-secret',
-        'base_url': 'https://gitlab.example.com',
+        'base_url': 'https://gitlab.example.com/gitlab',
       }),
     );
 
     expect(await accounts.refreshCredential(account), isTrue);
     expect(refreshRequest!.uri.toString(),
-        'https://gitlab.example.com/oauth/token');
+        'https://gitlab.example.com/gitlab/oauth/token');
     expect(refreshRequest!.data,
         containsPair('refresh_token', 'old-gitlab-refresh'));
     expect(refreshRequest!.data,

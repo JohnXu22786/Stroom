@@ -12,14 +12,14 @@ void main() {
   test('GitLab Duo OAuth uses the configured PKCE application contract', () {
     final attempt = LlmOAuthAuthorizationAttempt.gitlabDuo(
       redirectUri: Uri.parse('http://localhost:20128/callback'),
-      baseUrl: 'https://gitlab.example.com/',
+      baseUrl: 'https://gitlab.example.com/gitlab',
       clientId: 'registered-client-id',
     );
     expect(
       attempt.authorizationUri.origin,
       'https://gitlab.example.com',
     );
-    expect(attempt.authorizationUri.path, '/oauth/authorize');
+    expect(attempt.authorizationUri.path, '/gitlab/oauth/authorize');
     expect(attempt.authorizationUri.queryParameters['scope'],
         'ai_features read_user');
     expect(attempt.authorizationUri.queryParameters['client_id'],
@@ -64,7 +64,7 @@ void main() {
       });
     final attempt = LlmOAuthAuthorizationAttempt.gitlabDuo(
       redirectUri: Uri.parse('http://localhost:20128/callback'),
-      baseUrl: 'https://gitlab.example.com',
+      baseUrl: 'https://gitlab.example.com/gitlab',
       clientId: 'configured-client',
     );
     final callback = attempt.consumeCallback(
@@ -76,12 +76,12 @@ void main() {
     final bundle = await LlmOAuthTokenClient(dio: dio).exchangeGitLabDuoCode(
       attempt: attempt,
       callback: callback,
-      baseUrl: 'https://gitlab.example.com',
+      baseUrl: 'https://gitlab.example.com/gitlab',
       clientSecret: 'configured-secret',
     );
 
-    expect(
-        tokenRequest!.uri.toString(), 'https://gitlab.example.com/oauth/token');
+    expect(tokenRequest!.uri.toString(),
+        'https://gitlab.example.com/gitlab/oauth/token');
     expect(
         tokenRequest!.data, containsPair('grant_type', 'authorization_code'));
     expect(

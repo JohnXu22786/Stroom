@@ -2596,7 +2596,10 @@ class LlmAccountConnectorService {
         final clientSecret = _firstString(bundle, const ['client_secret']);
         if (clientId == null) return null;
         return _LlmTokenRefreshRequest(
-          uri: root.resolve('/oauth/token'),
+          uri: LlmOAuthAuthorizationAttempt.resolveGitLabDuoEndpoint(
+            root,
+            'oauth/token',
+          ),
           body: {
             'client_id': clientId,
             ...?(clientSecret == null ? null : {'client_secret': clientSecret}),
@@ -5206,19 +5209,33 @@ class LlmNativeRequestBuilder {
       if (body is! Map || body['messages'] is! Iterable) {
         throw const LlmAccountConnectorException();
       }
-      final tools = body['tools'];
-      if (tools is Iterable && tools.isNotEmpty) {
+      if (body.containsKey('tools') ||
+          body.containsKey('tool_choice') ||
+          body.containsKey('tool_calls') ||
+          body.containsKey('functions') ||
+          body.containsKey('parallel_tool_calls') ||
+          body.containsKey('function_call')) {
         throw const LlmAccountConnectorException();
       }
-      final systemParts = <String>[];
-      final userParts = <String>[];
+      final conversationParts = <String>[];
       for (final rawMessage in body['messages'] as Iterable) {
-        if (rawMessage is! Map) continue;
+        if (rawMessage is! Map) {
+          throw const LlmAccountConnectorException();
+        }
         final role = rawMessage['role']?.toString().toLowerCase();
+        if (!const {'system', 'developer', 'user', 'assistant', 'tool'}
+            .contains(role)) {
+          throw const LlmAccountConnectorException();
+        }
         if (role == 'tool' ||
-            (role == 'assistant' &&
-                rawMessage['tool_calls'] is Iterable &&
-                (rawMessage['tool_calls'] as Iterable).isNotEmpty)) {
+            const {
+              'tool_calls',
+              'function_call',
+              'tools',
+              'functions',
+              'tool_choice',
+              'parallel_tool_calls',
+            }.any(rawMessage.containsKey)) {
           throw const LlmAccountConnectorException();
         }
         final rawContent = rawMessage['content'];
@@ -5231,22 +5248,21 @@ class LlmNativeRequestBuilder {
                 throw const LlmAccountConnectorException();
               }
               return part['text'] as String;
-            }).join('\n'),
+            }).join(),
           null => '',
           _ => throw const LlmAccountConnectorException(),
         };
-        if (content.trim().isEmpty) continue;
-        if (role == 'system' || role == 'developer') {
-          systemParts.add(content.trim());
-        } else if (role == 'user') {
-          userParts.add(content.trim());
-        }
+        if (content.isEmpty) continue;
+        final label = switch (role) {
+          'system' => 'System instruction',
+          'developer' => 'Developer instruction',
+          'user' => 'User',
+          'assistant' => 'Assistant',
+          _ => throw const LlmAccountConnectorException(),
+        };
+        conversationParts.add('$label: $content');
       }
-      final userPrompt = userParts.isEmpty ? '' : userParts.last;
-      final prompt = systemParts.isEmpty
-          ? userPrompt
-          : 'System instructions:\n${systemParts.join('\n\n')}\n\n$userPrompt'
-              .trim();
+      final prompt = conversationParts.join('\n');
       if (prompt.isEmpty) throw const LlmAccountConnectorException();
       return {
         'current_file': {

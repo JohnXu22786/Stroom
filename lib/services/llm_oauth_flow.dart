@@ -759,7 +759,8 @@ class LlmOAuthAuthorizationAttempt {
         .replaceAll('=', '');
     return LlmOAuthAuthorizationAttempt._(
       redirectUri: redirectUri,
-      authorizationUri: root.resolve('/oauth/authorize').replace(
+      authorizationUri:
+          resolveGitLabDuoEndpoint(root, 'oauth/authorize').replace(
         queryParameters: {
           'client_id': client,
           'redirect_uri': redirectUri.toString(),
@@ -793,6 +794,11 @@ class LlmOAuthAuthorizationAttempt {
       throw const LlmOAuthFlowException();
     }
     return uri;
+  }
+
+  static Uri resolveGitLabDuoEndpoint(Uri root, String endpointPath) {
+    final basePath = root.path.endsWith('/') ? root.path : '${root.path}/';
+    return root.replace(path: '$basePath$endpointPath');
   }
 
   /// Qoder OAuth endpoints are operator supplied; reject insecure or

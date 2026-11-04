@@ -1079,7 +1079,10 @@ class LlmOAuthTokenClient {
     }
     final root = LlmOAuthAuthorizationAttempt.validateGitLabDuoBaseUrl(baseUrl);
     final response = await _dio.postUri<Object?>(
-      root.resolve('/oauth/token'),
+      LlmOAuthAuthorizationAttempt.resolveGitLabDuoEndpoint(
+        root,
+        'oauth/token',
+      ),
       data: {
         'client_id': clientId,
         if (clientSecret.trim().isNotEmpty)
