@@ -6,19 +6,135 @@ import 'package:dio/dio.dart';
 /// The pasted Cloud-IDE-JWT is not a refreshable OAuth credential.
 class TraeSoloCredential {
   final String accessToken;
+  final String? refreshToken;
   final DateTime expiresAt;
   final Map<String, Object?> identity;
 
   const TraeSoloCredential({
     required this.accessToken,
+    this.refreshToken,
     required this.expiresAt,
     required this.identity,
   });
+
+  factory TraeSoloCredential.fromCallbackUri(
+    Uri callback, {
+    required String expectedState,
+    DateTime? now,
+  }) {
+    if (callback.scheme != 'http' ||
+        callback.host != '127.0.0.1' ||
+        callback.path != '/authorize' ||
+        callback.port < 1 ||
+        callback.userInfo.isNotEmpty ||
+        callback.fragment.isNotEmpty ||
+        callback.toString().length > 32768 ||
+        expectedState.isEmpty ||
+        callback.queryParametersAll.keys.any(
+          (key) => callback.queryParametersAll[key]!.length != 1,
+        ) ||
+        callback.queryParameters['loginTraceID'] != expectedState) {
+      throw const FormatException('Invalid Trae authorization callback.');
+    }
+    final rawBundle = callback.queryParameters['userJwt'];
+    final rawInfo = callback.queryParameters['userInfo'];
+    if (rawBundle == null ||
+        rawBundle.length > 16384 ||
+        rawInfo == null ||
+        rawInfo.length > 8192) {
+      throw const FormatException('Invalid Trae authorization callback.');
+    }
+    try {
+      final bundleValue = jsonDecode(rawBundle);
+      final infoValue = jsonDecode(rawInfo);
+      if (bundleValue is! Map || infoValue is! Map) {
+        throw const FormatException();
+      }
+      final bundle = Map<String, dynamic>.from(bundleValue);
+      final info = Map<String, dynamic>.from(infoValue);
+      final token = bundle['Token'];
+      if (token is! String || token.isEmpty) throw const FormatException();
+      final credential = TraeSoloCredential.fromPastedValue(token, now: now);
+      final rawExpiry = bundle['TokenExpireAt'];
+      final epochMilliseconds = rawExpiry is num
+          ? rawExpiry.toInt()
+          : rawExpiry is String
+              ? int.tryParse(rawExpiry)
+              : null;
+      final expiry = epochMilliseconds != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              epochMilliseconds,
+              isUtc: true,
+            )
+          : rawExpiry is String
+              ? DateTime.tryParse(rawExpiry)
+              : null;
+      final identity = Map<String, Object?>.from(credential.identity)
+        ..['webId'] = _firstValue(info, const ['WebID', 'UserID']) ??
+            credential.identity['webId']
+        ..['bizUserId'] = _firstValue(info, const ['UserID']) ??
+            credential.identity['bizUserId']
+        ..['userUniqueId'] = _firstValue(info, const ['UserID']) ??
+            credential.identity['userUniqueId']
+        ..['tenantId'] = _firstValue(info, const ['TenantID'])
+        ..['clientId'] =
+            _firstValue(bundle, const ['ClientID']) ?? 'en1oxy7wnw8j9n'
+        ..['host'] = _validatedCallbackHost(
+          callback.queryParameters['host'],
+        )
+        ..['region'] =
+            _firstValue(info, const ['Region']) ?? credential.identity['region']
+        ..['aiRegion'] = _firstValue(info, const ['AIRegion', 'Region']) ??
+            credential.identity['aiRegion']
+        ..['userTimezone'] = _firstValue(info, const ['Timezone']) ??
+            credential.identity['userTimezone']
+        ..['userRegion'] = _firstValue(info, const ['UserRegion']) ??
+            credential.identity['userRegion']
+        ..['authMethod'] = 'oauth_callback';
+      identity.removeWhere((_, value) => value == null);
+      return TraeSoloCredential(
+        accessToken: credential.accessToken,
+        refreshToken: _firstValue(bundle, const ['RefreshToken']) ??
+            callback.queryParameters['refreshToken'],
+        expiresAt: expiry ?? credential.expiresAt,
+        identity: Map.unmodifiable(identity),
+      );
+    } on FormatException {
+      throw const FormatException('Invalid Trae authorization callback.');
+    } catch (_) {
+      throw const FormatException('Invalid Trae authorization callback.');
+    }
+  }
+
+  static String? _firstValue(Map<dynamic, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  static String? _validatedCallbackHost(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final uri = Uri.tryParse(value.contains('://') ? value : 'https://$value');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.path.isNotEmpty && uri.path != '/' ||
+        uri.query.isNotEmpty ||
+        uri.fragment.isNotEmpty ||
+        !(uri.host == 'api.trae.ai' || uri.host.endsWith('.trae.ai'))) {
+      throw const FormatException('Invalid Trae host.');
+    }
+    return uri.origin;
+  }
 
   factory TraeSoloCredential.fromPastedValue(String value, {DateTime? now}) {
     var token = value.trim();
     DateTime? storedExpiry;
     Map<String, dynamic>? storedIdentity;
+    String? storedRefreshToken;
+    String? storedClientId;
     if (token.startsWith('{')) {
       try {
         final stored = jsonDecode(token);
@@ -27,6 +143,14 @@ class TraeSoloCredential {
           final rawExpiry = stored['expires_at'] ?? stored['expiresAt'];
           final rawIdentity =
               stored['providerSpecificData'] ?? stored['identity'];
+          final rawRefresh = stored['refresh_token'] ?? stored['refreshToken'];
+          final rawClientId = stored['client_id'] ?? stored['clientId'];
+          if (rawClientId is String && rawClientId.trim().isNotEmpty) {
+            storedClientId = rawClientId.trim();
+          }
+          if (rawRefresh is String && rawRefresh.trim().isNotEmpty) {
+            storedRefreshToken = rawRefresh.trim();
+          }
           if (rawToken is String && rawToken.trim().isNotEmpty) {
             token = rawToken.trim();
             if (rawExpiry is String) {
@@ -64,8 +188,7 @@ class TraeSoloCredential {
     }
     final current = (now ?? DateTime.now()).toUtc();
     final exp = claims['exp'];
-    final expiry =
-        storedExpiry ??
+    final expiry = storedExpiry ??
         (exp is num
             ? DateTime.fromMillisecondsSinceEpoch(
                 exp.toInt() * 1000,
@@ -79,8 +202,7 @@ class TraeSoloCredential {
       'scope': _claim(claims, const ['scope']) ?? 'marscode-us',
       'tenant': _claim(claims, const ['tenant']) ?? 'marscode',
       'region': _claim(claims, const ['region']) ?? 'US-East',
-      'aiRegion':
-          _claim(claims, const ['ai_region', 'aiRegion']) ??
+      'aiRegion': _claim(claims, const ['ai_region', 'aiRegion']) ??
           _claim(claims, const ['region']) ??
           'US-East',
       'appLanguage':
@@ -100,19 +222,28 @@ class TraeSoloCredential {
         }
       }
     }
+    if (storedClientId != null) identity['clientId'] = storedClientId;
+    final storedHost = storedIdentity?['host'];
+    if (storedHost is String) {
+      final host = _validatedCallbackHost(storedHost);
+      if (host != null) identity['host'] = host;
+    }
     identity.removeWhere((_, value) => value == null);
     return TraeSoloCredential(
       accessToken: token,
+      refreshToken: storedRefreshToken,
       expiresAt: expiry,
       identity: Map.unmodifiable(identity),
     );
   }
 
   String toStoredValue() => jsonEncode({
-    'access_token': accessToken,
-    'expires_at': expiresAt.toUtc().toIso8601String(),
-    'providerSpecificData': identity,
-  });
+        'access_token': accessToken,
+        if (refreshToken != null) 'refresh_token': refreshToken,
+        if (identity['clientId'] is String) 'client_id': identity['clientId'],
+        'expires_at': expiresAt.toUtc().toIso8601String(),
+        'providerSpecificData': identity,
+      });
 
   static String? _claim(Map<String, dynamic> claims, List<String> names) {
     for (final name in names) {
@@ -127,6 +258,44 @@ class TraeSoloConnector {
   static const defaultBaseUrl = 'https://core-normal.trae.ai/api/remote/v1';
   static const modelsPath =
       '/models?functions=solo_agent_remote,solo_work_remote';
+
+  static Uri authorizationUri(Uri callbackUri, String state) {
+    if (callbackUri.scheme != 'http' ||
+        callbackUri.host != '127.0.0.1' ||
+        callbackUri.path != '/authorize' ||
+        callbackUri.userInfo.isNotEmpty ||
+        state.length < 32 ||
+        !RegExp(r'^[a-f0-9]+$').hasMatch(state)) {
+      throw const FormatException('Invalid Trae callback setup.');
+    }
+    final deviceId = state
+        .split('')
+        .take(19)
+        .map((digit) => (int.parse(digit, radix: 16) % 10).toString())
+        .join();
+    return Uri.https('www.trae.ai', '/authorization', {
+      'login_version': '1',
+      'auth_from': 'solo',
+      'login_channel': 'native_ide',
+      'plugin_version': '2.3.24254',
+      'auth_type': 'local',
+      'client_id': 'en1oxy7wnw8j9n',
+      'redirect': '0',
+      'login_trace_id': state,
+      'auth_callback_url': callbackUri.toString(),
+      'machine_id': state.substring(0, 32),
+      'device_id': deviceId,
+      'x_device_id': deviceId,
+      'x_machine_id': state.substring(0, 32),
+      'x_device_brand': 'Mac14,7',
+      'x_device_type': 'mac',
+      'x_os_version': 'macOS 26.4.1',
+      'x_env': '',
+      'x_app_version': '0.1.7',
+      'x_app_type': 'stable',
+      'hide_saas_login': 'true',
+    });
+  }
 
   static Uri modelsUriFor(String baseUrl) =>
       Uri.parse('${baseUrl.replaceFirst(RegExp(r'/+$'), '')}$modelsPath');
@@ -312,7 +481,7 @@ class TraeSoloHttpAdapter {
   const TraeSoloHttpAdapter(this.dio);
 
   Future<({int statusCode, Object body, Map<String, List<String>> headers})>
-  request({
+      request({
     required String baseUrl,
     required String credential,
     required String modelId,

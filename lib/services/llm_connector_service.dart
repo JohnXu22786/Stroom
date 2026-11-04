@@ -459,6 +459,7 @@ abstract final class LlmConnectorRegistry {
       displayName: 'Trae SOLO',
       protocol: LlmNativeProtocol.openAIChatCompletions,
       authTypes: {'session_token'},
+      canRefreshCredentials: true,
     ),
     LlmConnectorDefinition(
       id: 'meta',
@@ -2099,10 +2100,21 @@ class LlmAccountConnectorService {
     if (account.connectorType == 'muse-code' && account.authType == 'oauth') {
       return _refreshMetaDca(account, bundle, cancelToken);
     }
-    if (account.authType != 'oauth') return false;
+    if (account.authType != 'oauth' &&
+        !(account.connectorType == 'trae' &&
+            account.authType == 'session_token')) {
+      return false;
+    }
     if (account.connectorType == 'github' ||
         account.connectorType == 'ghe-copilot') {
       return _refreshCopilotCredential(account, bundle, cancelToken);
+    }
+    if (account.connectorType == 'trae') {
+      final providerData = bundle['providerSpecificData'];
+      if (providerData is! Map ||
+          providerData['authMethod'] != 'oauth_callback') {
+        return false;
+      }
     }
 
     final refreshToken = _firstString(bundle, const [
@@ -2128,13 +2140,29 @@ class LlmAccountConnectorService {
             );
       if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       final outerTokenResponse = _asJsonMap(response.data);
+      if (account.connectorType == 'trae') {
+        final responseMetadata = outerTokenResponse?['ResponseMetadata'];
+        final responseError = responseMetadata is Map
+            ? responseMetadata['Error']
+            : null;
+        final errorCode = responseError is Map ? responseError['Code'] : null;
+        if (errorCode != null && errorCode != false && errorCode != '') {
+          throw const LlmAccountConnectorException();
+        }
+      }
       final nestedTokenData = outerTokenResponse?['data'];
-      final tokenResponse = nestedTokenData is Map
+      final traeResult = outerTokenResponse?['Result'];
+      final tokenResponse = account.connectorType == 'trae'
+          ? traeResult is Map
+                ? Map<String, dynamic>.from(traeResult)
+                : null
+          : nestedTokenData is Map
           ? Map<String, dynamic>.from(nestedTokenData)
           : outerTokenResponse;
-      final accessToken = _firstString(tokenResponse, const [
+      final accessToken = _firstString(tokenResponse, [
         'access_token',
         'accessToken',
+        if (account.connectorType == 'trae') 'Token',
       ]);
       if (accessToken == null) throw const LlmAccountConnectorException();
       final xaiRefreshScope = account.connectorType == 'grok-cli' ||
@@ -2151,6 +2179,37 @@ class LlmAccountConnectorService {
       ]);
       if (rotatedRefreshToken != null) {
         updated['refresh_token'] = rotatedRefreshToken;
+      }
+      if (account.connectorType == 'trae') {
+        final expiryValue = tokenResponse?['TokenExpireAt'];
+        final epochMilliseconds = expiryValue is num
+            ? expiryValue.toInt()
+            : expiryValue is String
+                ? int.tryParse(expiryValue)
+                : null;
+        final expiry = epochMilliseconds != null
+            ? DateTime.fromMillisecondsSinceEpoch(
+                epochMilliseconds,
+                isUtc: true,
+              )
+            : expiryValue is String
+                ? DateTime.tryParse(expiryValue)
+                : null;
+        if (expiry != null) {
+          updated['expires_at'] = expiry.toIso8601String();
+        } else {
+          updated.remove('expires_at');
+          updated.remove('expiresAt');
+          updated.remove('expired');
+        }
+        final returnedRefresh = _firstString(tokenResponse, const [
+          'RefreshToken',
+          'refresh_token',
+          'refreshToken',
+        ]);
+        if (returnedRefresh != null) {
+          updated['refresh_token'] = returnedRefresh;
+        }
       }
       if (xaiRefreshScope != null) updated['scope'] = xaiRefreshScope;
       final claudeAccount = tokenResponse?['account'];
@@ -2206,7 +2265,11 @@ class LlmAccountConnectorService {
         updated['expires_at'] = expiry.toIso8601String();
         updated['expired'] = expiry.toIso8601String();
       }
-      await saveAccount(account, secret: jsonEncode(updated));
+      await saveAccount(
+        account,
+        secret: jsonEncode(updated),
+        traeCallbackIssued: account.connectorType == 'trae',
+      );
       return true;
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) rethrow;
@@ -2579,6 +2642,43 @@ class LlmAccountConnectorService {
           body: const <String, Object?>{},
           contentType: Headers.jsonContentType,
           headers: {'Authorization': 'Bearer $refreshToken'},
+        );
+      case 'trae':
+        final clientId =
+            _firstString(bundle, const ['client_id', 'clientId']) ??
+            'en1oxy7wnw8j9n';
+        final providerData = bundle['providerSpecificData'];
+        final hostValue = providerData is Map
+            ? _firstString(Map<String, dynamic>.from(providerData), const [
+                'host',
+              ])
+            : null;
+        final hostUri = hostValue == null
+            ? Uri.parse('https://api.trae.ai')
+            : Uri.tryParse(
+                hostValue.contains('://') ? hostValue : 'https://$hostValue',
+              );
+        if (hostUri == null ||
+            hostUri.scheme != 'https' ||
+            hostUri.userInfo.isNotEmpty ||
+            !(hostUri.host == 'api.trae.ai' ||
+                hostUri.host.endsWith('.trae.ai'))) {
+          return null;
+        }
+        return _LlmTokenRefreshRequest(
+          uri: hostUri.replace(
+            path: '/cloudide/api/v3/trae/oauth/ExchangeToken',
+            query: null,
+            fragment: null,
+          ),
+          body: {
+            'ClientID': clientId,
+            'RefreshToken': refreshToken,
+            'ClientSecret': '-',
+            'UserID': '',
+          },
+          contentType: Headers.jsonContentType,
+          headers: const {'Accept': 'application/json'},
         );
       case 'codex':
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
@@ -3054,10 +3154,13 @@ class LlmAccountConnectorService {
           'codebuddy-intl',
           'workbuddy',
         }.contains(account.connectorType);
-    final usesRefreshableOAuth = usesGeminiOAuth ||
+    final usesRefreshableOAuth =
+        usesGeminiOAuth ||
         usesXaiOAuth ||
         usesTencentOAuth ||
-        (account.authType == 'oauth' && account.connectorType == 'openference');
+        (account.authType == 'oauth' &&
+            account.connectorType == 'openference') ||
+        account.connectorType == 'trae';
     final usesGrokBuildOAuth =
         account.authType == 'oauth' && account.connectorType == 'grok-cli';
     final usesKiloOAuth =
@@ -3897,7 +4000,11 @@ class LlmAccountConnectorService {
   /// Adds or updates an account. Pass [secret] to replace its secure value;
   /// omit it to retain the existing value. API/OAuth/service-account secrets
   /// never enter the account's endpoint configuration or preference record.
-  Future<LlmAccount> saveAccount(LlmAccount account, {String? secret}) async {
+  Future<LlmAccount> saveAccount(
+    LlmAccount account, {
+    String? secret,
+    bool traeCallbackIssued = false,
+  }) async {
     final lease =
         await LlmAccountMigrationService.acquireCredentialTransaction();
     String? reference;
@@ -3914,7 +4021,17 @@ class LlmAccountConnectorService {
     try {
       account = _canonicalAccount(account);
       if (secret != null && account.connectorType == 'trae') {
-        secret = TraeSoloCredential.fromPastedValue(secret).toStoredValue();
+        final credential = TraeSoloCredential.fromPastedValue(secret);
+        final normalized =
+            jsonDecode(credential.toStoredValue()) as Map<String, dynamic>;
+        final providerData = Map<String, dynamic>.from(
+          normalized['providerSpecificData'] as Map? ?? const {},
+        );
+        if (traeCallbackIssued && credential.refreshToken != null) {
+          providerData['authMethod'] = 'oauth_callback';
+        }
+        normalized['providerSpecificData'] = providerData;
+        secret = jsonEncode(normalized);
       }
       _validateAccount(account);
       if (secret != null) _validateCredential(account, secret);

@@ -141,8 +141,25 @@ class LlmConnectorHttpClient {
         throw const LlmConnectorHttpException();
       }
     }
+    final accountForRefresh = storedAccount;
     var didPrepareCredential = false;
     var didRetry = false;
+    Future<bool> refreshTraeCredential() async {
+      try {
+        return await accountService.refreshCredential(
+          accountForRefresh,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) {
+          throw const LlmConnectorRequestCancelled();
+        }
+        throw const LlmConnectorAuthenticationRequired();
+      } catch (_) {
+        throw const LlmConnectorAuthenticationRequired();
+      }
+    }
+
     while (true) {
       final requestCancelToken = _requestCancelToken(cancelToken);
       final credential = await accountService.readCredential(storedAccount.id);
@@ -157,6 +174,16 @@ class LlmConnectorHttpClient {
           throw const LlmConnectorAuthenticationRequired();
         }
         final requestMessages = body['messages'] as List;
+        final traeCredential = TraeSoloCredential.fromPastedValue(credential);
+        if (!didPrepareCredential &&
+            !traeCredential.expiresAt.isAfter(DateTime.now().toUtc())) {
+          didPrepareCredential = true;
+          if (traeCredential.refreshToken != null &&
+              await refreshTraeCredential()) {
+            continue;
+          }
+          throw const LlmConnectorAuthenticationRequired();
+        }
         final requestTools = body['tools'];
         final requestFunctions = body['functions'];
         if ((requestTools is Iterable && requestTools.isNotEmpty) ||
@@ -196,6 +223,12 @@ class LlmConnectorHttpClient {
           throw const LlmConnectorAuthenticationRequired();
         } on TraeSoloHttpException catch (error) {
           if (error.statusCode == 401 || error.statusCode == 403) {
+            if (!didRetry && traeCredential.refreshToken != null) {
+              didRetry = true;
+              if (await refreshTraeCredential()) {
+                continue;
+              }
+            }
             throw const LlmConnectorAuthenticationRequired();
           }
           throw LlmConnectorHttpException(

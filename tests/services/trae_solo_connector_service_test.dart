@@ -12,6 +12,418 @@ import 'package:stroom/services/trae_solo_connector.dart';
 
 void main() {
   test(
+    'refreshes only callback-issued Trae credentials by ExchangeToken',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'ResponseMetadata': {},
+              'Result': {
+                'Token': _testJwt({'web_id': 'web-2'}),
+                'RefreshToken': 'refresh-2',
+                'TokenExpireAt': DateTime.utc(
+                  2030,
+                  1,
+                  2,
+                ).millisecondsSinceEpoch.toString(),
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final originalToken = _testJwt({'web_id': 'web-1'});
+      final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+        'loginTraceID': 'state-123456789012345678901234567890',
+        'userJwt': jsonEncode({
+          'ClientID': 'client-1',
+          'Token': originalToken,
+          'RefreshToken': 'refresh-1',
+          'TokenExpireAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 1))
+              .millisecondsSinceEpoch,
+        }),
+        'userInfo': jsonEncode({'UserID': 'user-1'}),
+        'host': 'api-us.trae.ai',
+      });
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'trae-callback',
+          connectorType: 'trae',
+          authType: 'session_token',
+          displayName: 'Trae callback account',
+          status: LlmAccountStatus.ready,
+        ),
+        secret: TraeSoloCredential.fromCallbackUri(
+          callback,
+          expectedState: 'state-123456789012345678901234567890',
+        ).toStoredValue(),
+        traeCallbackIssued: true,
+      );
+
+      expect(await service.refreshCredential(account), isTrue);
+      expect(
+        requests.single.uri.toString(),
+        'https://api-us.trae.ai/cloudide/api/v3/trae/oauth/ExchangeToken',
+      );
+      expect(requests.single.data, {
+        'ClientID': 'client-1',
+        'RefreshToken': 'refresh-1',
+        'ClientSecret': '-',
+        'UserID': '',
+      });
+      final refreshed = TraeSoloCredential.fromPastedValue(
+        (await service.readCredential(account.id))!,
+      );
+      expect(refreshed.refreshToken, 'refresh-2');
+      expect(refreshed.accessToken, isNot(originalToken));
+      expect(refreshed.expiresAt, DateTime.utc(2030, 1, 2));
+    },
+  );
+
+  test(
+    'rejects a Trae refresh error envelope even when Result has a token',
+    () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'ResponseMetadata': {
+                'Error': {'Code': 'InvalidRefreshToken'},
+              },
+              'Result': {
+                'Token': _testJwt({'web_id': 'must-not-be-saved'}),
+                'RefreshToken': 'must-not-be-saved',
+                'TokenExpireAt': DateTime.utc(
+                  2030,
+                  1,
+                  2,
+                ).millisecondsSinceEpoch,
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final originalToken = _testJwt({'web_id': 'web-1'});
+      final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+        'loginTraceID': 'state-123456789012345678901234567890',
+        'userJwt': jsonEncode({
+          'ClientID': 'client-1',
+          'Token': originalToken,
+          'RefreshToken': 'refresh-1',
+          'TokenExpireAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 1))
+              .millisecondsSinceEpoch,
+        }),
+        'userInfo': jsonEncode({'UserID': 'user-1'}),
+      });
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'trae-callback-error',
+          connectorType: 'trae',
+          authType: 'session_token',
+          displayName: 'Trae callback account',
+          status: LlmAccountStatus.ready,
+        ),
+        secret: TraeSoloCredential.fromCallbackUri(
+          callback,
+          expectedState: 'state-123456789012345678901234567890',
+        ).toStoredValue(),
+        traeCallbackIssued: true,
+      );
+
+      await expectLater(
+        service.refreshCredential(account),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      final stored = TraeSoloCredential.fromPastedValue(
+        (await service.readCredential(account.id))!,
+      );
+      expect(stored.accessToken, originalToken);
+      expect(stored.refreshToken, 'refresh-1');
+    },
+  );
+
+  test('uses the rotated JWT expiry when Trae omits TokenExpireAt', () async {
+    final rotatedExpiry = DateTime.now().toUtc().add(const Duration(days: 2));
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        return ResponseBody.fromString(
+          jsonEncode({
+            'ResponseMetadata': {},
+            'Result': {
+              'Token': _testJwt({
+                'web_id': 'web-2',
+                'exp': rotatedExpiry.millisecondsSinceEpoch ~/ 1000,
+              }),
+              'RefreshToken': 'refresh-2',
+            },
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+      dio: dio,
+    );
+    final originalToken = _testJwt({'web_id': 'web-1'});
+    final staleExpiry = DateTime.now().toUtc().subtract(
+      const Duration(minutes: 1),
+    );
+    final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+      'loginTraceID': 'state-123456789012345678901234567890',
+      'userJwt': jsonEncode({
+        'ClientID': 'client-1',
+        'Token': originalToken,
+        'RefreshToken': 'refresh-1',
+        'TokenExpireAt': staleExpiry.millisecondsSinceEpoch,
+      }),
+      'userInfo': jsonEncode({'UserID': 'user-1'}),
+    });
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'trae-callback-no-expiry',
+        connectorType: 'trae',
+        authType: 'session_token',
+        displayName: 'Trae callback account',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: TraeSoloCredential.fromCallbackUri(
+        callback,
+        expectedState: 'state-123456789012345678901234567890',
+      ).toStoredValue(),
+      traeCallbackIssued: true,
+    );
+
+    expect(await service.refreshCredential(account), isTrue);
+    final refreshed = TraeSoloCredential.fromPastedValue(
+      (await service.readCredential(account.id))!,
+    );
+    expect(refreshed.accessToken, isNot(originalToken));
+    expect(
+      refreshed.expiresAt.millisecondsSinceEpoch ~/ 1000,
+      rotatedExpiry.millisecondsSinceEpoch ~/ 1000,
+    );
+  });
+
+  test('replays a Trae request once after a 401 refresh', () async {
+    final requests = <RequestOptions>[];
+    var sessionAttempts = 0;
+    var refreshAttempts = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        if (options.uri.path.endsWith('/ExchangeToken')) {
+          refreshAttempts++;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'ResponseMetadata': {},
+              'Result': {
+                'Token': _testJwt({'web_id': 'web-$refreshAttempts'}),
+                'RefreshToken': 'refresh-${refreshAttempts + 1}',
+                'TokenExpireAt': DateTime.utc(
+                  2030,
+                  1,
+                  2,
+                ).millisecondsSinceEpoch,
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        }
+        if (options.uri.path.endsWith('/chat_sessions')) {
+          sessionAttempts++;
+          if (sessionAttempts == 1) return ResponseBody.fromString('{}', 401);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'chat_session_id': 'session-1',
+                'message_id': 'message-1',
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        }
+        return ResponseBody.fromString('event: done\ndata: {}\n\n', 200);
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+      dio: dio,
+    );
+    final originalToken = _testJwt({'web_id': 'web-0'});
+    final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+      'loginTraceID': 'state-123456789012345678901234567890',
+      'userJwt': jsonEncode({
+        'ClientID': 'client-1',
+        'Token': originalToken,
+        'RefreshToken': 'refresh-1',
+        'TokenExpireAt': DateTime.now()
+            .toUtc()
+            .subtract(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+      }),
+      'userInfo': jsonEncode({'UserID': 'user-1'}),
+    });
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'trae-callback-401',
+        connectorType: 'trae',
+        authType: 'session_token',
+        displayName: 'Trae callback account',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'trae-model',
+            upstreamModelId: 'solo-model',
+            displayName: 'SOLO model',
+          ),
+        ],
+      ),
+      secret: TraeSoloCredential.fromCallbackUri(
+        callback,
+        expectedState: 'state-123456789012345678901234567890',
+      ).toStoredValue(),
+      traeCallbackIssued: true,
+    );
+
+    await LlmConnectorHttpClient(accountService: service, dio: dio).request(
+      account: account,
+      modelId: 'solo-model',
+      body: const {
+        'messages': [
+          {'role': 'user', 'content': 'hello'},
+        ],
+      },
+      stream: true,
+    );
+
+    final sessionRequests = requests
+        .where((request) => request.uri.path.endsWith('/chat_sessions'))
+        .toList();
+    expect(sessionRequests, hasLength(2));
+    expect(
+      sessionRequests.first.headers['Authorization'],
+      'Cloud-IDE-JWT ${_testJwt({'web_id': 'web-1'})}',
+    );
+    expect(
+      sessionRequests.last.headers['Authorization'],
+      'Cloud-IDE-JWT ${_testJwt({'web_id': 'web-2'})}',
+    );
+    final refreshRequests = requests
+        .where((request) => request.uri.path.endsWith('/ExchangeToken'))
+        .toList();
+    expect(refreshRequests, hasLength(2));
+    expect(refreshRequests.first.data['RefreshToken'], 'refresh-1');
+    expect(refreshRequests.last.data['RefreshToken'], 'refresh-2');
+  });
+
+  test('maps failed Trae refreshes to authentication required', () async {
+    for (final expired in [true, false]) {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path.endsWith('/ExchangeToken')) {
+            return ResponseBody.fromString('{}', 500);
+          }
+          return ResponseBody.fromString('{}', 401);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+        'loginTraceID': 'state-123456789012345678901234567890',
+        'userJwt': jsonEncode({
+          'Token': _testJwt({'web_id': 'web-1'}),
+          'RefreshToken': 'refresh-1',
+          'TokenExpireAt': DateTime.now()
+              .toUtc()
+              .add(
+                expired
+                    ? const Duration(minutes: -1)
+                    : const Duration(minutes: 1),
+              )
+              .millisecondsSinceEpoch,
+        }),
+        'userInfo': jsonEncode({'UserID': 'user-1'}),
+      });
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'trae-refresh-failure-$expired',
+          connectorType: 'trae',
+          authType: 'session_token',
+          displayName: 'Trae callback account',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: 'trae-model',
+              upstreamModelId: 'solo-model',
+              displayName: 'SOLO model',
+            ),
+          ],
+        ),
+        secret: TraeSoloCredential.fromCallbackUri(
+          callback,
+          expectedState: 'state-123456789012345678901234567890',
+        ).toStoredValue(),
+        traeCallbackIssued: true,
+      );
+
+      await expectLater(
+        LlmConnectorHttpClient(accountService: service, dio: dio).request(
+          account: account,
+          modelId: 'solo-model',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+          stream: true,
+        ),
+        throwsA(isA<LlmConnectorAuthenticationRequired>()),
+      );
+      expect(
+        requests.any((request) => request.uri.path.endsWith('/ExchangeToken')),
+        isTrue,
+      );
+    }
+  });
+
+  test(
     'Trae discovery uses the account catalog and keeps routing text-only',
     () async {
       final requests = <RequestOptions>[];
@@ -46,7 +458,11 @@ void main() {
           displayName: 'Trae account',
           status: LlmAccountStatus.ready,
         ),
-        secret: _testJwt({'web_id': 'web-1'}),
+        secret: jsonEncode({
+          'access_token': _testJwt({'web_id': 'web-1'}),
+          'refresh_token': 'imported-refresh-token',
+          'providerSpecificData': {'authMethod': 'oauth_callback'},
+        }),
       );
       final importFinished = DateTime.now().toUtc();
       final savedSecret = await service.readCredential(account.id);
@@ -56,6 +472,8 @@ void main() {
       );
 
       final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(await service.refreshCredential(account), isFalse);
 
       expect(
         requests.single.uri.toString(),

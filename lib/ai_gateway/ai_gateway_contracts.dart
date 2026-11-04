@@ -415,6 +415,7 @@ abstract interface class AiGatewayAccountManagement {
   Future<AiGatewayAccount> saveAccount(
     AiGatewayAccount account, {
     String? secret,
+    bool traeCallbackIssued = false,
   });
   Future<void> deleteAccount(String accountId);
   Future<void> saveModelGroup(AiGatewayModelGroup group);

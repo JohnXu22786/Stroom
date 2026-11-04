@@ -57,6 +57,117 @@ void main() {
     });
   });
 
+  group('Trae SOLO in-app callback', () {
+    test('builds only the pinned callback authorization URL', () {
+      final state = List<String>.filled(32, 'a').join();
+      final uri = TraeSoloConnector.authorizationUri(
+        Uri.parse('http://127.0.0.1:43210/authorize'),
+        state,
+      );
+      expect(uri.origin, 'https://www.trae.ai');
+      expect(uri.path, '/authorization');
+      expect(uri.queryParameters['auth_from'], 'solo');
+      expect(
+        uri.queryParameters['auth_callback_url'],
+        'http://127.0.0.1:43210/authorize',
+      );
+      expect(uri.queryParameters['login_trace_id'], state);
+      expect(
+        () => TraeSoloConnector.authorizationUri(
+          Uri.parse('https://example.com/authorize'),
+          'short',
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('validates state and stores callback token, refresh and identity', () {
+      final access = _jwt({'exp': 1760000000, 'web_id': 'token-web'});
+      final callback = Uri.http('127.0.0.1:43210', '/authorize', {
+        'loginTraceID': 'one-use-state',
+        'userJwt': jsonEncode({
+          'ClientID': 'client-1',
+          'Token': access,
+          'RefreshToken': 'refresh-1',
+          'TokenExpireAt': '1768000000000',
+        }),
+        'userInfo': jsonEncode({
+          'UserID': 'user-1',
+          'TenantID': 'tenant-1',
+          'Region': 'US-East',
+          'AIRegion': 'US-West',
+        }),
+      });
+      final credential = TraeSoloCredential.fromCallbackUri(
+        callback,
+        expectedState: 'one-use-state',
+      );
+      expect(credential.accessToken, access);
+      expect(credential.refreshToken, 'refresh-1');
+      expect(
+        credential.expiresAt,
+        DateTime.fromMillisecondsSinceEpoch(1768000000000, isUtc: true),
+      );
+      expect(credential.identity['userUniqueId'], 'user-1');
+      expect(credential.identity['tenantId'], 'tenant-1');
+      expect(credential.identity['authMethod'], 'oauth_callback');
+      final stored = TraeSoloCredential.fromPastedValue(
+        credential.toStoredValue(),
+      );
+      expect(stored.refreshToken, 'refresh-1');
+      expect(stored.identity['clientId'], 'client-1');
+    });
+
+    test(
+      'rejects wrong route, host, state, duplicate keys, and oversized URL',
+      () {
+        final base = Uri.http('127.0.0.1:43210', '/authorize', {
+          'loginTraceID': 'expected',
+          'userJwt': jsonEncode({'Token': _jwt(const {})}),
+          'userInfo': jsonEncode({'UserID': 'u1'}),
+        });
+        expect(
+          () => TraeSoloCredential.fromCallbackUri(
+            base.replace(path: '/other'),
+            expectedState: 'expected',
+          ),
+          throwsFormatException,
+        );
+        expect(
+          () => TraeSoloCredential.fromCallbackUri(
+            base.replace(host: 'localhost'),
+            expectedState: 'expected',
+          ),
+          throwsFormatException,
+        );
+        expect(
+          () =>
+              TraeSoloCredential.fromCallbackUri(base, expectedState: 'wrong'),
+          throwsFormatException,
+        );
+        expect(
+          () => TraeSoloCredential.fromCallbackUri(
+            Uri.parse('${base.toString()}&loginTraceID=expected'),
+            expectedState: 'expected',
+          ),
+          throwsFormatException,
+        );
+        expect(
+          () => TraeSoloCredential.fromCallbackUri(
+            base.replace(
+              queryParameters: {
+                ...base.queryParameters,
+                'padding': List<String>.filled(33000, 'x').join(),
+              },
+            ),
+            expectedState: 'expected',
+          ),
+          throwsFormatException,
+        );
+      },
+    );
+  });
+
   test('builds source model and session routes with text-only messages', () {
     expect(
       TraeSoloConnector.modelsUri.toString(),

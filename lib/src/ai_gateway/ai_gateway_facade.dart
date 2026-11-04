@@ -2125,6 +2125,7 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
   Future<AiGatewayAccount> saveAccount(
     AiGatewayAccount account, {
     String? secret,
+    bool traeCallbackIssued = false,
   }) async {
     final existing = (await _accounts.listAccounts())
         .where((item) => item.id == account.id)
@@ -2139,6 +2140,7 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
     final saved = await _accounts.saveAccount(
       _legacyAccount(account, credentialRef: existing?.credentialRef),
       secret: secret,
+      traeCallbackIssued: traeCallbackIssued,
     );
     return _gatewayAccount(saved);
   }
