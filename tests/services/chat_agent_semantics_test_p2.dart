@@ -272,6 +272,7 @@ void chatAgentSemanticsGroup2() {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-once', title: '')],
       );
+      await container.read(localeProvider.notifier).setLocaleCode('en_US');
       final manager = container.read(chatStreamManagerProvider);
       // 第 1 次调用 = 压缩请求（摘要）；后续 = 主请求
       final provider = _RecordingProvider([
@@ -317,7 +318,7 @@ void chatAgentSemanticsGroup2() {
       final compactionCalls = provider.captures
           .where((c) => ((c['messages'] as List).first as Map)['content']
               .toString()
-              .contains('锚定上下文摘要助手'))
+              .contains('Context Compaction Assistant'))
           .length;
       expect(compactionCalls, 1, reason: '压缩只发生一次——第二次发送不重复压缩');
       // 主请求（含摘要 system）至少 2 次
