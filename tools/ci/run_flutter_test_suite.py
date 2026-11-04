@@ -173,6 +173,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/ios_continued_task_service_test.dart",
         "services/notification_service_test.dart",
         "providers/update_provider_test.dart",
+        "providers/locale_provider_test.dart",
         "utils/app_version_test.dart",
         "utils/byte_lru_cache_test.dart",
         "utils/duration_parser_test.dart",
