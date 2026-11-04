@@ -41,6 +41,13 @@ Widget createTestApp({
   );
 }
 
+Widget _localizedAssistantSelectionApp() => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const AssistantSelectionPage(),
+    );
+
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   final context = tester.element(find.byType(AssistantSelectionPage));
   return localizedBuiltInPrompts(AppLocalizations.of(context)!).first;
@@ -1183,7 +1190,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1225,7 +1232,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1294,7 +1301,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1348,7 +1355,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1402,7 +1409,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1482,7 +1489,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1522,7 +1529,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
