@@ -99,6 +99,11 @@ Widget createChatFlowTestApp({
   );
 }
 
+Finder _localizedBackButton(WidgetTester tester) {
+  final context = tester.element(find.byType(AppBar).first);
+  return find.byTooltip(AppLocalizations.of(context)!.actionBack);
+}
+
 void main() {
   group('Chat tab navigation flow (nested Navigator)', () {
     // =========================================================================
@@ -239,7 +244,7 @@ void main() {
       expect(find.text('新对话'), findsWidgets);
 
       // Tap back button
-      final backButtons = find.byTooltip('Back');
+      final backButtons = _localizedBackButton(tester);
       await tester.tap(backButtons.first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -266,7 +271,7 @@ void main() {
       expect(find.text('选择对话'), findsOneWidget);
 
       // Press back using tooltip
-      await tester.tap(find.byTooltip('Back'));
+      await tester.tap(_localizedBackButton(tester));
       await tester.pumpAndSettle();
 
       // Should be back on assistant selection page
@@ -292,8 +297,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('选择对话'), findsOneWidget);
 
-      // Use system back button to return
-      await tester.pageBack();
+      // The test app uses MaterialPageRoute, so exercise its localized AppBar
+      // back button rather than WidgetTester.pageBack's Cupertino-only lookup.
+      await tester.tap(_localizedBackButton(tester));
       await tester.pumpAndSettle();
 
       // Should be back on assistant selection page

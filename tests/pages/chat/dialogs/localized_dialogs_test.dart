@@ -120,7 +120,10 @@ void main() {
     final previousPlatform = InAppWebViewPlatform.instance;
     InAppWebViewPlatform.instance = _NeverCreatedWebViewPlatform();
     addTearDown(() {
-      InAppWebViewPlatform.instance = previousPlatform;
+      // The plugin interface rejects null, so when no platform was registered
+      // before this test, restore the inert test platform as its neutral state.
+      InAppWebViewPlatform.instance =
+          previousPlatform ?? _NeverCreatedWebViewPlatform();
     });
 
     await tester.pumpWidget(localizedApp(Builder(
