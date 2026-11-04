@@ -10,6 +10,7 @@ import 'aws_bedrock_event_stream.dart';
 import 'aws_credential_chain.dart';
 import 'aws_sigv4.dart';
 import 'llm_connector_service.dart';
+import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
 import 'cursor_connect_rpc.dart';
@@ -209,9 +210,7 @@ class LlmConnectorHttpClient {
                       message['tool_calls'] != null ||
                       message['function_call'] != null),
             )) {
-          throw const LlmConnectorHttpException(
-            code: 'unsupported_capability',
-          );
+          throw const LlmConnectorHttpException(code: 'unsupported_capability');
         }
         try {
           final result = await TraeSoloHttpAdapter(_dio).request(
@@ -496,10 +495,14 @@ class LlmConnectorHttpClient {
             // oversized error body can be cancelled before Dio buffers it.
             responseType: ResponseType.stream,
             validateStatus: (status) => status != null,
-            followRedirects: storedAccount.connectorType != 'command-code',
+            followRedirects: storedAccount.connectorType != 'command-code' &&
+                storedAccount.connectorType != 'aihorde',
             connectTimeout: connectTimeout,
             sendTimeout: sendTimeout,
-            receiveTimeout: receiveTimeout,
+            receiveTimeout: receiveTimeout ??
+                (storedAccount.connectorType == 'aihorde'
+                    ? kAiHordeChatTimeout
+                    : null),
           ),
           cancelToken: requestCancelToken,
           onSendProgress: reportSendProgress,

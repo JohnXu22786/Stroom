@@ -2436,6 +2436,7 @@ void main() {
     'routes OpenAI-compatible named providers through the ChatAdapter',
     () async {
       for (final connectorType in [
+        'aihorde',
         'moonshot',
         'glm',
         'deepseek',

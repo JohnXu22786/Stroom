@@ -359,9 +359,11 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                   ),
                 );
                 final browserResult = navigator.push<bool>(route);
-                unawaited(cancelSignal.then((_) {
-                  if (route.isCurrent) navigator.pop(false);
-                }));
+                unawaited(
+                  cancelSignal.then((_) {
+                    if (route.isCurrent) navigator.pop(false);
+                  }),
+                );
                 return await browserResult == true;
               }
             : null,
@@ -1571,6 +1573,7 @@ String _authLabel(String type, {String? connectorType}) {
   return switch (type) {
     'api_key' => switch (connectorType) {
         'bedrock' => 'Amazon Bedrock API Key',
+        'aihorde' => 'AI Horde API Key (higher queue priority)',
         'qoder' => 'DashScope API Key',
         _ => 'API Key',
       },
@@ -2154,9 +2157,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    '登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。',
-                  ),
+                  child: Text('登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。'),
                 ),
               ],
               if (connector.supportsChatAdapter != true ||
@@ -2422,6 +2423,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 controller: _endpoint,
                 enabled: _connectorType != 'devin-cli-agentic' &&
                     _connectorType != 'command-code' &&
+                    _connectorType != 'aihorde' &&
                     _connectorType != 'qoder' &&
                     _connectorType != 'kilocode' &&
                     _connectorType != 'cline' &&
@@ -2433,13 +2435,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       : _connectorType == 'cline' ||
                               _connectorType == 'clinepass'
                           ? 'Cline 使用固定服务端点'
-                          : _connectorType == 'kilocode'
-                              ? 'Kilo Code 使用固定服务端点'
-                              : _connectorType == 'qoder' ||
-                                      _connectorType == 'trae'
-                                  ? '固定服务端点'
-                                  : '端点地址（连接器需要时填写）',
+                          : _connectorType == 'aihorde'
+                              ? 'AI Horde 使用固定 HTTPS Chat 端点'
+                              : _connectorType == 'kilocode'
+                                  ? 'Kilo Code 使用固定服务端点'
+                                  : _connectorType == 'qoder' ||
+                                          _connectorType == 'trae'
+                                      ? '固定服务端点'
+                                      : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
+                    'aihorde' => 'https://oai.aihorde.net/v1',
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
                     'command-code' => kCommandCodeBaseUrl,
@@ -2455,6 +2460,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'cline' ||
                     'clinepass' =>
                       '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                    'aihorde' => 'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
                     'trae' =>
                       'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
                     _ => null,
@@ -2530,6 +2536,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                         ? 'Claude Setup Token'
                                         : _authType == 'api_key'
                                             ? switch (_connectorType) {
+                                                'aihorde' =>
+                                                  'AI Horde API Key（可选优先级）',
                                                 'glm-cn' =>
                                                   'GLM Coding (China) API Key',
                                                 'minimax-cn' =>
@@ -2552,7 +2560,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                                     : '凭据',
                     helperText: _connectorType == 'trae'
                         ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
-                        : null,
+                        : _connectorType == 'aihorde' && _authType == 'api_key'
+                            ? '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。'
+                            : null,
                     hintText: _connectorType == 'trae'
                         ? 'Cloud-IDE-JWT eyJ…'
                         : _authType == 'aws_credential_chain'

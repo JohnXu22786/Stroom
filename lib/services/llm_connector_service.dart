@@ -15,6 +15,7 @@ import 'aws_sigv4.dart';
 import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
+import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
 import 'llm_oauth_token_client.dart';
 import 'devin_connect_rpc.dart';
@@ -691,6 +692,12 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'aihorde',
+      displayName: 'AI Horde',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'none', 'api_key'},
+    ),
+    LlmConnectorDefinition(
       id: 'openai-compatibility',
       displayName: 'OpenAI-compatible endpoint',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -757,6 +764,7 @@ abstract final class LlmConnectorRegistry {
         'openai-api' ||
         'opencode-go' ||
         'opencode-zen' ||
+        'aihorde' ||
         'command-code' ||
         'moonshot' ||
         'kimi-coding' ||
@@ -1560,6 +1568,7 @@ class LlmAccountConnectorService {
       throw const LlmAccountConnectorException();
     }
     final hasRemoteCatalog = {
+      'aihorde',
       'openai-compatibility',
       'openai-api',
       'opencode-go',
@@ -3015,10 +3024,126 @@ class LlmAccountConnectorService {
     return models;
   }
 
+  Future<List<LlmUpstreamModel>> _discoverAiHordeModels(
+    LlmAccount account,
+  ) async {
+    final storedKey = account.credentialRef == null
+        ? null
+        : await _readSecureValue(account.credentialRef!);
+    final apiKey = account.authType == 'api_key' ? storedKey?.trim() : null;
+    if (account.authType == 'api_key') {
+      if (apiKey == null || apiKey.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      if (!await validateAiHordeApiKey(_dio, apiKey)) {
+        throw const LlmAccountConnectorException();
+      }
+    }
+
+    final response = await _dio.getUri<Object?>(
+      Uri.parse(kAiHordeChatModelsUri),
+      options: Options(
+        responseType: ResponseType.json,
+        followRedirects: false,
+        validateStatus: (status) => status != null,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ${apiKey ?? kAiHordeAnonymousKey}',
+        },
+      ),
+    );
+    final status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      throw const LlmAccountConnectorException();
+    }
+    final payload = _asJsonMap(response.data);
+    final rawModels = payload?['data'];
+    if (rawModels is! Iterable) throw const LlmAccountConnectorException();
+    final models = <LlmUpstreamModel>[];
+    for (final rawModel in rawModels) {
+      if (rawModel is! Map) continue;
+      final item = Map<String, dynamic>.from(rawModel);
+      final modelId = _firstString(item, const ['id']);
+      if (modelId == null ||
+          !LlmConnectorRegistry.isConversationalModel(modelId, item)) {
+        continue;
+      }
+      final modelType = [
+        item['type'],
+        item['taskType'],
+        item['task_type'],
+        item['modelType'],
+      ].whereType<String>().join(' ').toLowerCase();
+      if (RegExp(r'image|diffusion|embedding|rerank|ranking|transcrib|tts')
+              .hasMatch(modelType) ||
+          !_aiHordeModelHasOnlyTextModalities(item)) {
+        continue;
+      }
+      models.add(
+        LlmUpstreamModel(
+          id: '${account.id}:aihorde:$modelId',
+          upstreamModelId: modelId,
+          displayName:
+              _firstString(item, const ['name', 'displayName']) ?? modelId,
+          capabilities: const {
+            'chat': true,
+            'streaming': true,
+            'toolCalling': false,
+            'supportedApiProtocols': ['openai.chat_completions'],
+          },
+          config: const {'catalogSource': 'live-chat-catalog'},
+        ),
+      );
+    }
+    return models;
+  }
+
+  bool _aiHordeModelHasOnlyTextModalities(Map<String, dynamic> model) {
+    final architecture = model['architecture'];
+    if (architecture is Map) {
+      final modality = architecture['modality'];
+      if (modality is String && modality.trim().isNotEmpty) {
+        final parts = modality.split('->');
+        if (parts.length != 2 ||
+            parts.any(
+              (part) =>
+                  part
+                      .split(RegExp(r'[+\s,]'))
+                      .where((value) => value.trim().isNotEmpty)
+                      .isEmpty ||
+                  part
+                      .split(RegExp(r'[+\s,]'))
+                      .where((value) => value.trim().isNotEmpty)
+                      .any((value) => value.toLowerCase() != 'text'),
+            )) {
+          return false;
+        }
+      }
+    }
+    for (final source in [model, if (architecture is Map) architecture]) {
+      for (final key in ['input_modalities', 'output_modalities']) {
+        final modalities = source[key];
+        if (modalities == null) continue;
+        if (modalities is! Iterable || modalities is String) return false;
+        final declared = modalities.whereType<String>().toList();
+        if (declared.length != modalities.length ||
+            declared.isEmpty ||
+            declared
+                .any((modality) => modality.trim().toLowerCase() != 'text')) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   Future<List<LlmUpstreamModel>> _discoverRemoteModels(
     LlmAccount account,
   ) async {
     _validateSafeConfig(account.endpointConfig);
+    if (account.connectorType == 'aihorde') {
+      return _discoverAiHordeModels(account);
+    }
     if (account.connectorType == 'gitlab-duo') {
       return [
         for (final modelId in kPinnedGitLabDuoModels)
@@ -3064,10 +3189,9 @@ class LlmAccountConnectorService {
       }
       final credentials = _decodeCredentialBundle(secret)
         ..['account_id'] = account.id;
-      return ZedHostedApiClient(dio: _dio).fetchModels(
-        credentials,
-        forceRefresh: true,
-      );
+      return ZedHostedApiClient(
+        dio: _dio,
+      ).fetchModels(credentials, forceRefresh: true);
     }
     if (account.connectorType == 'cline' ||
         account.connectorType == 'clinepass') {
@@ -3768,10 +3892,7 @@ class LlmAccountConnectorService {
     }
     final host = awsRegionalEndpointHost('bedrock', region);
     Map<String, String> headersFor(Uri uri) => apiKey != null
-        ? {
-            'Accept': 'application/json',
-            'Authorization': 'Bearer $apiKey',
-          }
+        ? {'Accept': 'application/json', 'Authorization': 'Bearer $apiKey'}
         : AwsSigV4.sign(
             method: 'GET',
             uri: uri,
@@ -3791,16 +3912,13 @@ class LlmAccountConnectorService {
       return _asJsonMap(response.data);
     }
 
-    final foundationUri = Uri.https(
-      host,
-      '/foundation-models',
-      {'byOutputModality': 'TEXT'},
-    );
-    final inferenceProfileUri = Uri.https(
-      host,
-      '/inference-profiles',
-      {'maxResults': '100', 'typeEquals': 'SYSTEM_DEFINED'},
-    );
+    final foundationUri = Uri.https(host, '/foundation-models', {
+      'byOutputModality': 'TEXT',
+    });
+    final inferenceProfileUri = Uri.https(host, '/inference-profiles', {
+      'maxResults': '100',
+      'typeEquals': 'SYSTEM_DEFINED',
+    });
     try {
       final models = <LlmUpstreamModel>[];
       final seenModelIds = <String>{};
@@ -5073,13 +5191,15 @@ class LlmNativeRequestBuilder {
               'zed-hosted-native-rsa-v1' ||
           _credentialBundleString(credential, const ['user_id', 'userId']) ==
               null ||
-          _credentialBundleString(
-                credential,
-                const ['access_token', 'accessToken'],
-              ) ==
+          _credentialBundleString(credential, const [
+                'access_token',
+                'accessToken',
+              ]) ==
               null ||
-          _credentialBundleString(
-                  credential, const ['system_id', 'systemId']) ==
+          _credentialBundleString(credential, const [
+                'system_id',
+                'systemId',
+              ]) ==
               null ||
           model == null ||
           zedLlmToken == null ||
@@ -5146,6 +5266,9 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        (account.connectorType == 'aihorde' &&
+            nativeFormat != null &&
+            nativeFormat != 'openai.chat_completions') ||
         ((account.connectorType == 'cline' ||
                 account.connectorType == 'clinepass') &&
             nativeFormat != null) ||
@@ -5257,7 +5380,7 @@ class LlmNativeRequestBuilder {
             : _credentialValue(account, credential);
     final config = account.endpointConfig;
     final configuredHeaders = config['headers'];
-    if (configuredHeaders is Map) {
+    if (account.connectorType != 'aihorde' && configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
         if (entry.key is String && entry.value is String) {
           headers[entry.key as String] = entry.value as String;
@@ -5274,6 +5397,14 @@ class LlmNativeRequestBuilder {
       nativeFormat: nativeFormat,
     );
     switch (account.connectorType) {
+      case 'aihorde':
+        final chatKey =
+            account.authType == 'none' ? kAiHordeAnonymousKey : secret.trim();
+        if (chatKey.isEmpty) {
+          throw const LlmAccountConnectorException();
+        }
+        headers['Authorization'] = 'Bearer $chatKey';
+        break;
       case 'gitlab-duo':
         headers['Authorization'] = 'Bearer $secret';
         break;
@@ -5524,7 +5655,9 @@ class LlmNativeRequestBuilder {
                         : _applyBodyStreamOption(
                             account: account,
                             config: config,
-                            body: body,
+                            body: account.connectorType == 'aihorde'
+                                ? _aiHordeChatBody(body)
+                                : body,
                             stream: upstreamStream,
                             nativeFormat: nativeFormat,
                           );
@@ -5590,8 +5723,13 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         final role = rawMessage['role']?.toString().toLowerCase();
-        if (!const {'system', 'developer', 'user', 'assistant', 'tool'}
-            .contains(role)) {
+        if (!const {
+          'system',
+          'developer',
+          'user',
+          'assistant',
+          'tool',
+        }.contains(role)) {
           throw const LlmAccountConnectorException();
         }
         if (role == 'tool' ||
@@ -5973,6 +6111,9 @@ class LlmNativeRequestBuilder {
             config['legacyOcrFullEndpoint'] == true &&
             nativeFormat == null;
     switch (account.connectorType) {
+      case 'aihorde':
+        baseUrl = 'https://oai.aihorde.net/v1';
+        path = '/chat/completions';
       case 'gitlab-duo':
         baseUrl = _baseUrl(config, 'https://gitlab.com');
         path = '/api/v4/code_suggestions/completions';
@@ -6242,7 +6383,8 @@ class LlmNativeRequestBuilder {
     final usesProtocolSpecificQwenBase =
         account.connectorType == 'qwen-cloud' ||
             account.connectorType == 'qwen-cloud-token-plan';
-    final base = account.connectorType == 'openai-compatibility' ||
+    final base = account.connectorType == 'aihorde' ||
+            account.connectorType == 'openai-compatibility' ||
             account.connectorType == 'cline' ||
             account.connectorType == 'clinepass' ||
             usesProtocolSpecificQwenBase
@@ -6442,6 +6584,7 @@ class LlmNativeRequestBuilder {
       'openference' || 'openference-api' => host == 'api.openference.com',
       'opencode-go' || 'opencode-zen' => host == 'opencode.ai',
       'command-code' => host == 'api.commandcode.ai',
+      'aihorde' => host == 'oai.aihorde.net',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',
@@ -6459,6 +6602,52 @@ class LlmNativeRequestBuilder {
       _ => false,
     };
     if (!allowed) throw const LlmAccountConnectorException();
+  }
+
+  static Object? _aiHordeChatBody(Object? body) {
+    if (body is! Map) {
+      throw const LlmAccountConnectorException();
+    }
+    final request = Map<String, dynamic>.from(body);
+    request.remove('tools');
+    request.remove('tool_choice');
+    request.remove('parallel_tool_calls');
+    final messages = request['messages'];
+    if (messages is! List) {
+      throw const LlmAccountConnectorException();
+    }
+    final normalized = <Map<String, dynamic>>[];
+    for (final rawMessage in messages) {
+      if (rawMessage is! Map) {
+        throw const LlmAccountConnectorException();
+      }
+      final message = Map<String, dynamic>.from(rawMessage);
+      final role = message['role'];
+      if (!const {'system', 'developer', 'user', 'assistant'}.contains(role) ||
+          message['tool_calls'] != null ||
+          message['function_call'] != null ||
+          message['tool_call_id'] != null) {
+        throw const LlmAccountConnectorException();
+      }
+      final content = message['content'];
+      if (content is List) {
+        final text = StringBuffer();
+        for (final part in content) {
+          if (part is! Map ||
+              part['type'] != 'text' ||
+              part['text'] is! String) {
+            throw const LlmAccountConnectorException();
+          }
+          text.write(part['text'] as String);
+        }
+        message['content'] = text.toString();
+      } else if (content != null && content is! String) {
+        throw const LlmAccountConnectorException();
+      }
+      normalized.add(message);
+    }
+    request['messages'] = normalized;
+    return request;
   }
 
   static String? _metaBaseUrl(String? credential) {

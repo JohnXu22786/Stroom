@@ -57,6 +57,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       _ => const {
           'openai-compatibility',
           'openai-api',
+          'aihorde',
           'bedrock',
           'kimi',
           'kimi-ai',
@@ -113,6 +114,7 @@ String llmRoutedChatProtocolForAccountModel({
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.
   if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
+  if (account.connectorType == 'aihorde') return 'openai.chat_completions';
   String protocol;
   if (apiProtocolOverride?.isNotEmpty == true) {
     protocol = apiProtocolOverride!;
