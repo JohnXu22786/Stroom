@@ -352,6 +352,121 @@ void main() {
     expect(agnes.capabilities['toolCalling'], isTrue);
   });
 
+  testWidgets('switching to an M39 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm39-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'DeepInfra account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.deepinfra.com/v1/openai/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'deepinfra',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm39-preset-switch:deepseek-v4-flash',
+            upstreamModelId: 'deepseek-ai/DeepSeek-V4-Flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm39-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'old-deepinfra-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('daoxe');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.daoxe.com/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('claude-sonnet-4-6'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(modelsField.controller!.text,
+        isNot(contains('deepseek-ai/DeepSeek-V4-Flash')));
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(
+        await service.readCredential('m39-preset-switch'), 'old-deepinfra-key');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'new-daoxe-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'daoxe');
+    expect(saved.endpointConfig['baseUrl'],
+        'https://api.daoxe.com/v1/chat/completions');
+    expect(
+        saved.endpointConfig['modelsUrl'], 'https://api.daoxe.com/v1/models');
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-daoxe-key');
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('custom-model'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('claude-sonnet-4-6'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        isNot(contains('deepseek-ai/DeepSeek-V4-Flash')));
+    final daoxeModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'claude-sonnet-4-6',
+    );
+    expect(daoxeModel.capabilities, isEmpty);
+    expect(
+      saved.models
+          .singleWhere((model) => model.upstreamModelId == 'custom-model')
+          .config['apiProtocolOverride'],
+      'anthropic.messages',
+    );
+  });
+
   testWidgets('Trae offers token import and in-app SOLO sign-in', (
     tester,
   ) async {
