@@ -1,12 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_chain_editor.dart';
+import 'package:stroom/task_flow/utils/task_flow_localization.dart';
 
 void main() {
+  test('built-in block type labels follow the selected locale', () {
+    expect(
+      localizedBlockTypeName(BlockType.chat, AppLocalizationsEn()),
+      'Assistant Chat',
+    );
+    expect(
+      localizedBlockTypeName(BlockType.chat, AppLocalizationsZh()),
+      '助手对话',
+    );
+  });
+
   testWidgets('middle block has an accessible menu and deletion action',
       (tester) async {
     int? removed;

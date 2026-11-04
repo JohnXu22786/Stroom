@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/temporary_countdown_capsule.dart';
+import 'package:stroom/widgets/search_panel.dart';
 
 /// Creates a test app simulating the topic selection page.
 Widget createTestApp({
@@ -105,6 +107,22 @@ Widget createMergedTopicTestApp({
 }
 
 void main() {
+  testWidgets('search panel uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Scaffold(
+        body: SearchPanel(
+          conversations: const [],
+          onConversationSelected: (_) {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Search conversations'), findsOneWidget);
+    expect(find.text('Enter a keyword...'), findsOneWidget);
+  });
   testWidgets('temporary conversation shows countdown before its title',
       (tester) async {
     final temporaryTopic = Conversation(
