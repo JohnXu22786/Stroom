@@ -108,12 +108,6 @@ void main() {
               'reasoning': true,
             },
           ),
-          LlmUpstreamModel(
-            id: 'custom-groq-compatible-model',
-            upstreamModelId: 'openai/gpt-oss-120b',
-            displayName: 'Custom Groq model choice',
-            capabilities: {'chat': true},
-          ),
         ],
       ),
       secret: 'existing-fireworks-key',
@@ -128,6 +122,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑账号'));
     await tester.pumpAndSettle();
+
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    modelsField.controller!.text += '\nopenai/gpt-oss-120b,chat';
 
     final preset = tester.widget<DropdownButtonFormField<String>>(
       find.byWidgetPredicate(
@@ -168,6 +170,25 @@ void main() {
             .single
             .endpointConfig['providerPresetId'],
         'fireworks');
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'new-groq-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig['providerPresetId'], 'groq');
+    expect(await service.readCredential('preset-key-change'), 'new-groq-key');
+    expect(
+      saved.models
+          .singleWhere((model) => model.upstreamModelId == 'groq/compound')
+          .displayName,
+      'Groq Compound',
+    );
   });
 
   testWidgets('Trae offers token import and in-app SOLO sign-in', (
@@ -1575,7 +1596,11 @@ void main() {
       provider.id,
     );
     await tester.pumpAndSettle();
-    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          widget.decoration.labelText == '认证方式',
+    );
     final authButton = find.descendant(
       of: authDropdown,
       matching: find.byType(DropdownButton<String>),
@@ -3228,7 +3253,11 @@ void main() {
       'https://example.test/v1',
     );
     await tester.enterText(find.byType(TextField).at(3), 'local-model,vision');
-    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          widget.decoration.labelText == '认证方式',
+    );
     await tester.ensureVisible(authDropdown);
     await tester.tap(authDropdown);
     await tester.pumpAndSettle();

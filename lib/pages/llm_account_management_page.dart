@@ -1972,17 +1972,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       _apiProtocol = preset.defaultApiProtocol;
       _endpoint.text = preset.baseUrl;
       if (_name.text.trim().isEmpty) _name.text = preset.displayName;
-      final previousFallbackLines = {
+      final previousFallbackModelIds = {
         for (final model in previousPreset?.fallbackModels ?? const [])
-          model.accountEditorLine(
-            modelIdPrefix: previousPreset!.modelIdPrefix,
-          ),
+          '${previousPreset!.modelIdPrefix}${model.id}',
       };
       final currentLines = _models.text
           .split('\n')
           .map((line) => line.trim())
           .where((line) => line.isNotEmpty)
-          .where((line) => !previousFallbackLines.contains(line))
+          .where(
+            (line) => !previousFallbackModelIds
+                .contains(line.split(',').first.trim()),
+          )
           .toList();
       final currentModelIds = {
         for (final line in currentLines) line.split(',').first.trim(),
@@ -3045,12 +3046,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         (widget.account!.endpointConfig['gheUrl'] != _endpoint.text.trim() ||
             widget.account!.endpointConfig['copilotClientId'] !=
                 _oauthClientId.text.trim());
+    final providerPresetIdentityChanged = widget.account != null &&
+        _connectorType == 'openai-compatibility' &&
+        widget.account!.endpointConfig['providerPresetId'] != _providerPresetId;
     final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
-            (_connectorType == 'openai-compatibility' &&
-                widget.account!.endpointConfig['providerPresetId'] !=
-                    _providerPresetId) ||
+            providerPresetIdentityChanged ||
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged ||
             qoderOAuthConfigurationChanged ||
@@ -3127,6 +3129,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final upstreamId = parts.first;
       var existing = existingByLine[index];
       if (existing == null &&
+          !providerPresetIdentityChanged &&
           index < previousModels.length &&
           !usedModelIds.contains(previousModels[index].id)) {
         existing = previousModels[index];
