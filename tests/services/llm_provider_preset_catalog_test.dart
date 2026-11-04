@@ -16,13 +16,24 @@ import 'package:stroom/services/llm_provider_preset_catalog.dart';
 void main() {
   test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
+      'agnes-cn',
       'ai21',
       'aimlapi',
+      'ainative',
+      'ainetcafe',
+      'aion',
       'alibaba',
       'alibaba-cn',
+      'ant-ling',
+      'anyapi',
+      'apmix',
       'arcee-ai',
+      'auriko',
       'baichuan',
+      'baidu',
       'baseten',
+      'bazaarlink',
+      'beatapi',
       'bigmodel',
       'byteplus',
       'cerebras',
@@ -58,14 +69,25 @@ void main() {
       {
         'ai21': 'https://api.ai21.com/studio/v1/chat/completions',
         'aimlapi': 'https://api.aimlapi.com/v1/chat/completions',
+        'ainative': 'https://api.ainative.studio/api/v1/chat/completions',
+        'ainetcafe': 'https://microquickjs.com/v1/chat/completions',
+        'aion': 'https://api.aionlabs.ai/v1/chat/completions',
+        'agnes-cn': 'https://api.agnes-ai.cn/v1/chat/completions',
         'alibaba':
             'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
         'alibaba-cn':
             'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
         'arcee-ai': 'https://api.arcee.ai/api/v1/chat/completions',
+        'ant-ling': 'https://api.ant-ling.com/v1/chat/completions',
+        'anyapi': 'https://api.anyapi.ai/v1/chat/completions',
+        'apmix': 'https://api.apmix.ai/v1/chat/completions',
+        'auriko': 'https://api.auriko.ai/v1/chat/completions',
         'baseten': 'https://inference.baseten.co/v1/chat/completions',
         'baichuan': 'https://api.baichuan-ai.com/v1/chat/completions',
+        'baidu': 'https://qianfan.baidubce.com/v2/chat/completions',
         'bigmodel': 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+        'bazaarlink': 'https://bazaarlink.ai/api/v1/chat/completions',
+        'beatapi': 'https://api.beatapi.io/v1/chat/completions',
         'byteplus':
             'https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions',
         'cerebras': 'https://api.cerebras.ai/v1/chat/completions',
@@ -115,6 +137,54 @@ void main() {
       findLlmOpenAiProviderPreset('novita')?.modelsUrl,
       'https://api.novita.ai/openai/v1/models',
     );
+    expect(
+      {
+        for (final id in [
+          'agnes-cn',
+          'ainative',
+          'ainetcafe',
+          'aion',
+          'ant-ling',
+          'anyapi',
+          'apmix',
+          'auriko',
+          'baidu',
+          'bazaarlink',
+          'beatapi',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'agnes-cn': 'https://api.agnes-ai.cn/v1/models',
+        'ainative': 'https://api.ainative.studio/api/v1/models',
+        'ainetcafe': 'https://microquickjs.com/v1/models',
+        'aion': 'https://api.aionlabs.ai/v1/models',
+        'ant-ling': null,
+        'anyapi': 'https://api.anyapi.ai/v1/models',
+        'apmix': 'https://api.apmix.ai/v1/models',
+        'auriko': 'https://api.auriko.ai/v1/models',
+        'baidu': null,
+        'bazaarlink': 'https://bazaarlink.ai/api/v1/models',
+        'beatapi': 'https://api.beatapi.io/v1/models',
+      },
+    );
+    for (final id in [
+      'agnes-cn',
+      'ainative',
+      'ainetcafe',
+      'aion',
+      'ant-ling',
+      'anyapi',
+      'apmix',
+      'auriko',
+      'baidu',
+      'bazaarlink',
+      'beatapi',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id)!.modelIdPrefix, isEmpty);
+    }
+    expect(findLlmOpenAiProviderPreset('baidu')!.displayName,
+        'Baidu ERNIE (Qianfan)');
     final stepfunChina = findLlmOpenAiProviderPreset('stepfun-cn')!;
     final stepfunInternational =
         findLlmOpenAiProviderPreset('stepfun-international')!;
@@ -193,6 +263,271 @@ void main() {
       findLlmOpenAiProviderPreset('deepinfra')!.fallbackModels[7].id,
       'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning',
     );
+  });
+
+  test('M37 presets retain the pinned source fallback catalog', () {
+    final fallbackIds = {
+      for (final id in [
+        'agnes-cn',
+        'ainative',
+        'ainetcafe',
+        'aion',
+        'ant-ling',
+        'anyapi',
+        'apmix',
+        'auriko',
+        'baidu',
+        'bazaarlink',
+        'beatapi',
+      ])
+        id: findLlmOpenAiProviderPreset(id)!
+            .fallbackModels
+            .map((model) => model.id)
+            .toList(),
+    };
+    expect(fallbackIds, {
+      'agnes-cn': ['agnes-2.0-flash', 'agnes-2.5-flash', 'agnes-3.0-flash'],
+      'ainative': [
+        'qwen3-235b-cerebras',
+        'qwen3-32b',
+        'qwen3-14b',
+        'qwen3-8b',
+        'llama-4-maverick',
+        'llama3.1-8b-cerebras',
+        'deepseek-r1',
+        'nous-coder',
+        'gemini-flash',
+      ],
+      'ainetcafe': <String>[],
+      'aion': [
+        'aion-labs/aion-3.0',
+        'aion-labs/aion-3.0-mini',
+        'aion-labs/aion-2.5',
+        'aion-labs/aion-2.0',
+        'aion-labs/aion-rp-llama-3.1-8b',
+      ],
+      'ant-ling': ['Ling-2.6-1T', 'Ring-2.6-1T', 'Ling-2.6-flash'],
+      'anyapi': <String>[],
+      'apmix': [
+        'claude-haiku-4-5',
+        'claude-sonnet-5',
+        'claude-opus-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-fable-5',
+        'claude-sonnet-4-6',
+        'gpt-5.6-terra',
+        'gpt-5.6-sol',
+        'gpt-5.6-luna',
+        'gpt-5.5',
+        'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
+        'gpt-6-luna-free',
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.1-pro',
+        'grok-4.5',
+        'grok-4.6',
+        'grok-4.7',
+        'deepseek-v4-pro',
+        'deepseek-v4-flash',
+        'deepseek-v4.1-flash',
+        'deepseek-v4-flash-free',
+        'qwen3.8-flash',
+        'qwen3.8-max',
+        'glm-5.3-flash',
+        'glm-5.3',
+        'glm-5.2',
+        'glm-5-turbo',
+        'kimi-k2.7-code',
+        'kimi-k3',
+        'mimo-v2.5-pro',
+        'mimo-v2.5',
+        'hy4-preview',
+        'composer-2.5-fast',
+        'minimax-m3',
+        'muse-spark-1.3',
+      ],
+      'auriko': <String>[],
+      'baidu': [
+        'ernie-5.1',
+        'ernie-5.0',
+        'ernie-x1.1',
+        'ernie-4.5-turbo-128k',
+        'ernie-4.5-turbo-32k',
+        'ernie-4.5-turbo-vl',
+        'ernie-4.5-21b-a3b',
+        'ernie-4.5-0.3b',
+        'ernie-4.0-8k',
+        'ernie-4.0-turbo-128k',
+        'ernie-4.0-turbo-8k',
+        'ernie-3.5-8k',
+        'ernie-speed-128k',
+        'ernie-speed-8k',
+        'ernie-lite-8k',
+        'ernie-tiny-8k',
+      ],
+      'bazaarlink': [
+        'auto:free',
+        'claude-opus-4.7',
+        'claude-sonnet-4.6',
+        'claude-haiku-4.5',
+        'gpt-5.5',
+        'gpt-5.4',
+        'gpt-5.4-mini',
+        'gpt-5.4-nano',
+        'grok-4.3',
+        'grok-4.20',
+        'gemini-3.1-pro-preview',
+        'gemini-3-flash-preview',
+        'gemini-3.1-flash-lite-preview',
+        'gemma-4-31b-it',
+        'gemma-4-26b-a4b-it',
+        'deepseek-v3.2',
+        'kimi-k2.6',
+        'kimi-k2.5',
+        'glm-5.1',
+        'glm-5',
+        'mimo-v2.5-pro',
+        'mimo-v2.5',
+        'minimax-m3',
+        'minimax-m2.7',
+        'minimax-m2.5',
+        'llama-4-maverick',
+        'llama-4-scout',
+        'llama-3.3-70b-instruct',
+        'qwen3.6-plus',
+        'mistral-large-2512',
+        'mistral-medium-3.1',
+        'mistral-small-2603',
+        'nemotron-3-super-120b-a12b',
+      ],
+      'beatapi': <String>[],
+    });
+    expect(
+        findLlmOpenAiProviderPreset('agnes-cn')!
+            .fallbackModels
+            .first
+            .capabilities,
+        containsPair('reasoning', true));
+    expect(
+        findLlmOpenAiProviderPreset('ainative')!
+            .fallbackModels
+            .first
+            .capabilities,
+        containsPair('toolCalling', true));
+    expect(
+        findLlmOpenAiProviderPreset('baidu')!.fallbackModels.first.capabilities,
+        containsPair('contextLength', 131072));
+    expect(
+        findLlmOpenAiProviderPreset('apmix')!.fallbackModels[39].capabilities,
+        containsPair('vision', true));
+    expect(
+        findLlmOpenAiProviderPreset('bazaarlink')!
+            .fallbackModels[22]
+            .capabilities,
+        containsPair('vision', true));
+    // Deferred: open-sse/config/providers/registry/api-airforce/index.ts:13-16
+    // requires HTTP-Referer and X-Title headers that presets cannot represent.
+    expect(findLlmOpenAiProviderPreset('api-airforce'), isNull);
+    // Deferred: open-sse/config/providers/registry/bai/index.ts:16 requires
+    // reasoning-content echo, which presets cannot represent.
+    expect(findLlmOpenAiProviderPreset('bai'), isNull);
+    // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
+    expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
+  });
+
+  test('each M37 eligible preset saves and reloads source defaults', () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const presetIds = [
+      'agnes-cn',
+      'ainative',
+      'ainetcafe',
+      'aion',
+      'ant-ling',
+      'anyapi',
+      'apmix',
+      'auriko',
+      'baidu',
+      'bazaarlink',
+      'beatapi',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallback = preset.fallbackModels;
+      final account = LlmAccount(
+        id: 'm37-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {
+          'customHeader': 'preserved',
+        }),
+        models: [
+          for (final model in fallback)
+            LlmUpstreamModel(
+              id: 'm37-$presetId:${model.id}',
+              upstreamModelId: model.id,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          if (fallback.isEmpty)
+            LlmUpstreamModel(
+              id: 'm37-$presetId:user-model',
+              upstreamModelId: 'user-model',
+              displayName: 'User model',
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+        ],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility');
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['customHeader'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(
+        restored.models.map((model) => model.upstreamModelId),
+        fallback.isEmpty ? ['user-model'] : fallback.map((model) => model.id),
+      );
+      if (fallback.isNotEmpty) {
+        expect(restored.models.first.capabilities, fallback.first.capabilities);
+      }
+      final model = restored.models.first;
+      final group = LlmModelGroup(
+        id: 'm37-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: model.upstreamModelId,
+          ),
+        ],
+      );
+      final providerConfigs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(providerConfigs, hasLength(1));
+      expect(providerConfigs.single.apiProtocol, 'openai.chat_completions');
+      expect(
+        providerConfigs.single.models.single.apiProtocolOverride,
+        'anthropic.messages',
+      );
+    }
   });
 
   test(
