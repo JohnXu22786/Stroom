@@ -21,6 +21,7 @@ import 'devin_connect_rpc.dart';
 import 'qoder_cli_service.dart';
 import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
+import 'trae_solo_connector.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -454,6 +455,12 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'trae',
+      displayName: 'Trae SOLO',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'session_token'},
+    ),
+    LlmConnectorDefinition(
       id: 'meta',
       displayName: 'Meta Muse Code',
       protocol: LlmNativeProtocol.metaResponses,
@@ -735,6 +742,7 @@ abstract final class LlmConnectorRegistry {
         'devin' => 'devin.connect_rpc',
         'devin-cli-agentic' => 'devin.acp',
         'cursor' => 'cursor.agent_connect_rpc',
+        'trae' => 'openai',
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
@@ -1576,6 +1584,7 @@ class LlmAccountConnectorService {
       'bedrock',
       'vertex',
       'ollama',
+      'trae',
     }.contains(account.connectorType);
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
@@ -1583,7 +1592,8 @@ class LlmAccountConnectorService {
     final accountEntitlementCatalog = account.connectorType == 'github' ||
         account.connectorType == 'ghe-copilot' ||
         account.connectorType == 'grok-cli' ||
-        account.connectorType == 'xai-oauth';
+        account.connectorType == 'xai-oauth' ||
+        account.connectorType == 'trae';
     if (account.connectorType == 'qoder' &&
         account.authType == 'pat' &&
         refreshRemote) {
@@ -1706,6 +1716,16 @@ class LlmAccountConnectorService {
           discovered,
           account.models
               .where((model) => entitledIds.contains(model.upstreamModelId))
+              .toList(),
+        );
+      }
+      if (account.connectorType == 'trae') {
+        final discoveredIds =
+            discovered.map((model) => model.upstreamModelId).toSet();
+        return _mergeModelMappings(
+          discovered,
+          account.models
+              .where((model) => discoveredIds.contains(model.upstreamModelId))
               .toList(),
         );
       }
@@ -2927,6 +2947,44 @@ class LlmAccountConnectorService {
         account.connectorType == 'clinepass') {
       return _discoverClineModels(account);
     }
+    if (account.connectorType == 'trae') {
+      if (account.authType != 'session_token' ||
+          account.endpointConfig['baseUrl'] != null ||
+          account.credentialRef == null) {
+        throw const LlmAccountConnectorException();
+      }
+      final rawCredential = await _readSecureValue(account.credentialRef!);
+      if (rawCredential == null || rawCredential.trim().isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final credential = TraeSoloCredential.fromPastedValue(rawCredential);
+      if (!credential.expiresAt.isAfter(DateTime.now().toUtc())) {
+        throw const LlmAccountConnectorException();
+      }
+      final response = await _dio.getUri<Object?>(
+        TraeSoloConnector.modelsUri,
+        options: Options(
+          responseType: ResponseType.json,
+          headers: TraeSoloConnector.headers(credential),
+          validateStatus: (status) => status != null,
+        ),
+      );
+      if ((response.statusCode ?? 0) < 200 ||
+          (response.statusCode ?? 0) >= 300) {
+        throw const LlmAccountConnectorException();
+      }
+      final models = TraeSoloConnector.parseModels(response.data);
+      return [
+        for (final model in models)
+          LlmUpstreamModel(
+            id: '${account.id}:trae:${model['id']}',
+            upstreamModelId: model['id'] as String,
+            displayName: model['displayName'] as String,
+            capabilities: const {'chat': true, 'streaming': true},
+            config: const {'catalogSource': 'account-entitlement'},
+          ),
+      ];
+    }
     final fallbackBase = switch (account.connectorType) {
       'openai-api' => 'https://api.openai.com/v1',
       'openference' || 'openference-api' => 'https://api.openference.com/v1',
@@ -2957,6 +3015,7 @@ class LlmAccountConnectorService {
       'kilocode' => 'https://api.kilo.ai/api/openrouter',
       'vertex' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
+      'trae' => TraeSoloConnector.defaultBaseUrl,
       _ => null,
     };
     final base = account.connectorType == 'kilocode'
@@ -3854,6 +3913,9 @@ class LlmAccountConnectorService {
     List<Map<String, dynamic>>? updatedModelGroups;
     try {
       account = _canonicalAccount(account);
+      if (secret != null && account.connectorType == 'trae') {
+        secret = TraeSoloCredential.fromPastedValue(secret).toStoredValue();
+      }
       _validateAccount(account);
       if (secret != null) _validateCredential(account, secret);
       final currentRecords = await _readAccounts();

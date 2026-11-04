@@ -1494,6 +1494,9 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'trae' && type == 'session_token') {
+    return '粘贴 Cloud-IDE-JWT';
+  }
   if (connectorType == 'cline' && type == 'oauth') {
     return 'Cline WorkOS OAuth';
   }
@@ -2027,6 +2030,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
                     _apiProtocol = builtinDefaultApiProtocolForConnector(value);
+                    if (value == 'trae') {
+                      _models.clear();
+                      _endpoint.clear();
+                      _discoveredModels = const [];
+                    }
                     if (value == 'command-code' &&
                         widget.account?.connectorType != 'command-code') {
                       _models.clear();
@@ -2367,7 +2375,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType != 'qoder' &&
                     _connectorType != 'kilocode' &&
                     _connectorType != 'cline' &&
-                    _connectorType != 'clinepass',
+                    _connectorType != 'clinepass' &&
+                    _connectorType != 'trae',
                 decoration: InputDecoration(
                   labelText: _connectorType == 'ghe-copilot'
                       ? 'GitHub Enterprise instance HTTPS URL'
@@ -2376,8 +2385,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? 'Cline 使用固定服务端点'
                           : _connectorType == 'kilocode'
                               ? 'Kilo Code 使用固定服务端点'
-                              : _connectorType == 'qoder'
-                                  ? 'Qoder 使用固定服务端点'
+                              : _connectorType == 'qoder' ||
+                                      _connectorType == 'trae'
+                                  ? '固定服务端点'
                                   : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
@@ -2395,6 +2405,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'cline' ||
                     'clinepass' =>
                       '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                    'trae' => 'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
                     _ => null,
                   },
                 ),
@@ -2481,8 +2492,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                         : _connectorType == 'qoder' &&
                                                 _authType == 'pat'
                                             ? 'Qoder PAT（pt-…）'
+                                            : _connectorType == 'trae'
+                                                ? 'Trae Cloud-IDE-JWT'
                                             : '凭据',
-                    hintText: _authType == 'aws_credential_chain'
+                    helperText: _connectorType == 'trae'
+                        ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌没有后台刷新；到期后请重新粘贴。'
+                        : null,
+                    hintText: _connectorType == 'trae'
+                        ? 'Cloud-IDE-JWT eyJ…'
+                        : _authType == 'aws_credential_chain'
                         ? '使用运行环境的 AWS 默认凭据链'
                         : !widget.hasCredential
                             ? '保存在平台安全存储中'
@@ -2579,7 +2597,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType == 'muse-code' ||
                     _connectorType == 'command-code' ||
                     _connectorType == 'cline' ||
-                    _connectorType == 'clinepass',
+                    _connectorType == 'clinepass' ||
+                    _connectorType == 'trae',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
@@ -2612,7 +2631,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         _connectorType == 'xai-oauth' ||
                         _connectorType == 'muse-code' ||
                         _connectorType == 'cline' ||
-                        _connectorType == 'clinepass'
+                        _connectorType == 'clinepass' ||
+                        _connectorType == 'trae'
                     ? null
                     : (_) => setState(() => _draftChanged = true),
               ),
@@ -3047,6 +3067,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     if (_connectorType == 'ghe-copilot') {
       endpointConfig['gheUrl'] = endpoint;
+      endpointConfig.remove('baseUrl');
+      endpointConfig.remove('host');
+      endpointConfig.remove('apiBase');
+    } else if (_connectorType == 'trae') {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
