@@ -4421,7 +4421,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final removed = removedTasks.firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
     final Future<bool> persistence;
-    if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
+    if (removed?.type == BackgroundTaskType.ocr) {
       final references = OcrRetryStorage.referencesFromSnapshot(
         removed!.retryData,
       );
