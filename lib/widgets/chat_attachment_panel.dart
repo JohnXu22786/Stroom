@@ -100,8 +100,8 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.insert_drive_file_outlined,
-                    label: AppLocalizations.of(context)!
-                        .chatAttachmentDeviceFiles,
+                    label:
+                        AppLocalizations.of(context)!.chatAttachmentDeviceFiles,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(context);

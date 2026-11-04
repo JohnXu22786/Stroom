@@ -6,15 +6,16 @@ import '../utils/batch_rename.dart';
 String localizedBatchRenameOperationLabel(
   BatchRenameOp operation,
   AppLocalizations strings,
-) => switch (operation) {
-  BatchNumberOp() => strings.batchRuleTypeNumber,
-  BatchReplaceOp() => strings.batchRuleTypeReplace,
-  BatchInsertOp() => strings.batchRuleTypeInsert,
-  BatchDeleteOp() => strings.batchRuleTypeDelete,
-  BatchCaseOp() => strings.batchRuleTypeCase,
-  BatchTemplateOp() => strings.batchRuleTypeTemplate,
-  BatchCleanupOp() => strings.batchRuleTypeCleanup,
-};
+) =>
+    switch (operation) {
+      BatchNumberOp() => strings.batchRuleTypeNumber,
+      BatchReplaceOp() => strings.batchRuleTypeReplace,
+      BatchInsertOp() => strings.batchRuleTypeInsert,
+      BatchDeleteOp() => strings.batchRuleTypeDelete,
+      BatchCaseOp() => strings.batchRuleTypeCase,
+      BatchTemplateOp() => strings.batchRuleTypeTemplate,
+      BatchCleanupOp() => strings.batchRuleTypeCleanup,
+    };
 
 String _localizedBatchRuleValidation(String error, AppLocalizations strings) =>
     switch (error) {
@@ -106,18 +107,15 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
         number('start', r.start, min: -999999999, max: 999999999) &&
             number('step', r.step, min: -999999999, max: 999999999) &&
             number('digits', r.digits, min: 1, max: 12),
-      BatchTemplateOp r =>
-        !r.pattern.contains('{n}') ||
-            (number('start', r.start, min: -999999999, max: 999999999) &&
-                number('step', r.step, min: -999999999, max: 999999999) &&
-                number('digits', r.digits, min: 1, max: 12)),
-      BatchInsertOp r =>
-        r.position != BatchRenameInsertPos.atIndex ||
-            number('index', r.index, min: 1),
-      BatchDeleteOp r =>
-        number('count', r.count, min: 1) &&
-            (r.position != BatchRenameDeletePos.atIndex ||
-                number('index', r.index, min: 1)),
+      BatchTemplateOp r => !r.pattern.contains('{n}') ||
+          (number('start', r.start, min: -999999999, max: 999999999) &&
+              number('step', r.step, min: -999999999, max: 999999999) &&
+              number('digits', r.digits, min: 1, max: 12)),
+      BatchInsertOp r => r.position != BatchRenameInsertPos.atIndex ||
+          number('index', r.index, min: 1),
+      BatchDeleteOp r => number('count', r.count, min: 1) &&
+          (r.position != BatchRenameDeletePos.atIndex ||
+              number('index', r.index, min: 1)),
       _ => true,
     };
   }
@@ -144,22 +142,23 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
     String? hint,
     String? keyName,
     String? help,
-  }) => Padding(
-    padding: const EdgeInsets.only(top: 8),
-    child: TextField(
-      key: keyName == null ? null : _key(keyName),
-      controller: _controller(field, initial),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        helperText: help,
-        helperMaxLines: 3,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
-      onChanged: onChanged,
-    ),
-  );
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: TextField(
+          key: keyName == null ? null : _key(keyName),
+          controller: _controller(field, initial),
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hint,
+            helperText: help,
+            helperMaxLines: 3,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: onChanged,
+        ),
+      );
 
   Widget _number(
     String label,
@@ -202,281 +201,285 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
     Map<T, String> choices,
     ValueChanged<T> onChanged, {
     String? keyName,
-  }) => Wrap(
-    key: keyName == null ? null : _key(keyName),
-    spacing: 6,
-    runSpacing: 4,
-    children: [
-      for (final e in choices.entries)
-        ChoiceChip(
-          label: Text(e.value),
-          selected: value == e.key,
-          showCheckmark: false,
-          onSelected: (_) => onChanged(e.key),
-        ),
-    ],
-  );
+  }) =>
+      Wrap(
+        key: keyName == null ? null : _key(keyName),
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final e in choices.entries)
+            ChoiceChip(
+              label: Text(e.value),
+              selected: value == e.key,
+              showCheckmark: false,
+              onSelected: (_) => onChanged(e.key),
+            ),
+        ],
+      );
 
   Widget _check(
     String text,
     bool checked,
     ValueChanged<bool> changed, {
     String? keyName,
-  }) => CheckboxListTile(
-    key: keyName == null ? null : _key(keyName),
-    contentPadding: EdgeInsets.zero,
-    dense: true,
-    controlAffinity: ListTileControlAffinity.leading,
-    title: Text(text),
-    value: checked,
-    onChanged: (v) => changed(v ?? false),
-  );
+  }) =>
+      CheckboxListTile(
+        key: keyName == null ? null : _key(keyName),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(text),
+        value: checked,
+        onChanged: (v) => changed(v ?? false),
+      );
 
   List<Widget> _fields(BatchRenameOp op) => switch (op) {
-    BatchNumberOp r => [
-      _choices(
-        r.position,
-        {
-          BatchRenameNumberPos.prefix: _strings.batchRulePrefix,
-          BatchRenameNumberPos.suffix: _strings.batchRuleSuffix,
-        },
-        (v) => _change(r.copyWith(position: v)),
-        keyName: 'batch_num_pos_selector',
-      ),
-      Wrap(
-        spacing: 8,
-        children: [
-          _number(
-            _strings.batchRuleStart,
-            'start',
-            r.start,
-            (v) => _change(r.copyWith(start: v)),
-            min: -999999999,
-            max: 999999999,
-            keyName: 'batch_num_start_field',
-          ),
-          _number(
-            _strings.batchRuleStep,
-            'step',
-            r.step,
-            (v) => _change(r.copyWith(step: v)),
-            min: -999999999,
-            max: 999999999,
-            keyName: 'batch_num_step_field',
-          ),
-          _number(
-            _strings.batchRuleDigits,
-            'digits',
-            r.digits,
-            (v) => _change(r.copyWith(digits: v)),
-            min: 1,
-            max: 12,
-            keyName: 'batch_num_digits_field',
-          ),
-        ],
-      ),
-      _text(
-        _strings.batchRuleSeparator,
-        'separator',
-        r.separator,
-        (v) => _change(r.copyWith(separator: v)),
-        keyName: 'batch_num_separator_field',
-      ),
-      _check(
-        _strings.batchRuleRestartFolder,
-        r.restartPerFolder,
-        (v) => _change(r.copyWith(restartPerFolder: v)),
-      ),
-      Text(_strings.batchRuleNumberHelp, style: TextStyle(fontSize: 12)),
-    ],
-    BatchReplaceOp r => [
-      _text(
-        _strings.batchRuleFind,
-        'find',
-        r.find,
-        (v) => _change(r.copyWith(find: v)),
-        keyName: 'batch_replace_find_field',
-      ),
-      _text(
-        _strings.batchRuleReplace,
-        'replace',
-        r.replace,
-        (v) => _change(r.copyWith(replace: v)),
-        keyName: 'batch_replace_to_field',
-      ),
-      _check(
-        _strings.batchRuleCaseSensitive,
-        r.caseSensitive,
-        (v) => _change(r.copyWith(caseSensitive: v)),
-        keyName: 'batch_replace_case_checkbox',
-      ),
-      _check(
-        _strings.batchRuleRegex,
-        r.useRegex,
-        (v) => _change(r.copyWith(useRegex: v)),
-        keyName: 'batch_replace_regex_checkbox',
-      ),
-      _check(
-        _strings.batchRuleFirstOnly,
-        r.firstOnly,
-        (v) => _change(r.copyWith(firstOnly: v)),
-      ),
-      if (r.useRegex)
-        SelectableText(
-          _strings.batchRuleRegexHelp,
-          style: TextStyle(fontSize: 12),
-        ),
-      if (r.find.isEmpty)
-        Text(_strings.batchRuleFindRequired, style: TextStyle(fontSize: 12)),
-    ],
-    BatchInsertOp r => [
-      _choices(
-        r.position,
-        {
-          BatchRenameInsertPos.start: _strings.batchRuleBeginning,
-          BatchRenameInsertPos.end: _strings.batchRuleEnd,
-          BatchRenameInsertPos.atIndex: _strings.batchRulePosition,
-        },
-        (v) => _change(r.copyWith(position: v)),
-        keyName: 'batch_insert_pos_selector',
-      ),
-      _text(
-        _strings.batchRuleInsertText,
-        'text',
-        r.text,
-        (v) => _change(r.copyWith(text: v)),
-        keyName: 'batch_insert_text_field',
-      ),
-      if (r.position == BatchRenameInsertPos.atIndex)
-        _number(
-          _strings.batchRuleBeforeChar,
-          'index',
-          r.index,
-          (v) => _change(r.copyWith(index: v)),
-          min: 1,
-          keyName: 'batch_insert_index_field',
-        ),
-      Text(_strings.batchRulePositionHelp, style: TextStyle(fontSize: 12)),
-    ],
-    BatchDeleteOp r => [
-      _choices(
-        r.position,
-        {
-          BatchRenameDeletePos.start: _strings.batchRuleFromBeginning,
-          BatchRenameDeletePos.end: _strings.batchRuleFromEnd,
-          BatchRenameDeletePos.atIndex: _strings.batchRulePosition,
-        },
-        (v) => _change(r.copyWith(position: v)),
-        keyName: 'batch_delete_pos_selector',
-      ),
-      Wrap(
-        spacing: 8,
-        children: [
-          if (r.position == BatchRenameDeletePos.atIndex)
-            _number(
-              _strings.batchRuleFromChar,
-              'index',
-              r.index,
-              (v) => _change(r.copyWith(index: v)),
-              min: 1,
-              keyName: 'batch_delete_index_field',
+        BatchNumberOp r => [
+            _choices(
+              r.position,
+              {
+                BatchRenameNumberPos.prefix: _strings.batchRulePrefix,
+                BatchRenameNumberPos.suffix: _strings.batchRuleSuffix,
+              },
+              (v) => _change(r.copyWith(position: v)),
+              keyName: 'batch_num_pos_selector',
             ),
-          _number(
-            _strings.batchRuleCount,
-            'count',
-            r.count,
-            (v) => _change(r.copyWith(count: v)),
-            min: 1,
-            keyName: 'batch_delete_count_field',
-          ),
-        ],
-      ),
-      Text(_strings.batchRuleDeleteHelp, style: TextStyle(fontSize: 12)),
-    ],
-    BatchCaseOp r => [
-      _choices(
-        r.mode,
-        {
-          BatchRenameCaseMode.upper: _strings.batchRuleUpper,
-          BatchRenameCaseMode.lower: _strings.batchRuleLower,
-          BatchRenameCaseMode.firstUpper: _strings.batchRuleFirstUpper,
-          BatchRenameCaseMode.title: _strings.batchRuleTitleCase,
-        },
-        (v) => _change(r.copyWith(mode: v)),
-        keyName: 'batch_case_mode_selector',
-      ),
-    ],
-    BatchTemplateOp r => [
-      _text(
-        _strings.batchRuleTemplate,
-        'pattern',
-        r.pattern,
-        (v) => _change(r.copyWith(pattern: v)),
-        keyName: 'batch_template_field',
-        hint: _strings.batchRuleTemplateHint('{n}', '{name}'),
-      ),
-      const SizedBox(height: 8),
-      SelectableText(
-        _strings.batchRuleTemplateHelp(
-          '{name}',
-          '{n}',
-          '{folder}',
-          '{created}',
-          '{modified}',
-          '{ext}',
-        ),
-        style: TextStyle(fontSize: 12),
-      ),
-      if (r.pattern.contains('{n}')) ...[
-        Wrap(
-          spacing: 8,
-          children: [
-            _number(
-              _strings.batchRuleStart,
-              'start',
-              r.start,
-              (v) => _change(r.copyWith(start: v)),
-              min: -999999999,
-              max: 999999999,
+            Wrap(
+              spacing: 8,
+              children: [
+                _number(
+                  _strings.batchRuleStart,
+                  'start',
+                  r.start,
+                  (v) => _change(r.copyWith(start: v)),
+                  min: -999999999,
+                  max: 999999999,
+                  keyName: 'batch_num_start_field',
+                ),
+                _number(
+                  _strings.batchRuleStep,
+                  'step',
+                  r.step,
+                  (v) => _change(r.copyWith(step: v)),
+                  min: -999999999,
+                  max: 999999999,
+                  keyName: 'batch_num_step_field',
+                ),
+                _number(
+                  _strings.batchRuleDigits,
+                  'digits',
+                  r.digits,
+                  (v) => _change(r.copyWith(digits: v)),
+                  min: 1,
+                  max: 12,
+                  keyName: 'batch_num_digits_field',
+                ),
+              ],
             ),
-            _number(
-              _strings.batchRuleStep,
-              'step',
-              r.step,
-              (v) => _change(r.copyWith(step: v)),
-              min: -999999999,
-              max: 999999999,
+            _text(
+              _strings.batchRuleSeparator,
+              'separator',
+              r.separator,
+              (v) => _change(r.copyWith(separator: v)),
+              keyName: 'batch_num_separator_field',
             ),
-            _number(
-              _strings.batchRuleDigits,
-              'digits',
-              r.digits,
-              (v) => _change(r.copyWith(digits: v)),
-              min: 1,
-              max: 12,
+            _check(
+              _strings.batchRuleRestartFolder,
+              r.restartPerFolder,
+              (v) => _change(r.copyWith(restartPerFolder: v)),
+            ),
+            Text(_strings.batchRuleNumberHelp, style: TextStyle(fontSize: 12)),
+          ],
+        BatchReplaceOp r => [
+            _text(
+              _strings.batchRuleFind,
+              'find',
+              r.find,
+              (v) => _change(r.copyWith(find: v)),
+              keyName: 'batch_replace_find_field',
+            ),
+            _text(
+              _strings.batchRuleReplace,
+              'replace',
+              r.replace,
+              (v) => _change(r.copyWith(replace: v)),
+              keyName: 'batch_replace_to_field',
+            ),
+            _check(
+              _strings.batchRuleCaseSensitive,
+              r.caseSensitive,
+              (v) => _change(r.copyWith(caseSensitive: v)),
+              keyName: 'batch_replace_case_checkbox',
+            ),
+            _check(
+              _strings.batchRuleRegex,
+              r.useRegex,
+              (v) => _change(r.copyWith(useRegex: v)),
+              keyName: 'batch_replace_regex_checkbox',
+            ),
+            _check(
+              _strings.batchRuleFirstOnly,
+              r.firstOnly,
+              (v) => _change(r.copyWith(firstOnly: v)),
+            ),
+            if (r.useRegex)
+              SelectableText(
+                _strings.batchRuleRegexHelp,
+                style: TextStyle(fontSize: 12),
+              ),
+            if (r.find.isEmpty)
+              Text(_strings.batchRuleFindRequired,
+                  style: TextStyle(fontSize: 12)),
+          ],
+        BatchInsertOp r => [
+            _choices(
+              r.position,
+              {
+                BatchRenameInsertPos.start: _strings.batchRuleBeginning,
+                BatchRenameInsertPos.end: _strings.batchRuleEnd,
+                BatchRenameInsertPos.atIndex: _strings.batchRulePosition,
+              },
+              (v) => _change(r.copyWith(position: v)),
+              keyName: 'batch_insert_pos_selector',
+            ),
+            _text(
+              _strings.batchRuleInsertText,
+              'text',
+              r.text,
+              (v) => _change(r.copyWith(text: v)),
+              keyName: 'batch_insert_text_field',
+            ),
+            if (r.position == BatchRenameInsertPos.atIndex)
+              _number(
+                _strings.batchRuleBeforeChar,
+                'index',
+                r.index,
+                (v) => _change(r.copyWith(index: v)),
+                min: 1,
+                keyName: 'batch_insert_index_field',
+              ),
+            Text(_strings.batchRulePositionHelp,
+                style: TextStyle(fontSize: 12)),
+          ],
+        BatchDeleteOp r => [
+            _choices(
+              r.position,
+              {
+                BatchRenameDeletePos.start: _strings.batchRuleFromBeginning,
+                BatchRenameDeletePos.end: _strings.batchRuleFromEnd,
+                BatchRenameDeletePos.atIndex: _strings.batchRulePosition,
+              },
+              (v) => _change(r.copyWith(position: v)),
+              keyName: 'batch_delete_pos_selector',
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (r.position == BatchRenameDeletePos.atIndex)
+                  _number(
+                    _strings.batchRuleFromChar,
+                    'index',
+                    r.index,
+                    (v) => _change(r.copyWith(index: v)),
+                    min: 1,
+                    keyName: 'batch_delete_index_field',
+                  ),
+                _number(
+                  _strings.batchRuleCount,
+                  'count',
+                  r.count,
+                  (v) => _change(r.copyWith(count: v)),
+                  min: 1,
+                  keyName: 'batch_delete_count_field',
+                ),
+              ],
+            ),
+            Text(_strings.batchRuleDeleteHelp, style: TextStyle(fontSize: 12)),
+          ],
+        BatchCaseOp r => [
+            _choices(
+              r.mode,
+              {
+                BatchRenameCaseMode.upper: _strings.batchRuleUpper,
+                BatchRenameCaseMode.lower: _strings.batchRuleLower,
+                BatchRenameCaseMode.firstUpper: _strings.batchRuleFirstUpper,
+                BatchRenameCaseMode.title: _strings.batchRuleTitleCase,
+              },
+              (v) => _change(r.copyWith(mode: v)),
+              keyName: 'batch_case_mode_selector',
             ),
           ],
-        ),
-        _check(
-          _strings.batchRuleRestartFolder,
-          r.restartPerFolder,
-          (v) => _change(r.copyWith(restartPerFolder: v)),
-        ),
-      ],
-    ],
-    BatchCleanupOp r => [
-      _check(
-        _strings.batchRuleTrim,
-        r.trim,
-        (v) => _change(r.copyWith(trim: v)),
-      ),
-      _check(
-        _strings.batchRuleCollapseSpaces,
-        r.collapseWhitespace,
-        (v) => _change(r.copyWith(collapseWhitespace: v)),
-      ),
-    ],
-  };
+        BatchTemplateOp r => [
+            _text(
+              _strings.batchRuleTemplate,
+              'pattern',
+              r.pattern,
+              (v) => _change(r.copyWith(pattern: v)),
+              keyName: 'batch_template_field',
+              hint: _strings.batchRuleTemplateHint('{n}', '{name}'),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              _strings.batchRuleTemplateHelp(
+                '{name}',
+                '{n}',
+                '{folder}',
+                '{created}',
+                '{modified}',
+                '{ext}',
+              ),
+              style: TextStyle(fontSize: 12),
+            ),
+            if (r.pattern.contains('{n}')) ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  _number(
+                    _strings.batchRuleStart,
+                    'start',
+                    r.start,
+                    (v) => _change(r.copyWith(start: v)),
+                    min: -999999999,
+                    max: 999999999,
+                  ),
+                  _number(
+                    _strings.batchRuleStep,
+                    'step',
+                    r.step,
+                    (v) => _change(r.copyWith(step: v)),
+                    min: -999999999,
+                    max: 999999999,
+                  ),
+                  _number(
+                    _strings.batchRuleDigits,
+                    'digits',
+                    r.digits,
+                    (v) => _change(r.copyWith(digits: v)),
+                    min: 1,
+                    max: 12,
+                  ),
+                ],
+              ),
+              _check(
+                _strings.batchRuleRestartFolder,
+                r.restartPerFolder,
+                (v) => _change(r.copyWith(restartPerFolder: v)),
+              ),
+            ],
+          ],
+        BatchCleanupOp r => [
+            _check(
+              _strings.batchRuleTrim,
+              r.trim,
+              (v) => _change(r.copyWith(trim: v)),
+            ),
+            _check(
+              _strings.batchRuleCollapseSpaces,
+              r.collapseWhitespace,
+              (v) => _change(r.copyWith(collapseWhitespace: v)),
+            ),
+          ],
+      };
 
   @override
   Widget build(BuildContext context) {

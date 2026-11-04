@@ -17,19 +17,20 @@ Future<BatchRenameExecution?> showBatchRenameRunDialog({
   required RenameCallback renameFile,
   required RenameCallback renameFolder,
   ValueChanged<List<BatchRenameChange>>? onChangesApplied,
-}) => showDialog<BatchRenameExecution>(
-  context: context,
-  barrierDismissible: false,
-  builder: (_) => _RunDialog(
-    plan: plan,
-    history: history,
-    bridge: bridge,
-    readSnapshot: readSnapshot,
-    renameFile: renameFile,
-    renameFolder: renameFolder,
-    onChangesApplied: onChangesApplied,
-  ),
-);
+}) =>
+    showDialog<BatchRenameExecution>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _RunDialog(
+        plan: plan,
+        history: history,
+        bridge: bridge,
+        readSnapshot: readSnapshot,
+        renameFile: renameFile,
+        renameFolder: renameFolder,
+        onChangesApplied: onChangesApplied,
+      ),
+    );
 
 class _RunDialog extends StatefulWidget {
   final BatchRenamePlan? plan;
@@ -113,9 +114,8 @@ class _RunDialogState extends State<_RunDialog> {
             );
       if (mounted) {
         setState(() {
-          _history = undo
-              ? remainingBatchRenameHistory(_history!, result)
-              : result;
+          _history =
+              undo ? remainingBatchRenameHistory(_history!, result) : result;
           _result = result;
           _undone = undo;
         });
@@ -124,9 +124,8 @@ class _RunDialogState extends State<_RunDialog> {
     } catch (e) {
       if (mounted) {
         setState(
-          () =>
-              _error = AppLocalizations.of(context)!
-                  .batchRunReadFailed(e.toString()),
+          () => _error =
+              AppLocalizations.of(context)!.batchRunReadFailed(e.toString()),
         );
       }
     } finally {
@@ -190,115 +189,121 @@ class _RunDialogState extends State<_RunDialog> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && !_running) _close();
-    },
-    child: AlertDialog(
-      key: const Key('batch_run_dialog'),
-      title: Text(
-        _running
-            ? AppLocalizations.of(context)!.batchRunWorking(
-                _undoing
-                    ? AppLocalizations.of(context)!.batchRunUndo
-                    : AppLocalizations.of(context)!.batchRunRename,
-              )
-            : AppLocalizations.of(context)!.batchRunTitle,
-      ),
-      content: SizedBox(
-        width: 540,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 400),
-          child: ListView(
-            key: const Key('batch_run_report'),
-            shrinkWrap: true,
-            children: [
-              if (_running) ...[
-                LinearProgressIndicator(
-                  value: _total == 0 ? null : _done / _total,
-                ),
-                const SizedBox(height: 12),
-                Text('$_done / $_total'),
-                Text(_current, maxLines: 2, overflow: TextOverflow.ellipsis),
-                if (!_undoing)
-                  Text(AppLocalizations.of(context)!.batchRunStoppedRetain),
-              ] else ...[
-                Text(_summary),
-                if (_error != null) Text(_error!),
-                if (_result?.error != null)
-                  SelectableText(
-                    _result!.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && !_running) _close();
+        },
+        child: AlertDialog(
+          key: const Key('batch_run_dialog'),
+          title: Text(
+            _running
+                ? AppLocalizations.of(context)!.batchRunWorking(
+                    _undoing
+                        ? AppLocalizations.of(context)!.batchRunUndo
+                        : AppLocalizations.of(context)!.batchRunRename,
+                  )
+                : AppLocalizations.of(context)!.batchRunTitle,
+          ),
+          content: SizedBox(
+            width: 540,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: ListView(
+                key: const Key('batch_run_report'),
+                shrinkWrap: true,
+                children: [
+                  if (_running) ...[
+                    LinearProgressIndicator(
+                      value: _total == 0 ? null : _done / _total,
                     ),
-                  ),
-                if (_result != null) ...[
-                  for (final c in _result!.completed)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.check_circle_outline),
-                      title: Text('${c.oldName} → ${c.forward.newBaseName}'),
-                      subtitle: Text('${c.sourcePath} → ${c.targetPath}'),
-                    ),
-                  if (_result!.failed != null)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.error_outline),
-                      title: Text(_result!.failed!.id),
-                      subtitle: Text(
-                        AppLocalizations.of(context)!.batchRunFailedRemaining,
+                    const SizedBox(height: 12),
+                    Text('$_done / $_total'),
+                    Text(_current,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (!_undoing)
+                      Text(AppLocalizations.of(context)!.batchRunStoppedRetain),
+                  ] else ...[
+                    Text(_summary),
+                    if (_error != null) Text(_error!),
+                    if (_result?.error != null)
+                      SelectableText(
+                        _result!.error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    if (_result != null) ...[
+                      for (final c in _result!.completed)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.check_circle_outline),
+                          title:
+                              Text('${c.oldName} → ${c.forward.newBaseName}'),
+                          subtitle: Text('${c.sourcePath} → ${c.targetPath}'),
+                        ),
+                      if (_result!.failed != null)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.error_outline),
+                          title: Text(_result!.failed!.id),
+                          subtitle: Text(
+                            AppLocalizations.of(context)!
+                                .batchRunFailedRemaining,
+                          ),
+                        ),
+                    ],
+                    if (_history?.canUndo == true)
+                      Text(AppLocalizations.of(context)!.batchRunUndoInfo),
+                    if (_result != null && !_result!.verified)
+                      Text(AppLocalizations.of(context)!.batchRunUncertain),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: _running
+              ? [
+                  if (_undoing)
+                    Text(AppLocalizations.of(context)!.batchRunUndoing)
+                  else
+                    TextButton(
+                      key: const Key('batch_run_cancel'),
+                      onPressed:
+                          _cancel ? null : () => setState(() => _cancel = true),
+                      child: Text(
+                        _cancel
+                            ? AppLocalizations.of(context)!.batchRunStopping
+                            : AppLocalizations.of(context)!
+                                .batchRunStopRemaining,
                       ),
                     ),
+                ]
+              : [
+                  if (_result != null)
+                    TextButton(
+                      onPressed: _copyReport,
+                      child: Text(
+                          AppLocalizations.of(context)!.batchRunCopyReport),
+                    ),
+                  if (_history?.canUndo == true)
+                    TextButton(
+                      key: const Key('batch_run_undo'),
+                      onPressed: () => _run(true),
+                      child: Text(
+                        _undone
+                            ? AppLocalizations.of(context)!
+                                .batchRunUndoRemaining(
+                                    _history!.completed.length)
+                            : AppLocalizations.of(context)!
+                                .batchRunUndoCompleted,
+                      ),
+                    ),
+                  FilledButton(
+                    key: const Key('batch_run_close'),
+                    onPressed: _close,
+                    child: Text(AppLocalizations.of(context)!.batchRunDone),
+                  ),
                 ],
-                if (_history?.canUndo == true)
-                  Text(AppLocalizations.of(context)!.batchRunUndoInfo),
-                if (_result != null && !_result!.verified)
-                  Text(AppLocalizations.of(context)!.batchRunUncertain),
-              ],
-            ],
-          ),
         ),
-      ),
-      actions: _running
-          ? [
-              if (_undoing)
-                Text(AppLocalizations.of(context)!.batchRunUndoing)
-              else
-                TextButton(
-                  key: const Key('batch_run_cancel'),
-                  onPressed: _cancel
-                      ? null
-                      : () => setState(() => _cancel = true),
-                  child: Text(
-                    _cancel
-                        ? AppLocalizations.of(context)!.batchRunStopping
-                        : AppLocalizations.of(context)!.batchRunStopRemaining,
-                  ),
-                ),
-            ]
-          : [
-              if (_result != null)
-                TextButton(
-                  onPressed: _copyReport,
-                  child: Text(AppLocalizations.of(context)!.batchRunCopyReport),
-                ),
-              if (_history?.canUndo == true)
-                TextButton(
-                  key: const Key('batch_run_undo'),
-                  onPressed: () => _run(true),
-                  child: Text(
-                    _undone
-                        ? AppLocalizations.of(context)!
-                              .batchRunUndoRemaining(_history!.completed.length)
-                        : AppLocalizations.of(context)!.batchRunUndoCompleted,
-                  ),
-                ),
-              FilledButton(
-                key: const Key('batch_run_close'),
-                onPressed: _close,
-                child: Text(AppLocalizations.of(context)!.batchRunDone),
-              ),
-            ],
-    ),
-  );
+      );
 }

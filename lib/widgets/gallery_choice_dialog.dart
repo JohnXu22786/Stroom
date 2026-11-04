@@ -54,7 +54,9 @@ class _GalleryChoiceSheet extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               AppLocalizations.of(context)!.galleryChoiceTitle,
-              style: Theme.of(context).textTheme.titleLarge
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
@@ -74,8 +76,8 @@ class _GalleryChoiceSheet extends StatelessWidget {
                 _ChoiceCard(
                   icon: Icons.folder_outlined,
                   title: AppLocalizations.of(context)!.galleryChoiceApp,
-                  subtitle: AppLocalizations.of(context)!
-                      .galleryChoiceAppDescription,
+                  subtitle:
+                      AppLocalizations.of(context)!.galleryChoiceAppDescription,
                   color: Colors.purple,
                   onTap: () => Navigator.of(
                     context,
@@ -136,13 +138,17 @@ class _ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context).textTheme.bodyMedium
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: Theme.of(context).textTheme.bodySmall
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

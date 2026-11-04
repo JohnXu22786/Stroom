@@ -19,9 +19,8 @@ class TaskFlowRunPage extends ConsumerWidget {
         .watch(taskFlowExecutionsProvider)
         .where((execution) => executionIds.contains(execution.id))
         .toList();
-    final finished = executions
-        .where((execution) => execution.isTerminal)
-        .length;
+    final finished =
+        executions.where((execution) => execution.isTerminal).length;
     final batchId = executions
         .map((execution) => execution.batchId)
         .whereType<String>()
@@ -59,38 +58,38 @@ class TaskFlowRunPage extends ConsumerWidget {
               ),
             )
           : executions.isEmpty
-          ? Center(
-              child: Text(
-                AppLocalizations.of(context)!.taskFlowUiRecordsCleared,
-              ),
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) => ListView(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      AppLocalizations.of(context)!.taskFlowUiRunSummary(
-                            finished,
-                            executionIds.length,
-                          ) +
-                          (executions.length < executionIds.length
-                              ? AppLocalizations.of(context)!
-                                    .taskFlowUiClearedRecordCount(
+              ? Center(
+                  child: Text(
+                    AppLocalizations.of(context)!.taskFlowUiRecordsCleared,
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) => ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          AppLocalizations.of(context)!.taskFlowUiRunSummary(
+                                finished,
+                                executionIds.length,
+                              ) +
+                              (executions.length < executionIds.length
+                                  ? AppLocalizations.of(context)!
+                                      .taskFlowUiClearedRecordCount(
                                       executionIds.length - executions.length,
                                     )
-                              : ''),
-                    ),
+                                  : ''),
+                        ),
+                      ),
+                      for (final execution in executions)
+                        TaskFlowCard(
+                          key: ValueKey(execution.id),
+                          execution: execution,
+                          taskListViewportHeight: constraints.maxHeight,
+                        ),
+                    ],
                   ),
-                  for (final execution in executions)
-                    TaskFlowCard(
-                      key: ValueKey(execution.id),
-                      execution: execution,
-                      taskListViewportHeight: constraints.maxHeight,
-                    ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 }

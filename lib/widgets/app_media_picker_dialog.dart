@@ -417,11 +417,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     label: Text(
                       hasSelection
                           ? AppLocalizations.of(context)!
-                                .appMediaConfirmSelectionCount(
-                                  _selectedItems.length,
-                                )
+                              .appMediaConfirmSelectionCount(
+                              _selectedItems.length,
+                            )
                           : AppLocalizations.of(context)!
-                                .appMediaConfirmSelection,
+                              .appMediaConfirmSelection,
                     ),
                   ),
                 ),

@@ -36,8 +36,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
     super.initState();
     // Failed tasks used to show their error box in the header unconditionally;
     // expand by default so the error stays visible in the collapsible design.
-    _expanded =
-        widget.task.status == TaskStatus.running ||
+    _expanded = widget.task.status == TaskStatus.running ||
         widget.task.status == TaskStatus.failed;
   }
 
@@ -95,7 +94,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           widget.task.title.isNotEmpty
                               ? widget.task.title
                               : AppLocalizations.of(context)!
-                                    .unifiedTaskUnnamedRecording,
+                                  .unifiedTaskUnnamedRecording,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,

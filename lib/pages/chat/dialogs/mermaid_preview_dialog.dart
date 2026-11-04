@@ -166,9 +166,8 @@ class _MermaidPreviewDialogContentState
           '[MermaidPreviewDialog] web navigation did not settle '
           'within 3s',
         );
-        _timedOutSourceCleanup = _pendingWebSourceKey == null
-            ? null
-            : _cleanupPendingWebSource();
+        _timedOutSourceCleanup =
+            _pendingWebSourceKey == null ? null : _cleanupPendingWebSource();
         setState(() {
           _isLoading = false;
           _hasError = true;
@@ -282,8 +281,7 @@ class _MermaidPreviewDialogContentState
     _clearPendingWebSource(sourceKey);
     try {
       final result = await controller.evaluateJavascript(
-        source:
-            '(() => { '
+        source: '(() => { '
             'const key = ${jsonEncode(sourceKey)}; '
             'const wasPending = window.sessionStorage.getItem(key) !== null; '
             'window.sessionStorage.removeItem(key); '
@@ -445,8 +443,7 @@ class _MermaidPreviewDialogContentState
     });
   }
 
-  String get _emptyPlaceholderHtml =>
-      '''
+  String get _emptyPlaceholderHtml => '''
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -484,7 +481,7 @@ class _MermaidPreviewDialogContentState
     final isEmptyCode = widget.mermaidCode.trim().isEmpty;
     final showControls =
         (!_isLoading || widget.showControlsBeforeWebViewReadyForTesting) &&
-        !_hasError;
+            !_hasError;
     final showWebControls = kIsWeb && (showControls || _hasError);
     final showFlutterClose = !showControls && !showWebControls;
 
@@ -520,12 +517,12 @@ class _MermaidPreviewDialogContentState
                 // placeholder HTML directly.
                 initialData: kIsWeb
                     ? (isEmptyCode
-                          ? InAppWebViewInitialData(
-                              data: _emptyPlaceholderHtml,
-                              mimeType: 'text/html',
-                              encoding: 'utf8',
-                            )
-                          : null)
+                        ? InAppWebViewInitialData(
+                            data: _emptyPlaceholderHtml,
+                            mimeType: 'text/html',
+                            encoding: 'utf8',
+                          )
+                        : null)
                     : InAppWebViewInitialData(
                         data: _buildHtml(),
                         mimeType: 'text/html',
@@ -816,8 +813,8 @@ class _MermaidPreviewDialogContentState
                         ),
                         child: IconButton(
                           icon: const Icon(Icons.close, size: 24),
-                          tooltip: AppLocalizations.of(context)!
-                              .chatPreviewClose,
+                          tooltip:
+                              AppLocalizations.of(context)!.chatPreviewClose,
                           color: cs.onSurface,
                           onPressed: () => Navigator.pop(context),
                         ),

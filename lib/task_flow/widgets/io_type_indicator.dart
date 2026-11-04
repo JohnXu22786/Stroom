@@ -34,8 +34,7 @@ class IOTypeIndicator extends StatelessWidget {
       IOType.any => strings.taskFlowIoTypeAny,
     };
     final union = possibleTypes?.toSet();
-    final isAudioVideoUnion =
-        union != null &&
+    final isAudioVideoUnion = union != null &&
         union.contains(IOType.audio) &&
         union.contains(IOType.video);
     final (IconData icon, Color color) = isAudioVideoUnion

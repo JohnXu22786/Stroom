@@ -46,11 +46,11 @@ class TopicItem extends StatelessWidget {
             brightness: Theme.of(context).brightness,
           ).primary
         : isUnread
-        ? ColorScheme.fromSeed(
-            seedColor: Colors.green,
-            brightness: Theme.of(context).brightness,
-          ).primary
-        : null;
+            ? ColorScheme.fromSeed(
+                seedColor: Colors.green,
+                brightness: Theme.of(context).brightness,
+              ).primary
+            : null;
 
     final title = topic.title.isEmpty
         ? AppLocalizations.of(context)!.topicItemNew
@@ -120,8 +120,7 @@ class TopicItem extends StatelessWidget {
                                   ? Icons.push_pin
                                   : Icons.chat_bubble_outline_rounded,
                               size: 20,
-                              color:
-                                  statusColor ??
+                              color: statusColor ??
                                   (topic.isPinned
                                       ? cs.primary
                                       : cs.onSurfaceVariant),
@@ -158,9 +157,8 @@ class TopicItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: isActive
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
+                              fontWeight:
+                                  isActive ? FontWeight.w600 : FontWeight.w500,
                               color: cs.onSurface,
                             ),
                           ),

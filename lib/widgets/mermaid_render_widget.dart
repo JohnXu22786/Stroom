@@ -309,8 +309,7 @@ class MermaidRenderWidget extends StatefulWidget {
     String initializeErrorPrefix,
   ) {
     final source = _buildMermaidLoader(inlineMermaidJs);
-    final sameSource =
-        identical(source, _cachedLocalizedLoaderSource) ||
+    final sameSource = identical(source, _cachedLocalizedLoaderSource) ||
         source == _cachedLocalizedLoaderSource;
     if (sameSource &&
         cdnLoadTimeoutMessage == _cachedLocalizedLoaderTimeout &&
@@ -372,8 +371,7 @@ class MermaidRenderWidget extends StatefulWidget {
       // script tag early (</script) or start an HTML comment (<!--) inside
       // the inlined code.
       final encoded = jsonEncode(inlineMermaidJs).replaceAll('<', r'\u003C');
-      final loader =
-          '''
+      final loader = '''
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var script = document.createElement('script');
@@ -1286,15 +1284,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Zoom inputs made before the WebView is ready to accept commands.
   final List<
-    ({
-      double delta,
-      double? centerX,
-      double? centerY,
-      double inputTimestamp,
-      int? inputSequence,
-    })
-  >
-  _pendingZoomOperations = [];
+      ({
+        double delta,
+        double? centerX,
+        double? centerY,
+        double inputTimestamp,
+        int? inputSequence,
+      })> _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -1391,18 +1387,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       final wasShowingWebSource = kIsWeb && _showSourceCode;
       final hasNonEmptyCode = widget.mermaidCode.trim().isNotEmpty;
       final wasEmptyCode = oldWidget.mermaidCode.trim().isEmpty;
-      final shouldRetryWebViewCreation =
-          kIsWeb &&
+      final shouldRetryWebViewCreation = kIsWeb &&
           hasNonEmptyCode &&
           _hasWebViewCreationTimeoutError &&
           _webViewController == null;
-      final isPendingWebRetry =
-          kIsWeb &&
+      final isPendingWebRetry = kIsWeb &&
           !_isReady &&
           _webViewController != null &&
           (_readyFallbackTimer?.isActive ?? false);
-      final isTimedOutWebRetry =
-          kIsWeb &&
+      final isTimedOutWebRetry = kIsWeb &&
           _hasWebRetryTimeoutError &&
           _webRetryUrl != null &&
           _webViewController != null;
@@ -1604,10 +1597,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
       cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
       cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
-      renderErrorPrefix: AppLocalizations.of(context)!
-          .mermaidRenderErrorPrefix(''),
-      initializeErrorPrefix: AppLocalizations.of(context)!
-          .mermaidInitializeErrorPrefix(''),
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
       resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
     );
     _armReadyFallback();
@@ -1649,8 +1642,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       final url = isTrackedRetry
           ? '$baseUrl&attempt=${++_webRetryGeneration}'
           : _webLoadUrl != null
-          ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
-          : baseUrl;
+              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
+              : baseUrl;
       _webLoadUrl = _resolveWebUrl(url);
       if (isTrackedRetry) {
         _webRetryUrl = _webLoadUrl;
@@ -1811,8 +1804,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
     final position = details.localPosition;
     controller.evaluateJavascript(
-      source:
-          '''
+      source: '''
         (() => {
           const target = document.elementFromPoint(
             ${position.dx},
@@ -1898,8 +1890,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     required double? centerY,
   }) {
     _webViewController?.evaluateJavascript(
-      source:
-          'window.applyGestureTransformAfterFit($gestureId, $scale, '
+      source: 'window.applyGestureTransformAfterFit($gestureId, $scale, '
           '$panDeltaX, $panDeltaY, $centerX, $centerY);',
     );
   }
@@ -1991,40 +1982,35 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // Forward stationary taps to Mermaid's existing DOM click
                   // handlers. This recognizer is deliberately not on [team]:
                   // a tap must not accept the scale team's pan recognizer.
-                  TapGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<
-                        TapGestureRecognizer
-                      >(
-                        TapGestureRecognizer.new,
-                        (instance) => instance.onTapUp = _onDiagramTap,
-                      ),
+                  TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      TapGestureRecognizer>(
+                    TapGestureRecognizer.new,
+                    (instance) => instance.onTapUp = _onDiagramTap,
+                  ),
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
-                  ScaleGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<
-                        ScaleGestureRecognizer
-                      >(
-                        () {
-                          final recognizer = ScaleGestureRecognizer()
-                            ..team = team;
-                          // Set ScaleGestureRecognizer as the team captain so
-                          // that when ImmediateMermaidGestureRecognizer wins the
-                          // parent arena via the team, the
-                          // ScaleGestureRecognizer's acceptGesture is called
-                          // (instead of being rejected). Without a captain, the
-                          // team would accept the immediately-resolved recognizer
-                          // and reject the ScaleGestureRecognizer, breaking
-                          // pan/zoom entirely.
-                          team.captain = recognizer;
-                          return recognizer;
-                        },
-                        (instance) {
-                          instance.onStart = _onScaleStart;
-                          instance.onUpdate = _onScaleUpdate;
-                          instance.onEnd = (_) {};
-                        },
-                      ),
+                  ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      ScaleGestureRecognizer>(
+                    () {
+                      final recognizer = ScaleGestureRecognizer()..team = team;
+                      // Set ScaleGestureRecognizer as the team captain so
+                      // that when ImmediateMermaidGestureRecognizer wins the
+                      // parent arena via the team, the
+                      // ScaleGestureRecognizer's acceptGesture is called
+                      // (instead of being rejected). Without a captain, the
+                      // team would accept the immediately-resolved recognizer
+                      // and reject the ScaleGestureRecognizer, breaking
+                      // pan/zoom entirely.
+                      team.captain = recognizer;
+                      return recognizer;
+                    },
+                    (instance) {
+                      instance.onStart = _onScaleStart;
+                      instance.onUpdate = _onScaleUpdate;
+                      instance.onEnd = (_) {};
+                    },
+                  ),
                   // ImmediateMermaidGestureRecognizer: wins the gesture arena
                   // after movement exceeds gesture slop (any direction).
                   // Defined after ScaleGestureRecognizer so it enters the
@@ -2032,11 +2018,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // 'possible' state before the team resolves.
                   ImmediateMermaidGestureRecognizer:
                       GestureRecognizerFactoryWithHandlers<
-                        ImmediateMermaidGestureRecognizer
-                      >(
-                        () => ImmediateMermaidGestureRecognizer()..team = team,
-                        (instance) {},
-                      ),
+                          ImmediateMermaidGestureRecognizer>(
+                    () => ImmediateMermaidGestureRecognizer()..team = team,
+                    (instance) {},
+                  ),
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Container(color: Colors.transparent),
@@ -2191,9 +2176,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
     late final Set<String> folders;
     try {
-      folders =
-          await (widget.testOnlyGetAllFolders?.call() ??
-              TextManifest.getAllFolders(throwOnError: true));
+      folders = await (widget.testOnlyGetAllFolders?.call() ??
+          TextManifest.getAllFolders(throwOnError: true));
     } catch (e) {
       _isSaving = false;
       if (mounted) {
@@ -2332,8 +2316,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
   }
 
-  String get _emptyPlaceholderHtml =>
-      '''
+  String get _emptyPlaceholderHtml => '''
 <html>
 <body style="background:transparent;display:flex;justify-content:center;align-items:center;height:100%;font-family:sans-serif;color:#999;font-size:14px;padding:16px;text-align:center;">
 <div>${AppLocalizations.of(context)!.mermaidEmptyPlaceholder}</div>
@@ -2373,10 +2356,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
       cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
       cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
-      renderErrorPrefix: AppLocalizations.of(context)!
-          .mermaidRenderErrorPrefix(''),
-      initializeErrorPrefix: AppLocalizations.of(context)!
-          .mermaidInitializeErrorPrefix(''),
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
       resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
     );
   }
@@ -2487,8 +2470,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final currentWebViewKey = _webViewKey;
     final initialNativeSourceCode =
         !kIsWeb && defaultTargetPlatform != TargetPlatform.windows
-        ? _getNativeInitialSourceCode()
-        : null;
+            ? _getNativeInitialSourceCode()
+            : null;
 
     return _buildBorderedContainer(
       height: effectiveHeight,
@@ -2667,8 +2650,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
                 if (kIsWeb && request.isForMainFrame == true) {
                   final requestUrl = _resolveWebUrl(request.url.toString());
-                  final sourceKey = Uri.tryParse(requestUrl)
-                      ?.queryParameters['sourceKey'];
+                  final sourceKey =
+                      Uri.tryParse(requestUrl)?.queryParameters['sourceKey'];
                   if (sourceKey != null) {
                     unawaited(_removeStoredWebSource(controller, sourceKey));
                   }
@@ -2683,9 +2666,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 // to the iframe's own loading/error UI. Native behavior still
                 // only reports load errors while its initial page is pending;
                 // the readiness fallback only hides the loading overlay.
-                final shouldShowError = kIsWeb
-                    ? request.isForMainFrame == true
-                    : !_hasLoadedPage;
+                final shouldShowError =
+                    kIsWeb ? request.isForMainFrame == true : !_hasLoadedPage;
                 if (mounted && shouldShowError) {
                   _readyFallbackTimer?.cancel();
                   setState(() {

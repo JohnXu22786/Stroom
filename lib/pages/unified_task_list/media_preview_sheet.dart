@@ -189,8 +189,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = AppLocalizations.of(context)!
-            .unifiedTaskLoadFailed(e.toString());
+        _error =
+            AppLocalizations.of(context)!.unifiedTaskLoadFailed(e.toString());
       });
     }
   }
@@ -444,23 +444,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
             const SizedBox(height: 20),
             Slider(
               value: _audioDuration.inMilliseconds > 0
                   ? (_audioPosition.inMilliseconds /
-                            _audioDuration.inMilliseconds)
-                        .clamp(0.0, 1.0)
-                        .toDouble()
+                          _audioDuration.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                      .toDouble()
                   : 0.0,
               onChanged: _audioDuration > Duration.zero
                   ? (value) {
                       final position = Duration(
-                        milliseconds: (value * _audioDuration.inMilliseconds)
-                            .round(),
+                        milliseconds:
+                            (value * _audioDuration.inMilliseconds).round(),
                       );
                       _seekAudio(position);
                     }

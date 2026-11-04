@@ -62,10 +62,10 @@ class BlockChainEditor extends StatelessWidget {
     final bool? allTemporary = temporaryOutputIndices.isEmpty
         ? false
         : temporaryOutputCount == temporaryOutputIndices.length
-        ? true
-        : temporaryOutputCount == 0
-        ? false
-        : null;
+            ? true
+            : temporaryOutputCount == 0
+                ? false
+                : null;
     return Column(
       children: [
         Expanded(
@@ -89,9 +89,9 @@ class BlockChainEditor extends StatelessWidget {
                       isLast: isLast,
                       onTemporaryOutputChanged:
                           isFlowTemporaryOutputEligible(blocks, index)
-                          ? (enabled) =>
-                                onTemporaryOutputChanged?.call(index, enabled)
-                          : null,
+                              ? (enabled) =>
+                                  onTemporaryOutputChanged?.call(index, enabled)
+                              : null,
                       selected: selectedBlockId == block.id,
                       validationMessage: (() {
                         final issue = issues
@@ -122,13 +122,13 @@ class BlockChainEditor extends StatelessWidget {
                       onInsertBefore: onInsertBlock == null
                           ? null
                           : () =>
-                                _showAddBlockSheet(context, insertIndex: index),
+                              _showAddBlockSheet(context, insertIndex: index),
                       onInsertAfter: onInsertBlock == null
                           ? null
                           : () => _showAddBlockSheet(
-                              context,
-                              insertIndex: index + 1,
-                            ),
+                                context,
+                                insertIndex: index + 1,
+                              ),
                     ),
                   ],
                 );
@@ -159,7 +159,7 @@ class BlockChainEditor extends StatelessWidget {
             onChanged: onTemporaryOutputsChanged == null
                 ? null
                 : (_) =>
-                      onTemporaryOutputsChanged!(value == true ? false : true),
+                    onTemporaryOutputsChanged!(value == true ? false : true),
           ),
           Text(
             AppLocalizations.of(context)!.taskFlowUiTemporaryFiles,
@@ -363,8 +363,7 @@ class BlockChainEditor extends StatelessWidget {
 
   List<BlockTypeDefinition> _insertionCandidates(int index) {
     final previousBlock = index == 0 ? null : blocks[index - 1];
-    final previousTypes =
-        previousBlock?.possibleOutputTypes ??
+    final previousTypes = previousBlock?.possibleOutputTypes ??
         (index == 0 ? [inputType] : const <IOType>[]);
     final next = index == blocks.length
         ? null
@@ -384,9 +383,8 @@ class BlockChainEditor extends StatelessWidget {
 
     final insertionIndex = insertIndex ?? blocks.length;
     final availableTypes = _insertionCandidates(insertionIndex);
-    final previousBlock = insertionIndex == 0
-        ? null
-        : blocks[insertionIndex - 1];
+    final previousBlock =
+        insertionIndex == 0 ? null : blocks[insertionIndex - 1];
     final previousLabel = insertionIndex == 0
         ? localizedIoTypeLabel(inputType, strings)
         : localizedIoTypeDisplayLabel(
@@ -429,7 +427,9 @@ class BlockChainEditor extends StatelessWidget {
                 insertIndex == null
                     ? AppLocalizations.of(context)!.taskFlowUiChooseBlock
                     : AppLocalizations.of(context)!.taskFlowUiInsertBlock,
-                style: Theme.of(scrollCtx).textTheme.titleMedium
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
@@ -486,8 +486,7 @@ class BlockChainEditor extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final block = blocks[index];
     final previousBlock = index == 0 ? null : blocks[index - 1];
-    final previousTypes =
-        previousBlock?.possibleOutputTypes ??
+    final previousTypes = previousBlock?.possibleOutputTypes ??
         (index == 0 ? [inputType] : const [IOType.any]);
     final nextInput = index == blocks.length - 1
         ? null
@@ -528,7 +527,9 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 AppLocalizations.of(context)!.taskFlowUiReplaceBlock,
-                style: Theme.of(scrollCtx).textTheme.titleMedium
+                style: Theme.of(scrollCtx)
+                    .textTheme
+                    .titleMedium
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),

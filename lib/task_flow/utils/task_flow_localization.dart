@@ -31,9 +31,10 @@ String localizedIoTypeDisplayLabel(String label, AppLocalizations strings) =>
 String localizedBlockTypeLabel(
   BlockTypeDefinition definition,
   AppLocalizations strings,
-) => definition.typeKey == BlockType.custom
-    ? definition.label
-    : localizedBlockTypeName(definition.typeKey, strings);
+) =>
+    definition.typeKey == BlockType.custom
+        ? definition.label
+        : localizedBlockTypeName(definition.typeKey, strings);
 
 String localizedBlockTypeName(BlockType type, AppLocalizations strings) =>
     switch (type) {
@@ -53,10 +54,9 @@ String localizedBlockParamLabel(
 ) {
   if (definition.typeKey == BlockType.custom) return parameter.label;
   return switch (parameter.key) {
-    'modelRef' =>
-      definition.typeKey == BlockType.tts
-          ? strings.taskFlowParamSynthesisModel
-          : strings.taskFlowParamRecognitionModel,
+    'modelRef' => definition.typeKey == BlockType.tts
+        ? strings.taskFlowParamSynthesisModel
+        : strings.taskFlowParamRecognitionModel,
     'saveFolder' => strings.taskFlowParamSaveFolder,
     'resourceSelectionPolicy' => strings.taskFlowParamResourceSelection,
     'outputPolicy' => strings.taskFlowParamOutputType,

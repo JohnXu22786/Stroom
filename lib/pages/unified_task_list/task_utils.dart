@@ -229,8 +229,8 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
         .read(taskFlowExecutionServiceProvider)
         .cancelExecution(execution.id)
         .catchError((Object error) {
-          debugPrint('无法保存任务流取消状态: $error');
-        }),
+      debugPrint('无法保存任务流取消状态: $error');
+    }),
   );
   removeFlowSubTaskTasksCore(
     execution,

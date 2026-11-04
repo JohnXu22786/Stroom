@@ -40,8 +40,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
     // - 新工具调用复用同一 element（例如列表原地替换）时；
     // - 状态从可折叠（completed/error）退回进行中（pending/running）时
     //   （同 id 重跑场景），保证"完成后自动收起"的不变量始终成立。
-    final oldCollapsible =
-        oldWidget.data.status == ToolCallStatus.completed ||
+    final oldCollapsible = oldWidget.data.status == ToolCallStatus.completed ||
         oldWidget.data.status == ToolCallStatus.error;
     if (oldWidget.data.id != widget.data.id ||
         (oldCollapsible && !_collapsible)) {

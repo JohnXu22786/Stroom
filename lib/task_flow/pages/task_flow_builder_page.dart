@@ -75,10 +75,10 @@ class _CatCatchInputEntry {
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
-    : urlController = TextEditingController(),
-      hourController = TextEditingController(),
-      minuteController = TextEditingController(),
-      secondController = TextEditingController();
+      : urlController = TextEditingController(),
+        hourController = TextEditingController(),
+        minuteController = TextEditingController(),
+        secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
@@ -148,9 +148,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref
-          .read(taskFlowListProvider)
-          .firstWhere(
+      final flow = ref.read(taskFlowListProvider).firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -597,9 +595,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-    final current = _editingFlowId == null
-        ? null
-        : notifier.getFlow(_editingFlowId!);
+    final current =
+        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
     final flow = TaskFlowDefinition(
       id: _editingFlowId,
       name: name,
@@ -780,11 +777,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   bool get _isFileRunInput => const {
-    IOType.image,
-    IOType.audio,
-    IOType.video,
-    IOType.file,
-  }.contains(_runInputType);
+        IOType.image,
+        IOType.audio,
+        IOType.video,
+        IOType.file,
+      }.contains(_runInputType);
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -844,9 +841,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: !_isStarting && _canStartFlow()
-                      ? _startFlow
-                      : null,
+                  onPressed:
+                      !_isStarting && _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: Text(AppLocalizations.of(context)!.taskFlowUiStart),
                 ),
@@ -953,8 +949,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         _catcatchInputs.removeAt(index);
                       });
                     },
-                    tooltip: AppLocalizations.of(context)!
-                        .taskFlowUiDeleteInput,
+                    tooltip:
+                        AppLocalizations.of(context)!.taskFlowUiDeleteInput,
                     padding: EdgeInsets.zero,
                   ),
                 ),
@@ -1125,20 +1121,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               isImage
                   ? Icons.image_outlined
                   : isAudio
-                  ? Icons.audiotrack
-                  : isFile
-                  ? Icons.insert_drive_file_outlined
-                  : Icons.videocam_outlined,
+                      ? Icons.audiotrack
+                      : isFile
+                          ? Icons.insert_drive_file_outlined
+                          : Icons.videocam_outlined,
               size: 16,
             ),
             label: Text(
               isImage
                   ? AppLocalizations.of(context)!.taskFlowUiSelectImages
                   : isAudio
-                  ? AppLocalizations.of(context)!.taskFlowUiSelectAudio
-                  : isFile
-                  ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
-                  : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
+                      ? AppLocalizations.of(context)!.taskFlowUiSelectAudio
+                      : isFile
+                          ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
+                          : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1156,10 +1152,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     isImage
                         ? Icons.image
                         : isAudio
-                        ? Icons.audiotrack
-                        : isFile
-                        ? Icons.insert_drive_file
-                        : Icons.videocam,
+                            ? Icons.audiotrack
+                            : isFile
+                                ? Icons.insert_drive_file
+                                : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
@@ -1200,8 +1196,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                                       content: Text(
                                         AppLocalizations.of(context)!
                                             .taskFlowUiCleanupError(
-                                              error.toString(),
-                                            ),
+                                          error.toString(),
+                                        ),
                                       ),
                                     ),
                                   );
@@ -1357,11 +1353,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   def == null
                       ? '-'
                       : (block.followsDownstreamOutput
-                            ? strings.taskFlowOutputVideoAudioDownstream
-                            : localizedIoTypeDisplayLabel(
-                                block.outputTypeLabel,
-                                strings,
-                              )),
+                          ? strings.taskFlowOutputVideoAudioDownstream
+                          : localizedIoTypeDisplayLabel(
+                              block.outputTypeLabel,
+                              strings,
+                            )),
                 ),
                 style: TextStyle(fontSize: 14, color: cs.onSurface),
               ),
@@ -1373,9 +1369,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) {
-                  final paramDef = def?.params
-                      .where((p) => p.key == e.key)
-                      .firstOrNull;
+                  final paramDef =
+                      def?.params.where((p) => p.key == e.key).firstOrNull;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
@@ -1541,8 +1536,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-      strings.taskFlowUiFileTooLarge(file.name, limit ~/ (1024 * 1024)),
-    );
+          strings.taskFlowUiFileTooLarge(file.name, limit ~/ (1024 * 1024)),
+        );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
         IOType.image;
@@ -1729,9 +1724,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         ? null
         : _blocks.where((item) => item.id == error.blockId).firstOrNull;
     final definition = block?.getDefinition();
-    final blockLabel = definition == null
-        ? ''
-        : localizedBlockTypeLabel(definition, strings);
+    final blockLabel =
+        definition == null ? '' : localizedBlockTypeLabel(definition, strings);
 
     switch (message) {
       case '任务流没有步骤，请先添加功能块':
@@ -1759,9 +1753,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (error.inputIndex != null) {
       final inputNumber = (error.inputIndex! + 1).toString();
       final separator = message.indexOf('：');
-      final detail = separator < 0
-          ? message
-          : message.substring(separator + 1).trim();
+      final detail =
+          separator < 0 ? message : message.substring(separator + 1).trim();
       if (detail == '文件不存在、为空或无法读取，请重新选择文件') {
         return strings.taskFlowValidationInputFileUnavailable(inputNumber);
       }
@@ -1789,8 +1782,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       if (detail == '文本附件不是有效的 UTF-8 编码，请转换后重试') {
         return strings.taskFlowValidationTextEncodingFailed(inputNumber);
       }
-      final typeMismatch = RegExp(r'^文件实际类型为(.+)，需要(.+)，请重新选择文件$')
-          .firstMatch(detail);
+      final typeMismatch =
+          RegExp(r'^文件实际类型为(.+)，需要(.+)，请重新选择文件$').firstMatch(detail);
       if (typeMismatch != null) {
         return strings.taskFlowValidationFileTypeMismatch(
           inputNumber,
@@ -1806,8 +1799,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           imageMime.group(1)!,
         );
       }
-      final audioMime = RegExp(r'^助手对话不支持 (.+) 音频附件，请转换为 MP3、WAV 或 M4A$')
-          .firstMatch(detail);
+      final audioMime =
+          RegExp(r'^助手对话不支持 (.+) 音频附件，请转换为 MP3、WAV 或 M4A$').firstMatch(detail);
       if (audioMime != null) {
         return strings.taskFlowValidationAudioMimeUnsupported(
           inputNumber,
@@ -1935,7 +1928,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             inputs.length == 1
                 ? AppLocalizations.of(context)!.taskFlowUiQueuedOne
                 : AppLocalizations.of(context)!
-                      .taskFlowUiQueuedMany(inputs.length),
+                    .taskFlowUiQueuedMany(inputs.length),
           ),
           duration: const Duration(seconds: 2),
         ),

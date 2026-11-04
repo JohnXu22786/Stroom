@@ -174,11 +174,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   }
 
   String _builtinPresetLabel(String key) => switch (key) {
-    '照片：日期与编号' => strings.batchBuiltinPhoto,
-    '课程：统一名称与编号' => strings.batchBuiltinCourse,
-    '下载文件：清理空白' => strings.batchBuiltinDownloads,
-    _ => key,
-  };
+        '照片：日期与编号' => strings.batchBuiltinPhoto,
+        '课程：统一名称与编号' => strings.batchBuiltinCourse,
+        '下载文件：清理空白' => strings.batchBuiltinDownloads,
+        _ => key,
+      };
 
   void _recompute() {
     _config = _config.copyWith(rules: [for (final slot in _rules) slot.op]);
@@ -186,8 +186,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     _regexWorker?.dispose();
     _regexWorker = null;
     _previewError = null;
-    _previewing =
-        validateBatchRenameConfig(_config) == null &&
+    _previewing = validateBatchRenameConfig(_config) == null &&
         _config.operations.any(
           (op) => op is BatchReplaceOp && op.effective && op.useRegex,
         );
@@ -238,8 +237,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           _previewError = e is TimeoutException
               ? e.message
               : e is StateError
-              ? '${e.message}'
-              : strings.batchDlgPreviewFailed;
+                  ? '${e.message}'
+                  : strings.batchDlgPreviewFailed;
         });
       }
     } finally {
@@ -256,9 +255,9 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   }
 
   void _change(VoidCallback update) => setState(() {
-    update();
-    _recompute();
-  });
+        update();
+        _recompute();
+      });
 
   void _useConfig(BatchRenameConfig config, {bool resetSelection = false}) =>
       _change(() {
@@ -421,95 +420,96 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   }
 
   Widget _header() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Text(
-                strings.batchDlgRenameCount(widget.items.length.toString()),
-                style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    strings.batchDlgRenameCount(widget.items.length.toString()),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: strings.batchDlgHelp,
+                  onPressed: _help,
+                  icon: const Icon(Icons.help_outline),
+                ),
+                IconButton(
+                  key: const Key('batch_rename_close_btn'),
+                  tooltip: strings.batchDlgClose,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            if (MediaQuery.viewInsetsOf(context).bottom == 0)
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  PopupMenuButton<BatchRenameConfig>(
+                    tooltip: strings.batchDlgLoadPreset,
+                    onSelected: _useConfig,
+                    itemBuilder: (_) => [
+                      for (final e in _builtins.entries)
+                        PopupMenuItem(
+                          value: e.value,
+                          child: Text(_builtinPresetLabel(e.key)),
+                        ),
+                      if (_presets.isNotEmpty) const PopupMenuDivider(),
+                      for (final e in _presets.entries)
+                        PopupMenuItem(value: e.value, child: Text(e.key)),
+                    ],
+                    child: Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(strings.batchDlgLoad),
+                          Icon(Icons.arrow_drop_down, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _saving ||
+                            _invalid.isNotEmpty ||
+                            _plan.configError != null
+                        ? null
+                        : _savePreset,
+                    child: Text(
+                      _saving
+                          ? strings.batchDlgSaving
+                          : strings.batchDlgSavePresetFallback,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _managePresets,
+                    tooltip: strings.batchDlgManagePresets,
+                    icon: const Icon(Icons.tune),
+                  ),
+                  IconButton(
+                    key: const Key('batch_reset'),
+                    tooltip: strings.batchDlgReset,
+                    onPressed: () => _useConfig(
+                      BatchRenameConfig(
+                        sortField: widget.initialConfig.sortField,
+                        sortOrder: widget.initialConfig.sortOrder,
+                      ),
+                      resetSelection: true,
+                    ),
+                    icon: const Icon(Icons.restart_alt),
+                  ),
+                ],
               ),
-            ),
-            IconButton(
-              tooltip: strings.batchDlgHelp,
-              onPressed: _help,
-              icon: const Icon(Icons.help_outline),
-            ),
-            IconButton(
-              key: const Key('batch_rename_close_btn'),
-              tooltip: strings.batchDlgClose,
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
-            ),
+            if (_notice != null)
+              Text(_notice!, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
-        if (MediaQuery.viewInsetsOf(context).bottom == 0)
-          Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              PopupMenuButton<BatchRenameConfig>(
-                tooltip: strings.batchDlgLoadPreset,
-                onSelected: _useConfig,
-                itemBuilder: (_) => [
-                  for (final e in _builtins.entries)
-                    PopupMenuItem(
-                      value: e.value,
-                      child: Text(_builtinPresetLabel(e.key)),
-                    ),
-                  if (_presets.isNotEmpty) const PopupMenuDivider(),
-                  for (final e in _presets.entries)
-                    PopupMenuItem(value: e.value, child: Text(e.key)),
-                ],
-                child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(strings.batchDlgLoad),
-                      Icon(Icons.arrow_drop_down, size: 18),
-                    ],
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed:
-                    _saving || _invalid.isNotEmpty || _plan.configError != null
-                    ? null
-                    : _savePreset,
-                child: Text(
-                  _saving
-                      ? strings.batchDlgSaving
-                      : strings.batchDlgSavePresetFallback,
-                ),
-              ),
-              IconButton(
-                onPressed: _managePresets,
-                tooltip: strings.batchDlgManagePresets,
-                icon: const Icon(Icons.tune),
-              ),
-              IconButton(
-                key: const Key('batch_reset'),
-                tooltip: strings.batchDlgReset,
-                onPressed: () => _useConfig(
-                  BatchRenameConfig(
-                    sortField: widget.initialConfig.sortField,
-                    sortOrder: widget.initialConfig.sortOrder,
-                  ),
-                  resetSelection: true,
-                ),
-                icon: const Icon(Icons.restart_alt),
-              ),
-            ],
-          ),
-        if (_notice != null)
-          Text(_notice!, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    ),
-  );
+      );
 
   Widget _rulesPane() =>
       KeyedSubtree(key: _rulesPaneKey, child: _rulesContent());
@@ -612,15 +612,15 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         onUp: index == 0
             ? null
             : () => _change(() {
-                _rules.removeAt(index);
-                _rules.insert(index - 1, slot);
-              }),
+                  _rules.removeAt(index);
+                  _rules.insert(index - 1, slot);
+                }),
         onDown: index == _rules.length - 1
             ? null
             : () => _change(() {
-                _rules.removeAt(index);
-                _rules.insert(index + 1, slot);
-              }),
+                  _rules.removeAt(index);
+                  _rules.insert(index + 1, slot);
+                }),
         onDuplicate: () {
           if (_rules.length < 50)
             _change(
@@ -634,19 +634,19 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       );
 
   List<BatchRenameResult> get _visible => _plan.results.where((r) {
-    final matches = '${r.oldDisplay}\n${r.newDisplay}\n${r.item.folder}'
-        .toLowerCase()
-        .contains(_search.toLowerCase());
-    return matches &&
-        switch (_filter) {
-          _PreviewFilter.all => true,
-          _PreviewFilter.changed => r.isChanged,
-          _PreviewFilter.errors => r.error != null,
-          _PreviewFilter.unchanged =>
-            r.included && !r.isChanged && r.error == null,
-          _PreviewFilter.excluded => !r.included,
-        };
-  }).toList();
+        final matches = '${r.oldDisplay}\n${r.newDisplay}\n${r.item.folder}'
+            .toLowerCase()
+            .contains(_search.toLowerCase());
+        return matches &&
+            switch (_filter) {
+              _PreviewFilter.all => true,
+              _PreviewFilter.changed => r.isChanged,
+              _PreviewFilter.errors => r.error != null,
+              _PreviewFilter.unchanged =>
+                r.included && !r.isChanged && r.error == null,
+              _PreviewFilter.excluded => !r.included,
+            };
+      }).toList();
 
   Widget _previewPane() =>
       KeyedSubtree(key: _previewPaneKey, child: _previewContent());
@@ -728,8 +728,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               for (final item in widget.items) {
                 if (v == 'none' ||
                     (v == 'files' && item.isFolder) ||
-                    (v == 'folders' && !item.isFolder))
-                  _excluded.add(item.key);
+                    (v == 'folders' && !item.isFolder)) _excluded.add(item.key);
               }
             }),
             child: Padding(
@@ -744,9 +743,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
             ),
           ),
           TextButton(
-            onPressed: _previewing || _previewError != null
-                ? null
-                : _copyPreview,
+            onPressed:
+                _previewing || _previewError != null ? null : _copyPreview,
             child: Text(strings.batchDlgCopyList),
           ),
         ],
@@ -860,8 +858,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                               color: r.error != null
                                   ? colors.error
                                   : r.isChanged
-                                  ? colors.primary
-                                  : colors.onSurfaceVariant,
+                                      ? colors.primary
+                                      : colors.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -882,10 +880,10 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                         (!r.included
                             ? strings.batchDlgFilterExcluded
                             : _overrides.containsKey(r.item.key)
-                            ? strings.batchDlgManualNameStatus
-                            : r.isChanged
-                            ? strings.batchDlgPendingRename
-                            : strings.batchDlgFilterUnchanged),
+                                ? strings.batchDlgManualNameStatus
+                                : r.isChanged
+                                    ? strings.batchDlgPendingRename
+                                    : strings.batchDlgFilterUnchanged),
                     style: TextStyle(
                       fontSize: 12,
                       color: r.error != null
@@ -933,8 +931,8 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               (!r.included
                   ? strings.batchDlgFilterExcluded
                   : r.isChanged
-                  ? strings.batchDlgPendingRename
-                  : strings.batchDlgFilterUnchanged),
+                      ? strings.batchDlgPendingRename
+                      : strings.batchDlgFilterUnchanged),
         ].map(cell).join(','),
     ].join('\n');
     try {
@@ -946,109 +944,110 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   }
 
   void _help() => showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(strings.batchDlgHelpTitle),
-      content: SingleChildScrollView(child: Text(strings.batchDlgHelpBody)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text(strings.batchDlgHelpDismiss),
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(strings.batchDlgHelpTitle),
+          content: SingleChildScrollView(child: Text(strings.batchDlgHelpBody)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(strings.batchDlgHelpDismiss),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   @override
   Widget build(BuildContext context) => Dialog(
-    key: const Key('batch_rename_dialog'),
-    insetPadding: const EdgeInsets.all(12),
-    clipBehavior: Clip.antiAlias,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 1160, maxHeight: 860),
-      child: Column(
-        children: [
-          _header(),
-          const Divider(height: 1),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth >= 720)
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: _rulesPane()),
-                      const VerticalDivider(width: 1),
-                      Expanded(child: _previewPane()),
-                    ],
-                  );
-                return Column(
-                  children: [
-                    Row(
+        key: const Key('batch_rename_dialog'),
+        insetPadding: const EdgeInsets.all(12),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1160, maxHeight: 860),
+          child: Column(
+            children: [
+              _header(),
+              const Divider(height: 1),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth >= 720)
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _rulesPane()),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: _previewPane()),
+                        ],
+                      );
+                    return Column(
                       children: [
-                        Expanded(
-                          child: TextButton(
-                            key: const Key('batch_rules_tab'),
-                            onPressed: () =>
-                                setState(() => _previewTab = false),
-                            child: Text(
-                              _previewTab
-                                  ? strings.batchDlgRulesTab
-                                  : '● ${strings.batchDlgRulesTab}',
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                key: const Key('batch_rules_tab'),
+                                onPressed: () =>
+                                    setState(() => _previewTab = false),
+                                child: Text(
+                                  _previewTab
+                                      ? strings.batchDlgRulesTab
+                                      : '● ${strings.batchDlgRulesTab}',
+                                ),
+                              ),
                             ),
-                          ),
+                            Expanded(
+                              child: TextButton(
+                                key: const Key('batch_preview_tab'),
+                                onPressed: () =>
+                                    setState(() => _previewTab = true),
+                                child: Text(
+                                  '${_previewTab ? '● ' : ''}${strings.batchDlgPreviewCount(_plan.changeCount.toString())}',
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         Expanded(
-                          child: TextButton(
-                            key: const Key('batch_preview_tab'),
-                            onPressed: () => setState(() => _previewTab = true),
-                            child: Text(
-                              '${_previewTab ? '● ' : ''}${strings.batchDlgPreviewCount(_plan.changeCount.toString())}',
-                            ),
+                          child: IndexedStack(
+                            index: _previewTab ? 1 : 0,
+                            children: [_rulesPane(), _previewPane()],
                           ),
                         ),
                       ],
+                    );
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    TextButton(
+                      key: const Key('batch_rename_cancel_btn'),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(strings.batchDlgCancel),
                     ),
-                    Expanded(
-                      child: IndexedStack(
-                        index: _previewTab ? 1 : 0,
-                        children: [_rulesPane(), _previewPane()],
+                    const Spacer(),
+                    FilledButton(
+                      key: const Key('batch_rename_apply_btn'),
+                      onPressed: !_previewing &&
+                              _previewError == null &&
+                              _plan.canApply &&
+                              _invalid.isEmpty
+                          ? () => Navigator.pop(context, _plan)
+                          : null,
+                      child: Text(
+                        strings
+                            .batchDlgRenameCount(_plan.changeCount.toString()),
                       ),
                     ),
                   ],
-                );
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                TextButton(
-                  key: const Key('batch_rename_cancel_btn'),
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(strings.batchDlgCancel),
                 ),
-                const Spacer(),
-                FilledButton(
-                  key: const Key('batch_rename_apply_btn'),
-                  onPressed:
-                      !_previewing &&
-                          _previewError == null &&
-                          _plan.canApply &&
-                          _invalid.isEmpty
-                      ? () => Navigator.pop(context, _plan)
-                      : null,
-                  child: Text(
-                    strings.batchDlgRenameCount(_plan.changeCount.toString()),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }
