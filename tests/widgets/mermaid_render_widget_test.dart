@@ -16,6 +16,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/mermaid_web_url.dart';
 import 'package:stroom/utils/mermaid_web_url_stub.dart'
@@ -41,6 +42,9 @@ void main() {
       final code = 'graph TD\n${'A-->B\n' * 2000}';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
         ),
       );
@@ -76,6 +80,9 @@ void main() {
       final code = 'graph TD\n${'A-->B\n' * 2000}';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
         ),
       );
@@ -115,6 +122,9 @@ void main() {
       final code = 'graph TD\n${'A-->B\n' * 2000}';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
         ),
       );
@@ -167,6 +177,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: diagram('A')),
           ),
@@ -183,6 +196,9 @@ void main() {
       webView.params.onWebViewCreated!(controller);
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: diagram('C')),
           ),
@@ -232,6 +248,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: diagram('A')),
           ),
@@ -250,6 +269,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: diagram('C')),
           ),
@@ -296,6 +318,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(
                 mermaidCode: 'graph TD\nA-->B',
@@ -340,6 +365,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(
                 mermaidCode: 'graph TD\nA-->B',
@@ -385,6 +413,9 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
           ),
@@ -541,8 +572,8 @@ void main() {
       // A dead or hanging CDN must not leave the diagram area spinning:
       // script.onerror and a load timeout both surface a visible error.
       expect(html, contains('script.onerror'));
-      expect(html, contains('无法访问 cdn.jsdelivr.net'));
-      expect(html, contains('Mermaid 加载超时'));
+      expect(html, contains('Could not load Mermaid from cdn.jsdelivr.net.'));
+      expect(html, contains('Mermaid loading timed out.'));
     });
 
     test('inlines the bundled mermaid.js when inlineMermaidJs is provided', () {
@@ -1133,6 +1164,9 @@ void main() {
       }
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(
               mermaidCode: 'graph TD\nA-->B',
@@ -1249,6 +1283,9 @@ void main() {
       await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(
               mermaidCode: 'graph TD\nA-->B',
@@ -1325,6 +1362,9 @@ void main() {
       await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
           ),
@@ -1453,6 +1493,9 @@ void main() {
       final scrollController = ScrollController();
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               controller: scrollController,
@@ -2135,6 +2178,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -2145,6 +2191,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
             ),
@@ -2362,7 +2411,7 @@ void main() {
         );
         expect(
           initialHtml,
-          contains("reportError('Mermaid resource failed to load');"),
+          contains('reportError("Mermaid 图表中的资源加载失败。");'),
         );
         expect(
           initialHtml,
@@ -2383,6 +2432,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -2393,6 +2445,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
             ),
@@ -2465,6 +2520,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -2550,6 +2608,9 @@ void main() {
 
           await tester.pumpWidget(
             const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                 body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
               ),
@@ -2562,6 +2623,9 @@ void main() {
 
           await tester.pumpWidget(
             const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                 body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
               ),
@@ -2621,6 +2685,9 @@ void main() {
           await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
           await tester.pumpWidget(
             const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                 body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
               ),
@@ -2644,6 +2711,9 @@ void main() {
 
           await tester.pumpWidget(
             const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                 body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
               ),
@@ -2658,6 +2728,9 @@ void main() {
               tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
           await tester.pumpWidget(
             const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                 body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
               ),
@@ -2770,6 +2843,9 @@ void main() {
         await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -2828,6 +2904,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -2902,6 +2981,9 @@ void main() {
         const mermaidCode = 'graph TD\nA-->B';
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: mermaidCode),
             ),
@@ -2984,6 +3066,9 @@ void main() {
         const initialCode = 'graph TD\nA-->B';
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: initialCode),
             ),
@@ -3024,6 +3109,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -3072,6 +3160,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(
                 mermaidCode: 'graph TD\nA-->B',
@@ -3093,6 +3184,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(
                 mermaidCode: 'graph TD\nA-->C',
@@ -3156,6 +3250,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3190,14 +3287,20 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: ''),
             ),
           ),
         );
-        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -3242,6 +3345,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3277,14 +3383,20 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: ''),
             ),
           ),
         );
-        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -3328,6 +3440,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3344,6 +3459,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: ' graph TD\nA-->B '),
             ),
@@ -3400,6 +3518,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3485,6 +3606,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3519,6 +3643,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
             ),
@@ -3586,6 +3713,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3618,6 +3748,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
             ),
@@ -3657,6 +3790,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3732,6 +3868,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3824,6 +3963,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3839,6 +3981,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
             ),
@@ -3877,6 +4022,9 @@ void main() {
         await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -3942,6 +4090,9 @@ void main() {
         await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(
                 mermaidCode: mermaidCode,
@@ -4053,6 +4204,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
@@ -4067,6 +4221,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
             ),
@@ -4141,6 +4298,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nB-->C'),
             ),
@@ -4227,16 +4387,22 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: ''),
             ),
           ),
         );
-        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
         expect(find.byType(InAppWebView), findsNothing);
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -4277,6 +4443,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: ''),
             ),
@@ -4284,6 +4453,9 @@ void main() {
         );
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
             ),
@@ -4330,6 +4502,9 @@ void main() {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4349,24 +4524,30 @@ void main() {
       const widget = MermaidRenderWidget(mermaidCode: '');
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
         ),
       );
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
     });
 
     testWidgets('handles empty code gracefully', (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: '');
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
         ),
       );
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
       expect(find.text('正在准备渲染引擎...'), findsNothing);
     });
   });
@@ -4380,6 +4561,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4402,6 +4586,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4424,6 +4611,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4446,6 +4636,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4476,6 +4669,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4499,6 +4695,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4521,6 +4720,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4543,6 +4745,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4568,6 +4773,9 @@ void main() {
 
         await tester.pumpWidget(
           const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: SizedBox.expand(
                 child: Row(
@@ -4615,6 +4823,9 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SizedBox.expand(
               child: Stack(
@@ -4656,6 +4867,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4674,6 +4888,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4696,6 +4913,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4724,6 +4944,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -4731,7 +4954,7 @@ void main() {
       );
 
       // Empty code should show the placeholder, not the code view
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
     });
 
     testWidgets('source code mode keeps the render layer mounted underneath',
@@ -4755,6 +4978,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -5266,7 +5492,12 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   bool supportsJavaScriptHandlers = false,
 }) async {
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
-  await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
+  await tester.pumpWidget(MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    home: Scaffold(body: body),
+  ));
   await tester.runAsync(() async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
   });
@@ -5293,6 +5524,9 @@ Future<_MermaidWebView> _mountMermaidWidgetBeforeNativeCreation(
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
   await tester.pumpWidget(
     const MaterialApp(
+      locale: Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
       ),
@@ -5316,6 +5550,9 @@ Future<List<_MermaidWebView>> _mountReadyMermaidWidgets(
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: bodies.length == 1 ? bodies.single : Column(children: bodies),
       ),
