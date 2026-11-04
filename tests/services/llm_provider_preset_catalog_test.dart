@@ -38,6 +38,8 @@ void main() {
       'novita',
       'nvidia',
       'siliconflow',
+      'stepfun-cn',
+      'stepfun-international',
       'together',
       'yi',
     ]);
@@ -79,6 +81,8 @@ void main() {
         'novita': 'https://api.novita.ai/openai/v1/chat/completions',
         'nvidia': 'https://integrate.api.nvidia.com/v1/chat/completions',
         'siliconflow': 'https://api.siliconflow.com/v1/chat/completions',
+        'stepfun-cn': 'https://api.stepfun.com/v1/chat/completions',
+        'stepfun-international': 'https://api.stepfun.ai/v1/chat/completions',
         'together': 'https://api.together.xyz/v1/chat/completions',
         'yi': 'https://api.lingyiwanwu.com/v1/chat/completions',
       },
@@ -110,6 +114,48 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset('novita')?.modelsUrl,
       'https://api.novita.ai/openai/v1/models',
+    );
+    final stepfunChina = findLlmOpenAiProviderPreset('stepfun-cn')!;
+    final stepfunInternational =
+        findLlmOpenAiProviderPreset('stepfun-international')!;
+    expect(stepfunChina.displayName, 'StepFun China (.com)');
+    expect(stepfunChina.modelsUrl, 'https://api.stepfun.com/v1/models');
+    expect(stepfunInternational.displayName, 'StepFun International (.ai)');
+    expect(stepfunInternational.modelsUrl, isNull);
+    for (final preset in [stepfunChina, stepfunInternational]) {
+      expect(preset.authType, 'api_key');
+      expect(preset.authorizationHeader, 'Authorization');
+      expect(preset.authorizationScheme, 'Bearer');
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      expect(preset.fallbackModels.map((model) => model.id), [
+        'step-5-preview',
+        'step-3.7-flash',
+        'step-3.5-flash',
+        'step-3.5-flash-2603',
+        'step-1o-turbo-vision',
+        'step-1v',
+      ]);
+      expect(preset.fallbackModels.map((model) => model.displayName), [
+        'Step 5 Preview',
+        'Step 3.7 Flash',
+        'Step 3.5 Flash',
+        'Step 3.5 Flash 2603',
+        'Step 1o Turbo Vision',
+        'Step 1V',
+      ]);
+    }
+    expect(stepfunChina.fallbackModels.first.capabilities, {
+      'contextLength': 1024000,
+      'reasoning': true,
+      'supportedThinkingEfforts': ['low', 'medium', 'high'],
+      'vision': true,
+      'toolCalling': true,
+    });
+    expect(
+      stepfunChina.fallbackModels
+          .map((model) => model.capabilities['contextLength'])
+          .toList(),
+      [1024000, 262144, 262144, 262144, 32768, null],
     );
     expect(
       findLlmOpenAiProviderPreset('ai21')!
@@ -405,6 +451,74 @@ void main() {
       isNotNull,
     );
   });
+
+  test(
+    'StepFun regional presets save, reload, and stay Chat and Task Flow eligible',
+    () async {
+      final preferences = _MemoryLlmAccountPreferences();
+      final credentials = _MemoryLlmCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+
+      for (final presetId in ['stepfun-cn', 'stepfun-international']) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final model = preset.fallbackModels.first;
+        final account = LlmAccount(
+          id: 'stepfun-$presetId-account',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+          models: [
+            LlmUpstreamModel(
+              id: 'stepfun-$presetId-model',
+              upstreamModelId: model.id,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        );
+        await service.saveAccount(account, secret: 'key-$presetId');
+
+        final restored = (await service.getAccount(account.id))!;
+        expect(restored.connectorType, 'openai-compatibility');
+        expect(restored.endpointConfig['providerPresetId'], presetId);
+        expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+        expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+        expect(
+            restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+        expect(
+          restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages',
+        );
+        expect(await service.readCredential(account.id), 'key-$presetId');
+
+        final group = LlmModelGroup(
+          id: 'stepfun-$presetId-group',
+          displayName: preset.displayName,
+          members: [
+            LlmModelGroupMember(
+              accountId: restored.id,
+              upstreamModelId: restored.models.single.upstreamModelId,
+            ),
+          ],
+        );
+        final configs = buildLlmModelGroupProviderConfigs(
+          accounts: [restored],
+          groups: [group],
+        );
+        expect(configs, hasLength(1));
+        expect(configs.single.apiProtocol, 'openai.chat_completions');
+        expect(
+          configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages',
+        );
+      }
+    },
+  );
 }
 
 class _MemoryLlmAccountPreferences implements LlmAccountPreferences {

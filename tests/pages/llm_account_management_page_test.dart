@@ -70,6 +70,8 @@ void main() {
         'novita',
         'nvidia',
         'siliconflow',
+        'stepfun-cn',
+        'stepfun-international',
         'together',
         'yi',
       ]),
@@ -245,6 +247,115 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'switching StepFun regions requires a new key and saves selected defaults',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'stepfun-regional-key-change',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'StepFun account',
+          endpointConfig: const {
+            'baseUrl': 'https://api.stepfun.com/v1/chat/completions',
+            'modelsUrl': 'https://api.stepfun.com/v1/models',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'stepfun-cn',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'stepfun-regional-key-change:step-5-preview',
+              upstreamModelId: 'step-5-preview',
+              displayName: 'Step 5 Preview',
+              capabilities: {
+                'contextLength': 65536,
+                'reasoning': true,
+                'vision': true,
+                'toolCalling': true,
+              },
+              config: {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        ),
+        secret: 'old-china-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              widget.decoration.labelText == '服务商预设',
+        ),
+      );
+      preset.onChanged!('stepfun-international');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+        'https://api.stepfun.ai/v1/chat/completions',
+      );
+      final modelsField = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+        ),
+      );
+      expect(
+        modelsField.controller!.text,
+        contains('step-5-preview,reasoning,vision,toolCalling'),
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('请输入凭据。'), findsOneWidget);
+      expect(
+        await service.readCredential('stepfun-regional-key-change'),
+        'old-china-key',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '凭据',
+        ),
+        'new-international-key',
+      );
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig['providerPresetId'], 'stepfun-international');
+      expect(saved.endpointConfig['baseUrl'],
+          'https://api.stepfun.ai/v1/chat/completions');
+      expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      final stepFive = saved.models.singleWhere(
+        (model) => model.upstreamModelId == 'step-5-preview',
+      );
+      expect(stepFive.capabilities['contextLength'], 1024000);
+      expect(stepFive.capabilities['supportedThinkingEfforts'], [
+        'low',
+        'medium',
+        'high',
+      ]);
+      expect(stepFive.config['apiProtocolOverride'], 'anthropic.messages');
+      expect(await service.readCredential(saved.id), 'new-international-key');
+    },
+  );
 
   test(
     'Cursor OAuth fallback models preserve inline vision metadata',
