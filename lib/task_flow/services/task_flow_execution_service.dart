@@ -303,7 +303,7 @@ class TaskFlowExecutionService {
   }
 
   void cancelActiveRequest(String id) {
-    final token = _activeRequestCancelTokens.remove(id);
+    final token = _activeRequestCancelTokens[id];
     if (token != null && !token.isCancelled) token.cancel();
   }
 

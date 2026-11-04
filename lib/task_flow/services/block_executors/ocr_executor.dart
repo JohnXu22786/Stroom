@@ -247,6 +247,15 @@ Future<String> executeOcrBlock({
   imageBytes = payload.bytes;
   imageFormat = payload.format;
 
+  if (!isFlowExecutionActive(execNotifier, execId)) {
+    bgNotifier.removeTask(taskId);
+    throw BlockExecutionException(
+      '任务流已结束或删除',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
     final String result;

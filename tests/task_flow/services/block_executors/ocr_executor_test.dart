@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -147,6 +148,61 @@ void main() {
     expect(result, 'recognized text');
     expect(requestFormat, 'png');
   });
+
+  test(
+    'cancellation during OCR input read prevents request dispatch',
+    () async {
+      final source = await File('${directory.path}/cancelled.png')
+          .writeAsBytes(_validPng());
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var requested = false;
+
+      final execution = executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        readInputBytes: (_, _) async {
+          readStarted.complete();
+          await releaseRead.future;
+          return _validPng();
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'must not be sent';
+        },
+      );
+
+      await readStarted.future;
+      executions.cancelExecution(execId);
+      releaseRead.complete();
+
+      await expectLater(
+        execution,
+        throwsA(isA<BlockExecutionException>().having(
+          (error) => error.message,
+          'message',
+          '任务流已结束或删除',
+        )),
+      );
+
+      expect(requested, isFalse);
+      expect(background.state, isEmpty);
+      expect(
+        executions.execution(execId)?.status,
+        FlowExecutionStatus.cancelled,
+      );
+      expect(
+        executions.execution(execId)?.subTasks.single.outcome,
+        FlowStepOutcome.cancelled,
+      );
+    },
+  );
 
   test('OCR rejects corrupt bytes before invoking its request', () async {
     final source = await File('${directory.path}/corrupt.png').writeAsBytes(
