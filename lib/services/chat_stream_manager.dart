@@ -231,6 +231,8 @@ class ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -269,6 +271,9 @@ class ChatStreamManager {
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
     state.history = List.from(history);
+    state.historyOnSuccess = historyOnSuccess == null
+        ? null
+        : List<ChatMessage>.from(historyOnSuccess);
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
@@ -369,12 +374,22 @@ class ChatStreamManager {
     // 快照消息不在历史中（被删）时安全回退为全量。
     final tailStartId = conv?.compactionTailStartId;
     final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
+    final historyForRequest = requestHistoryOverride == null
+        ? state.history
+        : requestHistoryOverride
+            .map((message) =>
+                state.history
+                    .where((stored) => stored.id == message.id)
+                    .firstOrNull ??
+                message)
+            .toList();
     List<ChatMessage> requestHistory;
     if (hasSummary && tailStartId != null) {
-      final idx = state.history.indexWhere((m) => m.id == tailStartId);
-      requestHistory = idx >= 0 ? state.history.sublist(idx) : state.history;
+      final idx = historyForRequest.indexWhere((m) => m.id == tailStartId);
+      requestHistory =
+          idx >= 0 ? historyForRequest.sublist(idx) : historyForRequest;
     } else {
-      requestHistory = state.history;
+      requestHistory = historyForRequest;
     }
 
     try {
@@ -393,9 +408,19 @@ class ChatStreamManager {
             .firstOrNull;
         final newTailStartId = newConv?.compactionTailStartId;
         if (newTailStartId != null) {
-          final idx = state.history.indexWhere((m) => m.id == newTailStartId);
+          final postCompactionHistory = requestHistoryOverride == null
+              ? state.history
+              : requestHistoryOverride
+                  .map((message) =>
+                      state.history
+                          .where((stored) => stored.id == message.id)
+                          .firstOrNull ??
+                      message)
+                  .toList();
+          final idx =
+              postCompactionHistory.indexWhere((m) => m.id == newTailStartId);
           if (idx >= 0) {
-            requestHistory = state.history.sublist(idx);
+            requestHistory = postCompactionHistory.sublist(idx);
           }
         }
       }

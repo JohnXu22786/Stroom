@@ -222,10 +222,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
     if (isAi) {
       final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
       final hasStructuredPartialError = chatMsg?.isError == true &&
-          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true &&
-          (chatMsg.content.isNotEmpty ||
-              chatMsg.reasoningSections?.any((section) => section.isNotEmpty) ==
-                  true);
+          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true;
       if (!hasStructuredPartialError &&
           ((chatMsg?.isError == true) || message.text.startsWith('错误:'))) {
         messageBubble = _buildErrorMessageBubble(
