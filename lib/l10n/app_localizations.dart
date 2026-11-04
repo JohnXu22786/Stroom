@@ -541,8 +541,8 @@ abstract class AppLocalizations {
   /// No description provided for @taskFlowTemplateCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} templates'**
-  String taskFlowTemplateCount(Object count);
+  /// **'{count, plural, one{{count} template} other{{count} templates}}'**
+  String taskFlowTemplateCount(num count);
 
   /// No description provided for @taskFlowTemplateDraftHint.
   ///
@@ -613,8 +613,44 @@ abstract class AppLocalizations {
   /// No description provided for @taskFlowBlockCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} blocks'**
-  String taskFlowBlockCount(Object count);
+  /// **'{count, plural, one{{count} block} other{{count} blocks}}'**
+  String taskFlowBlockCount(num count);
+
+  /// No description provided for @taskFlowBlockOcr.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR'**
+  String get taskFlowBlockOcr;
+
+  /// No description provided for @taskFlowBlockAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Recognition'**
+  String get taskFlowBlockAsr;
+
+  /// No description provided for @taskFlowBlockAudioSeparation.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Separation'**
+  String get taskFlowBlockAudioSeparation;
+
+  /// No description provided for @taskFlowBlockCatCatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Resource Download'**
+  String get taskFlowBlockCatCatch;
+
+  /// No description provided for @taskFlowBlockTts.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Synthesis'**
+  String get taskFlowBlockTts;
+
+  /// No description provided for @taskFlowBlockChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant Chat'**
+  String get taskFlowBlockChat;
 
   /// No description provided for @taskFlowEdit.
   ///
@@ -853,14 +889,14 @@ abstract class AppLocalizations {
   /// No description provided for @ocrConcurrencyOption.
   ///
   /// In en, this message translates to:
-  /// **'{count} concurrent requests'**
-  String ocrConcurrencyOption(Object count);
+  /// **'{count, plural, one{{count} concurrent request} other{{count} concurrent requests}}'**
+  String ocrConcurrencyOption(num count);
 
   /// No description provided for @ocrConcurrencyStatus.
   ///
   /// In en, this message translates to:
-  /// **'{count} concurrent'**
-  String ocrConcurrencyStatus(Object count);
+  /// **'{count, plural, one{{count} concurrent request} other{{count} concurrent requests}}'**
+  String ocrConcurrencyStatus(num count);
 
   /// No description provided for @ocrRetryCompletedHint.
   ///
@@ -895,8 +931,8 @@ abstract class AppLocalizations {
   /// No description provided for @ocrRechooseRequiredImages.
   ///
   /// In en, this message translates to:
-  /// **'Select all {count} images again before retrying.'**
-  String ocrRechooseRequiredImages(Object count);
+  /// **'Select all {count, plural, one{{count} image} other{{count} images}} again before retrying.'**
+  String ocrRechooseRequiredImages(num count);
 
   /// No description provided for @ocrImageLabel.
   ///
@@ -931,8 +967,8 @@ abstract class AppLocalizations {
   /// No description provided for @ocrSelectedImagesCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} images selected'**
-  String ocrSelectedImagesCount(Object count);
+  /// **'{count, plural, one{{count} image selected} other{{count} images selected}}'**
+  String ocrSelectedImagesCount(num count);
 
   /// No description provided for @ocrPreparingImages.
   ///
@@ -1033,8 +1069,8 @@ abstract class AppLocalizations {
   /// No description provided for @ocrImagesLoaded.
   ///
   /// In en, this message translates to:
-  /// **'Loaded {count} images'**
-  String ocrImagesLoaded(Object count);
+  /// **'Loaded {count, plural, one{{count} image} other{{count} images}}'**
+  String ocrImagesLoaded(num count);
 
   /// No description provided for @ocrProcessImageFailed.
   ///
@@ -1501,8 +1537,8 @@ abstract class AppLocalizations {
   /// No description provided for @contextModelOverrideCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} model-specific overrides'**
-  String contextModelOverrideCount(Object count);
+  /// **'{count, plural, one{{count} model-specific override} other{{count} model-specific overrides}}'**
+  String contextModelOverrideCount(num count);
 
   /// No description provided for @contextCompressionTriggerTitle.
   ///

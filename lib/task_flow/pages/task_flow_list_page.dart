@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/unified_task_list/task_utils.dart';
+import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_templates.dart';
@@ -100,9 +101,20 @@ class TaskFlowListPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) {
-    final defs = flow.blocks
-        .map((b) => b.getDefinition()?.label ?? b.typeKey.name)
-        .join(' → ');
+    final strings = AppLocalizations.of(context)!;
+    final defs = flow.blocks.map((block) {
+      final definition = block.getDefinition();
+      if (definition == null) return block.typeKey.name;
+      return switch (block.typeKey) {
+        BlockType.ocr => strings.taskFlowBlockOcr,
+        BlockType.asr => strings.taskFlowBlockAsr,
+        BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
+        BlockType.catcatch => strings.taskFlowBlockCatCatch,
+        BlockType.tts => strings.taskFlowBlockTts,
+        BlockType.chat => strings.taskFlowBlockChat,
+        BlockType.custom => definition.label,
+      };
+    }).join(' → ');
 
     return Card(
       elevation: 0,

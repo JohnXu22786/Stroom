@@ -264,8 +264,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose a flow close to what you need; you can adjust it later.';
 
   @override
-  String taskFlowTemplateCount(Object count) {
-    return '$count templates';
+  String taskFlowTemplateCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count templates',
+      one: '$count template',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -311,9 +317,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskFlowActions => 'Flow actions';
 
   @override
-  String taskFlowBlockCount(Object count) {
-    return '$count blocks';
+  String taskFlowBlockCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count blocks',
+      one: '$count block',
+    );
+    return '$_temp0';
   }
+
+  @override
+  String get taskFlowBlockOcr => 'OCR';
+
+  @override
+  String get taskFlowBlockAsr => 'Speech Recognition';
+
+  @override
+  String get taskFlowBlockAudioSeparation => 'Audio Separation';
+
+  @override
+  String get taskFlowBlockCatCatch => 'Web Resource Download';
+
+  @override
+  String get taskFlowBlockTts => 'Speech Synthesis';
+
+  @override
+  String get taskFlowBlockChat => 'Assistant Chat';
 
   @override
   String get taskFlowEdit => 'Edit';
@@ -445,13 +475,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ocrMaxConcurrency => 'Up to 2 concurrent requests';
 
   @override
-  String ocrConcurrencyOption(Object count) {
-    return '$count concurrent requests';
+  String ocrConcurrencyOption(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count concurrent requests',
+      one: '$count concurrent request',
+    );
+    return '$_temp0';
   }
 
   @override
-  String ocrConcurrencyStatus(Object count) {
-    return '$count concurrent';
+  String ocrConcurrencyStatus(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count concurrent requests',
+      one: '$count concurrent request',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -472,8 +514,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Take a photo or select multiple images from your album to recognize.';
 
   @override
-  String ocrRechooseRequiredImages(Object count) {
-    return 'Select all $count images again before retrying.';
+  String ocrRechooseRequiredImages(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images',
+      one: '$count image',
+    );
+    return 'Select all $_temp0 again before retrying.';
   }
 
   @override
@@ -496,8 +544,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ocrConfirmModel => 'Confirm this model';
 
   @override
-  String ocrSelectedImagesCount(Object count) {
-    return '$count images selected';
+  String ocrSelectedImagesCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images selected',
+      one: '$count image selected',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -554,8 +608,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String ocrImagesLoaded(Object count) {
-    return 'Loaded $count images';
+  String ocrImagesLoaded(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images',
+      one: '$count image',
+    );
+    return 'Loaded $_temp0';
   }
 
   @override
@@ -831,8 +891,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String contextModelOverrideCount(Object count) {
-    return '$count model-specific overrides';
+  String contextModelOverrideCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count model-specific overrides',
+      one: '$count model-specific override',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1324,8 +1390,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Choose a flow close to what you need; you can adjust it later.';
 
   @override
-  String taskFlowTemplateCount(Object count) {
-    return '$count templates';
+  String taskFlowTemplateCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count templates',
+      one: '$count template',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1371,9 +1443,33 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get taskFlowActions => 'Flow actions';
 
   @override
-  String taskFlowBlockCount(Object count) {
-    return '$count blocks';
+  String taskFlowBlockCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count blocks',
+      one: '$count block',
+    );
+    return '$_temp0';
   }
+
+  @override
+  String get taskFlowBlockOcr => 'OCR';
+
+  @override
+  String get taskFlowBlockAsr => 'Speech Recognition';
+
+  @override
+  String get taskFlowBlockAudioSeparation => 'Audio Separation';
+
+  @override
+  String get taskFlowBlockCatCatch => 'Web Resource Download';
+
+  @override
+  String get taskFlowBlockTts => 'Speech Synthesis';
+
+  @override
+  String get taskFlowBlockChat => 'Assistant Chat';
 
   @override
   String get taskFlowEdit => 'Edit';
@@ -1505,13 +1601,25 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get ocrMaxConcurrency => 'Up to 2 concurrent requests';
 
   @override
-  String ocrConcurrencyOption(Object count) {
-    return '$count concurrent requests';
+  String ocrConcurrencyOption(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count concurrent requests',
+      one: '$count concurrent request',
+    );
+    return '$_temp0';
   }
 
   @override
-  String ocrConcurrencyStatus(Object count) {
-    return '$count concurrent';
+  String ocrConcurrencyStatus(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count concurrent requests',
+      one: '$count concurrent request',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1532,8 +1640,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Take a photo or select multiple images from your album to recognize.';
 
   @override
-  String ocrRechooseRequiredImages(Object count) {
-    return 'Select all $count images again before retrying.';
+  String ocrRechooseRequiredImages(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images',
+      one: '$count image',
+    );
+    return 'Select all $_temp0 again before retrying.';
   }
 
   @override
@@ -1556,8 +1670,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get ocrConfirmModel => 'Confirm this model';
 
   @override
-  String ocrSelectedImagesCount(Object count) {
-    return '$count images selected';
+  String ocrSelectedImagesCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images selected',
+      one: '$count image selected',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1614,8 +1734,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
-  String ocrImagesLoaded(Object count) {
-    return 'Loaded $count images';
+  String ocrImagesLoaded(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images',
+      one: '$count image',
+    );
+    return 'Loaded $_temp0';
   }
 
   @override
@@ -1891,8 +2017,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
-  String contextModelOverrideCount(Object count) {
-    return '$count model-specific overrides';
+  String contextModelOverrideCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count model-specific overrides',
+      one: '$count model-specific override',
+    );
+    return '$_temp0';
   }
 
   @override

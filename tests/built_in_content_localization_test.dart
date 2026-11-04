@@ -53,6 +53,36 @@ void main() {
       }
     });
 
+    test('English count labels use singular forms for a count of one', () {
+      final strings = AppLocalizationsEnUs();
+
+      expect(strings.taskFlowTemplateCount(1), '1 template');
+      expect(strings.taskFlowTemplateCount(2), '2 templates');
+      expect(strings.taskFlowBlockCount(1), '1 block');
+      expect(strings.taskFlowBlockCount(2), '2 blocks');
+      expect(strings.ocrConcurrencyOption(1), '1 concurrent request');
+      expect(strings.ocrConcurrencyOption(2), '2 concurrent requests');
+      expect(strings.ocrConcurrencyStatus(1), '1 concurrent request');
+      expect(strings.ocrConcurrencyStatus(2), '2 concurrent requests');
+      expect(strings.ocrSelectedImagesCount(1), '1 image selected');
+      expect(strings.ocrSelectedImagesCount(2), '2 images selected');
+      expect(
+        strings.ocrRechooseRequiredImages(1),
+        'Select all 1 image again before retrying.',
+      );
+      expect(
+        strings.ocrRechooseRequiredImages(2),
+        'Select all 2 images again before retrying.',
+      );
+      expect(strings.ocrImagesLoaded(1), 'Loaded 1 image');
+      expect(strings.ocrImagesLoaded(2), 'Loaded 2 images');
+      expect(strings.contextModelOverrideCount(1), '1 model-specific override');
+      expect(
+        strings.contextModelOverrideCount(2),
+        '2 model-specific overrides',
+      );
+    });
+
     test(
       'built-in prompts are available in English and Simplified Chinese',
       () {
@@ -138,27 +168,29 @@ void main() {
       expect(english.selectionValue, chinese.selectionValue);
     });
 
-    test('OCR request localizes built-in instructions but preserves user text',
-        () {
-      const userInstruction = OcrInstruction(content: 'Keep my OCR wording');
+    test(
+      'OCR request localizes built-in instructions but preserves user text',
+      () {
+        const userInstruction = OcrInstruction(content: 'Keep my OCR wording');
 
-      expect(
-        selectedOcrInstructionContent(
-          [userInstruction],
-          0,
-          strings: AppLocalizationsEnUs(),
-        ),
-        userInstruction.content,
-      );
-      expect(
-        selectedOcrInstructionContent(
-          [userInstruction],
-          -3,
-          strings: AppLocalizationsEnUs(),
-        ),
-        AppLocalizationsEnUs().ocrTemplatePlainTextContent,
-      );
-    });
+        expect(
+          selectedOcrInstructionContent(
+            [userInstruction],
+            0,
+            strings: AppLocalizationsEnUs(),
+          ),
+          userInstruction.content,
+        );
+        expect(
+          selectedOcrInstructionContent(
+            [userInstruction],
+            -3,
+            strings: AppLocalizationsEnUs(),
+          ),
+          AppLocalizationsEnUs().ocrTemplatePlainTextContent,
+        );
+      },
+    );
 
     testWidgets('built-in prompt market renders English and Chinese', (
       tester,

@@ -246,7 +246,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowTemplateIntroduction => '选择一个接近需求的流程，后续还可以继续调整。';
 
   @override
-  String taskFlowTemplateCount(Object count) {
+  String taskFlowTemplateCount(num count) {
     return '$count 个模板';
   }
 
@@ -284,9 +284,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowActions => '流程操作';
 
   @override
-  String taskFlowBlockCount(Object count) {
+  String taskFlowBlockCount(num count) {
     return '$count 个功能块';
   }
+
+  @override
+  String get taskFlowBlockOcr => '文字识别';
+
+  @override
+  String get taskFlowBlockAsr => '语音识别';
+
+  @override
+  String get taskFlowBlockAudioSeparation => '音频分离';
+
+  @override
+  String get taskFlowBlockCatCatch => '下载网页资源';
+
+  @override
+  String get taskFlowBlockTts => '语音合成';
+
+  @override
+  String get taskFlowBlockChat => '助手对话';
 
   @override
   String get taskFlowEdit => '编辑';
@@ -414,12 +432,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrMaxConcurrency => '最多 2 张同时请求';
 
   @override
-  String ocrConcurrencyOption(Object count) {
+  String ocrConcurrencyOption(num count) {
     return '$count 张同时请求';
   }
 
   @override
-  String ocrConcurrencyStatus(Object count) {
+  String ocrConcurrencyStatus(num count) {
     return '并发 $count';
   }
 
@@ -439,7 +457,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrSelectImagesHint => '支持拍照或从相册批量选择图片进行识别';
 
   @override
-  String ocrRechooseRequiredImages(Object count) {
+  String ocrRechooseRequiredImages(num count) {
     return '请重新选择全部 $count 张图片后重试';
   }
 
@@ -463,7 +481,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrConfirmModel => '确认此模型';
 
   @override
-  String ocrSelectedImagesCount(Object count) {
+  String ocrSelectedImagesCount(num count) {
     return '已选 $count 张图片';
   }
 
@@ -520,7 +538,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String ocrImagesLoaded(Object count) {
+  String ocrImagesLoaded(num count) {
     return '已加载 $count 张图片';
   }
 
@@ -773,7 +791,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String contextModelOverrideCount(Object count) {
+  String contextModelOverrideCount(num count) {
     return '$count 个模型独立设置';
   }
 
@@ -1237,7 +1255,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get taskFlowTemplateIntroduction => '选择一个接近需求的流程，后续还可以继续调整。';
 
   @override
-  String taskFlowTemplateCount(Object count) {
+  String taskFlowTemplateCount(num count) {
     return '$count 个模板';
   }
 
@@ -1275,9 +1293,27 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get taskFlowActions => '流程操作';
 
   @override
-  String taskFlowBlockCount(Object count) {
+  String taskFlowBlockCount(num count) {
     return '$count 个功能块';
   }
+
+  @override
+  String get taskFlowBlockOcr => '文字识别';
+
+  @override
+  String get taskFlowBlockAsr => '语音识别';
+
+  @override
+  String get taskFlowBlockAudioSeparation => '音频分离';
+
+  @override
+  String get taskFlowBlockCatCatch => '下载网页资源';
+
+  @override
+  String get taskFlowBlockTts => '语音合成';
+
+  @override
+  String get taskFlowBlockChat => '助手对话';
 
   @override
   String get taskFlowEdit => '编辑';
@@ -1405,12 +1441,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get ocrMaxConcurrency => '最多 2 张同时请求';
 
   @override
-  String ocrConcurrencyOption(Object count) {
+  String ocrConcurrencyOption(num count) {
     return '$count 张同时请求';
   }
 
   @override
-  String ocrConcurrencyStatus(Object count) {
+  String ocrConcurrencyStatus(num count) {
     return '并发 $count';
   }
 
@@ -1430,7 +1466,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get ocrSelectImagesHint => '支持拍照或从相册批量选择图片进行识别';
 
   @override
-  String ocrRechooseRequiredImages(Object count) {
+  String ocrRechooseRequiredImages(num count) {
     return '请重新选择全部 $count 张图片后重试';
   }
 
@@ -1454,7 +1490,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get ocrConfirmModel => '确认此模型';
 
   @override
-  String ocrSelectedImagesCount(Object count) {
+  String ocrSelectedImagesCount(num count) {
     return '已选 $count 张图片';
   }
 
@@ -1511,7 +1547,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String ocrImagesLoaded(Object count) {
+  String ocrImagesLoaded(num count) {
     return '已加载 $count 张图片';
   }
 
@@ -1764,7 +1800,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String contextModelOverrideCount(Object count) {
+  String contextModelOverrideCount(num count) {
     return '$count 个模型独立设置';
   }
 

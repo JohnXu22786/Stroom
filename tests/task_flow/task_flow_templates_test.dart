@@ -4,8 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
+import 'package:stroom/task_flow/models/io_type.dart';
+import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_templates.dart';
 import 'package:stroom/task_flow/pages/task_flow_list_page.dart';
+import 'package:stroom/task_flow/providers/task_flow_provider.dart';
+
+class _TaskFlowNotifierWithState extends TaskFlowNotifier {
+  _TaskFlowNotifierWithState(TaskFlowDefinition flow) {
+    state = [flow];
+  }
+}
 
 void main() {
   test(
@@ -78,5 +87,41 @@ void main() {
     await openTemplates(const Locale('zh', 'CN'));
     expect(find.text('选择示例模板'), findsOneWidget);
     expect(find.text('录音转写与总结'), findsOneWidget);
+  });
+
+  testWidgets('saved flow previews localize built-in block labels',
+      (tester) async {
+    final flow = TaskFlowDefinition(
+      name: 'Example Flow',
+      inputType: IOType.image,
+      blocks: [
+        TaskFlowBlock(typeKey: BlockType.ocr),
+        TaskFlowBlock(typeKey: BlockType.chat),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          taskFlowListProvider.overrideWith(
+            (ref) => _TaskFlowNotifierWithState(flow),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const TaskFlowListPage(),
+        ),
+      ),
+    );
+
+    expect(
+        find.text('Image Text Recognition → Assistant Chat'), findsOneWidget);
   });
 }

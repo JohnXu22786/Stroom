@@ -2099,7 +2099,7 @@ void main() {
 
           expect(find.text(resetWarning), findsNothing);
           expect(find.text(englishResetWarning), findsNothing);
-          expect(find.text('1 images selected'), findsOneWidget);
+          expect(find.text('1 image selected'), findsOneWidget);
 
           updateLocale(() => selectedLocale = const Locale('zh', 'CN'));
           await tester.pumpAndSettle();
@@ -2306,10 +2306,7 @@ void main() {
                   retryData: {
                     'type': 'ocr',
                     'version': 2,
-                    'modelRef': {
-                      'configId': 'config-1',
-                      'modelId': 'model-1',
-                    },
+                    'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
                     'images': [
                       presentImage,
                       {
@@ -4561,7 +4558,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Take photo'));
+    await tester.tap(find.text('Take a photo'));
     await tester.pumpAndSettle();
 
     expect(find.text('The image is empty. Select it again.'), findsOneWidget);
