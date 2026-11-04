@@ -930,6 +930,19 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     ],
   ),
   LlmProviderPreset(
+    id: 'stepfun-cn',
+    displayName: 'StepFun China (.com)',
+    baseUrl: 'https://api.stepfun.com/v1/chat/completions',
+    modelsUrl: 'https://api.stepfun.com/v1/models',
+    fallbackModels: _stepfunFallbackModels,
+  ),
+  LlmProviderPreset(
+    id: 'stepfun-international',
+    displayName: 'StepFun International (.ai)',
+    baseUrl: 'https://api.stepfun.ai/v1/chat/completions',
+    fallbackModels: _stepfunFallbackModels,
+  ),
+  LlmProviderPreset(
     id: 'together',
     displayName: 'Together AI',
     baseUrl: 'https://api.together.xyz/v1/chat/completions',
@@ -969,6 +982,31 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
       LlmProviderPresetModel('yi-large', displayName: 'Yi Large'),
     ],
   ),
+];
+
+const _stepfunFallbackModels = <LlmProviderPresetModel>[
+  LlmProviderPresetModel(
+    'step-5-preview',
+    displayName: 'Step 5 Preview',
+    capabilities: {
+      'contextLength': 1024000,
+      'reasoning': true,
+      'supportedThinkingEfforts': ['low', 'medium', 'high'],
+      'vision': true,
+      'toolCalling': true,
+    },
+  ),
+  LlmProviderPresetModel('step-3.7-flash',
+      displayName: 'Step 3.7 Flash', capabilities: {'contextLength': 262144}),
+  LlmProviderPresetModel('step-3.5-flash',
+      displayName: 'Step 3.5 Flash', capabilities: {'contextLength': 262144}),
+  LlmProviderPresetModel('step-3.5-flash-2603',
+      displayName: 'Step 3.5 Flash 2603',
+      capabilities: {'contextLength': 262144}),
+  LlmProviderPresetModel('step-1o-turbo-vision',
+      displayName: 'Step 1o Turbo Vision',
+      capabilities: {'contextLength': 32768}),
+  LlmProviderPresetModel('step-1v', displayName: 'Step 1V'),
 ];
 
 LlmProviderPreset? findLlmOpenAiProviderPreset(String? id) {

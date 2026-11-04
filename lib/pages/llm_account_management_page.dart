@@ -3096,6 +3096,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final id = widget.account?.id ?? const Uuid().v4();
     final previousModels =
         widget.account?.models ?? const <AiGatewayUpstreamModel>[];
+    final previousModelPresetId =
+        widget.account?.endpointConfig['providerPresetId'];
+    final previousModelPreset = findLlmOpenAiProviderPreset(
+      previousModelPresetId is String ? previousModelPresetId : null,
+    );
+    final selectedModelPreset = findLlmOpenAiProviderPreset(_providerPresetId);
+    final previousPresetModelIds = {
+      for (final model in previousModelPreset?.fallbackModels ?? const [])
+        '${previousModelPreset!.modelIdPrefix}${model.id}',
+    };
     final existingModelsByUpstream = <String, List<AiGatewayUpstreamModel>>{};
     for (final model in previousModels) {
       existingModelsByUpstream
@@ -3129,6 +3139,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final parts = modelLines[index];
       final upstreamId = parts.first;
       var existing = existingByLine[index];
+      final refreshPresetModel = selectedModelPreset != null &&
+          providerPresetIdentityChanged &&
+          previousPresetModelIds.contains(upstreamId);
       if (existing == null &&
           !providerPresetIdentityChanged &&
           index < previousModels.length &&
@@ -3142,8 +3155,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             .firstOrNull;
         if (existing != null) usedModelIds.add(existing.id);
       }
+      final refreshedPresetModel = refreshPresetModel
+          ? _discoveredModels
+              .where((model) => model.upstreamModelId == upstreamId)
+              .firstOrNull
+          : null;
       final capabilities = <String, dynamic>{
-        if (existing != null)
+        if (refreshedPresetModel != null)
+          ...refreshedPresetModel.capabilities
+        else if (existing != null)
           for (final entry in existing.capabilities.entries)
             if (entry.value is! bool) entry.key: entry.value,
       };
@@ -3199,6 +3219,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final modelConfig = Map<String, dynamic>.from(
         existing?.config ?? const {},
       );
+      if (refreshedPresetModel != null) {
+        modelConfig.remove('catalogSource');
+        modelConfig.addAll(refreshedPresetModel.config);
+      }
       if (_connectorType == 'command-code') {
         modelConfig.remove('apiProtocolOverride');
         if (apiProtocolOverride != null) {
