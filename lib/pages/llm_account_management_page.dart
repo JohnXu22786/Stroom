@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
+import '../services/llm_provider_preset_catalog.dart';
 import '../services/amazon_q_connector.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
@@ -1813,6 +1814,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late String _connectorType;
   late String _authType;
   late String _apiProtocol;
+  String? _providerPresetId;
   String? _selectedCommandCodeModelId;
   String _commandCodeModelProtocol = '';
   late AiGatewayAccountStatus _status;
@@ -1829,6 +1831,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final account = widget.account;
     _connectorType = account?.connectorType ?? 'openai-compatibility';
     _authType = account?.authType ?? 'api_key';
+    final savedProviderPresetId = account?.endpointConfig['providerPresetId'];
+    _providerPresetId = _connectorType == 'openai-compatibility'
+        ? findLlmOpenAiProviderPreset(
+            savedProviderPresetId is String ? savedProviderPresetId : null,
+          )?.id
+        : null;
     final configuredProtocol = account?.endpointConfig['apiProtocol'];
     _apiProtocol = configuredProtocol is String &&
             kCustomHttpApiProtocols.contains(configuredProtocol)
@@ -1930,6 +1938,81 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       .join('\n') ??
                   '',
     );
+    final preset = findLlmOpenAiProviderPreset(_providerPresetId);
+    if (_models.text.trim().isEmpty &&
+        preset?.fallbackModels.isNotEmpty == true) {
+      _models.text = preset!.fallbackModels
+          .map(
+            (model) => model.accountEditorLine(
+              modelIdPrefix: preset.modelIdPrefix,
+            ),
+          )
+          .join('\n');
+      _discoveredModels = [
+        for (final model in preset.fallbackModels)
+          AiGatewayUpstreamModel(
+            id: '${account?.id ?? 'new'}:preset:${preset.modelIdPrefix}${model.id}',
+            upstreamModelId: '${preset.modelIdPrefix}${model.id}',
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            config: const {'catalogSource': 'pinned-provider-preset'},
+          ),
+      ];
+    }
+  }
+
+  void _selectProviderPreset(String value) {
+    final preset = findLlmOpenAiProviderPreset(value.isEmpty ? null : value);
+    final previousPreset = findLlmOpenAiProviderPreset(_providerPresetId);
+    setState(() {
+      _providerPresetId = preset?.id;
+      _draftChanged = true;
+      if (preset == null) return;
+      _authType = preset.authType;
+      _apiProtocol = preset.defaultApiProtocol;
+      _endpoint.text = preset.baseUrl;
+      if (_name.text.trim().isEmpty) _name.text = preset.displayName;
+      final previousFallbackModelIds = {
+        for (final model in previousPreset?.fallbackModels ?? const [])
+          '${previousPreset!.modelIdPrefix}${model.id}',
+      };
+      final currentLines = _models.text
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .where(
+            (line) => !previousFallbackModelIds
+                .contains(line.split(',').first.trim()),
+          )
+          .toList();
+      final currentModelIds = {
+        for (final line in currentLines) line.split(',').first.trim(),
+      };
+      final newFallbackLines = preset.fallbackModels
+          .where(
+            (model) =>
+                !currentModelIds.contains('${preset.modelIdPrefix}${model.id}'),
+          )
+          .map(
+            (model) => model.accountEditorLine(
+              modelIdPrefix: preset.modelIdPrefix,
+            ),
+          )
+          .toList();
+      if (_models.text.trim().isEmpty || previousPreset != null) {
+        _models.text = [...currentLines, ...newFallbackLines].join('\n');
+      }
+      _discoveredModels = [
+        for (final model in preset.fallbackModels)
+          AiGatewayUpstreamModel(
+            id: '${widget.account?.id ?? 'new'}:preset:${preset.modelIdPrefix}${model.id}',
+            upstreamModelId: '${preset.modelIdPrefix}${model.id}',
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            config: const {'catalogSource': 'pinned-provider-preset'},
+          ),
+      ];
+    });
   }
 
   @override
@@ -2070,6 +2153,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _draftChanged = true;
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
+                    if (value != 'openai-compatibility') {
+                      _providerPresetId = null;
+                    }
                     _apiProtocol = builtinDefaultApiProtocolForConnector(value);
                     if (value == 'uncloseai') {
                       _authType = 'none';
@@ -2158,6 +2244,27 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
+              if (_connectorType == 'openai-compatibility') ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _providerPresetId ?? '',
+                  decoration: const InputDecoration(labelText: '服务商预设'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('自定义 OpenAI 兼容端点'),
+                    ),
+                    for (final preset in llmOpenAiProviderPresets)
+                      DropdownMenuItem(
+                        value: preset.id,
+                        child: Text(preset.displayName),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _selectProviderPreset(value);
+                  },
+                ),
+              ],
               if (_connectorType == 'trae') ...[
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
@@ -2939,9 +3046,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         (widget.account!.endpointConfig['gheUrl'] != _endpoint.text.trim() ||
             widget.account!.endpointConfig['copilotClientId'] !=
                 _oauthClientId.text.trim());
+    final providerPresetIdentityChanged = widget.account != null &&
+        _connectorType == 'openai-compatibility' &&
+        widget.account!.endpointConfig['providerPresetId'] != _providerPresetId;
     final credentialIdentityChanged = widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
+            providerPresetIdentityChanged ||
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged ||
             qoderOAuthConfigurationChanged ||
@@ -3018,6 +3129,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final upstreamId = parts.first;
       var existing = existingByLine[index];
       if (existing == null &&
+          !providerPresetIdentityChanged &&
           index < previousModels.length &&
           !usedModelIds.contains(previousModels[index].id)) {
         existing = previousModels[index];
@@ -3237,6 +3349,29 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
     } else if (widget.account?.connectorType == 'command-code') {
       endpointConfig.remove('apiProtocol');
+    }
+    final selectedPreset = _connectorType == 'openai-compatibility'
+        ? findLlmOpenAiProviderPreset(_providerPresetId)
+        : null;
+    final previousPresetId = widget.account?.endpointConfig['providerPresetId'];
+    final previousPreset = findLlmOpenAiProviderPreset(
+      previousPresetId is String ? previousPresetId : null,
+    );
+    if (selectedPreset != null) {
+      endpointConfig['providerPresetId'] = selectedPreset.id;
+      endpointConfig['apiProtocol'] = selectedPreset.defaultApiProtocol;
+      if (selectedPreset.modelsUrl != null) {
+        endpointConfig['modelsUrl'] = selectedPreset.modelsUrl;
+      } else if (endpointConfig['modelsUrl'] == previousPreset?.modelsUrl &&
+          previousPreset?.modelsUrl != null) {
+        endpointConfig.remove('modelsUrl');
+      }
+    } else {
+      endpointConfig.remove('providerPresetId');
+      if (endpointConfig['modelsUrl'] == previousPreset?.modelsUrl &&
+          previousPreset?.modelsUrl != null) {
+        endpointConfig.remove('modelsUrl');
+      }
     }
     if (_connectorType == 'bedrock') {
       endpointConfig['region'] = _region.text.trim();

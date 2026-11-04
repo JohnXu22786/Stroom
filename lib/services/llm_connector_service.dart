@@ -3586,13 +3586,32 @@ class LlmAccountConnectorService {
     final secret = account.credentialRef == null
         ? null
         : await _readSecureValue(account.credentialRef!);
+    final configuredModelsUrl = LlmNativeRequestBuilder._configString(
+      account.endpointConfig,
+      'modelsUrl',
+    );
+    final configuredModelsUri = configuredModelsUrl == null
+        ? null
+        : Uri.tryParse(configuredModelsUrl.trim());
     final uri = account.connectorType == 'workbuddy'
         ? Uri.https('www.workbuddy.ai', '/v3/config')
         : account.connectorType == 'ollama'
             ? _ollamaModelListUri(base)
             : account.connectorType == 'vertex'
                 ? _vertexModelListUri(account.endpointConfig, base, secret)
-                : _modelListUri(base, isGemini: isGemini);
+                : configuredModelsUrl != null
+                    ? configuredModelsUri
+                    : _modelListUri(base, isGemini: isGemini);
+    if (uri == null ||
+        !uri.hasScheme ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment ||
+        (uri.scheme != 'https' &&
+            !(uri.scheme == 'http' &&
+                LlmNativeRequestBuilder._isLoopbackHost(uri.host)))) {
+      throw const LlmAccountConnectorException();
+    }
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
     final usesGeminiOAuth = account.authType == 'oauth' &&
@@ -5364,7 +5383,8 @@ class LlmAccountConnectorService {
             normalized.contains('cookie')) {
           throw const LlmAccountConnectorException();
         }
-        if (normalized == 'baseurl' && entry.value is String) {
+        if ((normalized == 'baseurl' || normalized == 'modelsurl') &&
+            entry.value is String) {
           final uri = Uri.tryParse((entry.value as String).trim());
           if (uri == null || uri.userInfo.isNotEmpty || uri.hasFragment) {
             throw const LlmAccountConnectorException();
