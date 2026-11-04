@@ -5,6 +5,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -526,7 +529,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // Get conversation title
     final conversations = ref.watch(conversationsProvider);
-    String title = '新对话';
+    String title = AppLocalizations.of(context)!.conversationNew;
     String currentDraftText = '';
     List<Attachment> currentDraftAttachments = const [];
     Conversation? currentConversation;

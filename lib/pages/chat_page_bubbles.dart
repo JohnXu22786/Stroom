@@ -92,7 +92,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
               ),
               const SizedBox(width: 4),
               Text(
-                '发送失败',
+                AppLocalizations.of(context)!.chatSendFailed,
                 style: TextStyle(
                   color: isDark ? Colors.red[300] : Colors.red[700],
                   fontSize: 12,
@@ -116,7 +116,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   color: isDark ? Colors.red[300] : Colors.red[700],
                 ),
                 label: Text(
-                  '查看详细错误',
+                  AppLocalizations.of(context)!.chatViewErrorDetails,
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.red[300] : Colors.red[700],

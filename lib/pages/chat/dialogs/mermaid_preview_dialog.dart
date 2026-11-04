@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_web_controls.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -610,7 +611,7 @@ class _MermaidPreviewDialogContentState
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '加载图表预览...',
+                          AppLocalizations.of(context)!.chatMermaidLoading,
                           style: TextStyle(
                             fontSize: 14,
                             color: cs.onSurfaceVariant,
@@ -638,7 +639,7 @@ class _MermaidPreviewDialogContentState
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '加载失败',
+                          AppLocalizations.of(context)!.chatPreviewLoadFailed,
                           style: TextStyle(
                             fontSize: 16,
                             color: cs.onSurface,
@@ -663,7 +664,7 @@ class _MermaidPreviewDialogContentState
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.close, size: 24),
-                    tooltip: '关闭预览',
+                    tooltip: AppLocalizations.of(context)!.chatPreviewClose,
                     color: cs.onSurface,
                     onPressed: () => Navigator.pop(context),
                   ),
@@ -712,13 +713,13 @@ class _MermaidPreviewDialogContentState
                           children: [
                             _buildActionButton(
                               icon: Icons.zoom_out,
-                              label: '缩小',
+                              label: AppLocalizations.of(context)!.chatZoomOut,
                               onTap: _zoomOut,
                               cs: cs,
                             ),
                             _buildActionButton(
                               icon: Icons.zoom_in,
-                              label: '放大',
+                              label: AppLocalizations.of(context)!.chatZoomIn,
                               onTap: _zoomIn,
                               cs: cs,
                             ),
@@ -739,7 +740,7 @@ class _MermaidPreviewDialogContentState
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        'Mermaid 预览',
+                        AppLocalizations.of(context)!.chatMermaidPreview,
                         style: TextStyle(
                           fontSize: 13,
                           color: cs.onSurface,
@@ -759,7 +760,8 @@ class _MermaidPreviewDialogContentState
                         ),
                         child: IconButton(
                           icon: const Icon(Icons.close, size: 24),
-                          tooltip: '关闭预览',
+                          tooltip:
+                              AppLocalizations.of(context)!.chatPreviewClose,
                           color: cs.onSurface,
                           onPressed: () => Navigator.pop(context),
                         ),

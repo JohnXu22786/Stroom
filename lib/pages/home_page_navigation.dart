@@ -19,13 +19,13 @@ extension _HomePageNavigationExt on _HomePageState {
   String _getPageTitle(AppPage page) {
     switch (page) {
       case AppPage.home:
-        return '主页';
+        return AppLocalizations.of(context)!.navHome;
       case AppPage.chat:
-        return '对话';
+        return AppLocalizations.of(context)!.navChat;
       case AppPage.files:
-        return '文件';
+        return AppLocalizations.of(context)!.navFiles;
       case AppPage.settings:
-        return '设置';
+        return AppLocalizations.of(context)!.navSettings;
     }
   }
 

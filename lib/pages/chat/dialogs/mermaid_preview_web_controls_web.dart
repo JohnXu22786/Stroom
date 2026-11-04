@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:flutter/widgets.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 Widget buildMermaidPreviewWebControls({
   Key? key,
@@ -58,8 +59,14 @@ class _MermaidPreviewWebControlsState
     final element = html.DivElement()
       ..setAttribute('data-mermaid-preview-controls', 'true');
     _element = element;
-    _renderControls(element);
     html.document.body!.append(element);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final element = _element;
+    if (element != null) _renderControls(element);
   }
 
   void _renderControls(html.DivElement root) {
@@ -100,14 +107,14 @@ class _MermaidPreviewWebControlsState
       ..backgroundColor = _rgba(widget.backgroundColor, 0.85)
       ..setProperty('pointer-events', 'none');
     zoomGroup.append(_button(
-      label: '缩小',
+      label: AppLocalizations.of(context)!.chatZoomOut,
       action: 'zoom-out',
       glyph: '−',
       onClick: widget.onZoomOut,
       circular: false,
     ));
     zoomGroup.append(_button(
-      label: '放大',
+      label: AppLocalizations.of(context)!.chatZoomIn,
       action: 'zoom-in',
       glyph: '+',
       onClick: widget.onZoomIn,
@@ -118,7 +125,7 @@ class _MermaidPreviewWebControlsState
       ..setAttribute('data-mermaid-preview-controls-title', 'true')
       ..setAttribute('role', 'heading')
       ..setAttribute('aria-level', '2')
-      ..text = 'Mermaid 预览';
+      ..text = AppLocalizations.of(context)!.chatMermaidPreview;
     title.style
       ..position = 'absolute'
       ..left = '50%'
@@ -132,7 +139,7 @@ class _MermaidPreviewWebControlsState
       ..setProperty('pointer-events', 'none');
 
     final close = _button(
-      label: '关闭预览',
+      label: AppLocalizations.of(context)!.chatPreviewClose,
       action: 'close',
       glyph: '×',
       onClick: widget.onClose,

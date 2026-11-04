@@ -26,8 +26,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
           return AlertDialog(
             title: Text(
               selectedIdentities.isNotEmpty
-                  ? '已选 ${selectedIdentities.length}/${mediaList.length} 个资源'
-                  : '选择要下载的资源',
+                  ? AppLocalizations.of(ctx)!.mediaSelectionCount(
+                      selectedIdentities.length, mediaList.length)
+                  : AppLocalizations.of(ctx)!.mediaSelectionTitle,
             ),
             content: SizedBox(
               width: double.maxFinite,
@@ -50,13 +51,18 @@ extension _HomePageMediaDialogExt on _HomePageState {
                         ),
                         label: Text(
                           segmentsExpanded
-                              ? '收起 $segmentCount 个分片'
-                              : '显示 $segmentCount 个分片',
+                              ? AppLocalizations.of(ctx)!
+                                  .mediaCollapseSegments(segmentCount)
+                              : AppLocalizations.of(ctx)!
+                                  .mediaExpandSegments(segmentCount),
                         ),
                       ),
                     ),
                   if (mediaList.isEmpty)
-                    const Expanded(child: Center(child: Text('检测到 0 个资源')))
+                    Expanded(
+                        child: Center(
+                            child: Text(
+                                AppLocalizations.of(ctx)!.mediaNoResources)))
                   else
                     SizedBox(
                       height: resourceViewportHeight,
@@ -152,10 +158,16 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                 ),
                                                 child: Text(
                                                   media.isPlaylistSegment
-                                                      ? '分片'
+                                                      ? AppLocalizations.of(
+                                                              ctx)!
+                                                          .mediaSegment
                                                       : media.isPlaylist
-                                                          ? '播放列表'
-                                                          : '整片',
+                                                          ? AppLocalizations.of(
+                                                                  ctx)!
+                                                              .mediaPlaylist
+                                                          : AppLocalizations.of(
+                                                                  ctx)!
+                                                              .mediaFullVideo,
                                                   style: TextStyle(
                                                     fontSize: 10,
                                                     color: media
@@ -188,7 +200,10 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                           ),
                                           if (media.duration != null)
                                             Text(
-                                              '时长: ${formatDurationShort(media.duration!)}',
+                                              AppLocalizations.of(ctx)!
+                                                  .mediaDuration(
+                                                      formatDurationShort(
+                                                          media.duration!)),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -199,7 +214,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                           if (media.width != null &&
                                               media.height != null)
                                             Text(
-                                              '分辨率: ${media.width}x${media.height}',
+                                              AppLocalizations.of(ctx)!
+                                                  .mediaResolution(media.width!,
+                                                      media.height!),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -218,7 +235,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                               Theme.of(ctx).colorScheme.primary,
                                           size: 22,
                                         ),
-                                        tooltip: '预览',
+                                        tooltip: AppLocalizations.of(ctx)!
+                                            .mediaPreview,
                                         onPressed: () {
                                           showMediaPreview(
                                             ctx,
@@ -235,10 +253,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                         ),
                                       ),
                                     if (media.isPlaylistSegment)
-                                      const Padding(
-                                        padding: EdgeInsets.only(left: 4),
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
                                         child: Tooltip(
-                                          message: '分片需通过播放列表预览',
+                                          message: AppLocalizations.of(ctx)!
+                                              .mediaSegmentPreviewHint,
                                           child: Icon(
                                             Icons.info_outline,
                                             size: 18,
@@ -261,7 +280,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(ctx)!.actionCancel),
               ),
               FilledButton(
                 onPressed: selectedIdentities.isNotEmpty ||
@@ -281,8 +300,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                     : null,
                 child: Text(
                   selectedIdentities.isNotEmpty
-                      ? '下载选中的 ${selectedIdentities.length} 个资源'
-                      : '确认下载',
+                      ? AppLocalizations.of(ctx)!
+                          .mediaDownloadSelected(selectedIdentities.length)
+                      : AppLocalizations.of(ctx)!.mediaConfirmDownload,
                 ),
               ),
             ],

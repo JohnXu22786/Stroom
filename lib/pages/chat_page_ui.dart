@@ -573,8 +573,11 @@ extension _ChatPageUiExt on _ChatPageState {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '上下文已压缩，旧对话已总结'
-                      '${_showCompactionSummary ? '（点击收起）' : '（点击查看摘要）'}',
+                      (_showCompactionSummary
+                          ? AppLocalizations.of(context)!
+                              .chatCompactionCollapsed
+                          : AppLocalizations.of(context)!
+                              .chatCompactionExpanded),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onTertiaryContainer,
@@ -635,7 +638,7 @@ extension _ChatPageUiExt on _ChatPageState {
     final titleWidget = conversation == null
         ? titleText
         : Tooltip(
-            message: '编辑对话标题',
+            message: AppLocalizations.of(context)!.chatEditConversationTitle,
             child: GestureDetector(
               onTap: () => _showRenameConversationDialog(conversation),
               child: titleText,
@@ -672,7 +675,7 @@ extension _ChatPageUiExt on _ChatPageState {
           if (Navigator.of(context).canPop())
             IconButton(
               icon: const Icon(Icons.arrow_back),
-              tooltip: 'Back',
+              tooltip: AppLocalizations.of(context)!.actionBack,
               onPressed: () {
                 // Allow navigation back at any time, even during
                 // streaming. The stream continues in the background,
@@ -724,7 +727,9 @@ extension _ChatPageUiExt on _ChatPageState {
                   : Icons.chat_bubble_outline,
               color: isTemporary ? cs.primary : null,
             ),
-            tooltip: isTemporary ? '关闭临时对话' : '临时对话',
+            tooltip: isTemporary
+                ? AppLocalizations.of(context)!.conversationCloseTemporary
+                : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
                 : () {
@@ -740,7 +745,7 @@ extension _ChatPageUiExt on _ChatPageState {
               color:
                   _isSearching ? Theme.of(context).colorScheme.primary : null,
             ),
-            tooltip: '搜索消息',
+            tooltip: AppLocalizations.of(context)!.chatSearchMessages,
             onPressed: () => setState(() {
               _isSearching = !_isSearching;
               if (!_isSearching) _searchMode = SearchMode.current;
@@ -756,12 +761,12 @@ extension _ChatPageUiExt on _ChatPageState {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('重命名对话'),
+        title: Text(AppLocalizations.of(context)!.conversationRename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.conversationRenameHint,
             border: OutlineInputBorder(),
           ),
           onSubmitted: (_) =>
@@ -770,12 +775,12 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () =>
                 _saveConversationTitle(dialogContext, conversation, controller),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.actionConfirm),
           ),
         ],
       ),
@@ -814,7 +819,7 @@ extension _ChatPageUiExt on _ChatPageState {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '⚠️ 未配置聊天API — 前往设置',
+              AppLocalizations.of(context)!.chatApiMissingSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.onErrorContainer,
@@ -829,7 +834,7 @@ extension _ChatPageUiExt on _ChatPageState {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              '设置',
+              AppLocalizations.of(context)!.appSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.error,
@@ -861,7 +866,9 @@ extension _ChatPageUiExt on _ChatPageState {
       onCopy: () {
         Clipboard.setData(ClipboardData(text: message.text));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+          SnackBar(
+              content: Text(AppLocalizations.of(context)!.chatCopied),
+              duration: Duration(seconds: 1)),
         );
       },
       onRetryOrEdit: () => isAi
@@ -895,8 +902,8 @@ extension _ChatPageUiExt on _ChatPageState {
       );
       if (plan == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('没有可保存的文本内容'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatNoSavableText),
             duration: Duration(seconds: 2),
           ),
         );
@@ -930,22 +937,24 @@ extension _ChatPageUiExt on _ChatPageState {
     return showDialog<MessageSaveOption>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('保存消息为 Markdown'),
+        title: Text(AppLocalizations.of(context)!.chatSaveMarkdownTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('该回复包含多步工具调用，选择要保存的内容：', style: TextStyle(fontSize: 13)),
+            Text(AppLocalizations.of(context)!.chatSaveToolCallChoice,
+                style: TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.article_outlined, size: 18),
-              label: const Text('保存完整消息'),
+              label:
+                  Text(AppLocalizations.of(context)!.chatSaveCompleteMessage),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               icon: const Icon(Icons.last_page, size: 18),
-              label: const Text('保存最后的消息'),
+              label: Text(AppLocalizations.of(context)!.chatSaveLastMessage),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.last),
             ),
           ],
@@ -953,7 +962,7 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
         ],
       ),
@@ -978,7 +987,7 @@ extension _ChatPageUiExt on _ChatPageState {
     try {
       final bytes = Uint8List.fromList(utf8.encode(markdown));
       final outputUri = await saveFileWithType(
-        dialogTitle: '保存消息为 Markdown',
+        dialogTitle: AppLocalizations.of(context)!.chatSaveMarkdownTitle,
         fileName: '${_defaultMarkdownFileName()}.md',
         extensions: ['md'],
         bytes: bytes,
@@ -988,7 +997,8 @@ extension _ChatPageUiExt on _ChatPageState {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到: $outputPath'),
+            content:
+                Text(AppLocalizations.of(context)!.chatSavedToPath(outputPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -997,7 +1007,8 @@ extension _ChatPageUiExt on _ChatPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1021,10 +1032,10 @@ extension _ChatPageUiExt on _ChatPageState {
       final selectedFolder = await FolderPickerDialog.show(
         context,
         availableFolders: folders,
-        title: '保存到应用文件',
-        hintText: '选择或创建文件夹保存 .md 文件',
+        title: AppLocalizations.of(context)!.chatSaveToAppFiles,
+        hintText: AppLocalizations.of(context)!.chatSaveFolderHint,
         fileNameController: _saveMarkdownFileNameController,
-        fileNameHintText: '输入文件名（自动添加 .md 后缀）',
+        fileNameHintText: AppLocalizations.of(context)!.chatSaveFilenameHint,
         onCreateFolder: (name) async {
           await TextManifest.addFolder(name);
           return null;
@@ -1042,7 +1053,8 @@ extension _ChatPageUiExt on _ChatPageState {
       if (fileName.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        ).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatFilenameRequired)));
         return;
       }
 
@@ -1085,7 +1097,8 @@ extension _ChatPageUiExt on _ChatPageState {
             : '$selectedFolder/$finalName.md';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到应用文件: $folderPath'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1094,7 +1107,8 @@ extension _ChatPageUiExt on _ChatPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );

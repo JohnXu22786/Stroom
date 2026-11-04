@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
@@ -86,13 +87,14 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
               ),
             )
           else if (_hasError)
-            const Center(
+            Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.error_outline, color: Colors.white38, size: 48),
                   SizedBox(height: 12),
-                  Text('视频加载失败', style: TextStyle(color: Colors.white70)),
+                  Text(AppLocalizations.of(context)!.chatVideoLoadFailed,
+                      style: TextStyle(color: Colors.white70)),
                 ],
               ),
             )

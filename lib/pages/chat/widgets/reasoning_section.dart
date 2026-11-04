@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+
 import '../chat_types.dart';
 
 /// Data model for the reasoning sections to display.
@@ -54,9 +57,11 @@ class ReasoningSection extends ConsumerWidget {
     for (var i = 0; i < sections.texts.length; i++) {
       if (sections.texts[i].isEmpty) continue;
       texts.add(sections.texts[i]);
-      indices.add(sections.sectionIndices.length == sections.texts.length
-          ? sections.sectionIndices[i]
-          : i);
+      indices.add(
+        sections.sectionIndices.length == sections.texts.length
+            ? sections.sectionIndices[i]
+            : i,
+      );
     }
     if (texts.isEmpty) return const SizedBox.shrink();
 
@@ -64,9 +69,7 @@ class ReasoningSection extends ConsumerWidget {
     for (int i = 0; i < texts.length; i++) {
       children.add(
         Padding(
-          padding: EdgeInsets.only(
-            bottom: i < texts.length - 1 ? 4 : 0,
-          ),
+          padding: EdgeInsets.only(bottom: i < texts.length - 1 ? 4 : 0),
           child: _ReasoningButton(
             reasoningText: texts[i],
             // Only mark the last section as streaming when the section
@@ -171,8 +174,12 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
 
   @override
   Widget build(BuildContext context) {
-    final label = widget.isStreaming ? '思考中' : '思考完成';
-    final prefix = widget.isMulti ? '思考 ${widget.index + 1} ' : '';
+    final label = widget.isStreaming
+        ? AppLocalizations.of(context)!.chatThinking
+        : AppLocalizations.of(context)!.chatThinkingComplete;
+    final prefix = widget.isMulti
+        ? '${AppLocalizations.of(context)!.chatThinkingNumbered(widget.index + 1)} '
+        : '';
     final accentColor = Colors.orange[700]!;
 
     return GestureDetector(
@@ -465,7 +472,9 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isReasoningComplete ? '思考完成' : '思考中',
+                  isReasoningComplete
+                      ? AppLocalizations.of(context)!.chatThinkingComplete
+                      : AppLocalizations.of(context)!.chatThinking,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

@@ -194,7 +194,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Center(
           child: Text(
-            '没有更多内容了',
+            AppLocalizations.of(context)!.chatNoMoreHistory,
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.grey[400] : Colors.grey[600],

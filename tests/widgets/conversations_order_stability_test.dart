@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/conversations_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 
@@ -23,7 +24,11 @@ Widget createTestApp({required List<Conversation> conversations}) {
       }),
       activeConversationIdProvider.overrideWith((ref) => null),
     ],
-    child: const MaterialApp(home: ConversationsPage()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ConversationsPage(),
+    ),
   );
 }
 

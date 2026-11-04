@@ -1,8 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
@@ -24,7 +28,9 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
+
 import 'package:visual_math/visual_math.dart';
+
 import 'anki_page.dart';
 
 import '../task_flow/pages/task_flow_list_page.dart';

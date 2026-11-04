@@ -1012,6 +1012,547 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ocrImagePreparationFailed => '无法处理图片，请重新选择后重试。';
+
+  @override
+  String get homeTitle => '主页';
+
+  @override
+  String get homeWelcome => '欢迎使用 Stroom';
+
+  @override
+  String get homeChooseModule => '选择一个功能模块开始使用';
+
+  @override
+  String get homeOcrSubtitle => '文字识别';
+
+  @override
+  String get homeAsrTitle => '语音识别';
+
+  @override
+  String get homeAsrSubtitle => '语音转文字';
+
+  @override
+  String get homeWebDownloadTitle => '下载网页资源';
+
+  @override
+  String get homeWebDownloadSubtitle => '下载网页中的音视频';
+
+  @override
+  String get homeAudioSeparationTitle => '音频分离';
+
+  @override
+  String get homeAudioSeparationSubtitle => '从视频中提取音频';
+
+  @override
+  String get homeTtsTitle => '语音合成';
+
+  @override
+  String get homeTtsSubtitle => '文字转语音';
+
+  @override
+  String get homeChartsTitle => '图表制作';
+
+  @override
+  String get homeChartsSubtitle => 'Mermaid 图表编辑';
+
+  @override
+  String get homeMathTitle => '数学绘图';
+
+  @override
+  String get homeMathSubtitle => '函数绘图';
+
+  @override
+  String get homeAnkiTitle => 'Anki 闪卡';
+
+  @override
+  String get homeAnkiSubtitle => '记忆辅助系统';
+
+  @override
+  String get homeTaskFlowTitle => '任务流';
+
+  @override
+  String get homeTaskFlowEmpty => '创建一个自动化任务流，依次执行多个功能';
+
+  @override
+  String homeTaskFlowManage(int count) {
+    return '$count 个任务流 · 点击管理';
+  }
+
+  @override
+  String get homeRecentTasks => '最近任务';
+
+  @override
+  String get homeViewAll => '查看全部';
+
+  @override
+  String get statusInProgress => '进行中';
+
+  @override
+  String get statusCompleted => '已完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String get navHome => '主页';
+
+  @override
+  String get navChat => '对话';
+
+  @override
+  String get navFiles => '文件';
+
+  @override
+  String get navSettings => '设置';
+
+  @override
+  String get conversationsTitle => '对话历史';
+
+  @override
+  String get conversationNew => '新对话';
+
+  @override
+  String get conversationDeleteTitle => '删除对话';
+
+  @override
+  String conversationDeleteMany(int count) {
+    return '确定要删除选中的 $count 个对话吗？此操作无法撤销。';
+  }
+
+  @override
+  String get actionCancel => '取消';
+
+  @override
+  String get actionDelete => '删除';
+
+  @override
+  String get conversationRename => '重命名对话';
+
+  @override
+  String get conversationRenameHint => '输入新名称';
+
+  @override
+  String get actionConfirm => '确定';
+
+  @override
+  String get conversationNoMatches => '没有找到匹配的对话';
+
+  @override
+  String get conversationEmpty => '暂无历史记录';
+
+  @override
+  String get conversationSearchHint => '搜索所有对话中的消息...';
+
+  @override
+  String conversationSelected(int count) {
+    return '已选 $count 个';
+  }
+
+  @override
+  String get conversationSearch => '搜索';
+
+  @override
+  String get conversationDeleteSelected => '删除选中';
+
+  @override
+  String get actionUnselect => '取消选择';
+
+  @override
+  String get actionSelect => '选择';
+
+  @override
+  String conversationDeleteCount(int count) {
+    return '删除 $count 个';
+  }
+
+  @override
+  String get conversationPin => '置顶';
+
+  @override
+  String get conversationUnpin => '取消置顶';
+
+  @override
+  String get actionRename => '重命名';
+
+  @override
+  String get conversationAutoRename => '自动命名';
+
+  @override
+  String get conversationTemporary => '临时对话';
+
+  @override
+  String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get taskListTitle => '任务列表';
+
+  @override
+  String get taskListEmpty => '暂无任务';
+
+  @override
+  String get chatSearchCurrent => '搜索当前对话...';
+
+  @override
+  String get chatSearchAll => '搜索所有对话...';
+
+  @override
+  String get searchPrevious => '上一个';
+
+  @override
+  String get searchNext => '下一个';
+
+  @override
+  String get searchClose => '关闭搜索';
+
+  @override
+  String get searchCurrentConversation => '当前对话';
+
+  @override
+  String get searchAllConversations => '所有对话';
+
+  @override
+  String get chatReasoning => '推理';
+
+  @override
+  String get chatTools => '工具';
+
+  @override
+  String get chatCustomParameters => '自定义参数';
+
+  @override
+  String get chatEditMessage => '编辑消息';
+
+  @override
+  String get actionClose => '关闭';
+
+  @override
+  String get chatEditWarning => '重新编辑发送后下面所有的消息将丢失';
+
+  @override
+  String get chatAttachment => '附件';
+
+  @override
+  String get chatMessageHint => '输入消息...';
+
+  @override
+  String get chatFullscreenEdit => '全屏编辑';
+
+  @override
+  String get chatStopGeneration => '停止生成';
+
+  @override
+  String get actionSend => '发送';
+
+  @override
+  String get chatCopy => '复制';
+
+  @override
+  String get actionSave => '保存';
+
+  @override
+  String get actionRetry => '重试';
+
+  @override
+  String get actionEdit => '编辑';
+
+  @override
+  String get chatViewResponseData => '查看响应数据';
+
+  @override
+  String get chatViewRequestData => '查看请求数据';
+
+  @override
+  String get chatInspectJson => 'JSON 审查';
+
+  @override
+  String get chatConfirmEditTitle => '编辑消息';
+
+  @override
+  String get chatConfirmEditDeleteFollowing => '确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。';
+
+  @override
+  String get chatConfirmResend => '确定要重新发送这条消息吗？';
+
+  @override
+  String get chatConfirmRetryTitle => '重试';
+
+  @override
+  String get chatConfirmRetryDeleteFollowing => '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。';
+
+  @override
+  String get chatConfirmRegenerate => '确定要重新生成回复吗？';
+
+  @override
+  String get chatDeleteMessageTitle => '删除消息';
+
+  @override
+  String get chatDeleteMessageConfirm => '确定要删除这条消息吗？此操作无法撤销。';
+
+  @override
+  String get chatThinking => '思考中';
+
+  @override
+  String get chatThinkingComplete => '思考完成';
+
+  @override
+  String get conversationDeleteOne => '确定要删除这个对话吗？此操作无法撤销。';
+
+  @override
+  String mediaSelectionCount(int selected, int total) {
+    return '已选 $selected/$total 个资源';
+  }
+
+  @override
+  String get mediaSelectionTitle => '选择要下载的资源';
+
+  @override
+  String mediaCollapseSegments(int count) {
+    return '收起 $count 个分片';
+  }
+
+  @override
+  String mediaExpandSegments(int count) {
+    return '显示 $count 个分片';
+  }
+
+  @override
+  String get mediaNoResources => '检测到 0 个资源';
+
+  @override
+  String get mediaSegment => '分片';
+
+  @override
+  String get mediaPlaylist => '播放列表';
+
+  @override
+  String get mediaFullVideo => '整片';
+
+  @override
+  String mediaDuration(String value) {
+    return '时长：$value';
+  }
+
+  @override
+  String mediaResolution(int width, int height) {
+    return '分辨率：${width}x$height';
+  }
+
+  @override
+  String get mediaPreview => '预览';
+
+  @override
+  String get mediaSegmentPreviewHint => '分片需通过播放列表预览';
+
+  @override
+  String mediaDownloadSelected(int count) {
+    return '下载选中的 $count 个资源';
+  }
+
+  @override
+  String get mediaConfirmDownload => '确认下载';
+
+  @override
+  String get chatNoMoreHistory => '没有更多内容了';
+
+  @override
+  String get chatSendFailed => '发送失败';
+
+  @override
+  String get chatViewErrorDetails => '查看详细错误';
+
+  @override
+  String get chatCompactionCollapsed => '上下文已压缩，旧对话已总结（点击收起）';
+
+  @override
+  String get chatCompactionExpanded => '上下文已压缩，旧对话已总结（点击查看摘要）';
+
+  @override
+  String get chatEditConversationTitle => '编辑对话标题';
+
+  @override
+  String get chatSearchMessages => '搜索消息';
+
+  @override
+  String get chatApiMissingSettings => '⚠️ 未配置聊天 API — 前往设置';
+
+  @override
+  String get appSettings => '设置';
+
+  @override
+  String get chatCopied => '已复制';
+
+  @override
+  String get chatNoSavableText => '没有可保存的文本内容';
+
+  @override
+  String get chatSaveMarkdownTitle => '保存消息为 Markdown';
+
+  @override
+  String get chatSaveToolCallChoice => '该回复包含多步工具调用，选择要保存的内容：';
+
+  @override
+  String get chatSaveCompleteMessage => '保存完整消息';
+
+  @override
+  String get chatSaveLastMessage => '保存最后的消息';
+
+  @override
+  String get chatSaveToAppFiles => '保存到应用文件';
+
+  @override
+  String get chatSaveFolderHint => '选择或创建文件夹保存 .md 文件';
+
+  @override
+  String get chatSaveFilenameHint => '输入文件名（自动添加 .md 后缀）';
+
+  @override
+  String get chatFilenameRequired => '文件名不能为空';
+
+  @override
+  String chatSavedToPath(String path) {
+    return '已保存到：$path';
+  }
+
+  @override
+  String chatSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String chatSavedToAppFiles(String path) {
+    return '已保存到应用文件：$path';
+  }
+
+  @override
+  String get chatSelectModel => '选择模型';
+
+  @override
+  String get chatNoModelsAvailable => '暂无可用模型';
+
+  @override
+  String get chatAvailableTools => '可用工具';
+
+  @override
+  String get chatNoToolsAvailable => '暂无可用工具';
+
+  @override
+  String get chatReasoningSettings => '推理设置';
+
+  @override
+  String get chatReasoningNotConfigured => '当前模型未配置推理参数，请在模型设置中添加';
+
+  @override
+  String get chatReasoningEffort => '推理力度';
+
+  @override
+  String get chatReasoningEffortNotConfigured => '当前模型未配置推理力度参数，请在模型设置中添加';
+
+  @override
+  String get chatParameterNoOptions => '该参数暂无选项值，请在模型设置中添加';
+
+  @override
+  String get chatOtherReasoningNotConfigured => '当前模型未配置其他推理参数\n请在模型设置中添加';
+
+  @override
+  String get chatCustomParamsNotConfigured => '当前模型未配置自定义参数\n请在模型设置中添加';
+
+  @override
+  String get chatNoOptionValues => '无选项值，请在模型设置中添加';
+
+  @override
+  String get chatImageLoadFailed => '无法加载图片';
+
+  @override
+  String get chatVideoLoadFailed => '视频加载失败';
+
+  @override
+  String get chatHtmlLoading => '加载 HTML 预览...';
+
+  @override
+  String get chatPreviewLoadFailed => '加载失败';
+
+  @override
+  String get chatHtmlPreview => 'HTML 预览';
+
+  @override
+  String get chatMermaidLoading => '加载图表预览...';
+
+  @override
+  String get chatMermaidPreview => 'Mermaid 预览';
+
+  @override
+  String get chatZoomOut => '缩小';
+
+  @override
+  String get chatZoomIn => '放大';
+
+  @override
+  String get chatJsonInspection => 'JSON 审查';
+
+  @override
+  String get chatNoRequestData => '无请求数据';
+
+  @override
+  String get chatNoResponseData => '无响应数据';
+
+  @override
+  String get chatSaveMessage => '保存消息';
+
+  @override
+  String get chatChooseSaveLocation => '选择消息保存位置';
+
+  @override
+  String get chatChooseSaveLocationLabel => '选择保存位置：';
+
+  @override
+  String get chatSaveAppFile => '保存到应用文件';
+
+  @override
+  String get chatSaveDevice => '保存到设备';
+
+  @override
+  String get chatFileTypeAudio => '音频文件';
+
+  @override
+  String get chatFileTypeVideo => '视频文件';
+
+  @override
+  String get chatFileTypeDocument => '文档';
+
+  @override
+  String get chatFileTypeGeneric => '文件';
+
+  @override
+  String get chatInfoType => '类型';
+
+  @override
+  String get chatInfoSize => '大小';
+
+  @override
+  String get chatInfoPath => '路径';
+
+  @override
+  String get chatErrorBack => '返回';
+
+  @override
+  String get chatDataDetails => '数据详情';
+
+  @override
+  String get chatAudioPreviewClose => '关闭';
+
+  @override
+  String get chatPreviewClose => '关闭预览';
+
+  @override
+  String get actionBack => '返回';
+
+  @override
+  String get chatCannotLoadFile => '无法加载文件';
+
+  @override
+  String chatThinkingNumbered(int index) {
+    return '思考 $index';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -2021,4 +2562,545 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrImagePreparationFailed => '无法处理图片，请重新选择后重试。';
+
+  @override
+  String get homeTitle => '主页';
+
+  @override
+  String get homeWelcome => '欢迎使用 Stroom';
+
+  @override
+  String get homeChooseModule => '选择一个功能模块开始使用';
+
+  @override
+  String get homeOcrSubtitle => '文字识别';
+
+  @override
+  String get homeAsrTitle => '语音识别';
+
+  @override
+  String get homeAsrSubtitle => '语音转文字';
+
+  @override
+  String get homeWebDownloadTitle => '下载网页资源';
+
+  @override
+  String get homeWebDownloadSubtitle => '下载网页中的音视频';
+
+  @override
+  String get homeAudioSeparationTitle => '音频分离';
+
+  @override
+  String get homeAudioSeparationSubtitle => '从视频中提取音频';
+
+  @override
+  String get homeTtsTitle => '语音合成';
+
+  @override
+  String get homeTtsSubtitle => '文字转语音';
+
+  @override
+  String get homeChartsTitle => '图表制作';
+
+  @override
+  String get homeChartsSubtitle => 'Mermaid 图表编辑';
+
+  @override
+  String get homeMathTitle => '数学绘图';
+
+  @override
+  String get homeMathSubtitle => '函数绘图';
+
+  @override
+  String get homeAnkiTitle => 'Anki 闪卡';
+
+  @override
+  String get homeAnkiSubtitle => '记忆辅助系统';
+
+  @override
+  String get homeTaskFlowTitle => '任务流';
+
+  @override
+  String get homeTaskFlowEmpty => '创建一个自动化任务流，依次执行多个功能';
+
+  @override
+  String homeTaskFlowManage(int count) {
+    return '$count 个任务流 · 点击管理';
+  }
+
+  @override
+  String get homeRecentTasks => '最近任务';
+
+  @override
+  String get homeViewAll => '查看全部';
+
+  @override
+  String get statusInProgress => '进行中';
+
+  @override
+  String get statusCompleted => '已完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String get navHome => '主页';
+
+  @override
+  String get navChat => '对话';
+
+  @override
+  String get navFiles => '文件';
+
+  @override
+  String get navSettings => '设置';
+
+  @override
+  String get conversationsTitle => '对话历史';
+
+  @override
+  String get conversationNew => '新对话';
+
+  @override
+  String get conversationDeleteTitle => '删除对话';
+
+  @override
+  String conversationDeleteMany(int count) {
+    return '确定要删除选中的 $count 个对话吗？此操作无法撤销。';
+  }
+
+  @override
+  String get actionCancel => '取消';
+
+  @override
+  String get actionDelete => '删除';
+
+  @override
+  String get conversationRename => '重命名对话';
+
+  @override
+  String get conversationRenameHint => '输入新名称';
+
+  @override
+  String get actionConfirm => '确定';
+
+  @override
+  String get conversationNoMatches => '没有找到匹配的对话';
+
+  @override
+  String get conversationEmpty => '暂无历史记录';
+
+  @override
+  String get conversationSearchHint => '搜索所有对话中的消息...';
+
+  @override
+  String conversationSelected(int count) {
+    return '已选 $count 个';
+  }
+
+  @override
+  String get conversationSearch => '搜索';
+
+  @override
+  String get conversationDeleteSelected => '删除选中';
+
+  @override
+  String get actionUnselect => '取消选择';
+
+  @override
+  String get actionSelect => '选择';
+
+  @override
+  String conversationDeleteCount(int count) {
+    return '删除 $count 个';
+  }
+
+  @override
+  String get conversationPin => '置顶';
+
+  @override
+  String get conversationUnpin => '取消置顶';
+
+  @override
+  String get actionRename => '重命名';
+
+  @override
+  String get conversationAutoRename => '自动命名';
+
+  @override
+  String get conversationTemporary => '临时对话';
+
+  @override
+  String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get taskListTitle => '任务列表';
+
+  @override
+  String get taskListEmpty => '暂无任务';
+
+  @override
+  String get chatSearchCurrent => '搜索当前对话...';
+
+  @override
+  String get chatSearchAll => '搜索所有对话...';
+
+  @override
+  String get searchPrevious => '上一个';
+
+  @override
+  String get searchNext => '下一个';
+
+  @override
+  String get searchClose => '关闭搜索';
+
+  @override
+  String get searchCurrentConversation => '当前对话';
+
+  @override
+  String get searchAllConversations => '所有对话';
+
+  @override
+  String get chatReasoning => '推理';
+
+  @override
+  String get chatTools => '工具';
+
+  @override
+  String get chatCustomParameters => '自定义参数';
+
+  @override
+  String get chatEditMessage => '编辑消息';
+
+  @override
+  String get actionClose => '关闭';
+
+  @override
+  String get chatEditWarning => '重新编辑发送后下面所有的消息将丢失';
+
+  @override
+  String get chatAttachment => '附件';
+
+  @override
+  String get chatMessageHint => '输入消息...';
+
+  @override
+  String get chatFullscreenEdit => '全屏编辑';
+
+  @override
+  String get chatStopGeneration => '停止生成';
+
+  @override
+  String get actionSend => '发送';
+
+  @override
+  String get chatCopy => '复制';
+
+  @override
+  String get actionSave => '保存';
+
+  @override
+  String get actionRetry => '重试';
+
+  @override
+  String get actionEdit => '编辑';
+
+  @override
+  String get chatViewResponseData => '查看响应数据';
+
+  @override
+  String get chatViewRequestData => '查看请求数据';
+
+  @override
+  String get chatInspectJson => 'JSON 审查';
+
+  @override
+  String get chatConfirmEditTitle => '编辑消息';
+
+  @override
+  String get chatConfirmEditDeleteFollowing => '确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。';
+
+  @override
+  String get chatConfirmResend => '确定要重新发送这条消息吗？';
+
+  @override
+  String get chatConfirmRetryTitle => '重试';
+
+  @override
+  String get chatConfirmRetryDeleteFollowing => '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。';
+
+  @override
+  String get chatConfirmRegenerate => '确定要重新生成回复吗？';
+
+  @override
+  String get chatDeleteMessageTitle => '删除消息';
+
+  @override
+  String get chatDeleteMessageConfirm => '确定要删除这条消息吗？此操作无法撤销。';
+
+  @override
+  String get chatThinking => '思考中';
+
+  @override
+  String get chatThinkingComplete => '思考完成';
+
+  @override
+  String get conversationDeleteOne => '确定要删除这个对话吗？此操作无法撤销。';
+
+  @override
+  String mediaSelectionCount(int selected, int total) {
+    return '已选 $selected/$total 个资源';
+  }
+
+  @override
+  String get mediaSelectionTitle => '选择要下载的资源';
+
+  @override
+  String mediaCollapseSegments(int count) {
+    return '收起 $count 个分片';
+  }
+
+  @override
+  String mediaExpandSegments(int count) {
+    return '显示 $count 个分片';
+  }
+
+  @override
+  String get mediaNoResources => '检测到 0 个资源';
+
+  @override
+  String get mediaSegment => '分片';
+
+  @override
+  String get mediaPlaylist => '播放列表';
+
+  @override
+  String get mediaFullVideo => '整片';
+
+  @override
+  String mediaDuration(String value) {
+    return '时长：$value';
+  }
+
+  @override
+  String mediaResolution(int width, int height) {
+    return '分辨率：${width}x$height';
+  }
+
+  @override
+  String get mediaPreview => '预览';
+
+  @override
+  String get mediaSegmentPreviewHint => '分片需通过播放列表预览';
+
+  @override
+  String mediaDownloadSelected(int count) {
+    return '下载选中的 $count 个资源';
+  }
+
+  @override
+  String get mediaConfirmDownload => '确认下载';
+
+  @override
+  String get chatNoMoreHistory => '没有更多内容了';
+
+  @override
+  String get chatSendFailed => '发送失败';
+
+  @override
+  String get chatViewErrorDetails => '查看详细错误';
+
+  @override
+  String get chatCompactionCollapsed => '上下文已压缩，旧对话已总结（点击收起）';
+
+  @override
+  String get chatCompactionExpanded => '上下文已压缩，旧对话已总结（点击查看摘要）';
+
+  @override
+  String get chatEditConversationTitle => '编辑对话标题';
+
+  @override
+  String get chatSearchMessages => '搜索消息';
+
+  @override
+  String get chatApiMissingSettings => '⚠️ 未配置聊天 API — 前往设置';
+
+  @override
+  String get appSettings => '设置';
+
+  @override
+  String get chatCopied => '已复制';
+
+  @override
+  String get chatNoSavableText => '没有可保存的文本内容';
+
+  @override
+  String get chatSaveMarkdownTitle => '保存消息为 Markdown';
+
+  @override
+  String get chatSaveToolCallChoice => '该回复包含多步工具调用，选择要保存的内容：';
+
+  @override
+  String get chatSaveCompleteMessage => '保存完整消息';
+
+  @override
+  String get chatSaveLastMessage => '保存最后的消息';
+
+  @override
+  String get chatSaveToAppFiles => '保存到应用文件';
+
+  @override
+  String get chatSaveFolderHint => '选择或创建文件夹保存 .md 文件';
+
+  @override
+  String get chatSaveFilenameHint => '输入文件名（自动添加 .md 后缀）';
+
+  @override
+  String get chatFilenameRequired => '文件名不能为空';
+
+  @override
+  String chatSavedToPath(String path) {
+    return '已保存到：$path';
+  }
+
+  @override
+  String chatSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String chatSavedToAppFiles(String path) {
+    return '已保存到应用文件：$path';
+  }
+
+  @override
+  String get chatSelectModel => '选择模型';
+
+  @override
+  String get chatNoModelsAvailable => '暂无可用模型';
+
+  @override
+  String get chatAvailableTools => '可用工具';
+
+  @override
+  String get chatNoToolsAvailable => '暂无可用工具';
+
+  @override
+  String get chatReasoningSettings => '推理设置';
+
+  @override
+  String get chatReasoningNotConfigured => '当前模型未配置推理参数，请在模型设置中添加';
+
+  @override
+  String get chatReasoningEffort => '推理力度';
+
+  @override
+  String get chatReasoningEffortNotConfigured => '当前模型未配置推理力度参数，请在模型设置中添加';
+
+  @override
+  String get chatParameterNoOptions => '该参数暂无选项值，请在模型设置中添加';
+
+  @override
+  String get chatOtherReasoningNotConfigured => '当前模型未配置其他推理参数\n请在模型设置中添加';
+
+  @override
+  String get chatCustomParamsNotConfigured => '当前模型未配置自定义参数\n请在模型设置中添加';
+
+  @override
+  String get chatNoOptionValues => '无选项值，请在模型设置中添加';
+
+  @override
+  String get chatImageLoadFailed => '无法加载图片';
+
+  @override
+  String get chatVideoLoadFailed => '视频加载失败';
+
+  @override
+  String get chatHtmlLoading => '加载 HTML 预览...';
+
+  @override
+  String get chatPreviewLoadFailed => '加载失败';
+
+  @override
+  String get chatHtmlPreview => 'HTML 预览';
+
+  @override
+  String get chatMermaidLoading => '加载图表预览...';
+
+  @override
+  String get chatMermaidPreview => 'Mermaid 预览';
+
+  @override
+  String get chatZoomOut => '缩小';
+
+  @override
+  String get chatZoomIn => '放大';
+
+  @override
+  String get chatJsonInspection => 'JSON 审查';
+
+  @override
+  String get chatNoRequestData => '无请求数据';
+
+  @override
+  String get chatNoResponseData => '无响应数据';
+
+  @override
+  String get chatSaveMessage => '保存消息';
+
+  @override
+  String get chatChooseSaveLocation => '选择消息保存位置';
+
+  @override
+  String get chatChooseSaveLocationLabel => '选择保存位置：';
+
+  @override
+  String get chatSaveAppFile => '保存到应用文件';
+
+  @override
+  String get chatSaveDevice => '保存到设备';
+
+  @override
+  String get chatFileTypeAudio => '音频文件';
+
+  @override
+  String get chatFileTypeVideo => '视频文件';
+
+  @override
+  String get chatFileTypeDocument => '文档';
+
+  @override
+  String get chatFileTypeGeneric => '文件';
+
+  @override
+  String get chatInfoType => '类型';
+
+  @override
+  String get chatInfoSize => '大小';
+
+  @override
+  String get chatInfoPath => '路径';
+
+  @override
+  String get chatErrorBack => '返回';
+
+  @override
+  String get chatDataDetails => '数据详情';
+
+  @override
+  String get chatAudioPreviewClose => '关闭';
+
+  @override
+  String get chatPreviewClose => '关闭预览';
+
+  @override
+  String get actionBack => '返回';
+
+  @override
+  String get chatCannotLoadFile => '无法加载文件';
+
+  @override
+  String chatThinkingNumbered(int index) {
+    return '思考 $index';
+  }
 }
