@@ -69,6 +69,12 @@ class _IoLlmOAuthLoopback implements LlmOAuthLoopback {
         ..close();
       return;
     }
+    if (request.uri.toString().length > 32768) {
+      request.response
+        ..statusCode = HttpStatus.requestUriTooLong
+        ..close();
+      return;
+    }
     final waiter = _nextUri;
     if (_pendingResponse != null || (waiter?.isCompleted ?? false)) {
       request.response

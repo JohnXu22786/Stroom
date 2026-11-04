@@ -23,6 +23,40 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('Trae offers token import and in-app SOLO sign-in', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!('trae');
+    await tester.pumpAndSettle();
+
+    expect(find.text('在 Stroom 内登录 Trae SOLO'), findsOneWidget);
+    expect(find.text('Trae Cloud-IDE-JWT'), findsOneWidget);
+    expect(
+      find.text(
+        '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。',
+      ),
+      findsOneWidget,
+    );
+  });
+
   test(
     'Cursor OAuth fallback models preserve inline vision metadata',
     () async {

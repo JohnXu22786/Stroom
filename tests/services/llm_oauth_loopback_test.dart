@@ -108,4 +108,38 @@ void main() {
       }
     },
   );
+
+  test('bounds callback URLs and closes pending listeners on cancellation',
+      () async {
+    final listener = await LlmOAuthLoopback.bind('/authorize');
+    final client = HttpClient();
+    try {
+      final pending = listener.nextCallback();
+      final pendingExpectation = expectLater(pending, throwsStateError);
+      final oversized = await client.getUrl(
+        listener.redirectUri.replace(
+          queryParameters: {'padding': List<String>.filled(33000, 'x').join()},
+        ),
+      );
+      expect(
+          (await oversized.close()).statusCode, HttpStatus.requestUriTooLong);
+      await expectLater(listener.close(), completes);
+      await pendingExpectation;
+    } finally {
+      client.close(force: true);
+      await listener.close();
+    }
+  });
+
+  test('fixed-port conflict fails without leaving a listener behind', () async {
+    final first = await LlmOAuthLoopback.bind('/authorize', port: 0);
+    try {
+      await expectLater(
+        LlmOAuthLoopback.bind('/authorize', port: first.redirectUri.port),
+        throwsA(anything),
+      );
+    } finally {
+      await first.close();
+    }
+  });
 }

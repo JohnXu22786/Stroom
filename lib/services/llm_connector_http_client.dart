@@ -14,6 +14,7 @@ import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
 import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
+import 'trae_solo_connector.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -140,11 +141,111 @@ class LlmConnectorHttpClient {
         throw const LlmConnectorHttpException();
       }
     }
+    final accountForRefresh = storedAccount;
     var didPrepareCredential = false;
     var didRetry = false;
+    Future<bool> refreshTraeCredential() async {
+      try {
+        return await accountService.refreshCredential(
+          accountForRefresh,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) {
+          throw const LlmConnectorRequestCancelled();
+        }
+        throw const LlmConnectorAuthenticationRequired();
+      } catch (_) {
+        throw const LlmConnectorAuthenticationRequired();
+      }
+    }
+
     while (true) {
       final requestCancelToken = _requestCancelToken(cancelToken);
       final credential = await accountService.readCredential(storedAccount.id);
+      if (storedAccount.connectorType == 'trae') {
+        if (storedAccount.authType != 'session_token' ||
+            !storedAccount.models.any(
+              (model) => model.upstreamModelId == modelId,
+            ) ||
+            credential == null ||
+            body is! Map ||
+            body['messages'] is! List) {
+          throw const LlmConnectorAuthenticationRequired();
+        }
+        final requestMessages = body['messages'] as List;
+        final traeCredential = TraeSoloCredential.fromPastedValue(credential);
+        if (!didPrepareCredential &&
+            !traeCredential.expiresAt.isAfter(DateTime.now().toUtc())) {
+          didPrepareCredential = true;
+          if (traeCredential.refreshToken != null &&
+              await refreshTraeCredential()) {
+            continue;
+          }
+          throw const LlmConnectorAuthenticationRequired();
+        }
+        final requestTools = body['tools'];
+        final requestFunctions = body['functions'];
+        if ((requestTools is Iterable && requestTools.isNotEmpty) ||
+            (requestFunctions is Iterable && requestFunctions.isNotEmpty) ||
+            body['function_call'] != null ||
+            requestMessages.any(
+              (message) =>
+                  message is Map &&
+                  (message['role'] == 'tool' ||
+                      message['tool_calls'] != null ||
+                      message['function_call'] != null),
+            )) {
+          throw const LlmConnectorHttpException(
+            code: 'unsupported_capability',
+          );
+        }
+        try {
+          final result = await TraeSoloHttpAdapter(_dio).request(
+            baseUrl: TraeSoloConnector.defaultBaseUrl,
+            credential: credential,
+            modelId: modelId,
+            messages: requestMessages.cast<dynamic>(),
+            stream: stream,
+            cancelToken: requestCancelToken,
+            onRequestSent: () {
+              markRequestSent();
+              return waitForRequestSentMarker();
+            },
+          );
+          return LlmConnectorResponse(
+            statusCode: result.statusCode,
+            headers: result.headers,
+            body: result.body,
+            observation: LlmConnectorObservation(),
+          );
+        } on TraeSoloAuthenticationException {
+          throw const LlmConnectorAuthenticationRequired();
+        } on TraeSoloHttpException catch (error) {
+          if (error.statusCode == 401 || error.statusCode == 403) {
+            if (!didRetry && traeCredential.refreshToken != null) {
+              didRetry = true;
+              if (await refreshTraeCredential()) {
+                continue;
+              }
+            }
+            throw const LlmConnectorAuthenticationRequired();
+          }
+          throw LlmConnectorHttpException(
+            statusCode: error.statusCode == 0 ? null : error.statusCode,
+            code: 'upstream_error',
+          );
+        } on DioException catch (error) {
+          if (CancelToken.isCancel(error)) {
+            throw const LlmConnectorRequestCancelled();
+          }
+          throw const LlmConnectorHttpException();
+        } on FormatException {
+          throw const LlmConnectorHttpException(code: 'invalid_request');
+        } catch (_) {
+          throw const LlmConnectorHttpException();
+        }
+      }
       if (!didPrepareCredential &&
           _needsInitialCredentialRefresh(storedAccount, credential)) {
         didPrepareCredential = true;

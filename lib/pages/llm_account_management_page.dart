@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,7 +11,10 @@ import '../services/llm_connector_model_catalog.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
 import '../services/llm_oauth_flow.dart';
+import '../services/llm_oauth_loopback.dart';
+import '../services/trae_solo_connector.dart';
 import 'browser_page.dart';
+import 'trae_solo_authorization_page.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -240,6 +244,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       return gateway.accountManagement.saveAccount(
         result.account,
         secret: result.secret.isEmpty ? null : result.secret,
+        traeCallbackIssued: result.traeCallbackIssued,
       );
     }
     if (result.account.connectorType == 'cursor') {
@@ -1494,6 +1499,9 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'trae' && type == 'session_token') {
+    return '粘贴 Cloud-IDE-JWT';
+  }
   if (connectorType == 'cline' && type == 'oauth') {
     return 'Cline WorkOS OAuth';
   }
@@ -1729,6 +1737,7 @@ class _AccountEditResult {
   final Map<String, String> oauthConfiguration;
   final bool requiresOAuthAuthorization;
   final bool requiresCliLogin;
+  final bool traeCallbackIssued;
 
   const _AccountEditResult(
     this.account,
@@ -1736,6 +1745,7 @@ class _AccountEditResult {
     this.oauthConfiguration = const {},
     this.requiresOAuthAuthorization = false,
     this.requiresCliLogin = false,
+    this.traeCallbackIssued = false,
   });
 }
 
@@ -1778,6 +1788,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   String _commandCodeModelProtocol = '';
   late AiGatewayAccountStatus _status;
   var _draftChanged = false;
+  String? _validatedTraeCallbackCredential;
   var _reconnectCli = false;
   var _trustDevinCliExecutable = false;
   String? _error;
@@ -2027,6 +2038,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
                     _apiProtocol = builtinDefaultApiProtocolForConnector(value);
+                    if (value == 'trae') {
+                      _models.clear();
+                      _endpoint.clear();
+                      _discoveredModels = const [];
+                    }
                     if (value == 'command-code' &&
                         widget.account?.connectorType != 'command-code') {
                       _models.clear();
@@ -2104,6 +2120,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
+              if (_connectorType == 'trae') ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _connectTraeSolo,
+                  icon: const Icon(Icons.login),
+                  label: const Text('在 Stroom 内登录 Trae SOLO'),
+                ),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。',
+                  ),
+                ),
+              ],
               if (connector.supportsChatAdapter != true ||
                   !LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
                     _connectorType,
@@ -2367,7 +2397,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType != 'qoder' &&
                     _connectorType != 'kilocode' &&
                     _connectorType != 'cline' &&
-                    _connectorType != 'clinepass',
+                    _connectorType != 'clinepass' &&
+                    _connectorType != 'trae',
                 decoration: InputDecoration(
                   labelText: _connectorType == 'ghe-copilot'
                       ? 'GitHub Enterprise instance HTTPS URL'
@@ -2376,8 +2407,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? 'Cline 使用固定服务端点'
                           : _connectorType == 'kilocode'
                               ? 'Kilo Code 使用固定服务端点'
-                              : _connectorType == 'qoder'
-                                  ? 'Qoder 使用固定服务端点'
+                              : _connectorType == 'qoder' ||
+                                      _connectorType == 'trae'
+                                  ? '固定服务端点'
                                   : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
@@ -2395,6 +2427,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'cline' ||
                     'clinepass' =>
                       '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                    'trae' =>
+                      'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
                     _ => null,
                   },
                 ),
@@ -2481,12 +2515,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                         : _connectorType == 'qoder' &&
                                                 _authType == 'pat'
                                             ? 'Qoder PAT（pt-…）'
-                                            : '凭据',
-                    hintText: _authType == 'aws_credential_chain'
-                        ? '使用运行环境的 AWS 默认凭据链'
-                        : !widget.hasCredential
-                            ? '保存在平台安全存储中'
-                            : '留空以保留当前安全凭据',
+                                            : _connectorType == 'trae'
+                                                ? 'Trae Cloud-IDE-JWT'
+                                                : '凭据',
+                    helperText: _connectorType == 'trae'
+                        ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
+                        : null,
+                    hintText: _connectorType == 'trae'
+                        ? 'Cloud-IDE-JWT eyJ…'
+                        : _authType == 'aws_credential_chain'
+                            ? '使用运行环境的 AWS 默认凭据链'
+                            : !widget.hasCredential
+                                ? '保存在平台安全存储中'
+                                : '留空以保留当前安全凭据',
                   ),
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
@@ -2579,7 +2620,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     _connectorType == 'muse-code' ||
                     _connectorType == 'command-code' ||
                     _connectorType == 'cline' ||
-                    _connectorType == 'clinepass',
+                    _connectorType == 'clinepass' ||
+                    _connectorType == 'trae',
                 decoration: InputDecoration(
                   labelText: '上游模型与能力',
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
@@ -2612,7 +2654,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         _connectorType == 'xai-oauth' ||
                         _connectorType == 'muse-code' ||
                         _connectorType == 'cline' ||
-                        _connectorType == 'clinepass'
+                        _connectorType == 'clinepass' ||
+                        _connectorType == 'trae'
                     ? null
                     : (_) => setState(() => _draftChanged = true),
               ),
@@ -2713,6 +2756,54 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       if (!mounted) return;
       setState(() => _error = '保存账号失败，请检查连接设置后重试。');
     });
+  }
+
+  Future<void> _connectTraeSolo() async {
+    LlmOAuthLoopback? loopback;
+    try {
+      loopback = await LlmOAuthLoopback.bind('/authorize');
+      final state = List<int>.generate(
+        32,
+        (_) => Random.secure().nextInt(256),
+      ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+      final callback = loopback.nextCallback().timeout(
+            const Duration(minutes: 5),
+          );
+      final authorizationUri = TraeSoloConnector.authorizationUri(
+        loopback.redirectUri,
+        state,
+      );
+      if (!mounted) return;
+      final callbackUri = await Navigator.of(context).push<Uri>(
+        MaterialPageRoute<Uri>(
+          builder: (_) => TraeSoloAuthorizationPage(
+            authorizationUri: authorizationUri,
+            callback: callback,
+          ),
+        ),
+      );
+      if (callbackUri == null) return;
+      final credential = TraeSoloCredential.fromCallbackUri(
+        callbackUri,
+        expectedState: state,
+      );
+      await loopback.respond(accepted: true);
+      if (!mounted) return;
+      final storedCredential = credential.toStoredValue();
+      setState(() {
+        _authType = 'session_token';
+        _validatedTraeCallbackCredential = storedCredential;
+        _credential.text = storedCredential;
+        _draftChanged = true;
+        _error = null;
+      });
+    } catch (_) {
+      await loopback?.respond(accepted: false);
+      if (!mounted) return;
+      setState(() => _error = 'Trae 登录未完成，请重试或使用 Cloud-IDE-JWT 手动导入。');
+    } finally {
+      await loopback?.close();
+    }
   }
 
   Future<void> _save({bool reconnectOAuth = false}) async {
@@ -3050,6 +3141,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
+    } else if (_connectorType == 'trae') {
+      endpointConfig.remove('baseUrl');
+      endpointConfig.remove('host');
+      endpointConfig.remove('apiBase');
     } else if (endpoint.isEmpty) {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
@@ -3169,6 +3264,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         requiresCliLogin: account.connectorType == 'devin-cli-agentic' &&
             (widget.account?.connectorType != 'devin-cli-agentic' ||
                 _reconnectCli),
+        traeCallbackIssued: _connectorType == 'trae' &&
+            _authType == 'session_token' &&
+            _validatedTraeCallbackCredential != null &&
+            secret == _validatedTraeCallbackCredential,
       ),
     );
   }
