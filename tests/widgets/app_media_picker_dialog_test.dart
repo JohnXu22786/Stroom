@@ -34,11 +34,7 @@ Widget _buildTestApp(Widget trigger) {
     locale: const Locale('zh', 'CN'),
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: trigger),
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      DefaultMaterialLocalizations.delegate,
-      DefaultWidgetsLocalizations.delegate,
-    ],
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
   );
 }
 

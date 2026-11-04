@@ -46,11 +46,7 @@ Widget _buildTestApp({
         testOnlyAfterChartNameAllocation: testOnlyAfterChartNameAllocation,
         testOnlyBeforeChartRecordUpdate: testOnlyBeforeChartRecordUpdate,
       ),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -113,11 +109,7 @@ Widget _buildSavedChartNavigationTestApp({
           ),
         ),
       ),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -143,11 +135,7 @@ Widget _buildNewChartNavigationTestApp() {
           ),
         ),
       ),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -433,11 +421,7 @@ void main() {
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -500,11 +484,7 @@ void main() {
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -2070,11 +2050,7 @@ void main() {
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                AppLocalizations.delegate,
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -2112,11 +2088,7 @@ void main() {
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                AppLocalizations.delegate,
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -2152,11 +2124,7 @@ void main() {
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -2199,11 +2167,7 @@ sequenceDiagram
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                AppLocalizations.delegate,
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );

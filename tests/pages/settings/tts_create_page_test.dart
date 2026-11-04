@@ -32,11 +32,7 @@ Widget _buildTestApp({List<ProviderEntry>? entries, SynthesisTask? retry}) {
       home: retry != null
           ? TTSCreatePage(retryTask: retry)
           : const TTSCreatePage(),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -170,11 +166,7 @@ void main() {
             locale: const Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(retryTask: _retryTask()),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -245,11 +237,7 @@ void main() {
             locale: Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -338,11 +326,7 @@ void main() {
             locale: const Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(retryTask: retryTask),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -363,11 +347,7 @@ void main() {
             locale: Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(initialFolder: '朗读合集'),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );

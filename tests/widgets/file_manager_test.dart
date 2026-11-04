@@ -150,11 +150,7 @@ Widget _buildTestApp(Widget body) {
     locale: const Locale('zh', 'CN'),
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      DefaultMaterialLocalizations.delegate,
-      DefaultWidgetsLocalizations.delegate,
-    ],
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
   );
 }
 
@@ -216,11 +212,7 @@ Widget _buildFileManagerApp({
           );
         },
       ),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -1160,11 +1152,7 @@ void main() {
             navigateToParentSignal: signal,
           ),
         ),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
-        ],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
       );
     }
 
@@ -1354,11 +1342,7 @@ void main() {
                   manifestBridge: fileManagerNavManifestBridge,
                 ),
               ),
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );

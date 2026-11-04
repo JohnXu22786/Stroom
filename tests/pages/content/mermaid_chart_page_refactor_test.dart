@@ -19,11 +19,7 @@ Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
         initialCode: initialCode,
         initialShowPreview: initialShowPreview,
       ),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }

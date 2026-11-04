@@ -59,7 +59,7 @@ void main() {
       );
 
       // Should show the empty placeholder, not the loading indicator
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
       expect(find.text('正在准备渲染引擎...'), findsNothing);
       expect(tester.takeException(), isNull);
     });

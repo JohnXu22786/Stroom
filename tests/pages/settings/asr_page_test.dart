@@ -37,11 +37,7 @@ Widget _buildTestApp({List<ProviderEntry>? entries}) {
       locale: Locale('zh', 'CN'),
       supportedLocales: AppLocalizations.supportedLocales,
       home: AsrPage(),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }

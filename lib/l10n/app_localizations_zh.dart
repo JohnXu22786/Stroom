@@ -247,7 +247,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String taskFlowTemplateCount(num count) {
-    return '$count 个模板';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个模板',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -285,7 +290,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String taskFlowBlockCount(num count) {
-    return '$count 个功能块';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个功能块',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -436,12 +446,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String ocrConcurrencyOption(num count) {
-    return '$count 张同时请求';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 张同时请求',
+    );
+    return '$_temp0';
   }
 
   @override
   String ocrConcurrencyStatus(num count) {
-    return '并发 $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '并发 $count',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -461,7 +481,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String ocrRechooseRequiredImages(num count) {
-    return '请重新选择全部 $count 张图片后重试';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '请重新选择全部 $count 张图片后重试',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -485,7 +510,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String ocrSelectedImagesCount(num count) {
-    return '已选 $count 张图片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 张图片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -542,7 +572,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String ocrImagesLoaded(num count) {
-    return '已加载 $count 张图片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已加载 $count 张图片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -795,7 +830,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String contextModelOverrideCount(num count) {
-    return '$count 个模型独立设置';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个模型独立设置',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1078,7 +1118,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String homeTaskFlowManage(int count) {
-    return '$count 个任务流 · 点击管理';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务流 · 点击管理',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1119,7 +1164,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String conversationDeleteMany(int count) {
-    return '确定要删除选中的 $count 个对话吗？此操作无法撤销。';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '确定要删除选中的 $count 个对话吗？此操作无法撤销。',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1302,7 +1352,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String mediaSelectionCount(int selected, int total) {
-    return '已选 $selected/$total 个资源';
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '已选 $selected/$total 个资源',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1310,12 +1365,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String mediaCollapseSegments(int count) {
-    return '收起 $count 个分片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '收起 $count 个分片',
+    );
+    return '$_temp0';
   }
 
   @override
   String mediaExpandSegments(int count) {
-    return '显示 $count 个分片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '显示 $count 个分片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1348,7 +1413,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String mediaDownloadSelected(int count) {
-    return '下载选中的 $count 个资源';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '下载选中的 $count 个资源',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4393,7 +4463,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String taskFlowTemplateCount(num count) {
-    return '$count 个模板';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个模板',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4431,7 +4506,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String taskFlowBlockCount(num count) {
-    return '$count 个功能块';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个功能块',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4582,12 +4662,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String ocrConcurrencyOption(num count) {
-    return '$count 张同时请求';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 张同时请求',
+    );
+    return '$_temp0';
   }
 
   @override
   String ocrConcurrencyStatus(num count) {
-    return '并发 $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '并发 $count',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4607,7 +4697,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String ocrRechooseRequiredImages(num count) {
-    return '请重新选择全部 $count 张图片后重试';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '请重新选择全部 $count 张图片后重试',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4631,7 +4726,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String ocrSelectedImagesCount(num count) {
-    return '已选 $count 张图片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 张图片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4688,7 +4788,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String ocrImagesLoaded(num count) {
-    return '已加载 $count 张图片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已加载 $count 张图片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -4941,7 +5046,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String contextModelOverrideCount(num count) {
-    return '$count 个模型独立设置';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个模型独立设置',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -5224,7 +5334,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String homeTaskFlowManage(int count) {
-    return '$count 个任务流 · 点击管理';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务流 · 点击管理',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -5265,7 +5380,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String conversationDeleteMany(int count) {
-    return '确定要删除选中的 $count 个对话吗？此操作无法撤销。';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '确定要删除选中的 $count 个对话吗？此操作无法撤销。',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -5448,7 +5568,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String mediaSelectionCount(int selected, int total) {
-    return '已选 $selected/$total 个资源';
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '已选 $selected/$total 个资源',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -5456,12 +5581,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String mediaCollapseSegments(int count) {
-    return '收起 $count 个分片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '收起 $count 个分片',
+    );
+    return '$_temp0';
   }
 
   @override
   String mediaExpandSegments(int count) {
-    return '显示 $count 个分片';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '显示 $count 个分片',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -5494,7 +5629,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String mediaDownloadSelected(int count) {
-    return '下载选中的 $count 个资源';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '下载选中的 $count 个资源',
+    );
+    return '$_temp0';
   }
 
   @override

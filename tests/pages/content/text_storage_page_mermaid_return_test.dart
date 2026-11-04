@@ -68,11 +68,7 @@ void main() {
             locale: Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TextStoragePage(),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -175,11 +171,7 @@ void main() {
             locale: Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             home: TextStoragePage(),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );

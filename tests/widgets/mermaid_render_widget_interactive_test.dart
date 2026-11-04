@@ -287,7 +287,7 @@ void main() {
       );
 
       // Empty code shows placeholder, not the code view
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
       // Save button should NOT be present
       expect(find.byIcon(Icons.save), findsNothing);
     });
@@ -504,7 +504,7 @@ void main() {
         ),
       );
 
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
     });
   });
 

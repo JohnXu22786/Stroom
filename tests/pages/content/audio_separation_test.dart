@@ -21,11 +21,7 @@ Widget _buildTestApp() {
       locale: const Locale('zh', 'CN'),
       supportedLocales: AppLocalizations.supportedLocales,
       home: AudioSeparationPage(),
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }

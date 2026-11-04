@@ -79,11 +79,7 @@ Widget _buildTestApp(Widget body, {double screenWidth = 800}) {
       locale: const Locale('zh', 'CN'),
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: body),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }

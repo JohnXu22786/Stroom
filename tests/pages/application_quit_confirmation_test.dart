@@ -82,6 +82,7 @@ Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
   SharedPreferences.setMockInitialValues({
     'data_format_version': 2, // skip migration
     'desktop_close_minimize': closeMinimizes,
+    'app_locale_override': 'zh_CN',
   });
 
   final windowCalls = <MethodCall>[];
