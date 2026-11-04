@@ -1009,6 +1009,60 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get contextCompactionHistoryIntro =>
+      'Conversation history to condense:';
+
+  @override
+  String get contextCompactionUserRole => 'User';
+
+  @override
+  String get contextCompactionAssistantRole => 'Assistant';
+
+  @override
+  String contextCompactionToolCall(
+    Object result,
+    Object role,
+    Object toolName,
+  ) {
+    return '$role called tool $toolName: $result';
+  }
+
+  @override
+  String get contextCompactionFinalInstruction =>
+      'Condense the conversation history above into an anchored summary, following the template exactly.';
+
+  @override
+  String get ocrImageEmpty => 'The image is empty. Select it again.';
+
+  @override
+  String get ocrImageUnsupportedFormat =>
+      'This image format is not supported. Convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageUnsupportedSpecialFormat =>
+      'HEIC, SVG, and TIFF images are not supported yet. Convert the image to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageDecodeFailed =>
+      'The image is damaged or cannot be decoded. Select it again, or convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageDimensionsTooLarge =>
+      'The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.';
+
+  @override
+  String get ocrImageOrientationPngTooLarge =>
+      'The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.';
+
+  @override
+  String get ocrImageOrientationFailed =>
+      'The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImagePreparationFailed =>
+      'The image could not be processed. Select it again and try again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -2015,4 +2069,58 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get contextCompactionHistoryIntro =>
+      'Conversation history to condense:';
+
+  @override
+  String get contextCompactionUserRole => 'User';
+
+  @override
+  String get contextCompactionAssistantRole => 'Assistant';
+
+  @override
+  String contextCompactionToolCall(
+    Object result,
+    Object role,
+    Object toolName,
+  ) {
+    return '$role called tool $toolName: $result';
+  }
+
+  @override
+  String get contextCompactionFinalInstruction =>
+      'Condense the conversation history above into an anchored summary, following the template exactly.';
+
+  @override
+  String get ocrImageEmpty => 'The image is empty. Select it again.';
+
+  @override
+  String get ocrImageUnsupportedFormat =>
+      'This image format is not supported. Convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageUnsupportedSpecialFormat =>
+      'HEIC, SVG, and TIFF images are not supported yet. Convert the image to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageDecodeFailed =>
+      'The image is damaged or cannot be decoded. Select it again, or convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImageDimensionsTooLarge =>
+      'The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.';
+
+  @override
+  String get ocrImageOrientationPngTooLarge =>
+      'The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.';
+
+  @override
+  String get ocrImageOrientationFailed =>
+      'The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.';
+
+  @override
+  String get ocrImagePreparationFailed =>
+      'The image could not be processed. Select it again and try again.';
 }

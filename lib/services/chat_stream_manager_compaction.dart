@@ -113,9 +113,11 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       sb.writeln('</previous-summary>');
       sb.writeln();
     }
-    sb.writeln('以下是需要压缩的对话历史：');
+    sb.writeln(strings.contextCompactionHistoryIntro);
     for (final m in head) {
-      final role = m.role == 'user' ? '用户' : '助手';
+      final role = m.role == 'user'
+          ? strings.contextCompactionUserRole
+          : strings.contextCompactionAssistantRole;
       final content = m.content.trim();
       if (content.isNotEmpty) {
         sb.writeln('$role: $content');
@@ -134,12 +136,14 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
           final result = rebuildToolResultText(tc);
           final trimmed =
               result.length > 200 ? '${result.substring(0, 200)}…' : result;
-          sb.writeln('$role 调用了工具 ${tc.name}: $trimmed');
+          sb.writeln(
+            strings.contextCompactionToolCall(trimmed, role, tc.name),
+          );
         }
       }
     }
     sb.writeln();
-    sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
+    sb.writeln(strings.contextCompactionFinalInstruction);
 
     // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
     //    独立 task service：此前 getOrCreateService 让压缩与主请求

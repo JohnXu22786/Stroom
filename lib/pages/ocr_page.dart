@@ -311,6 +311,30 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       widget.testImagePayloadPreparer?.call(bytes) ??
       prepareOcrImagePayload(bytes);
 
+  String _localizedImagePreparationError(FormatException error) {
+    final strings = AppLocalizations.of(context)!;
+    switch (error.message) {
+      case '图片为空，请重新选择。':
+        return strings.ocrImageEmpty;
+      case '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageUnsupportedFormat;
+      case '暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageUnsupportedSpecialFormat;
+      case '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。':
+        return strings.ocrImageDecodeFailed;
+      case '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。':
+        return strings.ocrImageDimensionsTooLarge;
+      case '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。':
+        return strings.ocrImageOrientationPngTooLarge;
+      case '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageOrientationFailed;
+      case '无法处理图片，请重新选择后重试。':
+        return strings.ocrImagePreparationFailed;
+      default:
+        return error.message;
+    }
+  }
+
   void _beginImageImport() {
     if (!mounted) return;
     setState(() => _pendingImageImports++);
@@ -2066,7 +2090,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e is FormatException
-                ? e.message
+                ? _localizedImagePreparationError(e)
                 : AppLocalizations.of(context)!.ocrTakePhotoFailed(e)),
           ),
         );
@@ -2137,7 +2161,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             SelectedImage.fromPayload(payload: payload, sourceName: file.name),
           );
         } on FormatException catch (error) {
-          firstError ??= error.message;
+          firstError ??= _localizedImagePreparationError(error);
         } catch (error) {
           firstFileFailure ??= error;
         }
@@ -2271,7 +2295,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
         final message = e is FormatException
-            ? e.message
+            ? _localizedImagePreparationError(e)
             : AppLocalizations.of(context)!.ocrProcessImageFailed(e.toString());
         setState(() {
           _clearOcrErrorDetails();
@@ -2387,8 +2411,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     } on FormatException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_localizedImagePreparationError(error))),
+        );
       }
     }
   }
@@ -2687,7 +2712,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (widget.retryData == null && widget.retryTaskId == null) {
           setState(() {
             _ocrStarting = false;
-            _errorMessage = error.message;
+            _errorMessage = _localizedImagePreparationError(error);
             _captureImagePreparationErrorDetails(
               option: modelOptions[modelIndex],
               images: sourceImages,

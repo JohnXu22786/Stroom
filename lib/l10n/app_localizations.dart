@@ -1797,6 +1797,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Installation failed. Open the APK manually.'**
   String get updateApkInstallFailedNoDetails;
+
+  /// No description provided for @contextCompactionHistoryIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation history to condense:'**
+  String get contextCompactionHistoryIntro;
+
+  /// No description provided for @contextCompactionUserRole.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get contextCompactionUserRole;
+
+  /// No description provided for @contextCompactionAssistantRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get contextCompactionAssistantRole;
+
+  /// No description provided for @contextCompactionToolCall.
+  ///
+  /// In en, this message translates to:
+  /// **'{role} called tool {toolName}: {result}'**
+  String contextCompactionToolCall(Object result, Object role, Object toolName);
+
+  /// No description provided for @contextCompactionFinalInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Condense the conversation history above into an anchored summary, following the template exactly.'**
+  String get contextCompactionFinalInstruction;
+
+  /// No description provided for @ocrImageEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The image is empty. Select it again.'**
+  String get ocrImageEmpty;
+
+  /// No description provided for @ocrImageUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'This image format is not supported. Convert it to PNG, JPEG, or WebP and try again.'**
+  String get ocrImageUnsupportedFormat;
+
+  /// No description provided for @ocrImageUnsupportedSpecialFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'HEIC, SVG, and TIFF images are not supported yet. Convert the image to PNG, JPEG, or WebP and try again.'**
+  String get ocrImageUnsupportedSpecialFormat;
+
+  /// No description provided for @ocrImageDecodeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The image is damaged or cannot be decoded. Select it again, or convert it to PNG, JPEG, or WebP and try again.'**
+  String get ocrImageDecodeFailed;
+
+  /// No description provided for @ocrImageDimensionsTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.'**
+  String get ocrImageDimensionsTooLarge;
+
+  /// No description provided for @ocrImageOrientationPngTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.'**
+  String get ocrImageOrientationPngTooLarge;
+
+  /// No description provided for @ocrImageOrientationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.'**
+  String get ocrImageOrientationFailed;
+
+  /// No description provided for @ocrImagePreparationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The image could not be processed. Select it again and try again.'**
+  String get ocrImagePreparationFailed;
 }
 
 class _AppLocalizationsDelegate

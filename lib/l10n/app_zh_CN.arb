@@ -282,5 +282,18 @@
   "updateFailed": "更新失败：{details}",
   "updateManualInstallFileError": "无法打开文件，请手动安装：{path}",
   "updateApkInstallFailed": "安装失败，请手动打开 APK 安装：{details}",
-  "updateApkInstallFailedNoDetails": "安装失败，请手动打开 APK 安装"
+  "updateApkInstallFailedNoDetails": "安装失败，请手动打开 APK 安装",
+  "contextCompactionHistoryIntro": "以下是需要压缩的对话历史：",
+  "contextCompactionUserRole": "用户",
+  "contextCompactionAssistantRole": "助手",
+  "contextCompactionToolCall": "{role} 调用了工具 {toolName}：{result}",
+  "contextCompactionFinalInstruction": "请将以上对话历史压缩为锚定摘要，严格按模板输出。",
+  "ocrImageEmpty": "图片为空，请重新选择。",
+  "ocrImageUnsupportedFormat": "不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。",
+  "ocrImageUnsupportedSpecialFormat": "暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。",
+  "ocrImageDecodeFailed": "图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。",
+  "ocrImageDimensionsTooLarge": "图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。",
+  "ocrImageOrientationPngTooLarge": "校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。",
+  "ocrImageOrientationFailed": "无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。",
+  "ocrImagePreparationFailed": "无法处理图片，请重新选择后重试。"
 }

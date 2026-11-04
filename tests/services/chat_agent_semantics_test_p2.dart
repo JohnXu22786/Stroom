@@ -127,6 +127,7 @@ void chatAgentSemanticsGroup2() {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-c', title: '')],
       );
+      await container.read(localeProvider.notifier).setLocaleCode('en_US');
       final manager = container.read(chatStreamManagerProvider);
 
       // 第 1 次调用 = 压缩请求（摘要）；第 2 次 = 主请求（回答）
@@ -146,7 +147,15 @@ void chatAgentSemanticsGroup2() {
       // 6 条消息：tail 从倒数第 2 个 user 消息开始
       final big = 'x' * 7000;
       final history = [
-        ChatMessage(role: 'assistant', content: 'old a1 $big'),
+        ChatMessage(role: 'assistant', content: 'old a1 $big', toolCalls: [
+          ToolCallData(
+            id: 'compact-tool-call',
+            name: 'lookup',
+            arguments: const {},
+            status: ToolCallStatus.completed,
+            result: 'found value',
+          ),
+        ]),
         ChatMessage(role: 'user', content: 'old q1 $big'),
         ChatMessage(role: 'assistant', content: 'old a2 $big'),
         ChatMessage(role: 'user', content: 'q2'),
@@ -174,7 +183,16 @@ void chatAgentSemanticsGroup2() {
           .where((m) => m['role'] == 'system')
           .toList();
       expect(sysMsgs, isNotEmpty);
-      expect(sysMsgs.first['content'], contains('锚定上下文摘要助手'));
+      expect(sysMsgs.first['content'],
+          contains('anchored-context summarization assistant'));
+      final compactedHistory = (provider.captures[0]['messages'] as List)
+          .cast<Map>()
+          .firstWhere((m) => m['role'] == 'user')['content'] as String;
+      expect(compactedHistory, contains('Conversation history to condense:'));
+      expect(
+        compactedHistory,
+        contains('Assistant called tool lookup: found value'),
+      );
 
       // 主请求发送 = 摘要(system) + 尾部（对齐 opencode filterCompacted）：
       // 存储完整保留头部，发给 API 的只是"摘要 + tail"子集

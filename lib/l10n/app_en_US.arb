@@ -282,5 +282,18 @@
   "updateFailed": "Update failed: {details}",
   "updateManualInstallFileError": "Could not open the file. Install it manually: {path}",
   "updateApkInstallFailed": "Installation failed. Open the APK manually: {details}",
-  "updateApkInstallFailedNoDetails": "Installation failed. Open the APK manually."
+  "updateApkInstallFailedNoDetails": "Installation failed. Open the APK manually.",
+  "contextCompactionHistoryIntro": "Conversation history to condense:",
+  "contextCompactionUserRole": "User",
+  "contextCompactionAssistantRole": "Assistant",
+  "contextCompactionToolCall": "{role} called tool {toolName}: {result}",
+  "contextCompactionFinalInstruction": "Condense the conversation history above into an anchored summary, following the template exactly.",
+  "ocrImageEmpty": "The image is empty. Select it again.",
+  "ocrImageUnsupportedFormat": "This image format is not supported. Convert it to PNG, JPEG, or WebP and try again.",
+  "ocrImageUnsupportedSpecialFormat": "HEIC, SVG, and TIFF images are not supported yet. Convert the image to PNG, JPEG, or WebP and try again.",
+  "ocrImageDecodeFailed": "The image is damaged or cannot be decoded. Select it again, or convert it to PNG, JPEG, or WebP and try again.",
+  "ocrImageDimensionsTooLarge": "The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.",
+  "ocrImageOrientationPngTooLarge": "The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.",
+  "ocrImageOrientationFailed": "The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.",
+  "ocrImagePreparationFailed": "The image could not be processed. Select it again and try again."
 }

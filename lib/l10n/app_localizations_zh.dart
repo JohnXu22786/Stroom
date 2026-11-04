@@ -945,6 +945,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';
+
+  @override
+  String get contextCompactionUserRole => '用户';
+
+  @override
+  String get contextCompactionAssistantRole => '助手';
+
+  @override
+  String contextCompactionToolCall(
+    Object result,
+    Object role,
+    Object toolName,
+  ) {
+    return '$role 调用了工具 $toolName：$result';
+  }
+
+  @override
+  String get contextCompactionFinalInstruction => '请将以上对话历史压缩为锚定摘要，严格按模板输出。';
+
+  @override
+  String get ocrImageEmpty => '图片为空，请重新选择。';
+
+  @override
+  String get ocrImageUnsupportedFormat => '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImageUnsupportedSpecialFormat =>
+      '暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImageDecodeFailed =>
+      '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。';
+
+  @override
+  String get ocrImageDimensionsTooLarge =>
+      '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。';
+
+  @override
+  String get ocrImageOrientationPngTooLarge =>
+      '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。';
+
+  @override
+  String get ocrImageOrientationFailed => '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImagePreparationFailed => '无法处理图片，请重新选择后重试。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1887,4 +1936,53 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';
+
+  @override
+  String get contextCompactionUserRole => '用户';
+
+  @override
+  String get contextCompactionAssistantRole => '助手';
+
+  @override
+  String contextCompactionToolCall(
+    Object result,
+    Object role,
+    Object toolName,
+  ) {
+    return '$role 调用了工具 $toolName：$result';
+  }
+
+  @override
+  String get contextCompactionFinalInstruction => '请将以上对话历史压缩为锚定摘要，严格按模板输出。';
+
+  @override
+  String get ocrImageEmpty => '图片为空，请重新选择。';
+
+  @override
+  String get ocrImageUnsupportedFormat => '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImageUnsupportedSpecialFormat =>
+      '暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImageDecodeFailed =>
+      '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。';
+
+  @override
+  String get ocrImageDimensionsTooLarge =>
+      '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。';
+
+  @override
+  String get ocrImageOrientationPngTooLarge =>
+      '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。';
+
+  @override
+  String get ocrImageOrientationFailed => '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。';
+
+  @override
+  String get ocrImagePreparationFailed => '无法处理图片，请重新选择后重试。';
 }

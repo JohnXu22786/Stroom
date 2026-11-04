@@ -4549,6 +4549,24 @@ void main() {
     expect(find.text('已选 1 张图片'), findsOneWidget);
   });
 
+  testWidgets('image payload validation feedback follows the English locale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        locale: const Locale('en', 'US'),
+        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+            XFile.fromData(Uint8List(0), name: 'empty.png'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Take photo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The image is empty. Select it again.'), findsOneWidget);
+  });
+
   for (final laterImport in ['camera', 'app album']) {
     testWidgets(
       'successful $laterImport import clears an earlier system gallery error',
