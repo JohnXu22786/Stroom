@@ -1780,6 +1780,18 @@ void main() {
       expect(LlmConnectorRegistry.find('bedrock'), isNotNull);
       expect(LlmConnectorRegistry.chatAdapterEndpointType('bedrock'), 'openai');
       expect(
+        LlmConnectorRegistry.find('bedrock')!.authTypes,
+        contains('api_key'),
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'bedrock',
+          'api_key',
+        ),
+        isTrue,
+        reason: 'Bedrock API keys must use the shared Chat and Task Flow route',
+      );
+      expect(
         LlmConnectorRegistry.chatAdapterEndpointType('gemini'),
         'google.gemini.generate_content',
       );
@@ -4573,10 +4585,19 @@ void main() {
     test(
       'signs Bedrock model discovery and excludes non-text models',
       () async {
-        RequestOptions? captured;
+        final captured = <RequestOptions>[];
         final dio = Dio()
           ..httpClientAdapter = _FunctionalAdapter((options) async {
-            captured = options;
+            captured.add(options);
+            if (options.uri.path == '/inference-profiles') {
+              return ResponseBody.fromString(
+                jsonEncode({'inferenceProfileSummaries': []}),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
             return ResponseBody.fromString(
               jsonEncode({
                 'modelSummaries': [
@@ -4645,13 +4666,22 @@ void main() {
           refreshRemote: true,
         );
 
-        expect(captured?.method, 'GET');
-        expect(captured?.uri.host, 'bedrock.us-east-1.amazonaws.com');
-        expect(captured?.uri.path, '/foundation-models');
-        expect(captured?.uri.queryParameters['byOutputModality'], 'TEXT');
+        expect(captured, hasLength(2));
+        expect(captured.first.method, 'GET');
+        expect(captured.first.uri.host, 'bedrock.us-east-1.amazonaws.com');
+        expect(captured.first.uri.path, '/foundation-models');
+        expect(captured.first.uri.queryParameters['byOutputModality'], 'TEXT');
         expect(
-          captured?.headers['x-amz-security-token'],
+          captured.first.headers['x-amz-security-token'],
           'private-session-token',
+        );
+        expect(captured.last.uri.path, '/inference-profiles');
+        expect(
+          captured.every((request) =>
+              request.headers['Authorization'] is String &&
+              (request.headers['Authorization'] as String)
+                  .startsWith('AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/')),
+          isTrue,
         );
         expect(models.map((model) => model.upstreamModelId), [
           'amazon.titan-text-express-v1',
@@ -4659,11 +4689,373 @@ void main() {
       },
     );
 
+    test('discovers Bedrock models with the distinct API-key mode', () async {
+      final captured = <RequestOptions>[];
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentials();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured.add(options);
+          if (options.uri.path == '/inference-profiles') {
+            final id = options.uri.queryParameters['nextToken'] == null
+                ? 'us.anthropic.claude-3-5-sonnet'
+                : 'eu.anthropic.claude-3-5-sonnet';
+            return ResponseBody.fromString(
+              jsonEncode({
+                'inferenceProfileSummaries': [
+                  {
+                    'inferenceProfileId': id,
+                    'inferenceProfileName': id,
+                    'status': 'ACTIVE',
+                    'type': 'SYSTEM_DEFINED',
+                    'models': [
+                      {
+                        'modelArn':
+                            'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet',
+                      },
+                    ],
+                  },
+                  {
+                    'inferenceProfileId': 'us.amazon.titan-image-generator-v1',
+                    'inferenceProfileName': 'Titan Image Generator',
+                    'status': 'ACTIVE',
+                    'type': 'SYSTEM_DEFINED',
+                    'models': [
+                      {
+                        'modelArn':
+                            'arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-image-generator-v1',
+                      },
+                    ],
+                  },
+                  {
+                    'inferenceProfileId': 'us.amazon.titan-text-legacy-v1',
+                    'inferenceProfileName': 'Titan Text Legacy',
+                    'status': 'ACTIVE',
+                    'type': 'SYSTEM_DEFINED',
+                    'models': [
+                      {
+                        'modelArn':
+                            'arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-text-legacy-v1',
+                      },
+                    ],
+                  },
+                ],
+                if (options.uri.queryParameters['nextToken'] == null)
+                  'nextToken': 'profile-next',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'modelSummaries': [
+                {
+                  'modelId': 'amazon.titan-text-express-v1',
+                  'modelName': 'Titan Text Express',
+                  'inputModalities': ['TEXT'],
+                  'outputModalities': ['TEXT'],
+                  'responseStreamingSupported': true,
+                  'modelLifecycle': {'status': 'ACTIVE'},
+                },
+                {
+                  'modelId': 'anthropic.claude-3-5-sonnet',
+                  'modelName': 'Claude 3.5 Sonnet',
+                  'inputModalities': ['TEXT'],
+                  'outputModalities': ['TEXT'],
+                  'responseStreamingSupported': true,
+                  'modelLifecycle': {'status': 'ACTIVE'},
+                },
+                {
+                  'modelId': 'amazon.titan-text-legacy-v1',
+                  'modelName': 'Titan Text Legacy',
+                  'inputModalities': ['TEXT'],
+                  'outputModalities': ['TEXT'],
+                  'responseStreamingSupported': false,
+                  'modelLifecycle': {'status': 'ACTIVE'},
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'bedrock-api-key-discovery',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {'region': 'eu-west-2'},
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(captured, hasLength(3));
+      expect(captured.map((request) => request.uri.host),
+          everyElement('bedrock.eu-west-2.amazonaws.com'));
+      expect(captured.map((request) => request.uri.path), [
+        '/foundation-models',
+        '/inference-profiles',
+        '/inference-profiles',
+      ]);
+      expect(
+          captured.map(
+              (request) => request.uri.queryParameters['byOutputModality']),
+          [
+            'TEXT',
+            null,
+            null,
+          ]);
+      expect(captured.map((request) => request.headers['Authorization']),
+          everyElement('Bearer bedrock-api-key-secret'));
+      expect(captured.map((request) => request.headers['x-amz-date']),
+          everyElement(isNull));
+      expect(models.map((model) => model.upstreamModelId), [
+        'amazon.titan-text-express-v1',
+        'anthropic.claude-3-5-sonnet',
+        'amazon.titan-text-legacy-v1',
+        'us.anthropic.claude-3-5-sonnet',
+        'us.amazon.titan-text-legacy-v1',
+        'eu.anthropic.claude-3-5-sonnet',
+      ]);
+      expect(models[1].capabilities['streaming'], isTrue);
+      expect(models[4].capabilities['streaming'], isFalse);
+      expect(captured.last.uri.queryParameters['nextToken'], 'profile-next');
+      expect(
+          credentials.values[account.credentialRef], 'bedrock-api-key-secret');
+      expect(preferences.values.values.join(),
+          isNot(contains('bedrock-api-key-secret')));
+    });
+
+    test('keeps foundation models when inference profiles are unavailable',
+        () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path == '/inference-profiles') {
+            return ResponseBody.fromString('{}', 500);
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'modelSummaries': [
+                {
+                  'modelId': 'amazon.titan-text-express-v1',
+                  'inputModalities': ['TEXT'],
+                  'outputModalities': ['TEXT'],
+                  'modelLifecycle': {'status': 'ACTIVE'},
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'bedrock-profile-list-unavailable',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(models.map((model) => model.upstreamModelId), [
+        'amazon.titan-text-express-v1',
+      ]);
+    });
+
+    test('keeps foundation models when API-key profile listing is denied',
+        () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path == '/inference-profiles') {
+            return ResponseBody.fromString('{}', 403);
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'modelSummaries': [
+                {
+                  'modelId': 'amazon.titan-text-express-v1',
+                  'inputModalities': ['TEXT'],
+                  'outputModalities': ['TEXT'],
+                  'modelLifecycle': {'status': 'ACTIVE'},
+                },
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'bedrock-api-key-profile-list-denied',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(models.map((model) => model.upstreamModelId), [
+        'amazon.titan-text-express-v1',
+      ]);
+    });
+
+    test(
+        'keeps manually configured Bedrock models when API-key listing is denied',
+        () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path.endsWith('/converse')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'output': {
+                  'message': {
+                    'role': 'assistant',
+                    'content': [
+                      {'text': 'Manual model route works'},
+                    ],
+                  },
+                },
+                'stopReason': 'end_turn',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 403);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-api-key-limited-list',
+          connectorType: 'bedrock',
+          authType: 'api_key',
+          displayName: 'Limited Bedrock API key',
+          endpointConfig: const {'region': 'us-east-1'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'manual-model',
+              upstreamModelId: 'us.anthropic.claude-sonnet-4-6',
+              displayName: 'Manually configured Claude',
+              capabilities: {'chat': true, 'streaming': true},
+            ),
+          ],
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(requests, hasLength(1));
+      expect(requests.single.uri.path, '/foundation-models');
+      expect(requests.single.headers['Authorization'],
+          'Bearer bedrock-api-key-secret');
+      expect(models.map((model) => model.upstreamModelId), [
+        'us.anthropic.claude-sonnet-4-6',
+      ]);
+      expect(models.single.capabilities['chat'], isTrue);
+      expect(models.single.capabilities['streaming'], isTrue);
+
+      final response = await LlmConnectorHttpClient(
+        accountService: service,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: models.single.upstreamModelId,
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+      );
+
+      expect(requests, hasLength(2));
+      expect(requests.last.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
+      expect(requests.last.uri.path, endsWith('/converse'));
+      expect(requests.last.headers['Authorization'],
+          'Bearer bedrock-api-key-secret');
+      expect((response.body as Map)['choices'], isA<List>());
+    });
+
+    test('rejects Bedrock API-key discovery when the key is unauthorized',
+        () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromString('{}', 401);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'bedrock-api-key-invalid',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: 'invalid-bedrock-api-key',
+      );
+
+      await expectLater(
+        service.discoverModels(account, refreshRemote: true),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
     test('uses the AWS China host for Bedrock model discovery', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           captured = options;
+          if (options.uri.path == '/inference-profiles') {
+            return ResponseBody.fromString(
+              jsonEncode({'inferenceProfileSummaries': []}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
           return ResponseBody.fromString(
             jsonEncode({'modelSummaries': []}),
             200,
@@ -4702,6 +5094,15 @@ void main() {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           requests.add(options);
+          if (options.uri.path == '/inference-profiles') {
+            return ResponseBody.fromString(
+              jsonEncode({'inferenceProfileSummaries': []}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
           final response = page++ == 0
               ? {
                   'modelSummaries': [
@@ -4757,9 +5158,10 @@ void main() {
         refreshRemote: true,
       );
 
-      expect(requests, hasLength(2));
+      expect(requests, hasLength(3));
       expect(requests.first.uri.queryParameters['byOutputModality'], 'TEXT');
       expect(requests[1].uri.queryParameters['nextToken'], 'bedrock-next');
+      expect(requests.last.uri.path, '/inference-profiles');
       expect(models.map((model) => model.upstreamModelId), [
         'amazon.titan-text-express-v1',
         'anthropic.claude-3-5-sonnet-v2:0',
@@ -6329,6 +6731,50 @@ void main() {
       );
     });
 
+    test('does not send a Bedrock API key to an untrusted endpoint', () async {
+      var requestsSent = 0;
+      final credentials = _MemoryCredentials();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'bedrock-api-key-foreign-endpoint',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {
+            'region': 'us-east-1',
+            'baseUrl': 'https://bedrock-runtime.attacker.example',
+          },
+        ),
+        secret: 'bedrock-private-api-key',
+      );
+
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'amazon.titan-text-express-v1',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmConnectorHttpException>()),
+      );
+
+      expect(requestsSent, 0);
+      expect(
+          credentials.values[account.credentialRef], 'bedrock-private-api-key');
+    });
+
     test('uses the AWS China host for Bedrock requests in cn regions', () {
       final request = builder.build(
         account: LlmAccount(
@@ -6355,6 +6801,27 @@ void main() {
       );
 
       expect(request.uri.host, 'bedrock-runtime.cn-north-1.amazonaws.com.cn');
+    });
+
+    test('rejects malformed Bedrock regions before constructing a host', () {
+      expect(
+        () => builder.build(
+          account: _account(
+            'bedrock-invalid-region',
+            'bedrock',
+            authType: 'api_key',
+            endpointConfig: const {'region': 'not-a-region'},
+          ),
+          credential: 'bedrock-api-key',
+          modelId: 'amazon.titan-text-express-v1',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
     });
 
     test('uses Anthropic Messages with Claude Code OAuth credentials', () {
@@ -8051,6 +8518,142 @@ void main() {
         expect(preferencesJson, isNot(contains('private-session-token')));
       },
     );
+
+    test('sends Bedrock API keys only to the regional Converse endpoint',
+        () async {
+      RequestOptions? captured;
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentials();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'output': {
+                'message': {
+                  'role': 'assistant',
+                  'content': [
+                    {'text': 'Bedrock API-key answer'},
+                  ],
+                },
+              },
+              'stopReason': 'end_turn',
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'bedrock-api-key-chat',
+          'bedrock',
+          authType: 'api_key',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'amazon.titan-text-express-v1',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Say hello.'},
+          ],
+        },
+      );
+
+      expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
+      expect(captured?.uri.path, endsWith('/converse'));
+      expect(
+          captured?.headers['Authorization'], 'Bearer bedrock-api-key-secret');
+      expect(captured?.headers['x-amz-date'], isNull);
+      expect((captured?.data as Map)['messages'], isA<List>());
+      expect((response.body as Map)['choices'], isA<List>());
+      expect(preferences.values.values.join(),
+          isNot(contains('bedrock-api-key-secret')));
+    });
+
+    test('adapts unary Bedrock output for streamed Chat when unsupported',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'output': {
+                'message': {
+                  'role': 'assistant',
+                  'content': [
+                    {'text': 'Unary Bedrock answer'},
+                  ],
+                },
+              },
+              'stopReason': 'end_turn',
+              'usage': {'inputTokens': 3, 'outputTokens': 4},
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'bedrock-api-key-unary',
+          connectorType: 'bedrock',
+          authType: 'api_key',
+          displayName: 'Bedrock API key',
+          endpointConfig: const {'region': 'us-east-1'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'titan-text',
+              upstreamModelId: 'amazon.titan-text-express-v1',
+              displayName: 'Titan Text Express',
+              capabilities: {'streaming': false},
+            ),
+          ],
+        ),
+        secret: 'bedrock-api-key-secret',
+      );
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'amazon.titan-text-express-v1',
+        stream: true,
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Say hello.'},
+          ],
+        },
+      );
+      final chunks = await (response.body as Stream<List<int>>).toList();
+      final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
+
+      expect(captured?.uri.path, endsWith('/converse'));
+      expect(captured?.headers['Accept'], 'application/json');
+      expect(text, contains('Unary Bedrock answer'));
+      expect(text, contains('data: [DONE]'));
+    });
 
     test(
       'does not discover a private Antigravity project for CLI OAuth',

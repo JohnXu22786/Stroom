@@ -655,7 +655,7 @@ abstract final class LlmConnectorRegistry {
       id: 'bedrock',
       displayName: 'AWS Bedrock',
       protocol: LlmNativeProtocol.bedrockConverse,
-      authTypes: {'aws_credentials', 'aws_credential_chain'},
+      authTypes: {'aws_credentials', 'aws_credential_chain', 'api_key'},
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
@@ -3752,57 +3752,102 @@ class LlmAccountConnectorService {
       account.endpointConfig,
       'region',
     );
-    if (region == null || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+    if (region == null || !isValidAwsRegion(region)) {
       throw const LlmAccountConnectorException();
     }
     final secret = account.credentialRef == null
         ? null
         : await _readSecureValue(account.credentialRef!);
-    final credentials = await _awsCredentialsFor(account, secret);
-    if (credentials == null) throw const LlmAccountConnectorException();
-    final uri = Uri.https(
-      awsRegionalEndpointHost('bedrock', region),
+    final apiKey = account.authType == 'api_key'
+        ? LlmNativeRequestBuilder._credentialValue(account, secret)
+        : null;
+    final awsCredentials =
+        apiKey == null ? await _awsCredentialsFor(account, secret) : null;
+    if (apiKey == null && awsCredentials == null) {
+      throw const LlmAccountConnectorException();
+    }
+    final host = awsRegionalEndpointHost('bedrock', region);
+    Map<String, String> headersFor(Uri uri) => apiKey != null
+        ? {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $apiKey',
+          }
+        : AwsSigV4.sign(
+            method: 'GET',
+            uri: uri,
+            region: region,
+            service: 'bedrock',
+            headers: const {'Accept': 'application/json'},
+            payload: Uint8List(0),
+            credentials: awsCredentials!,
+            now: DateTime.now().toUtc(),
+          );
+
+    Future<Map<String, dynamic>?> fetchPage(Uri uri) async {
+      final response = await _dio.getUri<Object?>(
+        uri,
+        options: Options(headers: headersFor(uri)),
+      );
+      return _asJsonMap(response.data);
+    }
+
+    final foundationUri = Uri.https(
+      host,
       '/foundation-models',
       {'byOutputModality': 'TEXT'},
     );
+    final inferenceProfileUri = Uri.https(
+      host,
+      '/inference-profiles',
+      {'maxResults': '100', 'typeEquals': 'SYSTEM_DEFINED'},
+    );
     try {
       final models = <LlmUpstreamModel>[];
-      final seenPageTokens = <String>{};
-      String? pageToken;
-      var pageCount = 0;
-      do {
-        if (++pageCount > _maxModelDiscoveryPages) {
-          throw const LlmAccountConnectorException();
-        }
-        final pageUri = pageToken == null
-            ? uri
-            : uri.replace(
-                queryParameters: {
-                  ...uri.queryParameters,
-                  'nextToken': pageToken,
-                },
-              );
-        final headers = AwsSigV4.sign(
-          method: 'GET',
-          uri: pageUri,
-          region: region,
-          service: 'bedrock',
-          headers: const {'Accept': 'application/json'},
-          payload: Uint8List(0),
-          credentials: credentials,
-          now: DateTime.now().toUtc(),
-        );
-        final response = await _dio.getUri<Object?>(
-          pageUri,
-          options: Options(headers: headers),
-        );
-        final data = _asJsonMap(response.data);
-        final rawModels = data?['modelSummaries'] ?? data?['foundationModels'];
-        if (rawModels is! List) {
-          throw const LlmAccountConnectorException();
-        }
-        for (final raw in rawModels) {
-          if (raw is! Map) continue;
+      final seenModelIds = <String>{};
+
+      Future<void> collectPages({
+        required Uri baseUri,
+        required String listKey,
+        required void Function(Object? item) add,
+      }) async {
+        final seenPageTokens = <String>{};
+        String? pageToken;
+        var pageCount = 0;
+        do {
+          if (++pageCount > _maxModelDiscoveryPages) {
+            throw const LlmAccountConnectorException();
+          }
+          final pageUri = pageToken == null
+              ? baseUri
+              : baseUri.replace(
+                  queryParameters: {
+                    ...baseUri.queryParameters,
+                    'nextToken': pageToken,
+                  },
+                );
+          final data = await fetchPage(pageUri);
+          final entries = data?[listKey];
+          if (entries is! List) {
+            throw const LlmAccountConnectorException();
+          }
+          for (final item in entries) {
+            add(item);
+          }
+          final nextPageToken = data?['nextToken'];
+          pageToken = nextPageToken is String && nextPageToken.isNotEmpty
+              ? nextPageToken
+              : null;
+          if (pageToken != null && !seenPageTokens.add(pageToken)) {
+            throw const LlmAccountConnectorException();
+          }
+        } while (pageToken != null);
+      }
+
+      await collectPages(
+        baseUri: foundationUri,
+        listKey: 'modelSummaries',
+        add: (raw) {
+          if (raw is! Map) return;
           final item = Map<String, dynamic>.from(raw);
           final modelId = item['modelId'];
           final input = item['inputModalities'];
@@ -3815,8 +3860,9 @@ class LlmAccountConnectorService {
               !output.contains('TEXT') ||
               !_isChatModel(modelId, item) ||
               (item['modelLifecycle'] is Map &&
-                  (item['modelLifecycle'] as Map)['status'] != 'ACTIVE')) {
-            continue;
+                  (item['modelLifecycle'] as Map)['status'] != 'ACTIVE') ||
+              !seenModelIds.add(modelId.trim())) {
+            return;
           }
           models.add(
             LlmUpstreamModel(
@@ -3828,22 +3874,86 @@ class LlmAccountConnectorService {
               capabilities: {
                 'inputModalities': input.whereType<String>().toList(),
                 'outputModalities': output.whereType<String>().toList(),
+                'streaming': item['responseStreamingSupported'] == true,
               },
               config: const {'catalogSource': 'bedrock_foundation_models'},
             ),
           );
+        },
+      );
+      final chatModelsById = {
+        for (final model in models)
+          if (model.config['catalogSource'] == 'bedrock_foundation_models')
+            model.upstreamModelId: model,
+      };
+      try {
+        await collectPages(
+          baseUri: inferenceProfileUri,
+          listKey: 'inferenceProfileSummaries',
+          add: (raw) {
+            if (raw is! Map) return;
+            final item = Map<String, dynamic>.from(raw);
+            final profileId = item['inferenceProfileId'];
+            final profileModels = item['models'];
+            if (profileModels is! List || profileModels.isEmpty) return;
+            final backingModels = <LlmUpstreamModel>[];
+            for (final profileModel in profileModels) {
+              if (profileModel is! Map) return;
+              final modelArn = profileModel['modelArn'];
+              if (modelArn is! String ||
+                  !modelArn.contains(':foundation-model/')) {
+                return;
+              }
+              final modelId = modelArn.substring(modelArn.lastIndexOf('/') + 1);
+              final backingModel = chatModelsById[modelId];
+              if (backingModel == null) return;
+              backingModels.add(backingModel);
+            }
+            if (profileId is! String ||
+                profileId.trim().isEmpty ||
+                (item['status'] is String && item['status'] != 'ACTIVE') ||
+                (item['type'] is String && item['type'] != 'SYSTEM_DEFINED') ||
+                !seenModelIds.add(profileId.trim())) {
+              return;
+            }
+            models.add(
+              LlmUpstreamModel(
+                id: '${account.id}:remote:${models.length}',
+                upstreamModelId: profileId.trim(),
+                displayName: item['inferenceProfileName'] is String
+                    ? item['inferenceProfileName'] as String
+                    : profileId.trim(),
+                capabilities: {
+                  'chat': true,
+                  'streaming': backingModels.every(
+                    (model) => model.capabilities['streaming'] == true,
+                  ),
+                  'source': 'bedrock_inference_profile',
+                },
+                config: const {'catalogSource': 'bedrock_inference_profiles'},
+              ),
+            );
+          },
+        );
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error) || error.response?.statusCode == 401) {
+          rethrow;
         }
-        final nextPageToken = data?['nextToken'];
-        pageToken = nextPageToken is String && nextPageToken.isNotEmpty
-            ? nextPageToken
-            : null;
-        if (pageToken != null && !seenPageTokens.add(pageToken)) {
-          throw const LlmAccountConnectorException();
-        }
-      } while (pageToken != null);
+        // Profile listing can be denied independently of model invocation.
+        // Keep the account-derived foundation catalog in that case.
+      } catch (_) {
+        // A non-auth inference-profile failure does not invalidate models
+        // already returned by Bedrock's foundation-model catalog.
+      }
       return List.unmodifiable(models);
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) rethrow;
+      if (account.authType == 'api_key' && error.response?.statusCode == 403) {
+        // The pinned OmniRoute source uses Bearer for control-plane discovery,
+        // but AWS's API-key docs do not enumerate model-list actions. If this
+        // key is denied listing, keep manual choices for Runtime Converse.
+        return List.unmodifiable(account.models);
+      }
       throw const LlmAccountConnectorException();
     } catch (_) {
       throw const LlmAccountConnectorException();
@@ -4715,7 +4825,7 @@ class LlmAccountConnectorService {
     _validateSafeConfig(account.endpointConfig);
     if (account.connectorType == 'bedrock') {
       final region = account.endpointConfig['region'];
-      if (region is! String || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+      if (region is! String || !isValidAwsRegion(region)) {
         throw const LlmAccountConnectorException();
       }
     }
@@ -5141,9 +5251,10 @@ class LlmNativeRequestBuilder {
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
-    final secret = account.connectorType == 'bedrock'
-        ? ''
-        : _credentialValue(account, credential);
+    final secret =
+        account.connectorType == 'bedrock' && account.authType != 'api_key'
+            ? ''
+            : _credentialValue(account, credential);
     final config = account.endpointConfig;
     final configuredHeaders = config['headers'];
     if (configuredHeaders is Map) {
@@ -5361,6 +5472,9 @@ class LlmNativeRequestBuilder {
         headers['Accept'] = '*/*';
         break;
       case 'bedrock':
+        if (account.authType == 'api_key') {
+          headers['Authorization'] = 'Bearer $secret';
+        }
         break;
       default:
         if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
@@ -5425,7 +5539,7 @@ class LlmNativeRequestBuilder {
     }
 
     var requestHeaders = headers;
-    if (account.connectorType == 'bedrock') {
+    if (account.connectorType == 'bedrock' && account.authType != 'api_key') {
       if (awsCredentials == null) {
         throw const LlmAccountConnectorException();
       }
@@ -5439,6 +5553,8 @@ class LlmNativeRequestBuilder {
         credentials: awsCredentials,
         now: DateTime.now().toUtc(),
       );
+    } else if (account.connectorType == 'bedrock' && secret.isEmpty) {
+      throw const LlmAccountConnectorException();
     }
 
     return LlmPreparedNativeRequest(
@@ -6024,7 +6140,7 @@ class LlmNativeRequestBuilder {
         };
       case 'bedrock':
         final region = _configString(config, 'region');
-        if (region == null || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+        if (region == null || !isValidAwsRegion(region)) {
           throw const LlmAccountConnectorException();
         }
         baseUrl =

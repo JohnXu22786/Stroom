@@ -1569,7 +1569,11 @@ String _authLabel(String type, {String? connectorType}) {
     return 'Claude Code OAuth';
   }
   return switch (type) {
-    'api_key' => connectorType == 'qoder' ? 'DashScope API Key' : 'API Key',
+    'api_key' => switch (connectorType) {
+        'bedrock' => 'Amazon Bedrock API Key',
+        'qoder' => 'DashScope API Key',
+        _ => 'API Key',
+      },
     'pat' => 'Personal Access Token',
     'oauth' => '订阅 OAuth',
     'setup_token' => 'Setup Token',
@@ -1675,9 +1679,11 @@ String _authSourceLabel(
         ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
         : '$provider OAuth',
     'setup_token' => '$provider Setup Token',
-    'api_key' => account.connectorType == 'openai-compatibility'
-        ? '用户提供的上游 API Key'
-        : '$provider API Key',
+    'api_key' => account.connectorType == 'bedrock'
+        ? 'Amazon Bedrock API Key'
+        : account.connectorType == 'openai-compatibility'
+            ? '用户提供的上游 API Key'
+            : '$provider API Key',
     'service_account' => '$provider 企业服务凭据',
     'aws_credentials' => 'AWS Bedrock 用户提供的静态凭据',
     'aws_credential_chain' => 'AWS 默认凭据链',
@@ -2092,6 +2098,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     if (value == 'bedrock' &&
                         previousConnectorType != 'bedrock') {
                       _region.text = 'us-east-1';
+                      _authType = 'aws_credentials';
                     } else if (value == 'vertex' &&
                         previousConnectorType != 'vertex') {
                       _region.text = 'us-central1';
@@ -2190,6 +2197,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   if (value == null) return;
                   setState(() {
                     _draftChanged = true;
+                    if (_connectorType == 'bedrock' && value != _authType) {
+                      _credential.clear();
+                    }
                     _authType = value;
                     if (value == 'none' ||
                         value == 'relay' ||
@@ -2507,35 +2517,39 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                             _authType == 'cli_session' ||
                             _authType == 'aws_credential_chain'
                         ? '该认证方式无需输入凭据'
-                        : _connectorType == 'bedrock'
+                        : _connectorType == 'bedrock' &&
+                                _authType == 'aws_credentials'
                             ? 'AWS 凭据 JSON'
-                            : _connectorType == 'vertex' &&
-                                    _authType == 'service_account'
-                                ? '服务账号 JSON'
-                                : _authType == 'setup_token'
-                                    ? 'Claude Setup Token'
-                                    : _authType == 'api_key'
-                                        ? switch (_connectorType) {
-                                            'glm-cn' =>
-                                              'GLM Coding (China) API Key',
-                                            'minimax-cn' =>
-                                              'MiniMax (China) API Key',
-                                            'opencode-go' =>
-                                              'OpenCode Go API Key',
-                                            'opencode-zen' =>
-                                              'OpenCode Zen API Key',
-                                            'qwen-cloud' =>
-                                              'Qwen Cloud API Key',
-                                            'qwen-cloud-token-plan' =>
-                                              'Qwen Cloud Token Plan API Key',
-                                            _ => '凭据',
-                                          }
-                                        : _connectorType == 'qoder' &&
-                                                _authType == 'pat'
-                                            ? 'Qoder PAT（pt-…）'
-                                            : _connectorType == 'trae'
-                                                ? 'Trae Cloud-IDE-JWT'
-                                                : '凭据',
+                            : _connectorType == 'bedrock' &&
+                                    _authType == 'api_key'
+                                ? 'Amazon Bedrock API Key'
+                                : _connectorType == 'vertex' &&
+                                        _authType == 'service_account'
+                                    ? '服务账号 JSON'
+                                    : _authType == 'setup_token'
+                                        ? 'Claude Setup Token'
+                                        : _authType == 'api_key'
+                                            ? switch (_connectorType) {
+                                                'glm-cn' =>
+                                                  'GLM Coding (China) API Key',
+                                                'minimax-cn' =>
+                                                  'MiniMax (China) API Key',
+                                                'opencode-go' =>
+                                                  'OpenCode Go API Key',
+                                                'opencode-zen' =>
+                                                  'OpenCode Zen API Key',
+                                                'qwen-cloud' =>
+                                                  'Qwen Cloud API Key',
+                                                'qwen-cloud-token-plan' =>
+                                                  'Qwen Cloud Token Plan API Key',
+                                                _ => '凭据',
+                                              }
+                                            : _connectorType == 'qoder' &&
+                                                    _authType == 'pat'
+                                                ? 'Qoder PAT（pt-…）'
+                                                : _connectorType == 'trae'
+                                                    ? 'Trae Cloud-IDE-JWT'
+                                                    : '凭据',
                     helperText: _connectorType == 'trae'
                         ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
                         : null,

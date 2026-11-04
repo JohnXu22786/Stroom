@@ -6,6 +6,9 @@ import 'package:crypto/crypto.dart';
 String awsRegionalEndpointHost(String service, String region) =>
     '$service.$region.${region.startsWith('cn-') ? 'amazonaws.com.cn' : 'amazonaws.com'}';
 
+bool isValidAwsRegion(String value) =>
+    RegExp(r'^[a-z]{2}(?:-[a-z0-9]+)+-\d+$').hasMatch(value);
+
 /// AWS credentials kept in the platform credential store, never in account
 /// preferences or request diagnostics.
 class AwsSigV4Credentials {

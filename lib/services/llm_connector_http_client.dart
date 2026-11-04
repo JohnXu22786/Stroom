@@ -166,6 +166,16 @@ class LlmConnectorHttpClient {
     while (true) {
       final requestCancelToken = _requestCancelToken(cancelToken);
       final credential = await accountService.readCredential(storedAccount.id);
+      final bedrockStreamingCapability =
+          storedAccount.connectorType == 'bedrock'
+              ? storedAccount.models
+                  .where((model) => model.upstreamModelId == modelId)
+                  .map((model) => model.capabilities['streaming'])
+                  .firstOrNull
+              : null;
+      final useBedrockEventStream = storedAccount.connectorType == 'bedrock' &&
+          stream &&
+          bedrockStreamingCapability != false;
       if (storedAccount.connectorType == 'trae') {
         if (storedAccount.authType != 'session_token' ||
             !storedAccount.models.any(
@@ -286,27 +296,29 @@ class LlmConnectorHttpClient {
           );
         }
         if (storedAccount.connectorType == 'bedrock') {
-          try {
-            if (storedAccount.authType == 'aws_credentials') {
-              final decoded = jsonDecode(credential ?? '');
-              if (decoded is! Map) {
-                throw const LlmConnectorHttpException();
+          if (storedAccount.authType != 'api_key') {
+            try {
+              if (storedAccount.authType == 'aws_credentials') {
+                final decoded = jsonDecode(credential ?? '');
+                if (decoded is! Map) {
+                  throw const LlmConnectorHttpException();
+                }
+                awsCredentials = AwsSigV4Credentials.fromJson(
+                  Map<String, dynamic>.from(decoded),
+                );
+              } else {
+                awsCredentials = await AwsCredentialChain.resolve();
               }
-              awsCredentials = AwsSigV4Credentials.fromJson(
-                Map<String, dynamic>.from(decoded),
+            } catch (_) {
+              throw const LlmConnectorHttpException(
+                code: 'aws_credentials_unavailable',
               );
-            } else {
-              awsCredentials = await AwsCredentialChain.resolve();
             }
-          } catch (_) {
-            throw const LlmConnectorHttpException(
-              code: 'aws_credentials_unavailable',
-            );
-          }
-          if (awsCredentials == null) {
-            throw const LlmConnectorHttpException(
-              code: 'aws_credentials_unavailable',
-            );
+            if (awsCredentials == null) {
+              throw const LlmConnectorHttpException(
+                code: 'aws_credentials_unavailable',
+              );
+            }
           }
         }
         prepared = _requestBuilder.build(
@@ -320,7 +332,11 @@ class LlmConnectorHttpClient {
           // Devin's source contract exposes unary Connect-RPC. The app's
           // chat stream adapter still expects SSE, which is synthesized from
           // the completed unary response below.
-          stream: storedAccount.connectorType == 'devin' ? false : stream,
+          stream: storedAccount.connectorType == 'devin'
+              ? false
+              : storedAccount.connectorType == 'bedrock'
+                  ? useBedrockEventStream
+                  : stream,
           nativeFormat: nativeFormat,
         );
       } on LlmConnectorHttpException {
@@ -616,7 +632,7 @@ class LlmConnectorHttpClient {
               : responseData is Stream<List<int>>
                   ? responseData
                   : null;
-          if (stream) {
+          if (useBedrockEventStream) {
             if (responseStream == null) {
               throw const LlmConnectorHttpException();
             }
@@ -648,14 +664,19 @@ class LlmConnectorHttpClient {
             storedAccount.connectorType,
             chatResponse,
           );
+          final observation = mergeLlmConnectorObservations(
+            headerObservation,
+            bodyObservation,
+          );
           return LlmConnectorResponse(
             statusCode: status,
             headers: response.headers.map,
-            body: chatResponse,
-            observation: mergeLlmConnectorObservations(
-              headerObservation,
-              bodyObservation,
-            ),
+            body: stream
+                ? Stream<List<int>>.value(
+                    _encodeOpenAiChatCompletionStream(chatResponse),
+                  )
+                : chatResponse,
+            observation: observation,
           );
         }
         if (storedAccount.connectorType == 'gitlab-duo') {

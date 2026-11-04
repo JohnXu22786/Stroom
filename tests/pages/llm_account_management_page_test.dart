@@ -2679,8 +2679,9 @@ void main() {
 
     expect(
       find.text('AWS Access + Secret Key（Session Token 可选）'),
-      findsOneWidget,
+      findsWidgets,
     );
+    expect(find.text('Amazon Bedrock API Key'), findsOneWidget);
   });
 
   testWidgets('clearing Vertex project ID removes the stored override', (

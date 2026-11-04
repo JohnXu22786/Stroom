@@ -199,6 +199,67 @@ void main() {
   );
 
   test(
+    'Bedrock API-key model group resolves through Chat in Task Flow',
+    () async {
+      final account = LlmAccount(
+        id: 'bedrock-api-key',
+        connectorType: 'bedrock',
+        authType: 'api_key',
+        displayName: 'Bedrock API key',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'bedrock-claude-profile',
+            upstreamModelId: 'us.anthropic.claude-3-5-sonnet',
+            displayName: 'Claude 3.5 Sonnet (US)',
+            capabilities: {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'bedrock-api-key-task-flow-group',
+        displayName: 'Bedrock group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'bedrock-api-key',
+            localModelId: 'bedrock-claude-profile',
+            upstreamModelId: 'us.anthropic.claude-3-5-sonnet',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Bedrock assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(config.apiProtocol, 'openai.chat_completions');
+      expect(config.key, isEmpty, reason: 'credentials stay in secure storage');
+      expect(
+        flowChatEndpointType(assistant, providers),
+        'openai.chat_completions',
+      );
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
+  test(
     'Codex model group resolves as Responses during Task Flow preflight',
     () async {
       final account = LlmAccount(

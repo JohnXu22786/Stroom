@@ -146,6 +146,32 @@ void main() {
       ]);
     });
 
+    test('rejects multimodal blocks outside the supported text boundary', () {
+      expect(
+        () => AwsBedrockConverseAdapter.toConverse({
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': 'Describe this image.'},
+                {
+                  'type': 'image_url',
+                  'image_url': {'url': 'data:image/png;base64,AAAA'},
+                },
+              ],
+            },
+          ],
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'Bedrock chat content must be text.',
+          ),
+        ),
+      );
+    });
+
     test(
       'maps Converse text, tool use and usage to Chat Completions shape',
       () {
