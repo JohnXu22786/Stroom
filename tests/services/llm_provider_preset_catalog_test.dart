@@ -31,13 +31,22 @@ void main() {
       'auriko',
       'baichuan',
       'baidu',
+      'bluesminds',
       'baseten',
       'bazaarlink',
       'beatapi',
       'bigmodel',
       'byteplus',
+      'bytez',
       'cerebras',
+      'charm-hyper',
+      'chat-oripe',
+      'chatanywhere',
       'chutes',
+      'cloudcode-one',
+      'codestral',
+      'cohere',
+      'coze',
       'deepinfra',
       'doubao',
       'fireworks',
@@ -85,11 +94,20 @@ void main() {
         'baseten': 'https://inference.baseten.co/v1/chat/completions',
         'baichuan': 'https://api.baichuan-ai.com/v1/chat/completions',
         'baidu': 'https://qianfan.baidubce.com/v2/chat/completions',
+        'bluesminds': 'https://api.bluesminds.com/v1/chat/completions',
         'bigmodel': 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
         'bazaarlink': 'https://bazaarlink.ai/api/v1/chat/completions',
         'beatapi': 'https://api.beatapi.io/v1/chat/completions',
         'byteplus':
             'https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions',
+        'bytez': 'https://api.bytez.com/models/v2/openai/v1/chat/completions',
+        'charm-hyper': 'https://hyper.charm.land/v1/chat/completions',
+        'chat-oripe': 'https://api.oriper.com/v1/chat/completions',
+        'chatanywhere': 'https://api.chatanywhere.org/v1/chat/completions',
+        'cloudcode-one': 'https://api.cloudcode.one/v1/chat/completions',
+        'codestral': 'https://codestral.mistral.ai/v1/chat/completions',
+        'cohere': 'https://api.cohere.com/compatibility/v1/chat/completions',
+        'coze': 'https://api.coze.com/v1/chat/completions',
         'cerebras': 'https://api.cerebras.ai/v1/chat/completions',
         'chutes': 'https://llm.chutes.ai/v1/chat/completions',
         'deepinfra': 'https://api.deepinfra.com/v1/openai/chat/completions',
@@ -122,6 +140,13 @@ void main() {
       'https://ark.ap-southeast.bytepluses.com/api/v3/models',
     );
     expect(
+      {
+        for (final id in ['bytez', 'codestral', 'coze'])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {'bytez': null, 'codestral': null, 'coze': null},
+    );
+    expect(
       findLlmOpenAiProviderPreset('fireworks')?.modelsUrl,
       'https://api.fireworks.ai/v1/accounts/fireworks/models?filter=supports_serverless=true',
     );
@@ -149,8 +174,14 @@ void main() {
           'apmix',
           'auriko',
           'baidu',
+          'bluesminds',
           'bazaarlink',
           'beatapi',
+          'charm-hyper',
+          'chat-oripe',
+          'chatanywhere',
+          'cloudcode-one',
+          'cohere',
         ])
           id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
       },
@@ -164,8 +195,14 @@ void main() {
         'apmix': 'https://api.apmix.ai/v1/models',
         'auriko': 'https://api.auriko.ai/v1/models',
         'baidu': null,
+        'bluesminds': 'https://api.bluesminds.com/v1/models',
         'bazaarlink': 'https://bazaarlink.ai/api/v1/models',
         'beatapi': 'https://api.beatapi.io/v1/models',
+        'charm-hyper': 'https://hyper.charm.land/v1/models',
+        'chat-oripe': 'https://api.oriper.com/v1/models',
+        'chatanywhere': 'https://api.chatanywhere.org/v1/models',
+        'cloudcode-one': 'https://api.cloudcode.one/v1/models',
+        'cohere': 'https://api.cohere.com/compatibility/v1/models',
       },
     );
     for (final id in [
@@ -430,6 +467,131 @@ void main() {
             .fallbackModels[22]
             .capabilities,
         containsPair('vision', true));
+    expect(
+      findLlmOpenAiProviderPreset('bluesminds')!
+          .fallbackModels
+          .firstWhere((model) => model.id == 'deepseek-reasoner')
+          .capabilities,
+      {'contextLength': 128000, 'reasoning': true},
+    );
+    expect(
+      {
+        for (final model
+            in findLlmOpenAiProviderPreset('bluesminds')!.fallbackModels)
+          model.id: model.displayName,
+      },
+      {
+        'gpt-4o': 'GPT-4o',
+        'gpt-4o-mini': 'GPT-4o Mini',
+        'gpt-4.1': 'GPT-4.1',
+        'gpt-4.1-mini': 'GPT-4.1 Mini',
+        'gpt-4.1-nano': 'GPT-4.1 Nano',
+        'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+        'claude-haiku-4-5': 'Claude Haiku 4.5',
+        'gemini-2.0-flash': 'Gemini 2.0 Flash',
+        'gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Exp)',
+        'deepseek-reasoner': 'DeepSeek Reasoner',
+        'deepseek-chat': 'DeepSeek Chat',
+        'qwen-plus': 'Qwen Plus',
+        'qwen-turbo': 'Qwen Turbo',
+        'kimi-k2': 'Kimi K2',
+        'kimi-k2-thinking': 'Kimi K2 Thinking',
+        'glm-4.7': 'GLM 4.7',
+        'glm-4-flash': 'GLM 4 Flash',
+        'minimax-m2.5': 'MiniMax M2.5',
+        'claude-opus-4-5': 'Claude Opus 4.5 (VIP)',
+        'gemini-2.5-pro': 'Gemini 2.5 Pro (VIP)',
+        'grok-3': 'Grok-3 (VIP)',
+        'qwen-max': 'Qwen Max (VIP)',
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('bluesminds')!
+          .fallbackModels
+          .firstWhere((model) => model.id == 'gemini-2.5-pro')
+          .capabilities,
+      {'contextLength': 1048576},
+    );
+    expect(
+      {
+        for (final id in [
+          'bluesminds',
+          'bytez',
+          'charm-hyper',
+          'chat-oripe',
+          'chatanywhere',
+          'cloudcode-one',
+          'codestral',
+          'cohere',
+          'coze',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!
+              .fallbackModels
+              .map((model) => model.id)
+              .toList(),
+      },
+      {
+        'bluesminds': [
+          'gpt-4o',
+          'gpt-4o-mini',
+          'gpt-4.1',
+          'gpt-4.1-mini',
+          'gpt-4.1-nano',
+          'claude-sonnet-4-5',
+          'claude-haiku-4-5',
+          'gemini-2.0-flash',
+          'gemini-2.0-flash-exp',
+          'deepseek-reasoner',
+          'deepseek-chat',
+          'qwen-plus',
+          'qwen-turbo',
+          'kimi-k2',
+          'kimi-k2-thinking',
+          'glm-4.7',
+          'glm-4-flash',
+          'minimax-m2.5',
+          'claude-opus-4-5',
+          'gemini-2.5-pro',
+          'grok-3',
+          'qwen-max',
+        ],
+        'bytez': [
+          'meta-llama/Llama-3.3-70B-Instruct',
+          'mistralai/Mistral-7B-Instruct-v0.3',
+          'Qwen/Qwen2.5-72B-Instruct',
+        ],
+        'charm-hyper': ['hyper/auto'],
+        'chat-oripe': <String>[],
+        'chatanywhere': <String>[],
+        'cloudcode-one': ['glm-4.7-flash', 'glm-4.6v-flash'],
+        'codestral': ['codestral-2508', 'codestral-latest'],
+        'cohere': [
+          'command-a-reasoning-08-2025',
+          'command-a-vision-07-2025',
+          'command-a-03-2025',
+          'command-r7b-12-2024',
+          'command-r-plus-08-2024',
+          'command-r-08-2024',
+        ],
+        'coze': ['claude-3-7-sonnet-20250514'],
+      },
+    );
+    // Deferred: registry/blackbox/index.ts:4,6,7,14-18 documents 404s for
+    // both audited URLs and an account-gated enterprise host;
+    // registry/cheaperinference/index.ts:240-252 declares Responses-target
+    // models and executor-specific routing; registry/chenzk/index.ts:4,6-11,13-14
+    // sets defaultContextLength for runtime-discovered models, which this
+    // catalog cannot represent; registry/cloudflare-ai/index.ts:4,6,7,9-11,17
+    // and executors/cloudflare-ai.ts:17-56 require an account ID in the URL
+    // and a provider-specific executor.
+    for (final id in [
+      'blackbox',
+      'cheaperinference',
+      'chenzk',
+      'cloudflare-ai',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id), isNull);
+    }
     // Deferred: open-sse/config/providers/registry/api-airforce/index.ts:13-16
     // requires HTTP-Referer and X-Title headers that presets cannot represent.
     expect(findLlmOpenAiProviderPreset('api-airforce'), isNull);
@@ -438,6 +600,8 @@ void main() {
     expect(findLlmOpenAiProviderPreset('bai'), isNull);
     // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
     expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
+    // The eligible M38 registry entries use distinct chat URLs, so no aliases
+    // in this cohort need to collapse to a single user-facing choice.
   });
 
   test('each M37 eligible preset saves and reloads source defaults', () async {
@@ -514,6 +678,97 @@ void main() {
           LlmModelGroupMember(
             accountId: restored.id,
             upstreamModelId: model.upstreamModelId,
+          ),
+        ],
+      );
+      final providerConfigs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(providerConfigs, hasLength(1));
+      expect(providerConfigs.single.apiProtocol, 'openai.chat_completions');
+      expect(
+        providerConfigs.single.models.single.apiProtocolOverride,
+        'anthropic.messages',
+      );
+    }
+  });
+
+  test(
+      'each M38 eligible preset saves, reloads, and routes through Chat and Task Flow',
+      () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const presetIds = [
+      'bluesminds',
+      'bytez',
+      'charm-hyper',
+      'chat-oripe',
+      'chatanywhere',
+      'cloudcode-one',
+      'codestral',
+      'cohere',
+      'coze',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final models = preset.fallbackModels;
+      final account = LlmAccount(
+        id: 'm38-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {
+          'customHeader': 'preserved',
+        }),
+        models: [
+          for (final model in models)
+            LlmUpstreamModel(
+              id: 'm38-$presetId:${model.id}',
+              upstreamModelId: model.id,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          if (models.isEmpty)
+            LlmUpstreamModel(
+              id: 'm38-$presetId:user-model',
+              upstreamModelId: 'user-model',
+              displayName: 'User model',
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+        ],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility');
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['customHeader'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(
+        restored.models.map((model) => model.upstreamModelId),
+        models.isEmpty ? ['user-model'] : models.map((model) => model.id),
+      );
+      expect(
+        restored.models.first.config['apiProtocolOverride'],
+        'anthropic.messages',
+      );
+
+      final group = LlmModelGroup(
+        id: 'm38-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.first.upstreamModelId,
           ),
         ],
       );
