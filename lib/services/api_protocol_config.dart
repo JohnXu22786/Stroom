@@ -71,6 +71,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'claude' => 'anthropic.messages',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
+      'amazon-q' => 'amazon-q.chat',
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
@@ -117,6 +118,7 @@ Set<String> supportedApiProtocolsForSupplier(
         'openai.responses',
         'anthropic.messages',
       },
+    'amazon-q' => const {'amazon-q.chat'},
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },

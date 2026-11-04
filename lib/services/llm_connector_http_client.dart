@@ -17,6 +17,7 @@ import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
+import 'amazon_q_connector.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -177,6 +178,7 @@ class LlmConnectorHttpClient {
       final useBedrockEventStream = storedAccount.connectorType == 'bedrock' &&
           stream &&
           bedrockStreamingCapability != false;
+      final useAmazonQEventStream = storedAccount.connectorType == 'amazon-q';
       if (storedAccount.connectorType == 'trae') {
         if (storedAccount.authType != 'session_token' ||
             !storedAccount.models.any(
@@ -333,9 +335,11 @@ class LlmConnectorHttpClient {
           // the completed unary response below.
           stream: storedAccount.connectorType == 'devin'
               ? false
-              : storedAccount.connectorType == 'bedrock'
-                  ? useBedrockEventStream
-                  : stream,
+              : useAmazonQEventStream
+                  ? true
+                  : storedAccount.connectorType == 'bedrock'
+                      ? useBedrockEventStream
+                      : stream,
           nativeFormat: nativeFormat,
         );
       } on LlmConnectorHttpException {
@@ -496,7 +500,8 @@ class LlmConnectorHttpClient {
             responseType: ResponseType.stream,
             validateStatus: (status) => status != null,
             followRedirects: storedAccount.connectorType != 'command-code' &&
-                storedAccount.connectorType != 'aihorde',
+                storedAccount.connectorType != 'aihorde' &&
+                storedAccount.connectorType != 'amazon-q',
             connectTimeout: connectTimeout,
             sendTimeout: sendTimeout,
             receiveTimeout: receiveTimeout ??
@@ -554,6 +559,54 @@ class LlmConnectorHttpClient {
           storedAccount.connectorType,
           response.headers.map,
         );
+        if (useAmazonQEventStream) {
+          final responseData = response.data;
+          final responseStream = responseData is ResponseBody
+              ? responseData.stream
+              : responseData is Stream<List<int>>
+                  ? responseData
+                  : null;
+          if (responseStream == null) {
+            throw const LlmConnectorHttpException();
+          }
+          if (stream) {
+            final completed = Completer<LlmConnectorObservation>();
+            final converted = AmazonQConnector.toOpenAiSse(
+              responseStream,
+              modelId: modelId,
+            );
+            final observed = _observeResponseStream(
+              storedAccount.connectorType,
+              converted,
+              headerObservation,
+              completed,
+            );
+            return LlmConnectorResponse(
+              statusCode: status,
+              headers: response.headers.map,
+              body: observed,
+              observation: headerObservation,
+              completedObservation: completed.future,
+            );
+          }
+          final completion = await AmazonQConnector.toOpenAiCompletion(
+            responseStream,
+            modelId: modelId,
+          );
+          final bodyObservation = parseLlmConnectorObservation(
+            storedAccount.connectorType,
+            completion,
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: completion,
+            observation: mergeLlmConnectorObservations(
+              headerObservation,
+              bodyObservation,
+            ),
+          );
+        }
         if (storedAccount.connectorType == 'devin' &&
             storedAccount.authType == 'oauth') {
           final responseData = response.data;
