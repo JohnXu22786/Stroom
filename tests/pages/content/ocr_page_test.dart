@@ -4559,7 +4559,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Take a photo'));
-    await tester.pumpAndSettle();
+    await _pumpUntil(
+      tester,
+      () => find
+          .text('The image is empty. Select it again.')
+          .evaluate()
+          .isNotEmpty,
+    );
 
     expect(find.text('The image is empty. Select it again.'), findsOneWidget);
   });

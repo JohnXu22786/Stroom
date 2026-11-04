@@ -121,7 +121,6 @@ void main() {
       ),
     );
 
-    expect(
-        find.text('Image Text Recognition → Assistant Chat'), findsOneWidget);
+    expect(find.text('OCR → Assistant Chat'), findsOneWidget);
   });
 }
