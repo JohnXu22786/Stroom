@@ -22,7 +22,10 @@ import 'package:stroom/providers/update_provider.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
-Widget _buildSettingsTestApp({Locale locale = const Locale('zh', 'CN')}) {
+Widget _buildSettingsTestApp({
+  Locale locale = const Locale('zh', 'CN'),
+  UpdateNotifier? updateNotifier,
+}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
@@ -32,7 +35,7 @@ Widget _buildSettingsTestApp({Locale locale = const Locale('zh', 'CN')}) {
         notifier.load();
         return notifier;
       }),
-      updateProvider.overrideWith((ref) => UpdateNotifier()),
+      updateProvider.overrideWith((ref) => updateNotifier ?? UpdateNotifier()),
     ],
     child: MaterialApp(
       locale: locale,
@@ -46,6 +49,15 @@ Widget _buildSettingsTestApp({Locale locale = const Locale('zh', 'CN')}) {
       home: const SettingsPage(),
     ),
   );
+}
+
+class _FixedErrorUpdateNotifier extends UpdateNotifier {
+  _FixedErrorUpdateNotifier(String error) {
+    state = UpdateState(error: error);
+  }
+
+  @override
+  Future<void> checkForUpdate({bool silent = false}) async {}
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -145,6 +157,33 @@ void main() {
     expect(find.text('常规设置'), findsOneWidget);
     await tester.ensureVisible(find.text('关于'));
     expect(find.text('关于'), findsOneWidget);
+  });
+
+  testWidgets('update check errors follow the selected locale', (tester) async {
+    Future<void> verifyError(Locale locale, String expectedText) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(
+          locale: locale,
+          updateNotifier: _FixedErrorUpdateNotifier('网络错误: connection failed'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final checkForUpdates = find.text(
+        locale.languageCode == 'en' ? 'Check for Updates' : '检查更新',
+      );
+      await tester.ensureVisible(checkForUpdates);
+      await tester.tap(checkForUpdates);
+      await tester.pumpAndSettle();
+      expect(find.text(expectedText), findsOneWidget);
+    }
+
+    await verifyError(
+      const Locale('en', 'US'),
+      'Network error: connection failed',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await verifyError(const Locale('zh', 'CN'), '网络错误：connection failed');
   });
 
   // ─────────────────────────────────────────────────────────────────────

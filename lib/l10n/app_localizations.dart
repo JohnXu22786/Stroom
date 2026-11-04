@@ -1426,6 +1426,30 @@ abstract class AppLocalizations {
   /// **'You are using the latest version'**
   String get aboutUpToDate;
 
+  /// No description provided for @aboutUpdateNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error: {details}'**
+  String aboutUpdateNetworkError(Object details);
+
+  /// No description provided for @aboutUpdateHttpError.
+  ///
+  /// In en, this message translates to:
+  /// **'Update check failed with HTTP status {statusCode}.'**
+  String aboutUpdateHttpError(Object statusCode);
+
+  /// No description provided for @aboutUpdateInvalidResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The update server returned an unexpected response.'**
+  String get aboutUpdateInvalidResponse;
+
+  /// No description provided for @aboutUpdateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The update check failed. Please try again.'**
+  String get aboutUpdateCheckFailed;
+
   /// No description provided for @aboutPrivacyContent.
   ///
   /// In en, this message translates to:
