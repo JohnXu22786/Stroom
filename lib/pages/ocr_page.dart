@@ -248,11 +248,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   String? _errorMessageValue;
   String? _lastImageImportErrorMessage;
   bool _isRetryImageResetWarning = false;
-  String? get _errorMessage =>
-      _isRetryImageResetWarning ? _retryImageResetMessage : _errorMessageValue;
+  int? _retryImageResetWarningRequiredCount;
+  String? get _errorMessage {
+    if (!_isRetryImageResetWarning) return _errorMessageValue;
+    final requiredCount = _retryImageResetWarningRequiredCount;
+    return requiredCount == null
+        ? _retryImageResetMessage
+        : _retryReselectAllMessage(requiredCount);
+  }
+
   set _errorMessage(String? message) {
     _errorMessageValue = message;
     _isRetryImageResetWarning = false;
+    _retryImageResetWarningRequiredCount = null;
     _lastImageImportErrorMessage = null;
   }
 
@@ -361,7 +369,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.retryTaskId != null && widget.retryData == null) {
+    if (widget.retryTaskId != null &&
+        widget.retryData == null &&
+        _retryImageCountUnknown &&
+        !_isRetryImageResetWarning) {
       _errorMessage = _retryImageCountUnknownMessage;
     }
   }
@@ -1574,6 +1585,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       } else {
         _retryImagesUnavailable = true;
         _errorMessage = _retryReselectAllMessage(requiredCount);
+        _isRetryImageResetWarning = true;
+        _retryImageResetWarningRequiredCount = requiredCount;
       }
     } else if (!_retryImagesUnavailable) {
       _errorMessage = _retryImageCountMismatch
@@ -2451,7 +2464,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           : _requiredRetryImageCount == null
               ? null
               : _retryReselectAllMessage(_requiredRetryImageCount!);
-      _isRetryImageResetWarning = imageCountUnknown;
+      _isRetryImageResetWarning = true;
+      _retryImageResetWarningRequiredCount =
+          imageCountUnknown ? null : _requiredRetryImageCount;
     });
   }
 
@@ -2565,8 +2580,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(AppLocalizations.of(context)!.ocrRequestSizeExceededBody(
-              ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes),
               ocrRequestSizeBudgetMib(budgetBytes),
+              ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes),
             )),
             const SizedBox(height: 12),
             Text(AppLocalizations.of(context)!.ocrRequestSizeHelp),

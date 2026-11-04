@@ -15,16 +15,24 @@ import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
 void main() {
-  test('system locale resolution uses supported locales and English fallback',
-      () {
-    expect(resolveSystemLocale(const Locale('zh', 'CN')),
-        const Locale('zh', 'CN'));
-    expect(resolveSystemLocale(const Locale('zh')), const Locale('zh', 'CN'));
-    expect(resolveSystemLocale(const Locale('zh', 'TW')),
-        const Locale('en', 'US'));
-    expect(resolveSystemLocale(const Locale('fr', 'FR')),
-        const Locale('en', 'US'));
-  });
+  test(
+    'system locale resolution uses supported locales and English fallback',
+    () {
+      expect(
+        resolveSystemLocale(const Locale('zh', 'CN')),
+        const Locale('zh', 'CN'),
+      );
+      expect(resolveSystemLocale(const Locale('zh')), const Locale('zh', 'CN'));
+      expect(
+        resolveSystemLocale(const Locale('zh', 'TW')),
+        const Locale('en', 'US'),
+      );
+      expect(
+        resolveSystemLocale(const Locale('fr', 'FR')),
+        const Locale('en', 'US'),
+      );
+    },
+  );
 
   test('localized display-name catalog covers generated supported locales', () {
     expect(
@@ -86,20 +94,24 @@ void main() {
       );
     });
 
-    test('selection made during preference loading is not overwritten',
-        () async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final controller = container.read(localeProvider.notifier);
-      final loading = controller.load();
-      final selecting = controller.setLocaleCode('zh_CN');
-      await Future.wait([loading, selecting]);
-      expect(container.read(localeProvider), const Locale('zh', 'CN'));
-      expect(
-        (await SharedPreferences.getInstance()).getString(localePreferenceKey),
-        'zh_CN',
-      );
-    });
+    test(
+      'selection made during preference loading is not overwritten',
+      () async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final controller = container.read(localeProvider.notifier);
+        final loading = controller.load();
+        final selecting = controller.setLocaleCode('zh_CN');
+        await Future.wait([loading, selecting]);
+        expect(container.read(localeProvider), const Locale('zh', 'CN'));
+        expect(
+          (await SharedPreferences.getInstance()).getString(
+            localePreferenceKey,
+          ),
+          'zh_CN',
+        );
+      },
+    );
   });
 
   testWidgets('theme mode and language options update', (tester) async {
@@ -187,6 +199,7 @@ void main() {
           updateProvider.overrideWith((ref) => UpdateNotifier()),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,

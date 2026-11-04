@@ -124,6 +124,9 @@ jobs:
               lib/utils/file_picker_utils.dart)
                 test_f="tests/utils/file_picker_utils_test.dart"
                 ;;
+              lib/widgets/version_info_dialog.dart)
+                test_f="tests/pages/settings/settings_page_test.dart"
+                ;;
               lib/pages/chat/dialogs/mermaid_preview_web_controls.dart|\
               lib/pages/chat/dialogs/mermaid_preview_web_controls_stub.dart|\
               lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart)
