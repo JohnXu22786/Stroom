@@ -120,8 +120,7 @@ void main() {
     final previousPlatform = InAppWebViewPlatform.instance;
     InAppWebViewPlatform.instance = _NeverCreatedWebViewPlatform();
     addTearDown(() {
-      InAppWebViewPlatform.instance =
-          previousPlatform ?? _NeverCreatedWebViewPlatform();
+      InAppWebViewPlatform.instance = previousPlatform;
     });
 
     await tester.pumpWidget(localizedApp(Builder(
