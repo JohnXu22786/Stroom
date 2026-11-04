@@ -48,6 +48,9 @@ const _openCodeGoAnthropicBaseUrl = 'https://opencode.ai/zen/go';
 const _openCodeZenBaseUrl = 'https://opencode.ai/zen/v1';
 const _openCodeZenAnthropicBaseUrl = 'https://opencode.ai/zen';
 const kCommandCodeBaseUrl = 'https://api.commandcode.ai/provider/v1';
+const _uncloseAiBaseUrl = 'https://hermes.ai.unturf.com/v1';
+const _uncloseAiChatModelId = 'turboderp/Qwen3.8-27B-exl3';
+const _uncloseAiDefaultContextLength = 65536;
 
 const _commandCodeProtocolByEndpoint = <String, String>{
   '/chat/completions': 'openai.chat_completions',
@@ -723,6 +726,13 @@ abstract final class LlmConnectorRegistry {
       authTypes: {'none', 'api_key'},
     ),
     LlmConnectorDefinition(
+      id: 'uncloseai',
+      displayName: 'UncloseAI',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'none', 'api_key'},
+      modelCatalog: [_uncloseAiChatModelId],
+    ),
+    LlmConnectorDefinition(
       id: 'openai-compatibility',
       displayName: 'OpenAI-compatible endpoint',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -791,6 +801,7 @@ abstract final class LlmConnectorRegistry {
         'opencode-go' ||
         'opencode-zen' ||
         'aihorde' ||
+        'uncloseai' ||
         'command-code' ||
         'moonshot' ||
         'kimi-coding' ||
@@ -1593,6 +1604,27 @@ class LlmAccountConnectorService {
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'uncloseai' && !refreshRemote) {
+      if (account.models.isNotEmpty) return List.unmodifiable(account.models);
+      final modelId = connector.modelCatalog.single;
+      return [
+        LlmUpstreamModel(
+          id: '${account.id}:catalog:0',
+          upstreamModelId: modelId,
+          displayName: 'Qwen3.8 27B exl3 (Free)',
+          capabilities: const {
+            'chat': true,
+            'streaming': true,
+            'contextLength': _uncloseAiDefaultContextLength,
+            'supportedApiProtocols': ['openai.chat_completions'],
+          },
+          config: const {
+            'catalogSource':
+                'pinned_provider_registry@$kLlmConnectorReferenceRevision',
+          },
+        ),
+      ];
+    }
     if (account.connectorType == 'amazon-q') {
       if (account.authType != 'oauth' || account.credentialRef == null) {
         throw const LlmAccountConnectorException();
@@ -1653,6 +1685,7 @@ class LlmAccountConnectorService {
     }
     final hasRemoteCatalog = {
       'aihorde',
+      'uncloseai',
       'openai-compatibility',
       'openai-api',
       'opencode-go',
@@ -1844,6 +1877,9 @@ class LlmAccountConnectorService {
               .toList(),
         );
       }
+      if (account.connectorType == 'uncloseai') {
+        return _mergeUncloseAiModelMappings(discovered, account.models);
+      }
       return _mergeModelMappings(discovered, account.models);
     }
     return List.unmodifiable([
@@ -1851,8 +1887,16 @@ class LlmAccountConnectorService {
         LlmUpstreamModel(
           id: '${account.id}:catalog:$index',
           upstreamModelId: connector.modelCatalog[index],
-          displayName: connector.modelCatalog[index],
+          displayName: connector.id == 'uncloseai'
+              ? 'Qwen3.8 27B exl3 (Free)'
+              : connector.modelCatalog[index],
           capabilities: switch (connector.id) {
+            'uncloseai' => const {
+                'chat': true,
+                'streaming': true,
+                'contextLength': _uncloseAiDefaultContextLength,
+                'supportedApiProtocols': ['openai.chat_completions'],
+              },
             'devin-cli-agentic' => const {'chat': true, 'streaming': true},
             // The Cursor adapter maps Stroom's supported inline image blocks;
             // remote or unsupported image representations fail explicitly.
@@ -1907,6 +1951,35 @@ class LlmAccountConnectorService {
       merged[model.upstreamModelId] = model;
     }
     return List.unmodifiable(merged.values);
+  }
+
+  static List<LlmUpstreamModel> _mergeUncloseAiModelMappings(
+    List<LlmUpstreamModel> discovered,
+    List<LlmUpstreamModel> configured,
+  ) {
+    final configuredById = {
+      for (final model in configured) model.upstreamModelId: model,
+    };
+    return List.unmodifiable([
+      for (final model in discovered)
+        if (configuredById[model.upstreamModelId] case final existing?)
+          LlmUpstreamModel(
+            id: existing.id,
+            upstreamModelId: model.upstreamModelId,
+            displayName: existing.displayName,
+            capabilities: {
+              ...model.capabilities,
+              ...existing.capabilities,
+              // Discovery describes the current model's limit and takes
+              // precedence over the provider default and stale metadata.
+              'contextLength': model.capabilities['contextLength'],
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+            config: {...model.config, ...existing.config},
+          )
+        else
+          model,
+    ]);
   }
 
   static List<LlmUpstreamModel> _mergeFallbackModelMappings(
@@ -3466,6 +3539,7 @@ class LlmAccountConnectorService {
       ];
     }
     final fallbackBase = switch (account.connectorType) {
+      'uncloseai' => _uncloseAiBaseUrl,
       'openai-api' => 'https://api.openai.com/v1',
       'openference' || 'openference-api' => 'https://api.openference.com/v1',
       'opencode-go' => _openCodeGoBaseUrl,
@@ -3498,7 +3572,8 @@ class LlmAccountConnectorService {
       'trae' => TraeSoloConnector.defaultBaseUrl,
       _ => null,
     };
-    final base = account.connectorType == 'kilocode'
+    final base = account.connectorType == 'kilocode' ||
+            account.connectorType == 'uncloseai'
         ? fallbackBase
         : LlmNativeRequestBuilder._configString(
               account.endpointConfig,
@@ -3884,6 +3959,15 @@ class LlmAccountConnectorService {
                 if (commandCodeProtocols != null) ...{
                   'chat': true,
                   'supportedApiProtocols': commandCodeProtocols,
+                },
+                if (account.connectorType == 'uncloseai') ...{
+                  'chat': true,
+                  'streaming': true,
+                  'contextLength': map['max_model_len'] is num &&
+                          (map['max_model_len'] as num) > 0
+                      ? (map['max_model_len'] as num).toInt()
+                      : _uncloseAiDefaultContextLength,
+                  'supportedApiProtocols': ['openai.chat_completions'],
                 },
                 if (account.connectorType == 'codebuddy-cn' ||
                     account.connectorType == 'codebuddy-intl')
@@ -5516,6 +5600,7 @@ class LlmNativeRequestBuilder {
         (account.connectorType == 'aihorde' &&
             nativeFormat != null &&
             nativeFormat != 'openai.chat_completions') ||
+        (account.connectorType == 'uncloseai' && nativeFormat != null) ||
         ((account.connectorType == 'cline' ||
                 account.connectorType == 'clinepass') &&
             nativeFormat != null) ||
@@ -5627,7 +5712,9 @@ class LlmNativeRequestBuilder {
             : _credentialValue(account, credential);
     final config = account.endpointConfig;
     final configuredHeaders = config['headers'];
-    if (account.connectorType != 'aihorde' && configuredHeaders is Map) {
+    if (account.connectorType != 'aihorde' &&
+        account.connectorType != 'uncloseai' &&
+        configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
         if (entry.key is String && entry.value is String) {
           headers[entry.key as String] = entry.value as String;
@@ -5651,6 +5738,11 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         headers['Authorization'] = 'Bearer $chatKey';
+        break;
+      case 'uncloseai':
+        if (account.authType == 'api_key' && secret.trim().isNotEmpty) {
+          headers['Authorization'] = 'Bearer ${secret.trim()}';
+        }
         break;
       case 'gitlab-duo':
         headers['Authorization'] = 'Bearer $secret';
@@ -6392,6 +6484,9 @@ class LlmNativeRequestBuilder {
       case 'aihorde':
         baseUrl = 'https://oai.aihorde.net/v1';
         path = '/chat/completions';
+      case 'uncloseai':
+        baseUrl = _uncloseAiBaseUrl;
+        path = '/chat/completions';
       case 'gitlab-duo':
         baseUrl = _baseUrl(config, 'https://gitlab.com');
         path = '/api/v4/code_suggestions/completions';
@@ -6663,6 +6758,7 @@ class LlmNativeRequestBuilder {
             account.connectorType == 'qwen-cloud-token-plan';
     final base = account.connectorType == 'amazon-q' ||
             account.connectorType == 'aihorde' ||
+            account.connectorType == 'uncloseai' ||
             account.connectorType == 'openai-compatibility' ||
             account.connectorType == 'cline' ||
             account.connectorType == 'clinepass' ||
@@ -6868,6 +6964,7 @@ class LlmNativeRequestBuilder {
       'opencode-go' || 'opencode-zen' => host == 'opencode.ai',
       'command-code' => host == 'api.commandcode.ai',
       'aihorde' => host == 'oai.aihorde.net',
+      'uncloseai' => host == 'hermes.ai.unturf.com',
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',

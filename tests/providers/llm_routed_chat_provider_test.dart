@@ -364,6 +364,31 @@ void main() {
       isNot(contains('qoder')),
     );
   });
+  test('UncloseAI Chat route accepts only the source-supported protocol', () {
+    final account = AiGatewayAccount(
+      id: 'uncloseai-account',
+      connectorType: 'uncloseai',
+      authType: 'none',
+      displayName: 'UncloseAI',
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'turboderp/Qwen3.8-27B-exl3',
+        endpointType: 'openai.chat_completions',
+      ),
+      'openai.chat_completions',
+    );
+    expect(
+      () => llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'turboderp/Qwen3.8-27B-exl3',
+        endpointType: 'openai.chat_completions',
+        apiProtocolOverride: 'openai.responses',
+      ),
+      throwsStateError,
+    );
+  });
   test(
     'invokes Claude OAuth and Setup Token accounts through Anthropic Chat',
     () async {
@@ -876,6 +901,106 @@ void main() {
       llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
       isNot(contains('meta')),
     );
+  });
+  test('UncloseAI is available only through OpenAI Chat Completions', () {
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      contains('uncloseai'),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.responses'),
+      isNot(contains('uncloseai')),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypes('anthropic.messages'),
+      isNot(contains('uncloseai')),
+    );
+    expect(
+      llmRoutedChatSupportedConnectorTypesForModelOverride(null),
+      contains('uncloseai'),
+    );
+  });
+  test('routes an anonymous UncloseAI model through ChatAdapter protocol',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    const accountId = 'uncloseai-chat-account';
+    const modelId = 'turboderp/Qwen3.8-27B-exl3';
+    await accounts.saveAccount(
+      LlmAccount(
+        id: accountId,
+        connectorType: 'uncloseai',
+        authType: 'none',
+        displayName: 'UncloseAI',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'uncloseai-chat-model',
+            upstreamModelId: modelId,
+            displayName: 'Qwen 3.8',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'contextLength': 65536,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'uncloseai-chat-group',
+        displayName: 'UncloseAI',
+        members: const [
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: 'uncloseai-chat-model',
+            upstreamModelId: modelId,
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBody: {
+        'choices': [
+          {
+            'message': {'content': 'UncloseAI reply'},
+          },
+        ],
+      },
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: 'uncloseai-chat-group',
+      localModelId: 'uncloseai-chat-model',
+      endpointType: 'openai',
+      apiProtocol: 'openai.chat_completions',
+    );
+
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      'UncloseAI reply',
+    );
+    expect(connector.requestedAccountIds, [accountId]);
+    expect(connector.requestedModelIds, [modelId]);
+    expect(connector.lastNativeFormat, isNull);
+    expect(connector.requestBody?['model'], modelId);
   });
 
   test('Qwen Cloud account IDs route only through documented formats', () {

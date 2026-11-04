@@ -370,6 +370,13 @@ void main() {
       expect(
         supportedApiProtocolsForSupplier(
           'openai.chat_completions',
+          connectorType: 'uncloseai',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
           connectorType: 'moonshot',
         ),
         {'openai.chat_completions'},

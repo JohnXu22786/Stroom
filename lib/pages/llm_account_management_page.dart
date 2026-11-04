@@ -1848,6 +1848,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
+    if (_connectorType == 'uncloseai') {
+      _endpoint.text = 'https://hermes.ai.unturf.com/v1';
+    }
     final configuredLocation = account?.endpointConfig['location'];
     final configuredRegion = account?.endpointConfig['region'];
     final region = account?.connectorType == 'vertex'
@@ -2068,6 +2071,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     final previousConnectorType = _connectorType;
                     _connectorType = value;
                     _apiProtocol = builtinDefaultApiProtocolForConnector(value);
+                    if (value == 'uncloseai') {
+                      _authType = 'none';
+                      _endpoint.text = 'https://hermes.ai.unturf.com/v1';
+                    }
                     if (value == 'trae') {
                       _models.clear();
                       _endpoint.clear();
@@ -2427,6 +2434,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 enabled: _connectorType != 'devin-cli-agentic' &&
                     _connectorType != 'command-code' &&
                     _connectorType != 'aihorde' &&
+                    _connectorType != 'uncloseai' &&
                     _connectorType != 'qoder' &&
                     _connectorType != 'kilocode' &&
                     _connectorType != 'cline' &&
@@ -2440,14 +2448,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? 'Cline 使用固定服务端点'
                           : _connectorType == 'aihorde'
                               ? 'AI Horde 使用固定 HTTPS Chat 端点'
-                              : _connectorType == 'kilocode'
-                                  ? 'Kilo Code 使用固定服务端点'
-                                  : _connectorType == 'qoder' ||
-                                          _connectorType == 'trae'
-                                      ? '固定服务端点'
-                                      : '端点地址（连接器需要时填写）',
+                              : _connectorType == 'uncloseai'
+                                  ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
+                                  : _connectorType == 'kilocode'
+                                      ? 'Kilo Code 使用固定服务端点'
+                                      : _connectorType == 'qoder' ||
+                                              _connectorType == 'trae'
+                                          ? '固定服务端点'
+                                          : '端点地址（连接器需要时填写）',
                   hintText: switch (_connectorType) {
                     'aihorde' => 'https://oai.aihorde.net/v1',
+                    'uncloseai' => 'https://hermes.ai.unturf.com/v1',
                     'opencode-go' => 'https://opencode.ai/zen/go/v1',
                     'opencode-zen' => 'https://opencode.ai/zen/v1',
                     'command-code' => kCommandCodeBaseUrl,
@@ -2463,6 +2474,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     'cline' ||
                     'clinepass' =>
                       '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                    'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
                     'aihorde' => 'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
                     'trae' =>
                       'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
@@ -3203,7 +3215,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
-    } else if (_connectorType == 'trae') {
+    } else if (_connectorType == 'trae' || _connectorType == 'uncloseai') {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
