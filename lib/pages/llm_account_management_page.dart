@@ -2248,6 +2248,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _providerPresetId ?? '',
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: '服务商预设'),
                   items: [
                     const DropdownMenuItem(
