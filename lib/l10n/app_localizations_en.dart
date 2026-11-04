@@ -346,6 +346,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskFlowBlockChat => 'Assistant Chat';
 
   @override
+  String get taskFlowBlockCustom => 'Custom block';
+
+  @override
   String get taskFlowEdit => 'Edit';
 
   @override
@@ -4754,6 +4757,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get taskFlowBlockChat => 'Assistant Chat';
+
+  @override
+  String get taskFlowBlockCustom => 'Custom block';
 
   @override
   String get taskFlowEdit => 'Edit';

@@ -1335,7 +1335,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       builder: (ctx) => AlertDialog(
         title: Text(
           def == null
-              ? block.typeKey.name
+              ? localizedBlockTypeName(block.typeKey, strings)
               : localizedBlockTypeLabel(def, strings),
         ),
         content: SingleChildScrollView(

@@ -652,6 +652,12 @@ abstract class AppLocalizations {
   /// **'Assistant Chat'**
   String get taskFlowBlockChat;
 
+  /// No description provided for @taskFlowBlockCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom block'**
+  String get taskFlowBlockCustom;
+
   /// No description provided for @taskFlowEdit.
   ///
   /// In en, this message translates to:

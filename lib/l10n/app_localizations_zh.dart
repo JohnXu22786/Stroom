@@ -307,6 +307,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowBlockChat => '助手对话';
 
   @override
+  String get taskFlowBlockCustom => '自定义功能块';
+
+  @override
   String get taskFlowEdit => '编辑';
 
   @override
@@ -4448,6 +4451,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get taskFlowBlockChat => '助手对话';
+
+  @override
+  String get taskFlowBlockCustom => '自定义功能块';
 
   @override
   String get taskFlowEdit => '编辑';

@@ -92,6 +92,7 @@
   "taskFlowBlockCatCatch": "下载网页资源",
   "taskFlowBlockTts": "语音合成",
   "taskFlowBlockChat": "助手对话",
+  "taskFlowBlockCustom": "自定义功能块",
   "taskFlowEdit": "编辑",
   "taskFlowCopy": "复制",
   "taskFlowCopied": "已复制",

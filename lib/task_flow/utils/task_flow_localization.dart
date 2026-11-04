@@ -31,15 +31,20 @@ String localizedIoTypeDisplayLabel(String label, AppLocalizations strings) =>
 String localizedBlockTypeLabel(
   BlockTypeDefinition definition,
   AppLocalizations strings,
-) => switch (definition.typeKey) {
-  BlockType.ocr => strings.taskFlowBlockOcr,
-  BlockType.asr => strings.taskFlowBlockAsr,
-  BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
-  BlockType.catcatch => strings.taskFlowBlockCatCatch,
-  BlockType.tts => strings.taskFlowBlockTts,
-  BlockType.chat => strings.taskFlowBlockChat,
-  BlockType.custom => definition.label,
-};
+) => definition.typeKey == BlockType.custom
+    ? definition.label
+    : localizedBlockTypeName(definition.typeKey, strings);
+
+String localizedBlockTypeName(BlockType type, AppLocalizations strings) =>
+    switch (type) {
+      BlockType.ocr => strings.taskFlowBlockOcr,
+      BlockType.asr => strings.taskFlowBlockAsr,
+      BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
+      BlockType.catcatch => strings.taskFlowBlockCatCatch,
+      BlockType.tts => strings.taskFlowBlockTts,
+      BlockType.chat => strings.taskFlowBlockChat,
+      BlockType.custom => strings.taskFlowBlockCustom,
+    };
 
 String localizedBlockParamLabel(
   BlockTypeDefinition definition,

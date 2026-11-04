@@ -175,8 +175,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                AppLocalizations.of(context)!
-                    .taskFlowUiUnregisteredBlock(widget.block.typeKey.name),
+                AppLocalizations.of(context)!.taskFlowUiUnregisteredBlock(
+                  localizedBlockTypeName(
+                    widget.block.typeKey,
+                    AppLocalizations.of(context)!,
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               FilledButton(

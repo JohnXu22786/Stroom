@@ -92,6 +92,7 @@
   "taskFlowBlockCatCatch": "Web Resource Download",
   "taskFlowBlockTts": "Speech Synthesis",
   "taskFlowBlockChat": "Assistant Chat",
+  "taskFlowBlockCustom": "Custom block",
   "taskFlowEdit": "Edit",
   "taskFlowCopy": "Copy",
   "taskFlowCopied": "Copied",
