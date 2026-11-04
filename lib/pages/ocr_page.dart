@@ -354,9 +354,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (widget.retryTaskId != null && widget.retryData == null) {
       _retryImageCountUnknown = true;
       _retryImagesUnavailable = true;
-      _errorMessage = _retryImageCountUnknownMessage;
     }
     unawaited(_applyRetryData());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.retryTaskId != null && widget.retryData == null) {
+      _errorMessage = _retryImageCountUnknownMessage;
+    }
   }
 
   @override

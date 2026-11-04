@@ -51,6 +51,11 @@ Widget _buildSettingsTestApp({
   );
 }
 
+Future<void> _scrollSettingsToEnd(WidgetTester tester) async {
+  await tester.drag(find.byType(ListView).first, const Offset(0, -10000));
+  await tester.pumpAndSettle();
+}
+
 class _FixedErrorUpdateNotifier extends UpdateNotifier {
   _FixedErrorUpdateNotifier(String error) {
     state = UpdateState(error: error);
@@ -137,6 +142,12 @@ String _llmEntryWithModels() {
 void main() {
   testWidgets('settings page headings follow the selected locale',
       (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
       _buildSettingsTestApp(locale: const Locale('en', 'US')),
@@ -144,6 +155,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('General'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
     await tester.ensureVisible(find.text('About'));
     expect(find.text('About'), findsOneWidget);
 
@@ -155,11 +167,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('常规设置'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
     await tester.ensureVisible(find.text('关于'));
     expect(find.text('关于'), findsOneWidget);
   });
 
   testWidgets('update check errors follow the selected locale', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     Future<void> verifyError(Locale locale, String expectedText) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -169,6 +188,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
       final checkForUpdates = find.text(
         locale.languageCode == 'en' ? 'Check for Updates' : '检查更新',
       );
@@ -527,6 +547,7 @@ void main() {
       // The whole about header card is tappable — tapping the app name
       // text (not just the logo icon) must open the dialog.
       // Scroll the last section of the long ListView into view first.
+      await _scrollSettingsToEnd(tester);
       await tester.ensureVisible(find.text('Stroom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stroom'));
@@ -560,6 +581,7 @@ void main() {
         _buildSettingsTestApp(locale: const Locale('en', 'US')),
       );
       await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
       await tester.ensureVisible(find.text('Stroom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stroom'));

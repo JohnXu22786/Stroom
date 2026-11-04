@@ -99,7 +99,7 @@ String _githubRelease(String tagName,
 void main() {
   group('UpdateDialog - Shared Dialog', () {
     testWidgets('labels follow the selected locale', (tester) async {
-      final (notifier, container) = _setupNotifier(
+      final setup = _setupNotifier(
         state: const UpdateState(
           latestVersion: 'v0.2.14',
           downloadUrl:
@@ -107,6 +107,8 @@ void main() {
           updateAvailable: true,
         ),
       );
+      final notifier = setup.notifier;
+      final container = setup.container;
       addTearDown(container.dispose);
 
       await _showDialog(

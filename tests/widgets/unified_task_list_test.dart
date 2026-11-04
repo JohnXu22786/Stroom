@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
@@ -91,7 +92,10 @@ Future<void> pumpPage(
         }),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -132,7 +136,10 @@ Future<void> pumpPageWithBackground(
         backgroundTasksProvider.overrideWith((ref) => bgNotifier),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -166,7 +173,10 @@ Future<void> pumpPageWithSynthesis(
         }),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -528,7 +538,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -637,7 +650,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -715,7 +731,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -759,7 +778,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -1350,7 +1372,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),

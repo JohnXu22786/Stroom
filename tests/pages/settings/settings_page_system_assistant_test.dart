@@ -191,8 +191,11 @@ void main() {
         matching: find.text('重置'),
       ));
       await tester.pumpAndSettle();
-      final defaultPrompt =
-          builtInSystemAssistantById(kBuiltInTitleAssistantId)!.prompt;
+      final defaultPrompt = localizedBuiltInSystemAssistantById(
+        kBuiltInTitleAssistantId,
+        AppLocalizations.of(tester.element(find.byType(SettingsPage)))!,
+      )!
+          .prompt;
       expect(_inSheet('当前使用默认提示词'), findsOneWidget);
       expect(
         find.text(defaultPrompt),
