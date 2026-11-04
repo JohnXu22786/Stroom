@@ -12,6 +12,7 @@ import {
   IconRefreshOutlineRegular,
   IconEditOutlineRegular,
   IconCodeOutlineRegular,
+  IconDataOutlineRegular,
   IconTrashOutlineRegular,
   MarkdownDelegateProvider,
   TextShimmer,
@@ -39,7 +40,7 @@ const icons = {
   retry: IconRefreshOutlineRegular,
   edit: IconEditOutlineRegular,
   raw: IconCodeOutlineRegular,
-  json: IconCodeOutlineRegular,
+  json: IconDataOutlineRegular,
   delete: IconTrashOutlineRegular,
 };
 const titles = {

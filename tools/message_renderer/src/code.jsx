@@ -29,10 +29,9 @@ mermaid.initialize({
 });
 let diagramId = 0;
 
-function Diagram({ code }) {
+function Diagram({ code, scale }) {
   const element = useRef(null);
   const [error, setError] = useState(false);
-  const [scale, setScale] = useState(1);
   useEffect(() => {
     let active = true;
     mermaid
@@ -52,21 +51,6 @@ function Diagram({ code }) {
   }, [code]);
   return (
     <div className="diagram">
-      <div className="diagram-controls">
-        <button
-          onClick={() => setScale((s) => Math.max(0.25, s - 0.25))}
-          aria-label="缩小"
-        >
-          −
-        </button>
-        <button onClick={() => setScale(1)}>重置</button>
-        <button
-          onClick={() => setScale((s) => Math.min(3, s + 0.25))}
-          aria-label="放大"
-        >
-          ＋
-        </button>
-      </div>
       {error && <p>图表暂时无法绘制，可以查看源码。</p>}
       <div className="diagram-pan" hidden={error}>
         <div
@@ -94,6 +78,7 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
     ["markdown", "md", "text", "plaintext", "txt"].includes(lang),
   );
   const [source, setSource] = useState(false);
+  const [scale, setScale] = useState(1);
   const [toolbar, setToolbar] = useState(null);
   const [htmlPreview, setHtmlPreview] = useState({
     code: null,
@@ -137,18 +122,13 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
         />
       ) : showingDiagram ? (
         <>
-          <CodeActions
+          <MermaidPreviewActions
             className="stroom-code-actions-floating"
             action={action}
-            special={special}
-            lang={lang}
-            streaming={streaming}
-            wrap={wrap}
-            setWrap={setWrap}
-            source={source}
             setSource={setSource}
+            setScale={setScale}
           />
-          <Diagram code={code} />
+          <Diagram code={code} scale={scale} />
         </>
       ) : (
         <>
@@ -161,9 +141,9 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
               streaming={streaming}
               wrap={wrap}
               setWrap={setWrap}
-              source={source}
               setSource={setSource}
               htmlFenceClosed={htmlFenceClosed}
+              mermaidSource={lang === "mermaid" && source}
             />,
             toolbar,
           )}
@@ -285,9 +265,9 @@ function CodeActions({
   streaming,
   wrap,
   setWrap,
-  source,
   setSource,
   htmlFenceClosed,
+  mermaidSource = false,
 }) {
   return (
     <div className={className} aria-label="代码块操作">
@@ -316,27 +296,69 @@ function CodeActions({
       >
         <IconWrapLinesOutlineRegular size={16} />
       </button>
-      {lang === "mermaid" && (
+      {lang === "mermaid" && !streaming && (
         <button
           className="stroom-code-action"
-          title={source ? "查看图表" : "查看源码"}
-          aria-label={source ? "查看图表" : "查看源码"}
+          title={mermaidSource ? "查看图表" : "查看源码"}
+          aria-label={mermaidSource ? "查看图表" : "查看源码"}
           onClick={() => setSource((value) => !value)}
         >
           <IconCodeOutlineRegular size={16} />
         </button>
       )}
+      {!mermaidSource && (
+        <button
+          className="stroom-code-action"
+          data-action={special ? lang : "code"}
+          title="全屏"
+          aria-label="全屏"
+          disabled={
+            special && (streaming || (lang === "html" && !htmlFenceClosed))
+          }
+          onClick={() => action(special ? lang : "code")}
+        >
+          <IconFullscreenOutlineRegular size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MermaidPreviewActions({ className, action, setSource, setScale }) {
+  return (
+    <div className={className} aria-label="图表预览操作">
       <button
         className="stroom-code-action"
-        data-action={special ? lang : "code"}
+        title="缩小"
+        aria-label="缩小"
+        onClick={() => setScale((value) => Math.max(0.25, value - 0.25))}
+      >
+        −
+      </button>
+      <button
+        className="stroom-code-action"
+        title="放大"
+        aria-label="放大"
+        onClick={() => setScale((value) => Math.min(3, value + 0.25))}
+      >
+        ＋
+      </button>
+      <button
+        className="stroom-code-action"
+        data-action="mermaid"
         title="全屏"
         aria-label="全屏"
-        disabled={
-          special && (streaming || (lang === "html" && !htmlFenceClosed))
-        }
-        onClick={() => action(special ? lang : "code")}
+        onClick={() => action("mermaid")}
       >
         <IconFullscreenOutlineRegular size={16} />
+      </button>
+      <button
+        className="stroom-code-action"
+        title="查看源码"
+        aria-label="查看源码"
+        onClick={() => setSource(true)}
+      >
+        <IconCodeOutlineRegular size={16} />
       </button>
     </div>
   );
