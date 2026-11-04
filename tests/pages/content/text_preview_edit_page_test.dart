@@ -13,11 +13,15 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// 构建测试应用，将 TextPreviewEditPage 放置在一个可以弹出返回的路径中
 Widget _buildTestApp(TextRecord file, String content) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       initialRoute: '/',
       routes: {
         '/': (_) => const _PlaceholderPage(),

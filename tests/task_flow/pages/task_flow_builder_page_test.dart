@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -21,7 +22,11 @@ class _Flows extends TaskFlowNotifier {
 Future<void> _open(WidgetTester tester, _Flows flows, String flowId) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [taskFlowListProvider.overrideWith((_) => flows)],
-    child: MaterialApp(home: TaskFlowBuilderPage(flowId: flowId)),
+    child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(flowId: flowId)),
   ));
   await tester.pumpAndSettle();
 }
@@ -168,7 +173,11 @@ void main() {
         ]);
     await tester.pumpWidget(ProviderScope(
       overrides: [taskFlowListProvider.overrideWith((_) => flows)],
-      child: MaterialApp(home: TaskFlowBuilderPage(initialDraft: draft)),
+      child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: TaskFlowBuilderPage(initialDraft: draft)),
     ));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'Template draft'), findsOneWidget);

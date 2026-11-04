@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/files_page.dart';
 import 'package:stroom/pages/files_page_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -10,8 +11,11 @@ import 'package:stroom/utils/text_manifest.dart';
 Widget _buildTestApp() {
   return const ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: FilesPage(),
       localizationsDelegates: [
+        AppLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],

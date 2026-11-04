@@ -13,6 +13,9 @@ Future<void> open(WidgetTester tester,
     bool settle = true}) async {
   final items = [file('a', 'alpha'), file('b', 'beta')];
   await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
           body: Builder(
               builder: (context) => TextButton(

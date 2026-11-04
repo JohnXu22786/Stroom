@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/files_page_shared.dart';
@@ -146,8 +147,11 @@ final fileManagerNavManifestBridge = ManifestBridge(
 /// MaterialApp + Scaffold.
 Widget _buildTestApp(Widget body) {
   return MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
     localizationsDelegates: const [
+      AppLocalizations.delegate,
       DefaultMaterialLocalizations.delegate,
       DefaultWidgetsLocalizations.delegate,
     ],
@@ -201,6 +205,8 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
         key: navKey,
         onGenerateRoute: (settings) {
@@ -211,6 +217,7 @@ Widget _buildFileManagerApp({
         },
       ),
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],
@@ -1122,6 +1129,8 @@ void main() {
       ManifestBridge? bridge,
     }) {
       return MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: FileManagerView<_TestFileRecord>(
             sortedRecords: [],
@@ -1152,6 +1161,7 @@ void main() {
           ),
         ),
         localizationsDelegates: const [
+          AppLocalizations.delegate,
           DefaultMaterialLocalizations.delegate,
           DefaultWidgetsLocalizations.delegate,
         ],
@@ -1314,6 +1324,8 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                 body: FileManagerView<_TestFileRecord>(
                   sortedRecords: [],
@@ -1343,6 +1355,7 @@ void main() {
                 ),
               ),
               localizationsDelegates: const [
+                AppLocalizations.delegate,
                 DefaultMaterialLocalizations.delegate,
                 DefaultWidgetsLocalizations.delegate,
               ],
@@ -2839,6 +2852,9 @@ void main() {
       VoidCallback? onTap,
     }) {
       return MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: FilePreviewChip(
             attachment: attachment,

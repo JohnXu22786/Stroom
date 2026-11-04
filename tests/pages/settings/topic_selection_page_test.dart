@@ -42,7 +42,12 @@ Widget createTestApp({
           (ref) => activeConversationId,
         ),
     ],
-    child: const MaterialApp(home: TopicSelectionPage()),
+    child: const MaterialApp(
+      locale: Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: TopicSelectionPage(),
+    ),
   );
 }
 
@@ -78,6 +83,9 @@ Widget createMergedTopicTestApp({
         ),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Navigator(
         initialRoute: '/topic-selection',
         onGenerateRoute: (settings) {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 
@@ -22,6 +23,9 @@ Future<void> _openBuilder(WidgetTester tester, _ControlledNotifier notifier,
   await tester.pumpWidget(ProviderScope(
     overrides: [taskFlowListProvider.overrideWith((ref) => notifier)],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Builder(builder: (context) {
         return Scaffold(
           body: TextButton(

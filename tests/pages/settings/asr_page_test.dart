@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 
@@ -33,8 +34,11 @@ Widget _buildTestApp({List<ProviderEntry>? entries}) {
   return ProviderScope(
     overrides: overrides,
     child: const MaterialApp(
+      locale: Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AsrPage(),
       localizationsDelegates: [
+        AppLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],

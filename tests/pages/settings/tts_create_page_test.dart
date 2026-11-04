@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/pages/tts_create_page.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -26,10 +27,13 @@ Widget _buildTestApp({List<ProviderEntry>? entries, SynthesisTask? retry}) {
   return ProviderScope(
     overrides: overrides,
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: retry != null
           ? TTSCreatePage(retryTask: retry)
           : const TTSCreatePage(),
       localizationsDelegates: [
+        AppLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],
@@ -163,8 +167,11 @@ void main() {
             providerEntriesProvider.overrideWith((ref) => notifier),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(retryTask: _retryTask()),
             localizationsDelegates: [
+              AppLocalizations.delegate,
               DefaultMaterialLocalizations.delegate,
               DefaultWidgetsLocalizations.delegate,
             ],
@@ -235,8 +242,11 @@ void main() {
             providerEntriesProvider.overrideWith((ref) => notifier),
           ],
           child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(),
             localizationsDelegates: [
+              AppLocalizations.delegate,
               DefaultMaterialLocalizations.delegate,
               DefaultWidgetsLocalizations.delegate,
             ],
@@ -325,8 +335,11 @@ void main() {
             taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(retryTask: retryTask),
             localizationsDelegates: [
+              AppLocalizations.delegate,
               DefaultMaterialLocalizations.delegate,
               DefaultWidgetsLocalizations.delegate,
             ],
@@ -347,8 +360,11 @@ void main() {
             taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
           ],
           child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: TTSCreatePage(initialFolder: '朗读合集'),
             localizationsDelegates: [
+              AppLocalizations.delegate,
               DefaultMaterialLocalizations.delegate,
               DefaultWidgetsLocalizations.delegate,
             ],

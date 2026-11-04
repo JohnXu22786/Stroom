@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
@@ -337,6 +338,9 @@ void main() {
         config: buildMarkdownConfig(isDark: false),
       );
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(body: Column(children: widgets)),
       ));
 
@@ -398,6 +402,9 @@ void main() {
         MarkdownConfig.defaultConfig,
       );
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(body: Text.rich(node.build())),
       ));
 
@@ -437,6 +444,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -462,6 +472,9 @@ void main() {
       final span = node.build() as WidgetSpan;
       final child = (span.child as Container).child!;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [WidgetSpan(child: child)])),
@@ -486,6 +499,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -512,6 +528,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -570,6 +589,9 @@ void main() {
       final config = MarkdownConfig.defaultConfig;
 
       Widget richTextWith(WidgetSpan span) => MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: Center(
                 child: KeyedSubtree(
@@ -604,6 +626,9 @@ void main() {
       // linearly with fontSize, so the block formula (20.8px) is exactly
       // 1.3x this height.
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(child: inlineMath),
         ),
@@ -2174,6 +2199,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2190,6 +2218,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2283,6 +2314,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2312,6 +2346,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),

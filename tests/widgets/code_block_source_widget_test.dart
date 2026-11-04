@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 
 import '../fake_file_picker.dart';
@@ -21,6 +22,9 @@ void main() {
   }) {
     return tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: CodeBlockSourceView(code: code, language: language),
         ),
@@ -33,6 +37,9 @@ void main() {
       const code = 'print("hello")';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
@@ -45,6 +52,9 @@ void main() {
       const code = 'line1\nline2\nline3';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
@@ -59,6 +69,9 @@ void main() {
       const code = 'single line';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
@@ -72,6 +85,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
@@ -90,6 +106,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'line1\nline2')),
         ),
       );
@@ -118,6 +137,9 @@ void main() {
     testWidgets('shows (empty) for empty code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: '')),
         ),
       );
@@ -132,6 +154,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
@@ -177,6 +202,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
@@ -226,6 +254,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(
               code: 'test',
@@ -256,6 +287,9 @@ void main() {
       const code = 'line1\nline2\n';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
@@ -277,6 +311,9 @@ void main() {
     }) {
       return tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               width: 200,
@@ -383,6 +420,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(code: 'print("hi")', language: 'python'),
           ),
@@ -398,6 +438,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'plain block')),
         ),
       );
@@ -417,6 +460,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(code: '', language: 'python'),
           ),
@@ -436,6 +482,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'l1\nl2\nl3')),
         ),
       );
@@ -461,6 +510,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: CodeBlockSourceView(code: 'l1\nl2\nl3')),
         ),
       );
@@ -549,6 +601,9 @@ void main() {
       const code = 'aaaa\nbbbb\ncccc\ndddd';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
@@ -605,6 +660,9 @@ void main() {
       final code = '${'x' * lineLength!}\nshort';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
@@ -629,6 +687,9 @@ void main() {
       const code = 'line1\nline2\nline3';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
@@ -669,6 +730,9 @@ void main() {
       final code = List.generate(50, (i) => 'line $i').join('\n');
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
@@ -701,6 +765,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: CodeBlockSourceView(code: 'one line'),
@@ -731,6 +798,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: CodeBlockSourceView(code: 'short code', height: 200),
@@ -777,6 +847,9 @@ void main() {
     }) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Center(
               child: SizedBox(
@@ -1624,7 +1697,11 @@ void main() {
 
       // Unmount the code block while the dialog is still "open".
       await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: SizedBox())),
+        const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(body: SizedBox())),
       );
       completer.complete(Uri.file('C:/docs/code.txt'));
       await tester.pump();
