@@ -604,6 +604,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isClaude = account.connectorType == 'claude';
       final isDevin = account.connectorType == 'devin';
       final isQoder = account.connectorType == 'qoder';
+      final isGitLabDuo = account.connectorType == 'gitlab-duo';
       final isOpenference = account.connectorType == 'openference';
       final isCline = account.connectorType == 'cline' ||
           account.connectorType == 'clinepass';
@@ -612,6 +613,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           !isClaude &&
           !isDevin &&
           !isQoder &&
+          !isGitLabDuo &&
           !isOpenference &&
           !isCline) {
         throw const AiGatewayOAuthException();
@@ -632,15 +634,19 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
                   ? '/callback'
                   : isClaude || isDevin
                       ? '/callback'
-                      : '/auth/callback';
+                      : isGitLabDuo
+                          ? '/callback'
+                          : '/auth/callback';
       listener = await LlmOAuthLoopback.bind(
         callbackPath,
-        host: isClaude ? 'localhost' : '127.0.0.1',
+        host: isClaude || isGitLabDuo ? 'localhost' : '127.0.0.1',
         port: isClaude
             ? 54545
             : isOpenference
                 ? 56123
-                : 0,
+                : isGitLabDuo
+                    ? 20128
+                    : 0,
       );
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
@@ -650,6 +656,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
               isClaude ||
               isDevin ||
               isQoder ||
+              isGitLabDuo ||
               isOpenference ||
               isCline
           ? await _existingOAuthBundle(account)
@@ -691,6 +698,15 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           redirectUri: listener.redirectUri,
           authorizeUrl: authorizeUrl,
           clientId: clientId,
+        );
+      } else if (isGitLabDuo) {
+        attempt = LlmOAuthAuthorizationAttempt.gitlabDuo(
+          redirectUri: listener.redirectUri,
+          baseUrl: account.endpointConfig['baseUrl'] as String? ?? '',
+          clientId: configuration['clientId'] ??
+              previousBundle?['client_id'] as String? ??
+              account.endpointConfig['clientId'] as String? ??
+              '',
         );
       } else if (isOpenference) {
         attempt = LlmOAuthAuthorizationAttempt.openference(
@@ -763,6 +779,16 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           attempt: attempt,
           callback: callback,
           configuration: qoderConfiguration,
+        );
+      } else if (isGitLabDuo) {
+        final baseUrl = account.endpointConfig['baseUrl'] as String? ?? '';
+        tokenBundle = await _tokenClient.exchangeGitLabDuoCode(
+          attempt: attempt,
+          callback: callback,
+          baseUrl: baseUrl,
+          clientSecret: configuration['clientSecret'] ??
+              previousBundle?['client_secret'] as String? ??
+              '',
         );
       } else if (isOpenference) {
         tokenBundle = await _tokenClient.exchangeOpenferenceCode(

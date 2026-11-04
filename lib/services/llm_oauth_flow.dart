@@ -82,6 +82,10 @@ class LlmOAuthProviderPolicy {
       providerId: 'ghe-copilot',
       supported: true,
     ),
+    'gitlab-duo': LlmOAuthProviderPolicy._(
+      providerId: 'gitlab-duo',
+      supported: true,
+    ),
     'kimi': LlmOAuthProviderPolicy._(
       providerId: 'kimi',
       supported: false,
@@ -728,6 +732,67 @@ class LlmOAuthAuthorizationAttempt {
       isOpenAiRegistration: false,
       isQoder: true,
     );
+  }
+
+  /// GitLab Duo requires a separately registered PKCE OAuth application.
+  factory LlmOAuthAuthorizationAttempt.gitlabDuo({
+    required Uri redirectUri,
+    required String baseUrl,
+    required String clientId,
+  }) {
+    _validateLoopbackRedirect(
+      redirectUri,
+      '/callback',
+      host: 'localhost',
+      port: 20128,
+    );
+    if (redirectUri.port != 20128 || redirectUri.host != 'localhost') {
+      throw const LlmOAuthFlowException();
+    }
+    final client = clientId.trim();
+    final root = validateGitLabDuoBaseUrl(baseUrl);
+    if (client.isEmpty) throw const LlmOAuthFlowException();
+    final state = _secureValue();
+    final verifier = _secureValue();
+    final challenge = base64Url
+        .encode(sha256.convert(utf8.encode(verifier)).bytes)
+        .replaceAll('=', '');
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: root.resolve('/oauth/authorize').replace(
+        queryParameters: {
+          'client_id': client,
+          'redirect_uri': redirectUri.toString(),
+          'response_type': 'code',
+          'state': state,
+          'scope': 'ai_features read_user',
+          'code_challenge': challenge,
+          'code_challenge_method': 'S256',
+        },
+      ),
+      state: state,
+      nonce: '',
+      codeVerifier: verifier,
+      existingClientId: client,
+      isOpenAiRegistration: false,
+    );
+  }
+
+  static Uri validateGitLabDuoBaseUrl(String raw) {
+    final value = raw.trim().replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse(value.isEmpty ? 'https://gitlab.com' : value);
+    final host = uri?.host.toLowerCase() ?? '';
+    final isLoopback =
+        host == 'localhost' || host == '127.0.0.1' || host == '::1';
+    if (uri == null ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        !(uri.scheme == 'https' || (uri.scheme == 'http' && isLoopback))) {
+      throw const LlmOAuthFlowException();
+    }
+    return uri;
   }
 
   /// Qoder OAuth endpoints are operator supplied; reject insecure or

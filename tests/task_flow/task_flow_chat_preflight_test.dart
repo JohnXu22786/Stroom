@@ -136,6 +136,69 @@ void main() {
   );
 
   test(
+    'GitLab Duo model group resolves through chat protocol in Task Flow',
+    () async {
+      final account = LlmAccount(
+        id: 'gitlab-duo-pat',
+        connectorType: 'gitlab-duo',
+        authType: 'pat',
+        displayName: 'GitLab Duo',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'gitlab-sonnet-local',
+            upstreamModelId: 'claude-sonnet-4-6',
+            displayName: 'Claude Sonnet 4.6 (GitLab Duo)',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'gitlab-duo-task-flow-group',
+        displayName: 'GitLab Duo group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'gitlab-duo-pat',
+            localModelId: 'gitlab-sonnet-local',
+            upstreamModelId: 'claude-sonnet-4-6',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'GitLab Duo assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(
+        flowChatEndpointType(assistant, providers),
+        'openai.chat_completions',
+      );
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
+  test(
     'Codex model group resolves as Responses during Task Flow preflight',
     () async {
       final account = LlmAccount(

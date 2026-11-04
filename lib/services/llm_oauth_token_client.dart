@@ -1067,6 +1067,62 @@ class LlmOAuthTokenClient {
     }
   }
 
+  Future<Map<String, dynamic>> exchangeGitLabDuoCode({
+    required LlmOAuthAuthorizationAttempt attempt,
+    required LlmOAuthCallbackResult callback,
+    required String baseUrl,
+    required String clientSecret,
+  }) async {
+    final clientId = attempt.existingClientId;
+    if (clientId == null || clientId.trim().isEmpty) {
+      throw const LlmOAuthFlowException();
+    }
+    final root = LlmOAuthAuthorizationAttempt.validateGitLabDuoBaseUrl(baseUrl);
+    final response = await _dio.postUri<Object?>(
+      root.resolve('/oauth/token'),
+      data: {
+        'client_id': clientId,
+        if (clientSecret.trim().isNotEmpty)
+          'client_secret': clientSecret.trim(),
+        'code': callback.code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': attempt.redirectUri.toString(),
+        'code_verifier': attempt.codeVerifier,
+      },
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.json,
+        headers: const {'Accept': 'application/json'},
+      ),
+    );
+    final token = response.data is Map
+        ? Map<String, dynamic>.from(response.data as Map)
+        : null;
+    final accessToken = _nonEmptyString(token?['access_token']);
+    final refreshToken = _nonEmptyString(token?['refresh_token']);
+    if (accessToken == null) throw const LlmOAuthFlowException();
+    final expiresIn = token?['expires_in'];
+    final expiresAt = expiresIn is num && expiresIn > 0
+        ? DateTime.now()
+            .toUtc()
+            .add(Duration(seconds: expiresIn.toInt()))
+            .toIso8601String()
+        : null;
+    return {
+      'oauth_contract': 'gitlab-duo-pkce-v1',
+      'access_token': accessToken,
+      ...?_optionalStringField('refresh_token', refreshToken),
+      if (expiresIn is num && expiresIn > 0) 'expires_in': expiresIn,
+      ...?_optionalStringField('expires_at', expiresAt),
+      'client_id': clientId,
+      ...?_optionalStringField(
+        'client_secret',
+        clientSecret.trim().isEmpty ? null : clientSecret.trim(),
+      ),
+      'base_url': root.toString(),
+    };
+  }
+
   /// Completes Devin's source-pinned PKCE exchange and verifies both the
   /// account profile and seat plan before the caller persists the credential.
   Future<Map<String, dynamic>> exchangeDevinCode({

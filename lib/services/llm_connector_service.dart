@@ -338,6 +338,14 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'gitlab-duo',
+      displayName: 'GitLab Duo',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'pat', 'oauth'},
+      modelCatalog: kPinnedGitLabDuoModels,
+      canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
       id: 'codex',
       displayName: 'OpenAI Codex',
       protocol: LlmNativeProtocol.openAIResponses,
@@ -714,6 +722,7 @@ abstract final class LlmConnectorRegistry {
         'workbuddy' ||
         'github' ||
         'ghe-copilot' ||
+        'gitlab-duo' ||
         'qoder' ||
         'kilocode' =>
           'openai',
@@ -2574,6 +2583,28 @@ class LlmAccountConnectorService {
           },
           contentType: formContentType,
         );
+      case 'gitlab-duo':
+        final clientId = _firstString(bundle, const ['client_id', 'clientId']);
+        final configuredBase = account.endpointConfig['baseUrl'];
+        final baseUrl = _firstString(bundle, const ['base_url']) ??
+            (configuredBase is String && configuredBase.trim().isNotEmpty
+                ? configuredBase.trim()
+                : 'https://gitlab.com');
+        final root = LlmOAuthAuthorizationAttempt.validateGitLabDuoBaseUrl(
+          baseUrl,
+        );
+        final clientSecret = _firstString(bundle, const ['client_secret']);
+        if (clientId == null) return null;
+        return _LlmTokenRefreshRequest(
+          uri: root.resolve('/oauth/token'),
+          body: {
+            'client_id': clientId,
+            ...?(clientSecret == null ? null : {'client_secret': clientSecret}),
+            'grant_type': 'refresh_token',
+            'refresh_token': refreshToken,
+          },
+          contentType: formContentType,
+        );
       case 'cline' || 'clinepass':
         return _LlmTokenRefreshRequest(
           uri: Uri.parse('https://api.cline.bot/api/v1/auth/refresh'),
@@ -2856,6 +2887,26 @@ class LlmAccountConnectorService {
     LlmAccount account,
   ) async {
     _validateSafeConfig(account.endpointConfig);
+    if (account.connectorType == 'gitlab-duo') {
+      return [
+        for (final modelId in kPinnedGitLabDuoModels)
+          LlmUpstreamModel(
+            id: '${account.id}:$modelId',
+            upstreamModelId: modelId,
+            displayName: switch (modelId) {
+              'claude-sonnet-4-6' => 'Claude Sonnet 4.6 (GitLab Duo)',
+              'claude-haiku-4-5' => 'Claude Haiku 4.5 (GitLab Duo)',
+              _ => modelId,
+            },
+            capabilities: const {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+            config: const {'catalogSource': 'pinned-provider-catalog'},
+          ),
+      ];
+    }
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
@@ -4439,6 +4490,20 @@ class LlmAccountConnectorService {
         account.endpointConfig.containsKey('baseUrl')) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'gitlab-duo' && account.authType == 'oauth') {
+      final clientId = account.endpointConfig['clientId'];
+      final baseUrl = account.endpointConfig['baseUrl'];
+      if (clientId is! String || clientId.trim().isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        LlmOAuthAuthorizationAttempt.validateGitLabDuoBaseUrl(
+          baseUrl is String ? baseUrl : '',
+        );
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+    }
     _validateSafeConfig(account.endpointConfig);
     if (account.connectorType == 'bedrock') {
       final region = account.endpointConfig['region'];
@@ -4720,6 +4785,11 @@ class LlmNativeRequestBuilder {
         ((account.connectorType == 'cline' ||
                 account.connectorType == 'clinepass') &&
             nativeFormat != null) ||
+        (account.connectorType == 'gitlab-duo' &&
+            nativeFormat != null &&
+            nativeFormat != 'openai.chat_completions') ||
+        (account.connectorType == 'gitlab-duo' &&
+            !kPinnedGitLabDuoModels.contains(modelId)) ||
         (account.connectorType == 'qoder' && account.authType == 'pat') ||
         (stream &&
             account.connectorType == 'devin' &&
@@ -4839,6 +4909,9 @@ class LlmNativeRequestBuilder {
       nativeFormat: nativeFormat,
     );
     switch (account.connectorType) {
+      case 'gitlab-duo':
+        headers['Authorization'] = 'Bearer $secret';
+        break;
       case 'kimi-coding':
         final deviceId = _credentialBundleString(credential, const [
           'device_id',
@@ -5129,6 +5202,64 @@ class LlmNativeRequestBuilder {
     required bool stream,
     required String? nativeFormat,
   }) {
+    if (account.connectorType == 'gitlab-duo') {
+      if (body is! Map || body['messages'] is! Iterable) {
+        throw const LlmAccountConnectorException();
+      }
+      final tools = body['tools'];
+      if (tools is Iterable && tools.isNotEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final systemParts = <String>[];
+      final userParts = <String>[];
+      for (final rawMessage in body['messages'] as Iterable) {
+        if (rawMessage is! Map) continue;
+        final role = rawMessage['role']?.toString().toLowerCase();
+        if (role == 'tool' ||
+            (role == 'assistant' &&
+                rawMessage['tool_calls'] is Iterable &&
+                (rawMessage['tool_calls'] as Iterable).isNotEmpty)) {
+          throw const LlmAccountConnectorException();
+        }
+        final rawContent = rawMessage['content'];
+        final content = switch (rawContent) {
+          String value => value,
+          Iterable values => values.map((part) {
+              if (part is! Map ||
+                  !const {'text', 'input_text'}.contains(part['type']) ||
+                  part['text'] is! String) {
+                throw const LlmAccountConnectorException();
+              }
+              return part['text'] as String;
+            }).join('\n'),
+          null => '',
+          _ => throw const LlmAccountConnectorException(),
+        };
+        if (content.trim().isEmpty) continue;
+        if (role == 'system' || role == 'developer') {
+          systemParts.add(content.trim());
+        } else if (role == 'user') {
+          userParts.add(content.trim());
+        }
+      }
+      final userPrompt = userParts.isEmpty ? '' : userParts.last;
+      final prompt = systemParts.isEmpty
+          ? userPrompt
+          : 'System instructions:\n${systemParts.join('\n\n')}\n\n$userPrompt'
+              .trim();
+      if (prompt.isEmpty) throw const LlmAccountConnectorException();
+      return {
+        'current_file': {
+          'file_name': 'snippet.txt',
+          'content_above_cursor': prompt,
+          'content_below_cursor': '',
+        },
+        'intent': 'generation',
+        'generation_type': 'small_file',
+        'stream': false,
+        'user_instruction': prompt,
+      };
+    }
     if ({
       'codebuddy-cn',
       'codebuddy-intl',
@@ -5299,8 +5430,13 @@ class LlmNativeRequestBuilder {
         credential.trim().startsWith('dca:')) {
       throw const LlmAccountConnectorException();
     }
+    if (account.authType == 'pat' &&
+        !{'qoder', 'gitlab-duo'}.contains(account.connectorType)) {
+      throw const LlmAccountConnectorException();
+    }
     if (account.authType != 'api_key' &&
         account.authType != 'oauth' &&
+        account.authType != 'pat' &&
         account.authType != 'session_token' &&
         account.authType != 'setup_token') {
       throw const LlmAccountConnectorException();
@@ -5454,6 +5590,9 @@ class LlmNativeRequestBuilder {
             config['legacyOcrFullEndpoint'] == true &&
             nativeFormat == null;
     switch (account.connectorType) {
+      case 'gitlab-duo':
+        baseUrl = _baseUrl(config, 'https://gitlab.com');
+        path = '/api/v4/code_suggestions/completions';
       case 'codex':
         baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
         path = '/responses';
@@ -5867,7 +6006,10 @@ class LlmNativeRequestBuilder {
   }
 
   static void _validateProviderBaseUrl(LlmAccount account, Uri base) {
-    if (account.connectorType == 'openai-compatibility') return;
+    if (account.connectorType == 'openai-compatibility' ||
+        account.connectorType == 'gitlab-duo') {
+      return;
+    }
     final host = base.host.toLowerCase();
     final hasCustomBaseUrl =
         _configString(account.endpointConfig, 'baseUrl') != null;
