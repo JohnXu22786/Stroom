@@ -10,6 +10,7 @@ import 'dart:convert';
 
 import 'ai_gateway_contracts.dart';
 import '../models/stroom_conversation.dart';
+import '../services/amazon_q_connector.dart';
 
 /// Built-in protocol mappings. Gemini Interactions is provider-specific and
 /// remains separate from the four general chat contracts.
@@ -20,6 +21,7 @@ abstract final class AiGatewayProtocolBridges {
   static const geminiGenerateContent = _GeminiGenerateContentBridge();
   static const geminiInteractions = _GeminiInteractionsBridge();
   static const ollamaChat = _OllamaChatBridge();
+  static const amazonQChat = _AmazonQChatBridge();
 
   static AiGatewayProtocolBridge<Map<String, dynamic>>? forProtocol(
     String protocolId,
@@ -31,6 +33,7 @@ abstract final class AiGatewayProtocolBridges {
         'google.gemini.generate_content' => geminiGenerateContent,
         'google.gemini.interactions' => geminiInteractions,
         'ollama.chat' => ollamaChat,
+        'amazon-q.chat' => amazonQChat,
         _ => null,
       };
 
@@ -99,6 +102,9 @@ abstract final class AiGatewayProtocolStreamBridge {
     Map<String, dynamic> event, {
     AiGatewayProtocolStreamState? state,
   }) {
+    if (protocolId == 'amazon-q.chat') {
+      return mapEvents('openai.chat_completions', event, state: state);
+    }
     final eventType = protocolId == 'google.gemini.interactions'
         ? event['event_type'] ?? event['type']
         : event['type'];
@@ -147,11 +153,16 @@ abstract final class AiGatewayProtocolStreamBridge {
             ),
           );
         }
-        if (delta['reasoning_content'] is String) {
+        final reasoningContent = delta['reasoning_content'];
+        final reasoningSignature = _stringValue(
+          delta['stroom.reasoningSignature'],
+        );
+        if (reasoningContent is String || reasoningSignature != null) {
           mapped.add(
             create(
               AiGatewayProtocolStreamEventKind.reasoningDelta,
-              delta: delta['reasoning_content'] as String,
+              delta: reasoningContent is String ? reasoningContent : null,
+              thoughtSignature: reasoningSignature,
             ),
           );
         }
@@ -657,6 +668,8 @@ class AiGatewayProtocolRequest {
   final double? temperature;
   final Map<String, dynamic> options;
   final String? previousInteractionId;
+  final String? conversationId;
+  final String? accountId;
 
   AiGatewayProtocolRequest({
     required this.modelId,
@@ -669,6 +682,8 @@ class AiGatewayProtocolRequest {
     this.temperature,
     Map<String, dynamic> options = const {},
     this.previousInteractionId,
+    this.conversationId,
+    this.accountId,
   })  : messages = List.unmodifiable(messages),
         tools = List.unmodifiable(tools),
         options = Map.unmodifiable(options);
@@ -1088,11 +1103,7 @@ abstract base class _MapBridge
             'Gemini Interactions image data URL contains invalid base64.',
           );
         }
-        return {
-          'type': 'image',
-          'data': data,
-          'mime_type': mimeType,
-        };
+        return {'type': 'image', 'data': data, 'mime_type': mimeType};
       }
       final uri = Uri.tryParse(reference);
       if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
@@ -1113,11 +1124,7 @@ abstract base class _MapBridge
           'Gemini Interactions image data contains invalid base64.',
         );
       }
-      return {
-        'type': 'image',
-        'data': nativeData,
-        'mime_type': nativeMimeType,
-      };
+      return {'type': 'image', 'data': nativeData, 'mime_type': nativeMimeType};
     }
     throw UnsupportedError(
       'Gemini Interactions requires an image data URL or HTTPS reference.',
@@ -2009,11 +2016,7 @@ final class _AnthropicMessagesBridge extends _MapBridge {
         }
         return {
           'type': 'document',
-          'source': {
-            'type': 'base64',
-            'media_type': mimeType,
-            'data': data,
-          },
+          'source': {'type': 'base64', 'media_type': mimeType, 'data': data},
           'title': fileName,
         };
       }
@@ -2374,10 +2377,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         }
         return _overlayVideoMetadata(
           _overlaySource(targetSource, {
-            'inlineData': {
-              'mimeType': mimeType,
-              'data': data,
-            },
+            'inlineData': {'mimeType': mimeType, 'data': data},
           }),
           part,
         );
@@ -2433,7 +2433,8 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
               encoded.isEmpty ||
               !_isValidGeminiBase64(encoded))) {
         throw UnsupportedError(
-            'Gemini audio data URL contains invalid base64.');
+          'Gemini audio data URL contains invalid base64.',
+        );
       }
       final format = _string(audio['format']).toLowerCase();
       final mimeType = dataUri?.group(1) ??
@@ -2461,10 +2462,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
         );
       }
       return {
-        'inlineData': {
-          'mimeType': mimeType,
-          'data': encoded ?? rawData,
-        },
+        'inlineData': {'mimeType': mimeType, 'data': encoded ?? rawData},
       };
     }
 
@@ -2505,7 +2503,8 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
             encodedData.isEmpty ||
             !_isValidGeminiBase64(encodedData))) {
       throw UnsupportedError(
-          'Gemini ${part.type} data URL contains invalid base64.');
+        'Gemini ${part.type} data URL contains invalid base64.',
+      );
     }
     if (mimeType != null && !_geminiMimeMatches(part.type, mimeType)) {
       throw UnsupportedError(
@@ -2560,10 +2559,7 @@ final class _GeminiGenerateContentBridge extends _MapBridge {
           );
         }
         return {
-          'inlineData': {
-            'mimeType': dataMime,
-            'data': encodedData,
-          },
+          'inlineData': {'mimeType': dataMime, 'data': encodedData},
         };
       }
       final uri = Uri.tryParse(uriValue);
@@ -2844,6 +2840,64 @@ final class _OllamaChatBridge extends _MapBridge {
     }
     throw UnsupportedError(
       'Ollama image inputs must be base64 or an image data URL.',
+    );
+  }
+}
+
+final class _AmazonQChatBridge extends _MapBridge {
+  const _AmazonQChatBridge();
+
+  @override
+  String get protocolId => 'amazon-q.chat';
+
+  @override
+  Map<String, dynamic> _encodeNeutral(StroomMessage message) =>
+      AiGatewayProtocolBridges.openAiChatCompletions.fromStroom(message);
+
+  @override
+  StroomMessage toStroom(Map<String, dynamic> message) =>
+      AiGatewayProtocolBridges.openAiChatCompletions.toStroom(message);
+
+  @override
+  AiGatewayEncodedProtocolRequest buildRequest(
+    AiGatewayProtocolRequest request,
+  ) {
+    if (request.operation != 'generate') {
+      throw ArgumentError.value(request.operation, 'operation');
+    }
+    final messages = <Map<String, dynamic>>[];
+    for (final sourceMessage in request.messages) {
+      final encodedMessages = AiGatewayProtocolBridges.openAiChatCompletions
+          .encodeMessages([sourceMessage]);
+      for (final encoded in encodedMessages) {
+        if (encoded['role'] == 'tool') {
+          final toolCallId = encoded['tool_call_id'];
+          final result = sourceMessage.content.where(
+            (part) =>
+                part.type == 'tool_result' &&
+                part.data['toolCallId'] == toolCallId,
+          );
+          if (result.isNotEmpty && result.first.data['isError'] == true) {
+            encoded['is_error'] = true;
+          }
+        }
+        messages.add(encoded);
+      }
+    }
+    return AiGatewayEncodedProtocolRequest(
+      path: '/generateAssistantResponse',
+      body: AmazonQConnector.buildChatRequest(
+        modelId: request.modelId,
+        accountId: request.accountId ?? '',
+        conversationId: request.conversationId,
+        messages: messages,
+        tools: request.tools,
+        system: request.system,
+        maxOutputTokens: request.maxOutputTokens,
+        temperature: request.temperature,
+        options: request.options,
+      ),
+      streams: request.stream,
     );
   }
 }

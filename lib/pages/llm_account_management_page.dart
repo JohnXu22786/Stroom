@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -9,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
+import '../services/amazon_q_connector.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
 import '../services/llm_oauth_flow.dart';
@@ -1859,7 +1861,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             : null;
     _region = TextEditingController(
       text: region ??
-          (account?.connectorType == 'bedrock'
+          (account?.connectorType == 'bedrock' ||
+                  account?.connectorType == 'amazon-q'
               ? 'us-east-1'
               : account?.connectorType == 'vertex'
                   ? 'us-central1'
@@ -2468,6 +2471,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),
+              if (_connectorType == 'amazon-q' && _authType == 'oauth') ...[
+                const SizedBox(height: 8),
+                const Text(
+                  '导入 AWS Builder ID OAuth 凭据 JSON，必须包含 refresh_token；也可提供 access_token、clientId 和 clientSecret。缺少客户端凭据时，Stroom 会通过 AWS OIDC 注册客户端后刷新令牌。令牌直接写入安全存储；Stroom 不读取浏览器 Cookie。仅支持 us-east-1 与 eu-central-1。',
+                ),
+                TextField(
+                  controller: _region,
+                  decoration: const InputDecoration(
+                    labelText: 'Amazon Q Developer 区域',
+                    hintText: 'us-east-1',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               if (_connectorType == 'bedrock' ||
                   _connectorType == 'vertex') ...[
                 const SizedBox(height: 8),
@@ -2518,46 +2535,49 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _authType != 'aws_credential_chain',
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: _authType == 'none' ||
-                            _authType == 'relay' ||
-                            _authType == 'cli_session' ||
-                            _authType == 'aws_credential_chain'
-                        ? '该认证方式无需输入凭据'
-                        : _connectorType == 'bedrock' &&
-                                _authType == 'aws_credentials'
-                            ? 'AWS 凭据 JSON'
+                    labelText: _connectorType == 'amazon-q' &&
+                            _authType == 'oauth'
+                        ? 'AWS Builder ID OAuth 凭据 JSON'
+                        : _authType == 'none' ||
+                                _authType == 'relay' ||
+                                _authType == 'cli_session' ||
+                                _authType == 'aws_credential_chain'
+                            ? '该认证方式无需输入凭据'
                             : _connectorType == 'bedrock' &&
-                                    _authType == 'api_key'
-                                ? 'Amazon Bedrock API Key'
-                                : _connectorType == 'vertex' &&
-                                        _authType == 'service_account'
-                                    ? '服务账号 JSON'
-                                    : _authType == 'setup_token'
-                                        ? 'Claude Setup Token'
-                                        : _authType == 'api_key'
-                                            ? switch (_connectorType) {
-                                                'aihorde' =>
-                                                  'AI Horde API Key（可选优先级）',
-                                                'glm-cn' =>
-                                                  'GLM Coding (China) API Key',
-                                                'minimax-cn' =>
-                                                  'MiniMax (China) API Key',
-                                                'opencode-go' =>
-                                                  'OpenCode Go API Key',
-                                                'opencode-zen' =>
-                                                  'OpenCode Zen API Key',
-                                                'qwen-cloud' =>
-                                                  'Qwen Cloud API Key',
-                                                'qwen-cloud-token-plan' =>
-                                                  'Qwen Cloud Token Plan API Key',
-                                                _ => '凭据',
-                                              }
-                                            : _connectorType == 'qoder' &&
-                                                    _authType == 'pat'
-                                                ? 'Qoder PAT（pt-…）'
-                                                : _connectorType == 'trae'
-                                                    ? 'Trae Cloud-IDE-JWT'
-                                                    : '凭据',
+                                    _authType == 'aws_credentials'
+                                ? 'AWS 凭据 JSON'
+                                : _connectorType == 'bedrock' &&
+                                        _authType == 'api_key'
+                                    ? 'Amazon Bedrock API Key'
+                                    : _connectorType == 'vertex' &&
+                                            _authType == 'service_account'
+                                        ? '服务账号 JSON'
+                                        : _authType == 'setup_token'
+                                            ? 'Claude Setup Token'
+                                            : _authType == 'api_key'
+                                                ? switch (_connectorType) {
+                                                    'aihorde' =>
+                                                      'AI Horde API Key（可选优先级）',
+                                                    'glm-cn' =>
+                                                      'GLM Coding (China) API Key',
+                                                    'minimax-cn' =>
+                                                      'MiniMax (China) API Key',
+                                                    'opencode-go' =>
+                                                      'OpenCode Go API Key',
+                                                    'opencode-zen' =>
+                                                      'OpenCode Zen API Key',
+                                                    'qwen-cloud' =>
+                                                      'Qwen Cloud API Key',
+                                                    'qwen-cloud-token-plan' =>
+                                                      'Qwen Cloud Token Plan API Key',
+                                                    _ => '凭据',
+                                                  }
+                                                : _connectorType == 'qoder' &&
+                                                        _authType == 'pat'
+                                                    ? 'Qoder PAT（pt-…）'
+                                                    : _connectorType == 'trae'
+                                                        ? 'Trae Cloud-IDE-JWT'
+                                                        : '凭据',
                     helperText: _connectorType == 'trae'
                         ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
                         : _connectorType == 'aihorde' && _authType == 'api_key'
@@ -3239,12 +3259,38 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           const AiGatewayMetricObservation.unknown(),
       quotaSignals: widget.account?.quotaSignals ?? const {},
     );
-    final secret = _authType == 'none' ||
+    var secret = _authType == 'none' ||
             _authType == 'relay' ||
             _authType == 'aws_credential_chain'
         ? ''
         : _credential.text.trim();
+    if (_connectorType == 'amazon-q' && _authType == 'oauth') {
+      final region = _region.text.trim().toLowerCase();
+      final retainingExistingCredential = secret.isEmpty &&
+          widget.hasCredential &&
+          !credentialIdentityChanged &&
+          widget.account?.connectorType == 'amazon-q' &&
+          widget.account?.authType == 'oauth';
+      if (!retainingExistingCredential) {
+        try {
+          secret = jsonEncode(AmazonQConnector.parseCredentialImport(secret));
+        } catch (_) {
+          setState(
+            () => _error =
+                '请输入包含 AWS Builder ID refresh token 的 Amazon Q 凭据 JSON。',
+          );
+          return;
+        }
+      }
+      if (!const {'us-east-1', 'eu-central-1'}.contains(region) ||
+          (!retainingExistingCredential && secret.isEmpty)) {
+        setState(() => _error = '请输入有效的 Amazon Q OAuth 凭据 JSON 和受支持区域。');
+        return;
+      }
+      endpointConfig['region'] = region;
+    }
     final requiresOAuthAuthorization = _authType == 'oauth' &&
+        _connectorType != 'amazon-q' &&
         (widget.account == null || reconnectOAuth || credentialIdentityChanged);
     final oauthConfiguration = <String, String>{
       if (_oauthClientId.text.trim().isNotEmpty)

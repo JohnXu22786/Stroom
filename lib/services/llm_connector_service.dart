@@ -24,6 +24,7 @@ import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
+import 'amazon_q_connector.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -69,6 +70,22 @@ const _qwenCloudRegions = {
   'ap-northeast-1',
   'us-east-1',
 };
+
+String _amazonQRegion(LlmAccount account, Map<String, dynamic> credential) {
+  final configured = account.endpointConfig['region'];
+  final credentialRegion =
+      credential['region'] ?? credential['regionId'] ?? credential['region_id'];
+  final value = configured is String && configured.trim().isNotEmpty
+      ? configured
+      : credentialRegion is String && credentialRegion.trim().isNotEmpty
+          ? credentialRegion
+          : 'us-east-1';
+  final region = value.trim().toLowerCase();
+  if (!AmazonQConnector.isSupportedRegion(region)) {
+    throw const LlmAccountConnectorException();
+  }
+  return region;
+}
 
 void _addTencentClientHeaders(
   String connectorType,
@@ -266,6 +283,7 @@ enum LlmNativeProtocol {
   kiloCodeChatCompletions,
   ollamaChat,
   bedrockConverse,
+  amazonQChat,
 }
 
 enum LlmQuotaAvailability { accountQuota, requestUsageOnly, unknown }
@@ -324,6 +342,13 @@ abstract final class LlmConnectorRegistry {
       ).hasMatch(modelId);
 
   static const List<LlmConnectorDefinition> all = [
+    LlmConnectorDefinition(
+      id: 'amazon-q',
+      displayName: 'Amazon Q Developer',
+      protocol: LlmNativeProtocol.amazonQChat,
+      authTypes: {'oauth'},
+      canRefreshCredentials: true,
+    ),
     LlmConnectorDefinition(
       id: 'github',
       displayName: 'GitHub Copilot',
@@ -730,6 +755,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
+        'amazon-q' => 'amazon-q.chat',
         'xai' ||
         'grok-cli' ||
         'xai-oauth' ||
@@ -1567,6 +1593,64 @@ class LlmAccountConnectorService {
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'amazon-q') {
+      if (account.authType != 'oauth' || account.credentialRef == null) {
+        throw const LlmAccountConnectorException();
+      }
+      final rawSecret = await _readSecureValue(account.credentialRef!);
+      if (rawSecret == null || rawSecret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final credential = _decodeCredentialBundle(rawSecret);
+      var token = _firstString(credential, const [
+        'access_token',
+        'accessToken',
+      ]);
+      if (token == null && await refreshCredential(account)) {
+        final refreshed = await readCredential(account.id);
+        token = _firstString(_decodeCredentialBundle(refreshed ?? ''), const [
+          'access_token',
+          'accessToken',
+        ]);
+      }
+      if (token == null) throw const LlmAccountConnectorException();
+      final region = _amazonQRegion(account, credential);
+      Future<Response<Object?>> fetchModels() => _dio.getUri<Object?>(
+            AmazonQConnector.modelsUri(region),
+            options: Options(
+              headers: {'Authorization': 'Bearer $token'},
+              followRedirects: false,
+              validateStatus: (status) => status != null,
+            ),
+          );
+      var response = await fetchModels();
+      if (response.statusCode == 401 && await refreshCredential(account)) {
+        final refreshed = await readCredential(account.id);
+        if (refreshed == null) throw const LlmAccountConnectorException();
+        token = _firstString(_decodeCredentialBundle(refreshed), const [
+          'access_token',
+          'accessToken',
+        ]);
+        if (token == null) throw const LlmAccountConnectorException();
+        response = await fetchModels();
+      }
+      if ((response.statusCode ?? 0) < 200 ||
+          (response.statusCode ?? 0) >= 300) {
+        throw const LlmAccountConnectorException();
+      }
+      final discovered = AmazonQConnector.parseModels(response.data)
+          .map(
+            (model) => LlmUpstreamModel(
+              id: '${account.id}:amazon-q:${model.upstreamModelId}',
+              upstreamModelId: model.upstreamModelId,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              config: model.config,
+            ),
+          )
+          .toList();
+      return _mergeModelMappings(discovered, account.models);
+    }
     final hasRemoteCatalog = {
       'aihorde',
       'openai-compatibility',
@@ -2142,6 +2226,15 @@ class LlmAccountConnectorService {
     ]);
     if (refreshToken == null) return false;
 
+    if (account.connectorType == 'amazon-q') {
+      return _refreshAmazonQCredential(
+        account,
+        bundle,
+        refreshToken,
+        cancelToken,
+      );
+    }
+
     final spec = _refreshRequest(account, bundle, refreshToken);
     if (spec == null) return false;
     try {
@@ -2154,6 +2247,7 @@ class LlmAccountConnectorService {
                 headers: spec.headers,
                 contentType: spec.contentType,
                 responseType: ResponseType.json,
+                followRedirects: account.connectorType != 'amazon-q',
               ),
               cancelToken: cancelToken,
             );
@@ -2638,6 +2732,140 @@ class LlmAccountConnectorService {
     }
   }
 
+  Future<bool> _refreshAmazonQCredential(
+    LlmAccount account,
+    Map<String, dynamic> bundle,
+    String refreshToken,
+    CancelToken? cancelToken,
+  ) async {
+    try {
+      final region = AmazonQConnector.oidcRegion(
+        bundle['oidcRegion'] ??
+            bundle['oidc_region'] ??
+            bundle['region'] ??
+            bundle['regionId'] ??
+            bundle['region_id'] ??
+            _amazonQRegion(account, bundle),
+      );
+      final tokenUri = Uri.https('oidc.$region.amazonaws.com', '/token');
+      var clientId = _firstString(bundle, const ['clientId', 'client_id']);
+      var clientSecret = _firstString(bundle, const [
+        'clientSecret',
+        'client_secret',
+      ]);
+
+      if ((clientId == null) != (clientSecret == null)) {
+        throw const LlmAccountConnectorException();
+      }
+      Future<void> registerClient() async {
+        final registration = await _dio.postUri<Object?>(
+          Uri.https('oidc.$region.amazonaws.com', '/client/register'),
+          data: const {
+            'clientName': 'kiro-oauth-client',
+            'clientType': 'public',
+            'scopes': [
+              'codewhisperer:completions',
+              'codewhisperer:analysis',
+              'codewhisperer:conversations',
+            ],
+            'grantTypes': [
+              'urn:ietf:params:oauth:grant-type:device_code',
+              'refresh_token',
+            ],
+            'issuerUrl':
+                'https://identitycenter.amazonaws.com/ssoins-722374e8c3c8e6c6',
+          },
+          options: Options(
+            contentType: Headers.jsonContentType,
+            responseType: ResponseType.json,
+            followRedirects: false,
+            validateStatus: (status) => status != null,
+            headers: const {'Accept': 'application/json'},
+          ),
+          cancelToken: cancelToken,
+        );
+        if ((registration.statusCode ?? 0) < 200 ||
+            (registration.statusCode ?? 0) >= 300) {
+          throw const LlmAccountConnectorException();
+        }
+        final registered = _asJsonMap(registration.data);
+        clientId = _firstString(registered, const ['clientId']);
+        clientSecret = _firstString(registered, const ['clientSecret']);
+        if (clientId == null || clientSecret == null) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+
+      if (clientId == null) await registerClient();
+
+      Future<Response<Object?>> refreshWithCurrentClient() =>
+          _dio.postUri<Object?>(
+            tokenUri,
+            data: {
+              'clientId': clientId,
+              'clientSecret': clientSecret,
+              'refreshToken': refreshToken,
+              'grantType': 'refresh_token',
+            },
+            options: Options(
+              contentType: Headers.jsonContentType,
+              responseType: ResponseType.json,
+              followRedirects: false,
+              validateStatus: (status) => status != null,
+              headers: const {'Accept': 'application/json'},
+            ),
+            cancelToken: cancelToken,
+          );
+
+      var response = await refreshWithCurrentClient();
+      if ((response.statusCode ?? 0) < 200 ||
+          (response.statusCode ?? 0) >= 300) {
+        final error = _asJsonMap(response.data);
+        final errorType = _firstString(error, const ['__type', 'error']);
+        if (const {
+          'InvalidGrantException',
+          'ExpiredTokenException',
+          'invalid_grant',
+        }.contains(errorType)) {
+          throw const LlmAccountConnectorException();
+        }
+        await registerClient();
+        response = await refreshWithCurrentClient();
+        if ((response.statusCode ?? 0) < 200 ||
+            (response.statusCode ?? 0) >= 300) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+      final tokens = _asJsonMap(response.data);
+      final accessToken = _firstString(tokens, const [
+        'accessToken',
+        'access_token',
+      ]);
+      if (accessToken == null) throw const LlmAccountConnectorException();
+
+      final updated = Map<String, dynamic>.from(bundle)
+        ..addAll(tokens ?? const <String, dynamic>{})
+        ..['access_token'] = accessToken
+        ..['clientId'] = clientId
+        ..['clientSecret'] = clientSecret;
+      final rotatedRefreshToken = _firstString(tokens, const [
+        'refreshToken',
+        'refresh_token',
+      ]);
+      updated['refresh_token'] = rotatedRefreshToken ?? refreshToken;
+      final expiresIn = tokens?['expiresIn'] ?? tokens?['expires_in'];
+      final expiresAt = _durationExpiry(expiresIn);
+      if (expiresAt != null) updated['expires_at'] = expiresAt;
+      await saveAccount(account, secret: jsonEncode(updated));
+      return true;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
+    } catch (_) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
   static String? _firstString(Map<String, dynamic>? map, List<String> names) {
     if (map == null) return null;
     for (final name in names) {
@@ -3074,8 +3302,9 @@ class LlmAccountConnectorService {
         item['task_type'],
         item['modelType'],
       ].whereType<String>().join(' ').toLowerCase();
-      if (RegExp(r'image|diffusion|embedding|rerank|ranking|transcrib|tts')
-              .hasMatch(modelType) ||
+      if (RegExp(
+            r'image|diffusion|embedding|rerank|ranking|transcrib|tts',
+          ).hasMatch(modelType) ||
           !_aiHordeModelHasOnlyTextModalities(item)) {
         continue;
       }
@@ -3128,8 +3357,9 @@ class LlmAccountConnectorService {
         final declared = modalities.whereType<String>().toList();
         if (declared.length != modalities.length ||
             declared.isEmpty ||
-            declared
-                .any((modality) => modality.trim().toLowerCase() != 'text')) {
+            declared.any(
+              (modality) => modality.trim().toLowerCase() != 'text',
+            )) {
           return false;
         }
       }
@@ -4963,6 +5193,14 @@ class LlmAccountConnectorService {
   }
 
   static void _validateCredential(LlmAccount account, String secret) {
+    if (account.connectorType == 'amazon-q' && account.authType == 'oauth') {
+      try {
+        AmazonQConnector.parseCredentialImport(secret);
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+      return;
+    }
     if (account.connectorType == 'qoder' && account.authType == 'pat') {
       if (!secret.trim().startsWith('pt-')) {
         throw const LlmAccountConnectorException();
@@ -5607,6 +5845,23 @@ class LlmNativeRequestBuilder {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;
+      case 'amazon-q':
+        final accessToken = _credentialBundleString(credential, const [
+          'access_token',
+          'accessToken',
+        ]);
+        if (account.authType != 'oauth' || accessToken == null) {
+          throw const LlmAccountConnectorException();
+        }
+        headers['Authorization'] = 'Bearer $accessToken';
+        headers['Accept'] = 'application/vnd.amazon.eventstream';
+        headers['X-Amz-Target'] =
+            'AmazonCodeWhispererStreamingService.GenerateAssistantResponse';
+        headers['Amz-Sdk-Request'] = 'attempt=1; max=3';
+        headers['Amz-Sdk-Invocation-Id'] = const Uuid().v4();
+        headers['x-amzn-bedrock-cache-control'] = 'enable';
+        headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
+        break;
       default:
         if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
         break;
@@ -5618,7 +5873,9 @@ class LlmNativeRequestBuilder {
         account.connectorType == 'ghe-copilot' ||
         account.connectorType == 'cline' ||
         account.connectorType == 'clinepass';
-    if (upstreamStream && account.connectorType == 'bedrock') {
+    if (upstreamStream &&
+        (account.connectorType == 'bedrock' ||
+            account.connectorType == 'amazon-q')) {
       headers['Accept'] = 'application/vnd.amazon.eventstream';
     } else if (upstreamStream && account.connectorType != 'devin') {
       headers['Accept'] = 'text/event-stream';
@@ -6106,11 +6363,26 @@ class LlmNativeRequestBuilder {
     String baseUrl;
     String path;
     String? query;
+    String? amazonQRegion;
     final preserveLegacyOcrEndpoint =
         account.connectorType == 'openai-compatibility' &&
             config['legacyOcrFullEndpoint'] == true &&
             nativeFormat == null;
     switch (account.connectorType) {
+      case 'amazon-q':
+        amazonQRegion = _amazonQRegion(
+          account,
+          {
+            'region': _credentialBundleString(credential, const [
+              'region',
+              'regionId',
+              'region_id',
+            ]),
+          },
+        );
+        final target = AmazonQConnector.chatUri(amazonQRegion);
+        baseUrl = target.origin;
+        path = target.path;
       case 'aihorde':
         baseUrl = 'https://oai.aihorde.net/v1';
         path = '/chat/completions';
@@ -6383,7 +6655,8 @@ class LlmNativeRequestBuilder {
     final usesProtocolSpecificQwenBase =
         account.connectorType == 'qwen-cloud' ||
             account.connectorType == 'qwen-cloud-token-plan';
-    final base = account.connectorType == 'aihorde' ||
+    final base = account.connectorType == 'amazon-q' ||
+            account.connectorType == 'aihorde' ||
             account.connectorType == 'openai-compatibility' ||
             account.connectorType == 'cline' ||
             account.connectorType == 'clinepass' ||
@@ -6398,7 +6671,11 @@ class LlmNativeRequestBuilder {
         !_isBaseSchemeAllowed(account, parsed)) {
       throw const LlmAccountConnectorException();
     }
-    _validateProviderBaseUrl(account, parsed);
+    _validateProviderBaseUrl(
+      account,
+      parsed,
+      amazonQRegion: amazonQRegion,
+    );
     if (preserveLegacyOcrEndpoint) return parsed.replace(fragment: null);
     final basePath = account.connectorType == 'openai-compatibility'
         ? parsed.path.replaceFirst(RegExp(r'/+$'), '')
@@ -6530,7 +6807,11 @@ class LlmNativeRequestBuilder {
     };
   }
 
-  static void _validateProviderBaseUrl(LlmAccount account, Uri base) {
+  static void _validateProviderBaseUrl(
+    LlmAccount account,
+    Uri base, {
+    String? amazonQRegion,
+  }) {
     if (account.connectorType == 'openai-compatibility' ||
         account.connectorType == 'gitlab-duo') {
       return;
@@ -6597,6 +6878,13 @@ class LlmNativeRequestBuilder {
       'qwen-cloud-token-plan' => host == 'token-plan.maas.qwencloudapi.com',
       'glm-cn' => host == 'open.bigmodel.cn',
       'bedrock' => host == bedrockHost,
+      'amazon-q' => AmazonQConnector.isSupportedRegion(
+            amazonQRegion ??
+                _configString(account.endpointConfig, 'region') ??
+                '',
+          ) &&
+          host ==
+              'q.${amazonQRegion ?? _configString(account.endpointConfig, 'region')}.amazonaws.com',
       'vertex' => host == 'aiplatform.googleapis.com' ||
           host == '$location-aiplatform.googleapis.com',
       _ => false,

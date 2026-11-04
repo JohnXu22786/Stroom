@@ -21,6 +21,302 @@ import '../fixtures/vertex_service_account.dart';
 void main() {
   _registerZedHostedHttpRetryTest();
   test(
+    'Amazon Q refresh registers a regional client for token-only imports',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          final payload = options.uri.path == '/client/register'
+              ? {
+                  'clientId': 'registered-client',
+                  'clientSecret': 'registered-secret',
+                }
+              : {
+                  'accessToken': 'fresh-access',
+                  'refreshToken': 'rotated-refresh',
+                  'expiresIn': 3600,
+                };
+          return ResponseBody.fromString(
+            jsonEncode(payload),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final credentials = _MemoryCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'amazon-q-refresh',
+          'amazon-q',
+          authType: 'oauth',
+          endpointConfig: const {'region': 'eu-central-1'},
+        ),
+        secret: jsonEncode({'refresh_token': 'imported-refresh'}),
+      );
+
+      expect(await service.refreshCredential(account), isTrue);
+      expect(requests.map((request) => request.uri.toString()), [
+        'https://oidc.eu-central-1.amazonaws.com/client/register',
+        'https://oidc.eu-central-1.amazonaws.com/token',
+      ]);
+      expect(
+        requests.every((request) => request.followRedirects == false),
+        isTrue,
+      );
+      expect(requests.last.data, {
+        'clientId': 'registered-client',
+        'clientSecret': 'registered-secret',
+        'refreshToken': 'imported-refresh',
+        'grantType': 'refresh_token',
+      });
+      expect(
+        jsonDecode((await service.readCredential(account.id))!),
+        containsPair('access_token', 'fresh-access'),
+      );
+    },
+  );
+  test(
+    'Amazon Q refresh uses the IdC region and re-registers invalid clients once',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          final payload = switch (options.uri.path) {
+            '/token'
+                when requests.where((r) => r.uri.path == '/token').length ==
+                    1 =>
+              {'__type': 'ExpiredClientException'},
+            '/client/register' => {
+                'clientId': 'replacement-client',
+                'clientSecret': 'replacement-secret',
+              },
+            '/token' => {
+                'accessToken': 'recovered-access',
+                'refreshToken': 'recovered-refresh',
+              },
+            _ => throw StateError('Unexpected Amazon Q refresh path.'),
+          };
+          final status = payload.containsKey('__type') ? 400 : 200;
+          return ResponseBody.fromString(
+            jsonEncode(payload),
+            status,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'amazon-q-idc-region',
+          'amazon-q',
+          authType: 'oauth',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: jsonEncode({
+          'refresh_token': 'imported-refresh',
+          'region': 'eu-north-1',
+          'clientId': 'expired-client',
+          'clientSecret': 'expired-secret',
+        }),
+      );
+
+      expect(await service.refreshCredential(account), isTrue);
+      expect(requests.map((request) => request.uri.toString()), [
+        'https://oidc.eu-north-1.amazonaws.com/token',
+        'https://oidc.eu-north-1.amazonaws.com/client/register',
+        'https://oidc.eu-north-1.amazonaws.com/token',
+      ]);
+      expect(requests.first.data, {
+        'clientId': 'expired-client',
+        'clientSecret': 'expired-secret',
+        'refreshToken': 'imported-refresh',
+        'grantType': 'refresh_token',
+      });
+      expect(requests.last.data, {
+        'clientId': 'replacement-client',
+        'clientSecret': 'replacement-secret',
+        'refreshToken': 'imported-refresh',
+        'grantType': 'refresh_token',
+      });
+      expect(
+        jsonDecode((await service.readCredential(account.id))!),
+        containsPair('access_token', 'recovered-access'),
+      );
+    },
+  );
+  test(
+    'Amazon Q invalid refresh tokens do not trigger client re-registration',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            '{"__type":"InvalidGrantException"}',
+            400,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'amazon-q-invalid-refresh',
+          'amazon-q',
+          authType: 'oauth',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: jsonEncode({
+          'refresh_token': 'expired-refresh',
+          'region': 'eu-north-1',
+          'clientId': 'registered-client',
+          'clientSecret': 'registered-secret',
+        }),
+      );
+
+      await expectLater(
+        service.refreshCredential(account),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      expect(requests, hasLength(1));
+      expect(requests.single.uri.host, 'oidc.eu-north-1.amazonaws.com');
+      expect(requests.single.uri.path, '/token');
+    },
+  );
+  test('Amazon Q refresh rejects an explicitly invalid OIDC region', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'accessToken': 'unexpected-access',
+            'refreshToken': 'unexpected-refresh',
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+      dio: dio,
+    );
+    final account = await service.saveAccount(
+      _account(
+        'amazon-q-malformed-oidc-region',
+        'amazon-q',
+        authType: 'oauth',
+        endpointConfig: const {'region': 'us-east-1'},
+      ),
+      secret: jsonEncode({
+        'refresh_token': 'imported-refresh',
+        'oidcRegion': 'not a region',
+      }),
+    );
+
+    await expectLater(
+      service.refreshCredential(account),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    expect(requests, isEmpty);
+  });
+  test('Amazon Q request host stays bound to its supported region', () {
+    final request = LlmNativeRequestBuilder().build(
+      account: _account(
+        'amazon-q-host',
+        'amazon-q',
+        authType: 'oauth',
+        endpointConfig: const {
+          'region': 'us-east-1',
+          'baseUrl': 'https://override.example',
+        },
+      ),
+      credential: jsonEncode({'access_token': 'q-access'}),
+      modelId: 'claude-sonnet-4',
+      body: const {'conversationState': {}},
+      stream: true,
+    );
+
+    expect(
+      request.uri,
+      Uri.https('q.us-east-1.amazonaws.com', '/generateAssistantResponse'),
+    );
+    expect(request.headers['Authorization'], 'Bearer q-access');
+    expect(request.headers['Accept'], 'application/vnd.amazon.eventstream');
+    expect(
+      request.headers['X-Amz-Target'],
+      'AmazonCodeWhispererStreamingService.GenerateAssistantResponse',
+    );
+    final credentialRegionRequest = LlmNativeRequestBuilder().build(
+      account: _account(
+        'amazon-q-credential-region',
+        'amazon-q',
+        authType: 'oauth',
+        endpointConfig: const {},
+      ),
+      credential: jsonEncode({
+        'access_token': 'q-access',
+        'region': 'eu-central-1',
+      }),
+      modelId: 'claude-sonnet-4',
+      body: const {'conversationState': {}},
+    );
+    expect(
+      credentialRegionRequest.uri,
+      Uri.https('q.eu-central-1.amazonaws.com', '/generateAssistantResponse'),
+    );
+    final defaultRegionRequest = LlmNativeRequestBuilder().build(
+      account: _account(
+        'amazon-q-default-region',
+        'amazon-q',
+        authType: 'oauth',
+        endpointConfig: const {},
+      ),
+      credential: jsonEncode({'access_token': 'q-access'}),
+      modelId: 'claude-sonnet-4',
+      body: const {'conversationState': {}},
+    );
+    expect(
+      defaultRegionRequest.uri,
+      Uri.https('q.us-east-1.amazonaws.com', '/generateAssistantResponse'),
+    );
+    expect(
+      () => LlmNativeRequestBuilder().build(
+        account: _account(
+          'amazon-q-invalid-region',
+          'amazon-q',
+          authType: 'oauth',
+          endpointConfig: const {'region': 'evil.example'},
+        ),
+        credential: jsonEncode({'access_token': 'q-access'}),
+        modelId: 'claude-sonnet-4',
+        body: const {'conversationState': {}},
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+  });
+  test(
     'GitLab Duo keeps PAT and configured OAuth as distinct account modes',
     () {
       final connector = LlmConnectorRegistry.find('gitlab-duo');
@@ -194,14 +490,14 @@ void main() {
     }
     for (final assistantCall in const [
       {
-        'function_call': {'name': 'lookup'}
+        'function_call': {'name': 'lookup'},
       },
       {'function_call': null},
       {'tool_calls': 'malformed'},
       {
         'functions': [
-          {'name': 'lookup'}
-        ]
+          {'name': 'lookup'},
+        ],
       },
       {'tools': []},
       {'tool_choice': 'none'},
@@ -216,7 +512,7 @@ void main() {
               {
                 'role': 'assistant',
                 'content': 'Calling a tool.',
-                ...assistantCall
+                ...assistantCall,
               },
               {'role': 'user', 'content': 'Continue.'},
             ],
@@ -279,12 +575,12 @@ void main() {
       {'function_call': null},
       {
         'functions': [
-          {'name': 'lookup'}
-        ]
+          {'name': 'lookup'},
+        ],
       },
       {'parallel_tool_calls': true},
       {
-        'function_call': {'name': 'lookup'}
+        'function_call': {'name': 'lookup'},
       },
     ]) {
       expect(
@@ -314,7 +610,7 @@ void main() {
           'tools': [
             {
               'type': 'function',
-              'function': {'name': 'lookup'}
+              'function': {'name': 'lookup'},
             },
           ],
         },
@@ -333,8 +629,8 @@ void main() {
               'content': [
                 {
                   'type': 'image_url',
-                  'image_url': {'url': 'data:image/png'}
-                }
+                  'image_url': {'url': 'data:image/png'},
+                },
               ],
             },
           ],
@@ -344,131 +640,142 @@ void main() {
     );
   });
 
-  test('GitLab Duo turns its JSON completion into Stroom chat events',
-      () async {
-    final accounts = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentials(),
-    );
-    final account = await accounts.saveAccount(
-      _account(
-        'gitlab-stream',
-        'gitlab-duo',
-        authType: 'pat',
-        endpointConfig: const {'baseUrl': 'https://gitlab.example.com'},
-      ),
-      secret: 'gitlab-pat-secret',
-    );
-    RequestOptions? request;
-    final dio = Dio()
-      ..httpClientAdapter = _FunctionalAdapter((options) async {
-        request = options;
-        return ResponseBody.fromString(
-          jsonEncode({
-            'model': {'name': 'claude-sonnet-4-6'},
-            'choices': [
-              {'text': 'GitLab Duo reply'},
-            ],
-          }),
-          200,
-          headers: const {
-            'content-type': ['application/json'],
-          },
-        );
-      });
-    final response = await LlmConnectorHttpClient(
-      accountService: accounts,
-      dio: dio,
-    ).request(
-      account: account,
-      modelId: 'claude-sonnet-4-6',
-      body: const {
-        'model': 'claude-sonnet-4-6',
-        'messages': [
-          {'role': 'user', 'content': 'Hello'},
-        ],
-      },
-      stream: true,
-    );
-
-    expect(request!.uri.toString(),
-        'https://gitlab.example.com/api/v4/code_suggestions/completions');
-    expect(request!.headers['Authorization'], 'Bearer gitlab-pat-secret');
-    expect(request!.data['stream'], false);
-    expect(response.body, isA<Stream<List<int>>>());
-    final bytes = await (response.body as Stream<List<int>>).fold<List<int>>(
-      [],
-      (previous, chunk) => previous..addAll(chunk),
-    );
-    final events = utf8.decode(bytes);
-    expect(events, contains('GitLab Duo reply'));
-    expect(events, contains('chat.completion.chunk'));
-    expect(events, contains('data: [DONE]'));
-  });
-
-  test('GitLab Duo OAuth refresh rotates credentials in secure storage',
-      () async {
-    RequestOptions? refreshRequest;
-    final dio = Dio()
-      ..httpClientAdapter = _FunctionalAdapter((options) async {
-        refreshRequest = options;
-        return ResponseBody.fromString(
-          jsonEncode({
-            'access_token': 'rotated-gitlab-access',
-            'refresh_token': 'rotated-gitlab-refresh',
-            'expires_in': 3600,
-          }),
-          200,
-          headers: const {
-            'content-type': ['application/json'],
-          },
-        );
-      });
-    final credentials = _MemoryCredentials();
-    final accounts = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: credentials,
-      dio: dio,
-    );
-    final account = await accounts.saveAccount(
-      _account(
-        'gitlab-oauth-refresh',
-        'gitlab-duo',
-        authType: 'oauth',
-        endpointConfig: const {
-          'baseUrl': 'https://gitlab.example.com/gitlab',
-          'clientId': 'registered-client',
+  test(
+    'GitLab Duo turns its JSON completion into Stroom chat events',
+    () async {
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'gitlab-stream',
+          'gitlab-duo',
+          authType: 'pat',
+          endpointConfig: const {'baseUrl': 'https://gitlab.example.com'},
+        ),
+        secret: 'gitlab-pat-secret',
+      );
+      RequestOptions? request;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          request = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'model': {'name': 'claude-sonnet-4-6'},
+              'choices': [
+                {'text': 'GitLab Duo reply'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'model': 'claude-sonnet-4-6',
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
         },
-      ),
-      secret: jsonEncode({
-        'oauth_contract': 'gitlab-duo-pkce-v1',
-        'access_token': 'expired-gitlab-access',
-        'refresh_token': 'old-gitlab-refresh',
-        'expires_at': DateTime.utc(2020).toIso8601String(),
-        'client_id': 'registered-client',
-        'client_secret': 'registered-secret',
-        'base_url': 'https://gitlab.example.com/gitlab',
-      }),
-    );
+        stream: true,
+      );
 
-    expect(await accounts.refreshCredential(account), isTrue);
-    expect(refreshRequest!.uri.toString(),
-        'https://gitlab.example.com/gitlab/oauth/token');
-    expect(refreshRequest!.data,
-        containsPair('refresh_token', 'old-gitlab-refresh'));
-    expect(refreshRequest!.data,
-        containsPair('client_secret', 'registered-secret'));
-    final saved = jsonDecode(
-      (await credentials.read(account.credentialRef!))!,
-    ) as Map;
-    expect(saved['access_token'], 'rotated-gitlab-access');
-    expect(saved['refresh_token'], 'rotated-gitlab-refresh');
-    expect(saved['client_secret'], 'registered-secret');
-    expect(
-      DateTime.parse(saved['expires_at'] as String).isAfter(DateTime.now()),
-      isTrue,
-    );
-  });
+      expect(
+        request!.uri.toString(),
+        'https://gitlab.example.com/api/v4/code_suggestions/completions',
+      );
+      expect(request!.headers['Authorization'], 'Bearer gitlab-pat-secret');
+      expect(request!.data['stream'], false);
+      expect(response.body, isA<Stream<List<int>>>());
+      final bytes = await (response.body as Stream<List<int>>).fold<List<int>>(
+        [],
+        (previous, chunk) => previous..addAll(chunk),
+      );
+      final events = utf8.decode(bytes);
+      expect(events, contains('GitLab Duo reply'));
+      expect(events, contains('chat.completion.chunk'));
+      expect(events, contains('data: [DONE]'));
+    },
+  );
+
+  test(
+    'GitLab Duo OAuth refresh rotates credentials in secure storage',
+    () async {
+      RequestOptions? refreshRequest;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          refreshRequest = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'access_token': 'rotated-gitlab-access',
+              'refresh_token': 'rotated-gitlab-refresh',
+              'expires_in': 3600,
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final credentials = _MemoryCredentials();
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'gitlab-oauth-refresh',
+          'gitlab-duo',
+          authType: 'oauth',
+          endpointConfig: const {
+            'baseUrl': 'https://gitlab.example.com/gitlab',
+            'clientId': 'registered-client',
+          },
+        ),
+        secret: jsonEncode({
+          'oauth_contract': 'gitlab-duo-pkce-v1',
+          'access_token': 'expired-gitlab-access',
+          'refresh_token': 'old-gitlab-refresh',
+          'expires_at': DateTime.utc(2020).toIso8601String(),
+          'client_id': 'registered-client',
+          'client_secret': 'registered-secret',
+          'base_url': 'https://gitlab.example.com/gitlab',
+        }),
+      );
+
+      expect(await accounts.refreshCredential(account), isTrue);
+      expect(
+        refreshRequest!.uri.toString(),
+        'https://gitlab.example.com/gitlab/oauth/token',
+      );
+      expect(
+        refreshRequest!.data,
+        containsPair('refresh_token', 'old-gitlab-refresh'),
+      );
+      expect(
+        refreshRequest!.data,
+        containsPair('client_secret', 'registered-secret'),
+      );
+      final saved =
+          jsonDecode((await credentials.read(account.credentialRef!))!) as Map;
+      expect(saved['access_token'], 'rotated-gitlab-access');
+      expect(saved['refresh_token'], 'rotated-gitlab-refresh');
+      expect(saved['client_secret'], 'registered-secret');
+      expect(
+        DateTime.parse(saved['expires_at'] as String).isAfter(DateTime.now()),
+        isTrue,
+      );
+    },
+  );
 
   test(
     'Copilot connectors preserve model-specific protocols and auth ownership',
@@ -4677,10 +4984,13 @@ void main() {
         );
         expect(captured.last.uri.path, '/inference-profiles');
         expect(
-          captured.every((request) =>
-              request.headers['Authorization'] is String &&
-              (request.headers['Authorization'] as String)
-                  .startsWith('AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/')),
+          captured.every(
+            (request) =>
+                request.headers['Authorization'] is String &&
+                (request.headers['Authorization'] as String).startsWith(
+                  'AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/',
+                ),
+          ),
           isTrue,
         );
         expect(models.map((model) => model.upstreamModelId), [
@@ -4802,25 +5112,29 @@ void main() {
       final models = await service.discoverModels(account, refreshRemote: true);
 
       expect(captured, hasLength(3));
-      expect(captured.map((request) => request.uri.host),
-          everyElement('bedrock.eu-west-2.amazonaws.com'));
+      expect(
+        captured.map((request) => request.uri.host),
+        everyElement('bedrock.eu-west-2.amazonaws.com'),
+      );
       expect(captured.map((request) => request.uri.path), [
         '/foundation-models',
         '/inference-profiles',
         '/inference-profiles',
       ]);
       expect(
-          captured.map(
-              (request) => request.uri.queryParameters['byOutputModality']),
-          [
-            'TEXT',
-            null,
-            null,
-          ]);
-      expect(captured.map((request) => request.headers['Authorization']),
-          everyElement('Bearer bedrock-api-key-secret'));
-      expect(captured.map((request) => request.headers['x-amz-date']),
-          everyElement(isNull));
+        captured.map(
+          (request) => request.uri.queryParameters['byOutputModality'],
+        ),
+        ['TEXT', null, null],
+      );
+      expect(
+        captured.map((request) => request.headers['Authorization']),
+        everyElement('Bearer bedrock-api-key-secret'),
+      );
+      expect(
+        captured.map((request) => request.headers['x-amz-date']),
+        everyElement(isNull),
+      );
       expect(models.map((model) => model.upstreamModelId), [
         'amazon.titan-text-express-v1',
         'anthropic.claude-3-5-sonnet',
@@ -4833,214 +5147,241 @@ void main() {
       expect(models[4].capabilities['streaming'], isFalse);
       expect(captured.last.uri.queryParameters['nextToken'], 'profile-next');
       expect(
-          credentials.values[account.credentialRef], 'bedrock-api-key-secret');
-      expect(preferences.values.values.join(),
-          isNot(contains('bedrock-api-key-secret')));
-    });
-
-    test('keeps foundation models when inference profiles are unavailable',
-        () async {
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          if (options.uri.path == '/inference-profiles') {
-            return ResponseBody.fromString('{}', 500);
-          }
-          return ResponseBody.fromString(
-            jsonEncode({
-              'modelSummaries': [
-                {
-                  'modelId': 'amazon.titan-text-express-v1',
-                  'inputModalities': ['TEXT'],
-                  'outputModalities': ['TEXT'],
-                  'modelLifecycle': {'status': 'ACTIVE'},
-                },
-              ],
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
-            },
-          );
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
+        credentials.values[account.credentialRef],
+        'bedrock-api-key-secret',
       );
-      final account = await service.saveAccount(
-        _account(
-          'bedrock-profile-list-unavailable',
-          'bedrock',
-          authType: 'api_key',
-          endpointConfig: const {'region': 'us-east-1'},
-        ),
-        secret: 'bedrock-api-key-secret',
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('bedrock-api-key-secret')),
       );
-
-      final models = await service.discoverModels(account, refreshRemote: true);
-
-      expect(models.map((model) => model.upstreamModelId), [
-        'amazon.titan-text-express-v1',
-      ]);
-    });
-
-    test('keeps foundation models when API-key profile listing is denied',
-        () async {
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          if (options.uri.path == '/inference-profiles') {
-            return ResponseBody.fromString('{}', 403);
-          }
-          return ResponseBody.fromString(
-            jsonEncode({
-              'modelSummaries': [
-                {
-                  'modelId': 'amazon.titan-text-express-v1',
-                  'inputModalities': ['TEXT'],
-                  'outputModalities': ['TEXT'],
-                  'modelLifecycle': {'status': 'ACTIVE'},
-                },
-              ],
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
-            },
-          );
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await service.saveAccount(
-        _account(
-          'bedrock-api-key-profile-list-denied',
-          'bedrock',
-          authType: 'api_key',
-          endpointConfig: const {'region': 'us-east-1'},
-        ),
-        secret: 'bedrock-api-key-secret',
-      );
-
-      final models = await service.discoverModels(account, refreshRemote: true);
-
-      expect(models.map((model) => model.upstreamModelId), [
-        'amazon.titan-text-express-v1',
-      ]);
     });
 
     test(
-        'keeps manually configured Bedrock models when API-key listing is denied',
-        () async {
-      final requests = <RequestOptions>[];
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requests.add(options);
-          if (options.uri.path.endsWith('/converse')) {
+      'keeps foundation models when inference profiles are unavailable',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            if (options.uri.path == '/inference-profiles') {
+              return ResponseBody.fromString('{}', 500);
+            }
             return ResponseBody.fromString(
               jsonEncode({
-                'output': {
-                  'message': {
-                    'role': 'assistant',
-                    'content': [
-                      {'text': 'Manual model route works'},
-                    ],
+                'modelSummaries': [
+                  {
+                    'modelId': 'amazon.titan-text-express-v1',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['TEXT'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
                   },
-                },
-                'stopReason': 'end_turn',
+                ],
               }),
               200,
               headers: const {
                 'content-type': ['application/json'],
               },
             );
-          }
-          return ResponseBody.fromString('{}', 403);
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await service.saveAccount(
-        LlmAccount(
-          id: 'bedrock-api-key-limited-list',
-          connectorType: 'bedrock',
-          authType: 'api_key',
-          displayName: 'Limited Bedrock API key',
-          endpointConfig: const {'region': 'us-east-1'},
-          models: const [
-            LlmUpstreamModel(
-              id: 'manual-model',
-              upstreamModelId: 'us.anthropic.claude-sonnet-4-6',
-              displayName: 'Manually configured Claude',
-              capabilities: {'chat': true, 'streaming': true},
-            ),
-          ],
-        ),
-        secret: 'bedrock-api-key-secret',
-      );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'bedrock-profile-list-unavailable',
+            'bedrock',
+            authType: 'api_key',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: 'bedrock-api-key-secret',
+        );
 
-      final models = await service.discoverModels(account, refreshRemote: true);
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
 
-      expect(requests, hasLength(1));
-      expect(requests.single.uri.path, '/foundation-models');
-      expect(requests.single.headers['Authorization'],
-          'Bearer bedrock-api-key-secret');
-      expect(models.map((model) => model.upstreamModelId), [
-        'us.anthropic.claude-sonnet-4-6',
-      ]);
-      expect(models.single.capabilities['chat'], isTrue);
-      expect(models.single.capabilities['streaming'], isTrue);
+        expect(models.map((model) => model.upstreamModelId), [
+          'amazon.titan-text-express-v1',
+        ]);
+      },
+    );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: service,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: models.single.upstreamModelId,
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'hello'},
-          ],
-        },
-      );
+    test(
+      'keeps foundation models when API-key profile listing is denied',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            if (options.uri.path == '/inference-profiles') {
+              return ResponseBody.fromString('{}', 403);
+            }
+            return ResponseBody.fromString(
+              jsonEncode({
+                'modelSummaries': [
+                  {
+                    'modelId': 'amazon.titan-text-express-v1',
+                    'inputModalities': ['TEXT'],
+                    'outputModalities': ['TEXT'],
+                    'modelLifecycle': {'status': 'ACTIVE'},
+                  },
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'bedrock-api-key-profile-list-denied',
+            'bedrock',
+            authType: 'api_key',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: 'bedrock-api-key-secret',
+        );
 
-      expect(requests, hasLength(2));
-      expect(requests.last.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
-      expect(requests.last.uri.path, endsWith('/converse'));
-      expect(requests.last.headers['Authorization'],
-          'Bearer bedrock-api-key-secret');
-      expect((response.body as Map)['choices'], isA<List>());
-    });
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
 
-    test('rejects Bedrock API-key discovery when the key is unauthorized',
-        () async {
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          return ResponseBody.fromString('{}', 401);
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await service.saveAccount(
-        _account(
-          'bedrock-api-key-invalid',
-          'bedrock',
-          authType: 'api_key',
-          endpointConfig: const {'region': 'us-east-1'},
-        ),
-        secret: 'invalid-bedrock-api-key',
-      );
+        expect(models.map((model) => model.upstreamModelId), [
+          'amazon.titan-text-express-v1',
+        ]);
+      },
+    );
 
-      await expectLater(
-        service.discoverModels(account, refreshRemote: true),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-    });
+    test(
+      'keeps manually configured Bedrock models when API-key listing is denied',
+      () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            if (options.uri.path.endsWith('/converse')) {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'output': {
+                    'message': {
+                      'role': 'assistant',
+                      'content': [
+                        {'text': 'Manual model route works'},
+                      ],
+                    },
+                  },
+                  'stopReason': 'end_turn',
+                }),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            return ResponseBody.fromString('{}', 403);
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'bedrock-api-key-limited-list',
+            connectorType: 'bedrock',
+            authType: 'api_key',
+            displayName: 'Limited Bedrock API key',
+            endpointConfig: const {'region': 'us-east-1'},
+            models: const [
+              LlmUpstreamModel(
+                id: 'manual-model',
+                upstreamModelId: 'us.anthropic.claude-sonnet-4-6',
+                displayName: 'Manually configured Claude',
+                capabilities: {'chat': true, 'streaming': true},
+              ),
+            ],
+          ),
+          secret: 'bedrock-api-key-secret',
+        );
+
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(requests, hasLength(1));
+        expect(requests.single.uri.path, '/foundation-models');
+        expect(
+          requests.single.headers['Authorization'],
+          'Bearer bedrock-api-key-secret',
+        );
+        expect(models.map((model) => model.upstreamModelId), [
+          'us.anthropic.claude-sonnet-4-6',
+        ]);
+        expect(models.single.capabilities['chat'], isTrue);
+        expect(models.single.capabilities['streaming'], isTrue);
+
+        final response = await LlmConnectorHttpClient(
+          accountService: service,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: models.single.upstreamModelId,
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        );
+
+        expect(requests, hasLength(2));
+        expect(
+          requests.last.uri.host,
+          'bedrock-runtime.us-east-1.amazonaws.com',
+        );
+        expect(requests.last.uri.path, endsWith('/converse'));
+        expect(
+          requests.last.headers['Authorization'],
+          'Bearer bedrock-api-key-secret',
+        );
+        expect((response.body as Map)['choices'], isA<List>());
+      },
+    );
+
+    test(
+      'rejects Bedrock API-key discovery when the key is unauthorized',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromString('{}', 401);
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'bedrock-api-key-invalid',
+            'bedrock',
+            authType: 'api_key',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: 'invalid-bedrock-api-key',
+        );
+
+        await expectLater(
+          service.discoverModels(account, refreshRemote: true),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
 
     test('uses the AWS China host for Bedrock model discovery', () async {
       RequestOptions? captured;
@@ -6772,7 +7113,9 @@ void main() {
 
       expect(requestsSent, 0);
       expect(
-          credentials.values[account.credentialRef], 'bedrock-private-api-key');
+        credentials.values[account.credentialRef],
+        'bedrock-private-api-key',
+      );
     });
 
     test('uses the AWS China host for Bedrock requests in cn regions', () {
@@ -8519,141 +8862,149 @@ void main() {
       },
     );
 
-    test('sends Bedrock API keys only to the regional Converse endpoint',
-        () async {
-      RequestOptions? captured;
-      final preferences = _MemoryPreferences();
-      final credentials = _MemoryCredentials();
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured = options;
-          return ResponseBody.fromString(
-            jsonEncode({
-              'output': {
-                'message': {
-                  'role': 'assistant',
-                  'content': [
-                    {'text': 'Bedrock API-key answer'},
-                  ],
+    test(
+      'sends Bedrock API keys only to the regional Converse endpoint',
+      () async {
+        RequestOptions? captured;
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'output': {
+                  'message': {
+                    'role': 'assistant',
+                    'content': [
+                      {'text': 'Bedrock API-key answer'},
+                    ],
+                  },
                 },
+                'stopReason': 'end_turn',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
               },
-              'stopReason': 'end_turn',
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
-            },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: credentials,
-        dio: dio,
-      );
-      final account = await accounts.saveAccount(
-        _account(
-          'bedrock-api-key-chat',
-          'bedrock',
-          authType: 'api_key',
-          endpointConfig: const {'region': 'us-east-1'},
-        ),
-        secret: 'bedrock-api-key-secret',
-      );
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          _account(
+            'bedrock-api-key-chat',
+            'bedrock',
+            authType: 'api_key',
+            endpointConfig: const {'region': 'us-east-1'},
+          ),
+          secret: 'bedrock-api-key-secret',
+        );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'amazon.titan-text-express-v1',
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'Say hello.'},
-          ],
-        },
-      );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'amazon.titan-text-express-v1',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'Say hello.'},
+            ],
+          },
+        );
 
-      expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
-      expect(captured?.uri.path, endsWith('/converse'));
-      expect(
-          captured?.headers['Authorization'], 'Bearer bedrock-api-key-secret');
-      expect(captured?.headers['x-amz-date'], isNull);
-      expect((captured?.data as Map)['messages'], isA<List>());
-      expect((response.body as Map)['choices'], isA<List>());
-      expect(preferences.values.values.join(),
-          isNot(contains('bedrock-api-key-secret')));
-    });
+        expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
+        expect(captured?.uri.path, endsWith('/converse'));
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer bedrock-api-key-secret',
+        );
+        expect(captured?.headers['x-amz-date'], isNull);
+        expect((captured?.data as Map)['messages'], isA<List>());
+        expect((response.body as Map)['choices'], isA<List>());
+        expect(
+          preferences.values.values.join(),
+          isNot(contains('bedrock-api-key-secret')),
+        );
+      },
+    );
 
-    test('adapts unary Bedrock output for streamed Chat when unsupported',
-        () async {
-      RequestOptions? captured;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured = options;
-          return ResponseBody.fromString(
-            jsonEncode({
-              'output': {
-                'message': {
-                  'role': 'assistant',
-                  'content': [
-                    {'text': 'Unary Bedrock answer'},
-                  ],
+    test(
+      'adapts unary Bedrock output for streamed Chat when unsupported',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'output': {
+                  'message': {
+                    'role': 'assistant',
+                    'content': [
+                      {'text': 'Unary Bedrock answer'},
+                    ],
+                  },
                 },
+                'stopReason': 'end_turn',
+                'usage': {'inputTokens': 3, 'outputTokens': 4},
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
               },
-              'stopReason': 'end_turn',
-              'usage': {'inputTokens': 3, 'outputTokens': 4},
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
-            },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'bedrock-api-key-unary',
-          connectorType: 'bedrock',
-          authType: 'api_key',
-          displayName: 'Bedrock API key',
-          endpointConfig: const {'region': 'us-east-1'},
-          models: const [
-            LlmUpstreamModel(
-              id: 'titan-text',
-              upstreamModelId: 'amazon.titan-text-express-v1',
-              displayName: 'Titan Text Express',
-              capabilities: {'streaming': false},
-            ),
-          ],
-        ),
-        secret: 'bedrock-api-key-secret',
-      );
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'bedrock-api-key-unary',
+            connectorType: 'bedrock',
+            authType: 'api_key',
+            displayName: 'Bedrock API key',
+            endpointConfig: const {'region': 'us-east-1'},
+            models: const [
+              LlmUpstreamModel(
+                id: 'titan-text',
+                upstreamModelId: 'amazon.titan-text-express-v1',
+                displayName: 'Titan Text Express',
+                capabilities: {'streaming': false},
+              ),
+            ],
+          ),
+          secret: 'bedrock-api-key-secret',
+        );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'amazon.titan-text-express-v1',
-        stream: true,
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'Say hello.'},
-          ],
-        },
-      );
-      final chunks = await (response.body as Stream<List<int>>).toList();
-      final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'amazon.titan-text-express-v1',
+          stream: true,
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'Say hello.'},
+            ],
+          },
+        );
+        final chunks = await (response.body as Stream<List<int>>).toList();
+        final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
 
-      expect(captured?.uri.path, endsWith('/converse'));
-      expect(captured?.headers['Accept'], 'application/json');
-      expect(text, contains('Unary Bedrock answer'));
-      expect(text, contains('data: [DONE]'));
-    });
+        expect(captured?.uri.path, endsWith('/converse'));
+        expect(captured?.headers['Accept'], 'application/json');
+        expect(text, contains('Unary Bedrock answer'));
+        expect(text, contains('data: [DONE]'));
+      },
+    );
 
     test(
       'does not discover a private Antigravity project for CLI OAuth',
@@ -10974,99 +11325,97 @@ void _appendVarint(List<int> output, int value) {
 }
 
 void _registerZedHostedHttpRetryTest() {
-  test('Zed Hosted refreshes an expired inference token exactly once',
-      () async {
-    var tokenRequests = 0;
-    var completionRequests = 0;
-    final receivedTokens = <String?>[];
-    Map<String, dynamic>? sentEnvelope;
-    final dio = Dio()
-      ..httpClientAdapter = _FunctionalAdapter((options) async {
-        if (options.uri.path == '/client/llm_tokens') {
-          tokenRequests++;
-          return ResponseBody.fromString(
-            jsonEncode({'token': 'inference-$tokenRequests'}),
-            200,
-            headers: const {
-              'content-type': ['application/json']
-            },
-          );
-        }
-        if (options.uri.path == '/completions') {
-          completionRequests++;
-          receivedTokens.add(options.headers['Authorization'] as String?);
-          sentEnvelope =
-              jsonDecode(options.data as String) as Map<String, dynamic>;
-          if (completionRequests == 1) {
+  test(
+    'Zed Hosted refreshes an expired inference token exactly once',
+    () async {
+      var tokenRequests = 0;
+      var completionRequests = 0;
+      final receivedTokens = <String?>[];
+      Map<String, dynamic>? sentEnvelope;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path == '/client/llm_tokens') {
+            tokenRequests++;
             return ResponseBody.fromString(
-              '{}',
-              401,
-              headers: const {},
+              jsonEncode({'token': 'inference-$tokenRequests'}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
             );
           }
-          return ResponseBody.fromString(
-            '{"event":{"type":"message_start"}}\n',
-            200,
-            headers: const {
-              'content-type': ['application/x-ndjson']
-            },
-          );
-        }
-        throw StateError('Unexpected Zed endpoint: ${options.uri}');
-      });
-    final accounts = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: _MemoryCredentials(),
-    );
-    final account = await accounts.saveAccount(
-      _account(
-        'zed-expiry-retry',
-        'zed-hosted',
-        authType: 'oauth',
-        models: [
-          LlmUpstreamModel(
-            id: 'zed-hosted:claude-model',
-            upstreamModelId: 'claude-model',
-            displayName: 'Claude Model',
-            capabilities: const {
-              'supportedApiProtocols': ['anthropic.messages'],
-              'streaming': true,
-            },
-            config: const {'upstreamProvider': 'anthropic'},
-          ),
-        ],
-      ),
-      secret: jsonEncode({
-        'oauth_contract': 'zed-hosted-native-rsa-v1',
-        'user_id': 'zed-user',
-        'access_token': 'account-token',
-        'system_id': 'system-id',
-        'organization_id': 'org-1',
-      }),
-    );
+          if (options.uri.path == '/completions') {
+            completionRequests++;
+            receivedTokens.add(options.headers['Authorization'] as String?);
+            sentEnvelope =
+                jsonDecode(options.data as String) as Map<String, dynamic>;
+            if (completionRequests == 1) {
+              return ResponseBody.fromString('{}', 401, headers: const {});
+            }
+            return ResponseBody.fromString(
+              '{"event":{"type":"message_start"}}\n',
+              200,
+              headers: const {
+                'content-type': ['application/x-ndjson'],
+              },
+            );
+          }
+          throw StateError('Unexpected Zed endpoint: ${options.uri}');
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'zed-expiry-retry',
+          'zed-hosted',
+          authType: 'oauth',
+          models: [
+            LlmUpstreamModel(
+              id: 'zed-hosted:claude-model',
+              upstreamModelId: 'claude-model',
+              displayName: 'Claude Model',
+              capabilities: const {
+                'supportedApiProtocols': ['anthropic.messages'],
+                'streaming': true,
+              },
+              config: const {'upstreamProvider': 'anthropic'},
+            ),
+          ],
+        ),
+        secret: jsonEncode({
+          'oauth_contract': 'zed-hosted-native-rsa-v1',
+          'user_id': 'zed-user',
+          'access_token': 'account-token',
+          'system_id': 'system-id',
+          'organization_id': 'org-1',
+        }),
+      );
 
-    final response = await LlmConnectorHttpClient(
-      accountService: accounts,
-      dio: dio,
-    ).request(
-      account: account,
-      modelId: 'claude-model',
-      body: const {'messages': [], 'stream': true},
-      nativeFormat: 'anthropic.messages',
-      stream: true,
-    );
-    final chunks = (response.body as Stream<List<int>>).toList();
-    expect(await chunks, isNotEmpty);
-    expect(tokenRequests, 2);
-    expect(completionRequests, 2);
-    expect(receivedTokens, ['Bearer inference-1', 'Bearer inference-2']);
-    expect(sentEnvelope?['provider'], 'anthropic');
-    expect(sentEnvelope?['model'], 'claude-model');
-    expect(sentEnvelope?['provider_request'], {
-      'messages': [],
-      'stream': true,
-    });
-  });
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'claude-model',
+        body: const {'messages': [], 'stream': true},
+        nativeFormat: 'anthropic.messages',
+        stream: true,
+      );
+      final chunks = (response.body as Stream<List<int>>).toList();
+      expect(await chunks, isNotEmpty);
+      expect(tokenRequests, 2);
+      expect(completionRequests, 2);
+      expect(receivedTokens, ['Bearer inference-1', 'Bearer inference-2']);
+      expect(sentEnvelope?['provider'], 'anthropic');
+      expect(sentEnvelope?['model'], 'claude-model');
+      expect(sentEnvelope?['provider_request'], {
+        'messages': [],
+        'stream': true,
+      });
+    },
+  );
 
   test('Zed Hosted stops after one inference-token retry', () async {
     var tokenRequests = 0;

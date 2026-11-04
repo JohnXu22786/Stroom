@@ -18,6 +18,10 @@ class LlmOAuthProviderPolicy {
   });
 
   static const _policies = <String, LlmOAuthProviderPolicy>{
+    'amazon-q': LlmOAuthProviderPolicy._(
+      providerId: 'amazon-q',
+      supported: true,
+    ),
     'codex': LlmOAuthProviderPolicy._(providerId: 'codex', supported: true),
     'gemini': LlmOAuthProviderPolicy._(providerId: 'gemini', supported: true),
     'aistudio': LlmOAuthProviderPolicy._(

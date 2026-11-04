@@ -17,6 +17,7 @@ import '../services/reasoning_replay_cache.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
+      'amazon-q.chat' => const {'amazon-q'},
       'cursor.agent_connect_rpc' => const {'cursor'},
       'anthropic' || 'anthropic.messages' => const {
           'openai-compatibility',
@@ -94,6 +95,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'devin.connect_rpc',
       'devin.acp',
       'cursor.agent_connect_rpc',
+      'amazon-q.chat',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
   };
@@ -115,6 +117,7 @@ String llmRoutedChatProtocolForAccountModel({
   // model's generic API protocol continues to govern other providers.
   if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
   if (account.connectorType == 'aihorde') return 'openai.chat_completions';
+  if (account.connectorType == 'amazon-q') return 'amazon-q.chat';
   String protocol;
   if (apiProtocolOverride?.isNotEmpty == true) {
     protocol = apiProtocolOverride!;
@@ -281,6 +284,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           temperature: temperature,
           system: system,
           extraParams: extraParams,
+          accountId: candidate.account.id,
         );
         _captureRequest(candidate.account, body, stream: false);
         try {
@@ -457,6 +461,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               tools: tools,
               system: system,
               extraParams: extraParams,
+              accountId: candidate.account.id,
             );
             _captureRequest(candidate.account, body, stream: true);
             try {
@@ -732,6 +737,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     String? system,
     Map<String, dynamic>? extraParams,
+    String? accountId,
   }) async {
     final requestProtocolId = protocolId == 'devin.connect_rpc' ||
             protocolId == 'devin.acp' ||
@@ -784,6 +790,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         stream: stream,
         maxOutputTokens: requestedMaxTokens,
         previousInteractionId: previousInteractionId,
+        conversationId: conversationId,
+        accountId: accountId,
         temperature: protocolId == 'anthropic.messages' && extendedThinking
             ? null
             : temperature,
@@ -1149,7 +1157,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                   case AiGatewayProtocolStreamEventKind.reasoningDelta:
                     if (geminiContentPartsHandled) break;
                     parsedEvents.add(
-                      AIStreamEvent(event.delta ?? '', isReasoning: true),
+                      AIStreamEvent(
+                        event.delta ?? '',
+                        isReasoning: true,
+                        thinkingSignature: event.thoughtSignature,
+                      ),
                     );
                   case AiGatewayProtocolStreamEventKind.toolCallDelta:
                     _accumulateProtocolToolCall(event, toolsByIndex);
@@ -1322,7 +1334,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .map((block) => _stringValue(block['thinking']) ?? '')
           .join();
     }
-    if (protocolId == 'openai.chat_completions') {
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == 'amazon-q.chat') {
       final choices = data['choices'];
       final message = choices is List && choices.isNotEmpty
           ? _jsonMap((choices.first as Map?)?['message'])
@@ -1378,7 +1391,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String text,
     String protocolId,
   ) {
-    if (protocolId == 'openai.chat_completions') {
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == 'amazon-q.chat') {
       final choices = data['choices'];
       final message = choices is List && choices.isNotEmpty
           ? _jsonMap((choices.first as Map?)?['message'])
@@ -1461,6 +1475,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic> data,
     String protocolId,
   ) {
+    if (protocolId == 'amazon-q.chat') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      final signature = _stringValue(message?['stroom.reasoningSignature']);
+      return signature == null ? const {} : {'__thinking__': signature};
+    }
     if (protocolId == 'anthropic.messages') {
       final blocks = data['content'];
       if (blocks is! List) return const {};
@@ -1845,7 +1867,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       AnthropicChatProvider.mergeAnthropicUsage(normalized, raw);
       return normalized;
     }
-    if (protocolId == 'openai.chat_completions') {
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == 'amazon-q.chat') {
       return OpenAICompatibleChatProvider.normalizeUsage(raw) ?? const {};
     }
     final input = raw['input_tokens'] ??
