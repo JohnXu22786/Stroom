@@ -265,7 +265,11 @@ class OcrDiagnosticSnapshot {
         : null;
     final safeFinishReason = includeFinishReason
         ? _safeReason(
-              source['finishReason'] ?? source['finish_reason'],
+              source['finishReason'],
+              excludedValues: safeExcludedValues,
+            ) ??
+            _safeReason(
+              source['finish_reason'],
               excludedValues: safeExcludedValues,
             ) ??
             _finishReasonFromData(data, excludedValues: safeExcludedValues)

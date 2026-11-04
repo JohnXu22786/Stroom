@@ -598,6 +598,34 @@ void main() {
     },
   );
 
+  test('finish reason aliases are sanitized independently before fallback', () {
+    final validSnakeCaseAlias = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': 'JaneDoe19810102',
+      'finish_reason': 'length',
+    })!;
+    final malformedCamelCaseAlias = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': {'unexpected': 'value'},
+      'finish_reason': 'max_tokens',
+    })!;
+    final dataFallback = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': 'JaneDoe19810102',
+      'finish_reason': ['malformed'],
+      'data': {
+        'choices': [
+          {'finish_reason': 'stop'},
+        ],
+      },
+    })!;
+
+    expect(validSnakeCaseAlias, {'finishReason': 'length'});
+    expect(malformedCamelCaseAlias, {'finishReason': 'max_tokens'});
+    expect(dataFallback, {'finishReason': 'stop'});
+    expect(
+      jsonEncode([validSnakeCaseAlias, malformedCamelCaseAlias, dataFallback]),
+      isNot(contains('JaneDoe19810102')),
+    );
+  });
+
   test('stored OCR task errors retain the safe max_tokens finish reason', () {
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
