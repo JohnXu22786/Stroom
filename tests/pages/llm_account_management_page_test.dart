@@ -154,7 +154,7 @@ void main() {
             widget is TextField && widget.decoration?.labelText == '上游模型与能力',
       ),
     );
-    modelsField.controller!.text += '\nQwen2.5-72B-Instruct,chat';
+    modelsField.controller!.text += '\nuser-owned-model,reasoning';
 
     final preset = tester.widget<DropdownButtonFormField<String>>(
       find.byWidgetPredicate(
@@ -163,7 +163,7 @@ void main() {
             widget.decoration.labelText == '服务商预设',
       ),
     );
-    preset.onChanged!('chutes');
+    preset.onChanged!('bytez');
     await tester.pumpAndSettle();
     final modelLines = tester
         .widget<TextField>(
@@ -175,12 +175,13 @@ void main() {
         )
         .controller!
         .text;
-    expect(modelLines, contains('Qwen2.5-72B-Instruct'));
+    expect(modelLines, contains('user-owned-model,reasoning'));
+    expect(modelLines, contains('meta-llama/Llama-3.3-70B-Instruct'));
     expect(modelLines, isNot(contains('accounts/fireworks/models/')));
     expect(
       modelLines
           .split('\n')
-          .where((line) => line.startsWith('Qwen2.5-72B-Instruct')),
+          .where((line) => line.startsWith('user-owned-model')),
       hasLength(1),
     );
     await tester.ensureVisible(find.text('保存').last);
@@ -200,28 +201,38 @@ void main() {
       find.byWidgetPredicate(
         (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
       ),
-      'new-chutes-key',
+      'new-bytez-key',
     );
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
     final saved = (await service.listAccounts()).single;
-    expect(saved.endpointConfig['providerPresetId'], 'chutes');
+    expect(saved.endpointConfig['providerPresetId'], 'bytez');
     expect(
       saved.endpointConfig['baseUrl'],
-      'https://llm.chutes.ai/v1/chat/completions',
+      'https://api.bytez.com/models/v2/openai/v1/chat/completions',
     );
+    expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
     expect(
       await service.readCredential('preset-key-change'),
-      'new-chutes-key',
+      'new-bytez-key',
     );
     expect(
       saved.models
           .singleWhere(
-            (model) => model.upstreamModelId == 'Qwen2.5-72B-Instruct',
+            (model) => model.upstreamModelId == 'user-owned-model',
           )
           .displayName,
-      'Qwen2.5 72B',
+      'user-owned-model',
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      containsAll([
+        'meta-llama/Llama-3.3-70B-Instruct',
+        'mistralai/Mistral-7B-Instruct-v0.3',
+        'Qwen/Qwen2.5-72B-Instruct',
+        'user-owned-model',
+      ]),
     );
   });
 
