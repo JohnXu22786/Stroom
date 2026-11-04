@@ -4119,6 +4119,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Add a new background task and return its ID.
+  /// Caller-supplied [taskId] values must not belong to a live task.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
   /// so the retry flow can pre-populate the form.
@@ -4132,6 +4133,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? taskId,
   }) {
     final id = taskId ?? _uuid.v4();
+    final existingTasks = state.where((task) => task.id == id).toList();
+    final removalOwnsId = _activeBatchRemovalAddedGenerations.any(
+      (removal) => removal.containsKey(id),
+    );
+    if (existingTasks.isNotEmpty && !removalOwnsId) {
+      throw ArgumentError.value(id, 'taskId', 'already belongs to a live task');
+    }
+    for (final existingTask in existingTasks) {
+      _queueTaskCleanupAfterRemoval(id, existingTask);
+    }
     _pendingRestoreTaskRemovals.remove(id);
     _pendingTaskRemovalReconciliations.remove(id);
     final steps = type.stepLabels
@@ -4149,7 +4160,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     for (final activeRemoval in _activeBatchRemovalAddedGenerations) {
       activeRemoval[id]?.add(generation);
     }
-    state = [task, ...state];
+    state = [
+      task,
+      ...state.where((existingTask) => existingTask.id != id),
+    ];
     _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
     return id;
