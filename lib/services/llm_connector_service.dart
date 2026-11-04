@@ -2142,9 +2142,8 @@ class LlmAccountConnectorService {
       final outerTokenResponse = _asJsonMap(response.data);
       if (account.connectorType == 'trae') {
         final responseMetadata = outerTokenResponse?['ResponseMetadata'];
-        final responseError = responseMetadata is Map
-            ? responseMetadata['Error']
-            : null;
+        final responseError =
+            responseMetadata is Map ? responseMetadata['Error'] : null;
         final errorCode = responseError is Map ? responseError['Code'] : null;
         if (errorCode != null && errorCode != false && errorCode != '') {
           throw const LlmAccountConnectorException();
@@ -2154,11 +2153,11 @@ class LlmAccountConnectorService {
       final traeResult = outerTokenResponse?['Result'];
       final tokenResponse = account.connectorType == 'trae'
           ? traeResult is Map
-                ? Map<String, dynamic>.from(traeResult)
-                : null
+              ? Map<String, dynamic>.from(traeResult)
+              : null
           : nestedTokenData is Map
-          ? Map<String, dynamic>.from(nestedTokenData)
-          : outerTokenResponse;
+              ? Map<String, dynamic>.from(nestedTokenData)
+              : outerTokenResponse;
       final accessToken = _firstString(tokenResponse, [
         'access_token',
         'accessToken',
@@ -2646,7 +2645,7 @@ class LlmAccountConnectorService {
       case 'trae':
         final clientId =
             _firstString(bundle, const ['client_id', 'clientId']) ??
-            'en1oxy7wnw8j9n';
+                'en1oxy7wnw8j9n';
         final providerData = bundle['providerSpecificData'];
         final hostValue = providerData is Map
             ? _firstString(Map<String, dynamic>.from(providerData), const [
@@ -3154,8 +3153,7 @@ class LlmAccountConnectorService {
           'codebuddy-intl',
           'workbuddy',
         }.contains(account.connectorType);
-    final usesRefreshableOAuth =
-        usesGeminiOAuth ||
+    final usesRefreshableOAuth = usesGeminiOAuth ||
         usesXaiOAuth ||
         usesTencentOAuth ||
         (account.authType == 'oauth' &&

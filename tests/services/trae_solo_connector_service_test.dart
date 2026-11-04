@@ -192,8 +192,8 @@ void main() {
     );
     final originalToken = _testJwt({'web_id': 'web-1'});
     final staleExpiry = DateTime.now().toUtc().subtract(
-      const Duration(minutes: 1),
-    );
+          const Duration(minutes: 1),
+        );
     final callback = Uri.http('127.0.0.1:43210', '/authorize', {
       'loginTraceID': 'state-123456789012345678901234567890',
       'userJwt': jsonEncode({
@@ -631,7 +631,8 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}
