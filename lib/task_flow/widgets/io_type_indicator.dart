@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../models/io_type.dart';
 
 /// Displays an [IOType] with an icon and label in a chip-like container.
@@ -22,8 +23,19 @@ class IOTypeIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
+    final localizedType = switch (type) {
+      IOType.text => strings.taskFlowIoTypeText,
+      IOType.audio => strings.taskFlowIoTypeAudio,
+      IOType.video => strings.taskFlowIoTypeVideo,
+      IOType.image => strings.taskFlowIoTypeImage,
+      IOType.url => strings.taskFlowIoTypeLink,
+      IOType.file => strings.taskFlowIoTypeFile,
+      IOType.any => strings.taskFlowIoTypeAny,
+    };
     final union = possibleTypes?.toSet();
-    final isAudioVideoUnion = union != null &&
+    final isAudioVideoUnion =
+        union != null &&
         union.contains(IOType.audio) &&
         union.contains(IOType.video);
     final (IconData icon, Color color) = isAudioVideoUnion
@@ -44,8 +56,8 @@ class IOTypeIndicator extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             isInput
-                ? '输入: ${type.label}'
-                : '输出: ${labelOverride ?? type.label}',
+                ? strings.taskFlowUiInputLabel(localizedType)
+                : strings.taskFlowUiOutputLabel(labelOverride ?? localizedType),
             style: TextStyle(
               fontSize: 10,
               color: color,

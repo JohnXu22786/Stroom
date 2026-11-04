@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 /// Shows the File Attachment Panel — a modal bottom sheet with file transfer
 /// options only. No model selection, tools, or reasoning settings.
 ///
@@ -52,12 +54,15 @@ void showChatAttachmentPanel({
                       color: cs.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Icon(Icons.attach_file_outlined,
-                        size: 18, color: cs.primary),
+                    child: Icon(
+                      Icons.attach_file_outlined,
+                      size: 18,
+                      color: cs.primary,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '传文件',
+                    AppLocalizations.of(context)!.chatAttachmentFile,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -76,7 +81,7 @@ void showChatAttachmentPanel({
                 children: [
                   _FileActionButton(
                     icon: Icons.camera_alt_outlined,
-                    label: '拍照',
+                    label: AppLocalizations.of(context)!.chatAttachmentCamera,
                     color: Colors.orange,
                     onTap: () {
                       Navigator.pop(context);
@@ -85,7 +90,8 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.photo_library_outlined,
-                    label: '设备相册',
+                    label: AppLocalizations.of(context)!
+                        .chatAttachmentDeviceGallery,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(context);
@@ -94,7 +100,8 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.insert_drive_file_outlined,
-                    label: '设备文件',
+                    label: AppLocalizations.of(context)!
+                        .chatAttachmentDeviceFiles,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(context);
@@ -103,7 +110,7 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.folder_outlined,
-                    label: '应用内文件',
+                    label: AppLocalizations.of(context)!.chatAttachmentAppFiles,
                     color: Colors.purple,
                     onTap: () {
                       Navigator.pop(context);
@@ -146,10 +153,7 @@ class _FileActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: color.withValues(alpha: 0.2),
-            width: 1,
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

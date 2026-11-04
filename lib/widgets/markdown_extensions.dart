@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+
 import '../utils/mhchem_syntax.dart';
 import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
@@ -34,14 +38,14 @@ const int _ltCharCode = 0x3C;
 /// avoids false positives.
 class BrSyntax extends m.InlineSyntax {
   BrSyntax()
-      : super(
-          // Optional leading "/" for </br>, optional whitespace before an
-          // optional self-closing "/". Case-insensitive: models also output
-          // <BR> or <Br>.
-          r'</?br\s*/?>',
-          startCharacter: _ltCharCode,
-          caseSensitive: false,
-        );
+    : super(
+        // Optional leading "/" for </br>, optional whitespace before an
+        // optional self-closing "/". Case-insensitive: models also output
+        // <BR> or <Br>.
+        r'</?br\s*/?>',
+        startCharacter: _ltCharCode,
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
@@ -72,13 +76,13 @@ class BrSyntax extends m.InlineSyntax {
 /// normally.
 class USyntax extends m.InlineSyntax {
   USyntax()
-      : super(
-          // Case-insensitive: models also output <U> or </U>. The inner
-          // group is re-parsed by [m.Document.parseInline] in [onMatch].
-          r'<u>([\s\S]*?)</u>',
-          startCharacter: _ltCharCode,
-          caseSensitive: false,
-        );
+    : super(
+        // Case-insensitive: models also output <U> or </U>. The inner
+        // group is re-parsed by [m.Document.parseInline] in [onMatch].
+        r'<u>([\s\S]*?)</u>',
+        startCharacter: _ltCharCode,
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
@@ -124,7 +128,8 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
 class LatexSyntax extends m.InlineSyntax {
   /// Matches existing dollar forms and the common LaTeX display/inline
   /// delimiters. Markdown handles code spans and fences before this syntax.
-  static const String latexPattern = r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
+  static const String latexPattern =
+      r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
       r'(\\\((?:(?:\\.)|[^\\])+?\\\))|'
       r'(\\\[(?:(?:\\.)|[^\\])+?\\\])|'
       r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
@@ -134,10 +139,7 @@ class LatexSyntax extends m.InlineSyntax {
       r'(\\\()|'
       r'(\\\[)';
 
-  LatexSyntax()
-      : super(
-          latexPattern,
-        );
+  LatexSyntax() : super(latexPattern);
 
   @override
   bool tryMatch(m.InlineParser parser, [int? startMatchPos]) {
@@ -209,11 +211,7 @@ bool _hasEscapedBackslash(String input, int index) {
   return count.isOdd;
 }
 
-bool _isCrossPairedInlineDollar(
-  String input,
-  int index,
-  String matchValue,
-) {
+bool _isCrossPairedInlineDollar(String input, int index, String matchValue) {
   if (index == 0) return false;
   final previousDollar = input.lastIndexOf(r'$', index - 1);
   if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
@@ -231,10 +229,7 @@ String _prepareMathEnvironment(String content) {
   const equationEnd = r'\end{equation}';
   if (content.startsWith(equationStart) && content.endsWith(equationEnd)) {
     return content
-        .substring(
-          equationStart.length,
-          content.length - equationEnd.length,
-        )
+        .substring(equationStart.length, content.length - equationEnd.length)
         .trim();
   }
   const alignStart = r'\begin{align}';
@@ -291,7 +286,8 @@ class LatexNode extends SpanNode {
     final mathTextStyle = isInline
         ? style
         : style.copyWith(
-            fontSize: (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
+            fontSize:
+                (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
                 _displayMathScaleFactor,
           );
 
@@ -308,22 +304,19 @@ class LatexNode extends SpanNode {
             onTap: () => showDialog<void>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: const Text('Math parse error'),
+                title: Text(AppLocalizations.of(dialogContext)!.mathParseError),
                 content: SingleChildScrollView(
                   child: SelectableText(error.messageWithType),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close'),
+                    child: Text(AppLocalizations.of(dialogContext)!.mathClose),
                   ),
                 ],
               ),
             ),
-            child: Text(
-              textContent,
-              style: style.copyWith(color: Colors.red),
-            ),
+            child: Text(textContent, style: style.copyWith(color: Colors.red)),
           ),
         );
       },
@@ -368,7 +361,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -379,7 +372,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '正在生成...',
+              AppLocalizations.of(context)!.markdownGenerating,
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -641,11 +634,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
         fenceInnerQuoteDepth,
       );
       if (fenceContainer.matches) {
-        if (_isClosingFenceLine(
-          fenceContainer.line,
-          fenceChar!,
-          fenceLength,
-        )) {
+        if (_isClosingFenceLine(fenceContainer.line, fenceChar!, fenceLength)) {
           clearFence();
         }
         paragraphOpen = false;
@@ -665,8 +654,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
       listInnerQuoteDepth = 0;
       if (!lazyParagraphContinuation) paragraphOpen = false;
     }
-    var listContainerIndent =
-        listContentIndents.isEmpty ? 0 : listContentIndents.last;
+    var listContainerIndent = listContentIndents.isEmpty
+        ? 0
+        : listContentIndents.last;
     var listContent = quotedLine.line;
     if (!_isMarkdownBlankLine(listContent)) {
       final lineIndent = _leadingIndentColumns(listContent);
@@ -679,8 +669,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
               ))) {
         listContentIndents.removeLast();
       }
-      listContainerIndent =
-          listContentIndents.isEmpty ? 0 : listContentIndents.last;
+      listContainerIndent = listContentIndents.isEmpty
+          ? 0
+          : listContentIndents.last;
       listContent = _stripListItemIndent(listContent, listContainerIndent);
     }
     final listLine = _stripListItemPrefix(
@@ -751,7 +742,8 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
       // Content starts after the fence line and its newline.
       tailStart = offset + line.length + 1;
     } else {
-      paragraphOpen = !_isParagraphBoundaryLine(
+      paragraphOpen =
+          !_isParagraphBoundaryLine(
             innerQuotedLine.line,
             paragraphOpen: paragraphOpen,
           ) &&
@@ -770,8 +762,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
       mermaidFenceIndent: 0,
     );
   }
-  final tail =
-      tailStart >= normalized.length ? '' : normalized.substring(tailStart);
+  final tail = tailStart >= normalized.length
+      ? ''
+      : normalized.substring(tailStart);
   return (
     tail: tail,
     mermaidFenceIndex: openMermaidFenceIndex,
@@ -842,8 +835,8 @@ bool _isMermaidFenceLanguage(
     // same Mermaid blocks as the builder. Keep the source fence marker because
     // CommonMark allows backticks in a tilde-fence info string.
     final fenceMarker = List.filled(fenceLength, fenceChar).join();
-    final parsed =
-        m.Document(encodeHtml: false).parseLines(['$fenceMarker$info']);
+    final parsed = m.Document(encodeHtml: false)
+        .parseLines(['$fenceMarker$info']);
     for (final node in parsed) {
       if (node is! m.Element || node.tag != 'pre') continue;
       final children = node.children;
@@ -878,10 +871,7 @@ final _htmlRawTagStart = RegExp(
 final _htmlCommentStart = RegExp(r'^ {0,3}<!--');
 final _htmlProcessingInstructionStart = RegExp(r'^ {0,3}<\?');
 final _htmlDeclarationStart = RegExp(r'^ {0,3}<![a-z]', caseSensitive: false);
-final _htmlCdataStart = RegExp(
-  r'^ {0,3}<!\[CDATA\[',
-  caseSensitive: false,
-);
+final _htmlCdataStart = RegExp(r'^ {0,3}<!\[CDATA\[', caseSensitive: false);
 final _htmlBlockTagStart = RegExp(
   r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|'
   r'caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|'
@@ -897,7 +887,7 @@ final _standaloneHtmlTag = RegExp(
 );
 
 ({RegExp? terminator, bool untilBlank, bool canInterruptParagraph})?
-    _htmlBlockStart(String line) {
+_htmlBlockStart(String line) {
   if (_htmlRawTagStart.hasMatch(line)) {
     return (
       terminator: RegExp(
@@ -945,10 +935,7 @@ final _standaloneHtmlTag = RegExp(
   return null;
 }
 
-bool _isParagraphBoundaryLine(
-  String line, {
-  required bool paragraphOpen,
-}) {
+bool _isParagraphBoundaryLine(String line, {required bool paragraphOpen}) {
   if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
   if (RegExp(r'^ {0,3}#{1,6}(?:[ \t\x0b\x0c]|$)').hasMatch(line) ||
       (!paragraphOpen && _isLinkReferenceDefinitionStart(line)) ||
@@ -1005,13 +992,21 @@ String _stripFenceContainerPrefix(
       fenceIndent == 0) {
     return text;
   }
-  return text.split('\n').map((line) {
-    final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
-    final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
-    final innerQuoteStripped =
-        _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
-    return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
-  }).join('\n');
+  return text
+      .split('\n')
+      .map((line) {
+        final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+        final listStripped = _stripListItemIndent(
+          outerQuoteStripped,
+          listIndent,
+        );
+        final innerQuoteStripped = _stripBlockQuoteDepth(
+          listStripped,
+          innerQuoteDepth,
+        );
+        return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
+      })
+      .join('\n');
 }
 
 String _stripFenceContentIndent(String line, int indent) {
@@ -1023,7 +1018,7 @@ String _stripFenceContentIndent(String line, int indent) {
 }
 
 ({String fenceChar, int fenceLength, String infoString, int indent})?
-    _openingFence(String line) {
+_openingFence(String line) {
   // CommonMark allows 1-3 leading spaces on fences.
   final stripped = _stripUpTo3Spaces(line);
   if (stripped.length < 3) return null;
@@ -1087,8 +1082,10 @@ String _stripBlockQuoteDepth(String line, int depth) {
       !blankLineInList) {
     return (line: line, matches: false);
   }
-  final innerQuoteStripped =
-      _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+  final innerQuoteStripped = _stripBlockQuoteDepth(
+    listStripped,
+    innerQuoteDepth,
+  );
   if (innerQuoteDepth > 0 && innerQuoteStripped == listStripped) {
     return (line: line, matches: false);
   }
@@ -1149,7 +1146,8 @@ String _expandLeadingTabs(String line, int column) {
   var markerStartIndent = 0;
   while (markerStart < line.length &&
       (line[markerStart] == ' ' || line[markerStart] == '\t')) {
-    final nextIndent = _indentColumnsAfter(
+    final nextIndent =
+        _indentColumnsAfter(
           line,
           markerStart,
           sourceColumnOffset + markerStartIndent,
@@ -1191,7 +1189,8 @@ String _expandLeadingTabs(String line, int column) {
   var separatorIndent = markerIndent;
   while (separatorEnd < line.length &&
       (line[separatorEnd] == ' ' || line[separatorEnd] == '\t')) {
-    separatorIndent = _indentColumnsAfter(
+    separatorIndent =
+        _indentColumnsAfter(
           line,
           separatorEnd,
           sourceColumnOffset + separatorIndent,
@@ -1208,16 +1207,19 @@ String _expandLeadingTabs(String line, int column) {
 
   final separatorColumns = separatorIndent - markerIndent;
   final consumesWholeSeparator = separatorColumns <= 4;
-  final consumedSeparator =
-      consumesWholeSeparator ? separatorEnd - markerEnd : 1;
+  final consumedSeparator = consumesWholeSeparator
+      ? separatorEnd - markerEnd
+      : 1;
   final consumed = markerEnd + consumedSeparator;
-  final consumedIndent =
-      consumesWholeSeparator ? separatorIndent : markerIndent + 1;
+  final consumedIndent = consumesWholeSeparator
+      ? separatorIndent
+      : markerIndent + 1;
   var contentLine = line.substring(consumed);
   if (!consumesWholeSeparator) {
     if (line[markerEnd] == '\t') {
       final markerEndColumn = sourceColumnOffset + markerIndent;
-      final tabWidth = _indentColumnsAfter(line, markerEnd, markerEndColumn) -
+      final tabWidth =
+          _indentColumnsAfter(line, markerEnd, markerEndColumn) -
           markerEndColumn;
       contentLine = '${List.filled(tabWidth - 1, ' ').join()}$contentLine';
     }
@@ -1226,10 +1228,7 @@ String _expandLeadingTabs(String line, int column) {
       sourceColumnOffset + consumedIndent,
     );
   }
-  return (
-    line: contentLine,
-    indent: consumedIndent,
-  );
+  return (line: contentLine, indent: consumedIndent);
 }
 
 String _stripListItemIndent(String line, int indent) {
@@ -1468,26 +1467,26 @@ String stripSearchIrrelevantMarkdown(String text) {
   // renderer treats them as literal text too, so search and rendering stay
   // consistent.
   final paragraphs = withoutFences.split('\n\n');
-  final inlineStripped = paragraphs.map((paragraph) {
-    final buffer = StringBuffer();
-    var last = 0;
-    for (final match in _codeSpanPattern.allMatches(paragraph)) {
-      if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
-      buffer.write(paragraph.substring(last, match.start));
-      last = match.end;
-    }
-    buffer.write(paragraph.substring(last));
-    return buffer.toString();
-  }).join('\n\n');
+  final inlineStripped = paragraphs
+      .map((paragraph) {
+        final buffer = StringBuffer();
+        var last = 0;
+        for (final match in _codeSpanPattern.allMatches(paragraph)) {
+          if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
+          buffer.write(paragraph.substring(last, match.start));
+          last = match.end;
+        }
+        buffer.write(paragraph.substring(last));
+        return buffer.toString();
+      })
+      .join('\n\n');
   return inlineStripped.replaceAll(_displayMathPattern, '');
 }
 
 /// The markdown parser's inline code pattern (see `CodeSyntax`): a run of
 /// backticks, non-greedy content ending in a non-backtick, then a
 /// same-length run of backticks.
-final RegExp _codeSpanPattern = RegExp(
-  r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)',
-);
+final RegExp _codeSpanPattern = RegExp(r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)');
 
 /// Display math (`$$...$$`) pattern used by the search stripper.
 final RegExp _displayMathPattern = RegExp(r'\$\$[\s\S]*?\$\$');
@@ -1695,27 +1694,28 @@ MarkdownConfig buildMarkdownConfig({
   bool isStreaming = false,
   String? streamingText,
 }) {
-  final base =
-      isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
-  return base.copy(configs: [
-    codeBlockPreConfig(
-      isDark: isDark,
-      isStreaming: isStreaming,
-      streamingText: streamingText,
-    ),
-    TableConfig(
-      wrapper: _wrapTableWithHorizontalScroll,
-    ),
-    if (isDark) ...[
-      NoDividerH1Config(style: H1Config.darkConfig.style),
-      NoDividerH2Config(style: H2Config.darkConfig.style),
-      NoDividerH3Config(style: H3Config.darkConfig.style),
-    ] else ...[
-      const NoDividerH1Config(),
-      const NoDividerH2Config(),
-      const NoDividerH3Config(),
+  final base = isDark
+      ? MarkdownConfig.darkConfig
+      : MarkdownConfig.defaultConfig;
+  return base.copy(
+    configs: [
+      codeBlockPreConfig(
+        isDark: isDark,
+        isStreaming: isStreaming,
+        streamingText: streamingText,
+      ),
+      TableConfig(wrapper: _wrapTableWithHorizontalScroll),
+      if (isDark) ...[
+        NoDividerH1Config(style: H1Config.darkConfig.style),
+        NoDividerH2Config(style: H2Config.darkConfig.style),
+        NoDividerH3Config(style: H3Config.darkConfig.style),
+      ] else ...[
+        const NoDividerH1Config(),
+        const NoDividerH2Config(),
+        const NoDividerH3Config(),
+      ],
     ],
-  ]);
+  );
 }
 
 /// Builds the [MarkdownConfig] used to render a single chat message.

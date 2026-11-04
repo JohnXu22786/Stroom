@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../l10n/app_localizations.dart';
 import '../providers/task_provider.dart';
 import '../task_flow/pages/task_flow_run_page.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
@@ -15,11 +17,14 @@ class TaskCard extends ConsumerWidget {
     final restoreStatus = ref.watch(taskFlowExecutionRestoreStatusProvider);
     final ownerExecution = ref
         .watch(taskFlowExecutionsProvider)
-        .where((execution) =>
-            execution.subTasks.any((subTask) => subTask.subTaskId == task.id))
+        .where(
+          (execution) =>
+              execution.subTasks.any((subTask) => subTask.subTaskId == task.id),
+        )
         .firstOrNull;
     final ownershipKnown = restoreStatus == FlowExecutionRestoreStatus.ready;
     final canControlStandalone = ownershipKnown && ownerExecution == null;
+    final strings = AppLocalizations.of(context)!;
 
     return Card(
       child: Padding(
@@ -33,7 +38,10 @@ class TaskCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    task.title.isNotEmpty ? task.title : '未命名录音',
+                    task.title.isNotEmpty
+                        ? task.title
+                        : AppLocalizations.of(context)!
+                              .unifiedTaskUnnamedRecording,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -44,14 +52,17 @@ class TaskCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      buildStatusChip(task.status),
+                      buildStatusChip(
+                        task.status,
+                        AppLocalizations.of(context)!,
+                      ),
                       const SizedBox(width: 8),
                       Text(
-                        formatRelativeTime(task.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
+                        formatRelativeTime(
+                          task.createdAt,
+                          AppLocalizations.of(context)!,
                         ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -74,13 +85,18 @@ class TaskCard extends ConsumerWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.error_outline,
-                                size: 14, color: Colors.red),
+                            const Icon(
+                              Icons.error_outline,
+                              size: 14,
+                              color: Colors.red,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: GestureDetector(
                                 onTap: () => _showErrorDetailDialog(
-                                    context, task.error!),
+                                  context,
+                                  task.error!,
+                                ),
                                 child: Text(
                                   task.error!,
                                   style: const TextStyle(
@@ -97,8 +113,8 @@ class TaskCard extends ConsumerWidget {
                               GestureDetector(
                                 onTap: () =>
                                     _showOriginalDetailDialog(context, task),
-                                child: const Text(
-                                  '详情',
+                                child: Text(
+                                  strings.taskListDetail,
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.red,
@@ -130,8 +146,8 @@ class TaskCard extends ConsumerWidget {
             if (!ownershipKnown)
               Tooltip(
                 message: restoreStatus == FlowExecutionRestoreStatus.restoring
-                    ? '正在确认任务归属'
-                    : '任务流记录读取失败，操作暂不可用',
+                    ? strings.taskListOwnershipChecking
+                    : strings.taskListOwnershipFailed,
                 child: const Icon(Icons.lock_outline, size: 20),
               ),
             if (ownershipKnown && ownerExecution != null)
@@ -143,7 +159,7 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ),
                 icon: const Icon(Icons.account_tree_outlined, size: 18),
-                label: const Text('查看任务流'),
+                label: Text(strings.taskListViewFlow),
               ),
             if (canControlStandalone && task.status == TaskStatus.running)
               PopupMenuButton<String>(
@@ -156,22 +172,28 @@ class TaskCard extends ConsumerWidget {
                   }
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'pause',
                     child: ListTile(
                       leading: Icon(Icons.pause, size: 20),
-                      title: Text('暂停'),
+                      title: Text(strings.taskListPause),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
-                      leading: Icon(Icons.delete_outline,
-                          size: 20, color: Colors.red),
-                      title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                      leading: Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: Colors.red,
+                      ),
+                      title: Text(
+                        strings.taskListClear,
+                        style: TextStyle(color: Colors.red),
+                      ),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -189,7 +211,10 @@ class TaskCard extends ConsumerWidget {
                         ref.read(taskListProvider.notifier).resumeTask(task.id);
                       },
                       icon: const Icon(Icons.play_arrow, size: 16),
-                      label: const Text('继续', style: TextStyle(fontSize: 13)),
+                      label: Text(
+                        strings.taskListResume,
+                        style: TextStyle(fontSize: 13),
+                      ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
@@ -203,13 +228,18 @@ class TaskCard extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'remove',
                         child: ListTile(
-                          leading: Icon(Icons.delete_outline,
-                              size: 20, color: Colors.red),
-                          title:
-                              Text('清除任务', style: TextStyle(color: Colors.red)),
+                          leading: Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: Colors.red,
+                          ),
+                          title: Text(
+                            strings.taskListClear,
+                            style: TextStyle(color: Colors.red),
+                          ),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -229,7 +259,10 @@ class TaskCard extends ConsumerWidget {
                         ref.read(taskListProvider.notifier).retryTask(task.id);
                       },
                       icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('重试', style: TextStyle(fontSize: 13)),
+                      label: Text(
+                        strings.taskListRetry,
+                        style: TextStyle(fontSize: 13),
+                      ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
@@ -248,25 +281,33 @@ class TaskCard extends ConsumerWidget {
                     },
                     itemBuilder: (_) => [
                       if (task.error != null) ...[
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'dismiss_error',
                           child: ListTile(
-                            leading:
-                                Icon(Icons.close, size: 20, color: Colors.grey),
-                            title: Text('关闭错误信息'),
+                            leading: Icon(
+                              Icons.close,
+                              size: 20,
+                              color: Colors.grey,
+                            ),
+                            title: Text(strings.taskListDismissError),
                             dense: true,
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         const PopupMenuDivider(),
                       ],
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'remove',
                         child: ListTile(
-                          leading: Icon(Icons.delete_outline,
-                              size: 20, color: Colors.red),
-                          title:
-                              Text('清除任务', style: TextStyle(color: Colors.red)),
+                          leading: Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: Colors.red,
+                          ),
+                          title: Text(
+                            strings.taskListClear,
+                            style: TextStyle(color: Colors.red),
+                          ),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -284,12 +325,18 @@ class TaskCard extends ConsumerWidget {
                   }
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
-                      leading: Icon(Icons.delete_outline,
-                          size: 20, color: Colors.red),
-                      title: Text('从列表移除', style: TextStyle(color: Colors.red)),
+                      leading: Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: Colors.red,
+                      ),
+                      title: Text(
+                        strings.taskListRemove,
+                        style: TextStyle(color: Colors.red),
+                      ),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -320,20 +367,24 @@ class TaskCard extends ConsumerWidget {
       case TaskStatus.paused:
         return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
       case TaskStatus.waiting:
-        return const Icon(Icons.hourglass_empty,
-            color: Colors.purple, size: 24);
+        return const Icon(
+          Icons.hourglass_empty,
+          color: Colors.purple,
+          size: 24,
+        );
     }
   }
 
   void _showErrorDetailDialog(BuildContext context, String error) {
+    final strings = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 20),
             SizedBox(width: 8),
-            Text('合成错误详情'),
+            Text(strings.taskListSynthesisErrorTitle),
           ],
         ),
         content: SingleChildScrollView(
@@ -345,7 +396,7 @@ class TaskCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: Text(strings.taskListClose),
           ),
         ],
       ),
@@ -353,14 +404,15 @@ class TaskCard extends ConsumerWidget {
   }
 
   void _showOriginalDetailDialog(BuildContext context, SynthesisTask task) {
+    final strings = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.code, color: Colors.orange, size: 20),
             SizedBox(width: 8),
-            Text('原始请求与响应'),
+            Text(strings.taskListOriginalExchange),
           ],
         ),
         content: SizedBox(
@@ -371,8 +423,8 @@ class TaskCard extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (task.originalRequest != null) ...[
-                  const Text(
-                    '原始请求体:',
+                  Text(
+                    strings.taskListOriginalRequest,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -399,8 +451,8 @@ class TaskCard extends ConsumerWidget {
                   const SizedBox(height: 16),
                 ],
                 if (task.originalResponse != null) ...[
-                  const Text(
-                    '原始响应体:',
+                  Text(
+                    strings.taskListOriginalResponse,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -432,7 +484,7 @@ class TaskCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: Text(strings.taskListClose),
           ),
         ],
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 import 'temporary_countdown_capsule.dart';
@@ -44,13 +46,15 @@ class TopicItem extends StatelessWidget {
             brightness: Theme.of(context).brightness,
           ).primary
         : isUnread
-            ? ColorScheme.fromSeed(
-                seedColor: Colors.green,
-                brightness: Theme.of(context).brightness,
-              ).primary
-            : null;
+        ? ColorScheme.fromSeed(
+            seedColor: Colors.green,
+            brightness: Theme.of(context).brightness,
+          ).primary
+        : null;
 
-    final title = topic.title.isEmpty ? '新话题' : topic.title;
+    final title = topic.title.isEmpty
+        ? AppLocalizations.of(context)!.topicItemNew
+        : topic.title;
     final subtitle = formatDate(topic.updatedAt);
     final msgCount = topic.messages.length;
 
@@ -116,7 +120,8 @@ class TopicItem extends StatelessWidget {
                                   ? Icons.push_pin
                                   : Icons.chat_bubble_outline_rounded,
                               size: 20,
-                              color: statusColor ??
+                              color:
+                                  statusColor ??
                                   (topic.isPinned
                                       ? cs.primary
                                       : cs.onSurfaceVariant),
@@ -135,13 +140,17 @@ class TopicItem extends StatelessWidget {
                         if (topic.isPinned)
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: Icon(Icons.push_pin,
-                                size: 12, color: cs.primary),
+                            child: Icon(
+                              Icons.push_pin,
+                              size: 12,
+                              color: cs.primary,
+                            ),
                           ),
                         if (topic.isTemporary &&
                             topic.temporaryExpiresAt != null)
                           TemporaryCountdownCapsule(
-                              expiresAt: topic.temporaryExpiresAt!),
+                            expiresAt: topic.temporaryExpiresAt!,
+                          ),
                         Expanded(
                           child: Text(
                             title,
@@ -149,8 +158,9 @@ class TopicItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight:
-                                  isActive ? FontWeight.w600 : FontWeight.w500,
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
                               color: cs.onSurface,
                             ),
                           ),
@@ -169,8 +179,11 @@ class TopicItem extends StatelessWidget {
                         ),
                         if (msgCount > 0) ...[
                           const SizedBox(width: 8),
-                          Icon(Icons.message_outlined,
-                              size: 12, color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.message_outlined,
+                            size: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             '$msgCount',
@@ -199,12 +212,17 @@ class TopicItem extends StatelessWidget {
                             ? cs.primary
                             : cs.onSurfaceVariant.withValues(alpha: 0.7),
                       ),
-                      tooltip: topic.isPinned ? '取消置顶' : '置顶',
+                      tooltip: topic.isPinned
+                          ? AppLocalizations.of(context)!.topicItemUnpin
+                          : AppLocalizations.of(context)!.topicItemPin,
                       onPressed: onPinToggle,
                     ),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert,
-                          size: 18, color: cs.onSurfaceVariant),
+                      icon: Icon(
+                        Icons.more_vert,
+                        size: 18,
+                        color: cs.onSurfaceVariant,
+                      ),
                       onSelected: (value) {
                         switch (value) {
                           case 'rename':
@@ -222,23 +240,34 @@ class TopicItem extends StatelessWidget {
                         }
                       },
                       itemBuilder: (ctx) => [
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'rename',
-                          child: Text('重命名'),
+                          child: Text(
+                            AppLocalizations.of(context)!.topicItemRename,
+                          ),
                         ),
                         PopupMenuItem(
                           value: 'auto_rename',
-                          child: Text('自动命名',
-                              style: TextStyle(color: cs.onSurface)),
+                          child: Text(
+                            AppLocalizations.of(context)!.topicItemAutoName,
+                            style: TextStyle(color: cs.onSurface),
+                          ),
                         ),
                         PopupMenuItem(
                           value: 'pin',
-                          child: Text(topic.isPinned ? '取消置顶' : '置顶'),
+                          child: Text(
+                            topic.isPinned
+                                ? AppLocalizations.of(context)!.topicItemUnpin
+                                : AppLocalizations.of(context)!.topicItemPin,
+                          ),
                         ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text('删除', style: TextStyle(color: cs.error)),
+                          child: Text(
+                            AppLocalizations.of(context)!.topicItemDelete,
+                            style: TextStyle(color: cs.error),
+                          ),
                         ),
                       ],
                     ),

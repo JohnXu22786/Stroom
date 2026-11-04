@@ -590,5 +590,1425 @@
         "type": "int"
       }
     }
+  },
+  "taskFlowUiDiscardTitle": "放弃未保存的更改？",
+  "taskFlowUiDiscardBody": "返回后，所有未保存的更改将会丢失。",
+  "taskFlowUiContinueEditing": "继续编辑",
+  "taskFlowUiDiscard": "放弃",
+  "taskFlowUiUndo": "撤销",
+  "taskFlowUiSave": "保存",
+  "taskFlowUiNameHint": "输入任务流名称",
+  "taskFlowUiDescriptionHint": "添加描述（可选）",
+  "taskFlowUiNameRequired": "请输入任务流名称",
+  "taskFlowUiStepRequired": "步骤 {index}：{message}",
+  "taskFlowUiParameterRequired": "「{block}」的「{parameter}」为必填项",
+  "taskFlowUiSaveFailed": "保存失败，更改仍保留，请重试",
+  "taskFlowUiRetry": "重试",
+  "taskFlowUiUpdated": "任务流已更新",
+  "taskFlowUiCreated": "任务流已创建",
+  "taskFlowUiTitle": "任务流",
+  "taskFlowUiNotFound": "任务未找到",
+  "taskFlowUiBack": "返回",
+  "taskFlowUiEdit": "编辑",
+  "taskFlowUiInput": "输入（{label}）",
+  "taskFlowUiInputHint": "输入文本或链接",
+  "taskFlowUiStart": "开始任务流",
+  "taskFlowUiNoInput": "暂无输入，点击下方按钮添加网页资源 URL",
+  "taskFlowUiAddResource": "添加网页资源",
+  "taskFlowUiUrlHint": "请输入视频/音频网页URL",
+  "taskFlowUiDeleteInput": "删除此输入",
+  "taskFlowUiHour": "时",
+  "taskFlowUiMinute": "分",
+  "taskFlowUiSecond": "秒",
+  "taskFlowUiPreview": "预览: ",
+  "taskFlowUiDurationFormat": "时:分:秒",
+  "taskFlowUiDurationHint": "可选：按时长筛选视频资源。留空则展示全部资源供选择",
+  "taskFlowUiSelectImages": "选择图片（可多选）",
+  "taskFlowUiSelectAudio": "选择音频（可多选）",
+  "taskFlowUiSelectFiles": "选择文件（可多选）",
+  "taskFlowUiSelectVideo": "选择视频（可多选）",
+  "taskFlowUiRemove": "移除",
+  "taskFlowUiRemovedFileCleanupFailed": "清理已移除文件失败：{error}",
+  "taskFlowUiInitialInput": "0. 初始输入",
+  "taskFlowUiInputType": "输入类型: {type}",
+  "taskFlowUiUserFlowInput": "用户运行任务流时输入",
+  "taskFlowUiBlockInput": "输入: {type}",
+  "taskFlowUiBlockOutput": "输出: {type}",
+  "taskFlowUiParameters": "参数:",
+  "taskFlowUiClose": "关闭",
+  "taskFlowUiSelectAppImages": "选择应用内图片（可多选）",
+  "taskFlowUiNoImages": "暂无图片",
+  "taskFlowUiSelectAppAudio": "选择应用内音频（可多选）",
+  "taskFlowUiNoAudio": "暂无音频",
+  "taskFlowUiSelectAppVideo": "选择应用内视频（可多选）",
+  "taskFlowUiNoVideo": "暂无视频",
+  "taskFlowUiFileSelectFailed": "选择文件失败：{error}",
+  "taskFlowUiFileTooLarge": "「{name}」超过 {limit} MB，请选择较小文件",
+  "taskFlowUiFileUnreadable": "「{name}」为空或无法读取",
+  "taskFlowUiSomeFilesMissing": "部分文件不存在，已跳过",
+  "taskFlowUiQueuedOne": "任务流已加入队列",
+  "taskFlowUiQueuedMany": "已将 {count} 个任务流加入队列",
+  "taskFlowUiRunTitle": "本次运行",
+  "taskFlowUiCancelBatch": "取消整个批次",
+  "taskFlowUiRestoringRecords": "正在恢复任务流记录…",
+  "taskFlowUiRecordsPaused": "任务流记录读取失败，任务操作已暂停",
+  "taskFlowUiRecordsCleared": "本次运行记录已清除",
+  "taskFlowUiRunsFinished": "{finished}/{total} 个运行已结束",
+  "taskFlowUiRecordsRemoved": " · {count} 个记录已清除",
+  "taskFlowUiTemporaryFiles": "临时中间文件",
+  "taskFlowUiAddBlock": "添加功能块",
+  "taskFlowUiInsertBlockBefore": "在步骤 {index} 前插入功能块",
+  "taskFlowUiIncompatibleAdjacentBlocks": "没有同时兼容相邻步骤的功能块，请先调整相邻步骤",
+  "taskFlowUiInsertBeforeStep": "在步骤 {index} 前插入",
+  "taskFlowUiUnknown": "未知",
+  "taskFlowUiChooseBlock": "选择功能块",
+  "taskFlowUiInsertBlock": "插入功能块",
+  "taskFlowUiPreviousOutput": "上一步输出",
+  "taskFlowUiNextStepNeeds": "，下一步需要: {label}",
+  "taskFlowUiNoCompatibleBlock": "没有与当前类型兼容的功能块",
+  "taskFlowUiReplaceBlock": "替换功能块",
+  "taskFlowUiBlockCompatibility": "只能替换为输入输出兼容的功能块（同类输入输出）",
+  "taskFlowUiTemporaryCleanupTooltip": "下一个步骤成功保存结果后清理；最终步骤始终保留",
+  "taskFlowUiSetParameters": "设置参数",
+  "taskFlowUiReplace": "替换",
+  "taskFlowUiViewParameters": "点击查看参数",
+  "taskFlowUiTapSetParameters": "点击设置参数",
+  "taskFlowUiUnknownBlockType": "未知功能块: {name}",
+  "taskFlowUiBlockUnregistered": "该功能块类型未注册",
+  "taskFlowUiStepActions": "步骤 {index} 操作",
+  "taskFlowUiInsertBefore": "在前面插入",
+  "taskFlowUiInsertAfter": "在后面插入",
+  "taskFlowUiCopyBlock": "复制功能块",
+  "taskFlowUiMoveUp": "上移",
+  "taskFlowUiMoveUpDisabled": "上移（已在最前）",
+  "taskFlowUiMoveDown": "下移",
+  "taskFlowUiMoveDownDisabled": "下移（已在最后）",
+  "taskFlowUiDeleteBlock": "删除功能块",
+  "taskFlowUiInputLabel": "输入: {label}",
+  "taskFlowUiOutputLabel": "输出: {label}",
+  "taskFlowUiUnregisteredBlockType": "功能块类型 “{name}” 未注册",
+  "taskFlowUiBlockSettings": "{label} 设置",
+  "taskFlowUiSendToAssistant": "发送给助手的用户消息 = 上一步的输出",
+  "taskFlowUiTempSpaceInfo": "此步骤会输出到任务流的临时空间，下一个步骤成功保存结果后自动清理。原保存文件夹会保留，关闭临时模式后恢复。",
+  "taskFlowUiNoExtraParameters": "该功能块无额外参数",
+  "taskFlowUiCancel": "取消",
+  "taskFlowUiConfirm": "确认",
+  "taskFlowUiConfigureModelFirst": "请先配置模型",
+  "taskFlowUiModelUnavailable": "模型未选择或已失效，请重新选择",
+  "taskFlowUiModelIndexed": "模型 {index}",
+  "taskFlowUiUnnamedProvider": "未命名供应商",
+  "taskFlowUiCustomModelParameters": "模型自定义参数",
+  "taskFlowUiTtsVoiceMissing": "所有TTS模型均未配置音色，可手动输入ID",
+  "taskFlowUiVoiceUnavailable": "音色已失效，请重新选择",
+  "taskFlowUiSelectVoice": "选择音色",
+  "taskFlowUiAssistantUnavailable": "助手不存在",
+  "taskFlowUiAssistantUseCurrent": "未指定（使用当前选中的助手）",
+  "taskFlowUiAssistantDeleted": "配置的助手已删除，请重新选择",
+  "taskFlowUiChooseAssistant": "选择助手",
+  "taskFlowUiOnlyCustomAssistants": "只能选择\"我的助手\"（在\"聊天 → 助手\"中添加）",
+  "taskFlowUiMyAssistants": "我的助手",
+  "taskFlowUiNoCustomAssistants": "还没有自定义助手，可在\"聊天 → 助手\"中创建",
+  "taskFlowUiYes": "是",
+  "taskFlowUiNo": "否",
+  "taskFlowUiDefaultRoot": "默认 (根目录)",
+  "taskFlowUiSelect": "选择",
+  "taskFlowUiSelectSaveFolder": "选择保存文件夹",
+  "taskFlowUiCatCatchVideo": "视频",
+  "taskFlowUiCatCatchAudio": "音频",
+  "taskFlowUiCatCatchEither": "视频或音频（按下游筛选）",
+  "taskFlowUiManual": "手动",
+  "taskFlowUiAutomatic": "自动",
+  "taskFlowUiAutomaticPrompt": "自动并询问",
+  "taskFlowUiEditTitle": "编辑任务流",
+  "taskFlowUiCreateTitle": "新建任务流",
+  "taskFlowUiStepNumber": "步骤 {index}：{message}",
+  "taskFlowUiInputTypeValue": "输入类型: {type}",
+  "taskFlowUiBlockInputValue": "输入: {type}",
+  "taskFlowUiBlockOutputValue": "输出: {type}",
+  "taskFlowUiCleanupError": "清理已移除文件失败：{error}",
+  "taskFlowUiSelectFileError": "选择文件失败：{error}",
+  "taskFlowUiLargeFile": "「{name}」超过 {limit} MB，请选择较小文件",
+  "taskFlowUiUnreadableFile": "「{name}」为空或无法读取",
+  "taskFlowUiTemporary": "临时",
+  "taskFlowUiTemporaryFileHint": "临时文件（下一步成功后清理）",
+  "taskFlowUiUnregisteredBlock": "功能块类型 “{name}” 未注册",
+  "taskFlowUiRunSummary": "{finished}/{total} 个运行已结束",
+  "taskFlowUiClearedRecordCount": " · {count} 个记录已清除",
+  "taskFlowUiInputOutput": "输入: {input} → 输出: {output}",
+  "taskFlowCardTag": "任务流",
+  "taskFlowCardQueued": "排队中（等待资源）",
+  "taskFlowCardCompletedProgress": "{done}/{total} 已完成",
+  "taskFlowCardCountLabel": "{count} 个{label}",
+  "taskFlowCardFailedLabel": "失败",
+  "taskFlowCardSkippedLabel": "跳过",
+  "taskFlowCardCancelledLabel": "取消",
+  "taskFlowCardInterruptedLabel": "中断",
+  "taskFlowCardCancelFlow": "取消流程",
+  "taskFlowCardRetry": "重试",
+  "taskFlowCardCancelBatch": "取消整个批次",
+  "taskFlowCardDelete": "删除",
+  "taskFlowCardRetryFlow": "重试任务流",
+  "taskFlowCardNoSnapshot": "此历史记录没有运行快照，将使用当前流程配置从头运行。",
+  "taskFlowCardRetryInfo": "从头运行会重新下载并调用模型。可按启动时的原配置重试，或明确选择当前最新配置。要复用已完成步骤，请选择“从中断步骤继续”。",
+  "taskFlowCardRunLatest": "按最新配置运行",
+  "taskFlowCardRetryOriginal": "按原配置重试",
+  "taskFlowCardDeleteRecord": "删除任务流记录",
+  "taskFlowCardDeleteBatchConfirm": "删除此运行记录将取消整个批次尚未完成的任务，并清除其子任务记录。确定删除？",
+  "taskFlowCardDeleteRunningConfirm": "任务流正在运行，删除将取消其中正在运行的任务。确定删除？",
+  "taskFlowCardDeleteRecordConfirm": "确定删除此任务流记录？其子任务记录也会一并删除。",
+  "taskFlowCardDeleteConfirm": "确定删除此任务流记录？",
+  "taskFlowCardSaveCancelStateError": "任务流取消状态无法保存，请重试删除",
+  "taskFlowCardStillRunning": "任务流取消后仍在运行",
+  "taskFlowCardSaveDeleteStateError": "任务流记录删除状态无法保存，请重试删除",
+  "taskFlowCardConfirm": "确定",
+  "taskFlowCardWaiting": "等待中",
+  "taskFlowCardRunning": "进行中",
+  "taskFlowCardPaused": "已暂停",
+  "taskFlowCardCompleted": "已完成",
+  "taskFlowCardFailed": "失败",
+  "taskFlowCardCanceled": "已取消",
+  "taskFlowCardInterrupted": "已中断",
+  "taskFlowCardSucceeded": "已跳过",
+  "taskFlowCardPause": "暂停流程",
+  "taskFlowCardResume": "继续流程",
+  "taskFlowCardResumeInterrupted": "从中断步骤继续",
+  "taskFlowCardCancel": "取消",
+  "unifiedTaskType": "任务类型",
+  "unifiedTaskCreatedAt": "创建时间",
+  "unifiedTaskCompletedAt": "完成时间",
+  "unifiedTaskResultStatus": "结果状态",
+  "unifiedTaskPartialResult": "部分结果，内容可能不完整",
+  "unifiedTaskErrorDetails": "错误详情",
+  "unifiedTaskViewErrorDetails": "查看错误详情",
+  "unifiedTaskOcrPerImage": "逐张识别",
+  "unifiedTaskOcrPageIndex": "第 {index} 张",
+  "unifiedTaskOcrPending": "待识别",
+  "unifiedTaskOcrRunning": "识别中",
+  "unifiedTaskCompleted": "已完成",
+  "unifiedTaskIncomplete": "结果不完整",
+  "unifiedTaskOcrFailed": "识别失败",
+  "unifiedTaskCancelled": "已取消",
+  "unifiedTaskWaitingStart": "等待开始...",
+  "unifiedTaskSteps": "执行步骤",
+  "unifiedTaskStartNow": "立即开始",
+  "unifiedTaskOpenFile": "打开文件",
+  "unifiedTaskRetrySave": "仅重试保存",
+  "unifiedTaskRetryPartialSave": "仅重试保存部分结果",
+  "unifiedTaskSavePartialResult": "保存部分结果",
+  "unifiedTaskRetry": "重试",
+  "unifiedTaskCancel": "取消",
+  "unifiedTaskDelete": "删除",
+  "unifiedTaskFormatUnsupported": "不支持此格式预览",
+  "unifiedTaskLoadFailed": "加载失败: {error}",
+  "unifiedTaskPlaybackFailed": "播放失败: {error}",
+  "unifiedTaskAudioFile": "音频文件",
+  "unifiedTaskPreviewLoadFailed": "无法加载预览",
+  "unifiedTaskUnknownSize": "未知大小",
+  "unifiedTaskUnnamedRecording": "未命名录音",
+  "unifiedTaskPause": "暂停",
+  "unifiedTaskClearTask": "清除任务",
+  "unifiedTaskContinue": "继续",
+  "unifiedTaskRemoveFromList": "从列表移除",
+  "unifiedTaskSynthesisText": "合成文本",
+  "unifiedTaskStatus": "状态",
+  "unifiedTaskDetails": "详情",
+  "unifiedTaskSynthesisError": "合成错误详情",
+  "unifiedTaskClose": "关闭",
+  "unifiedTaskRawRequestResponse": "原始请求与响应",
+  "unifiedTaskRawRequestBody": "原始请求体:",
+  "unifiedTaskRawResponseBody": "原始响应体:",
+  "commonJustNow": "刚刚",
+  "commonMinutesAgo": "{count}分钟前",
+  "commonHoursAgo": "{count}小时前",
+  "unifiedDurationSeconds": "{seconds}秒",
+  "unifiedDurationMinutesSeconds": "{minutes}分{seconds}秒",
+  "unifiedDurationHoursMinutes": "{hours}时{minutes}分",
+  "unifiedTaskTypeOcr": "文字识别",
+  "unifiedTaskTypeAsr": "音频转写",
+  "unifiedTaskTypeAudioSeparation": "音频分离",
+  "unifiedTaskTypeChat": "助手对话",
+  "unifiedTaskPlayAudio": "播放音频",
+  "unifiedTaskPauseAudio": "暂停音频",
+  "catcatchFlowActionNotStarted": "任务流操作未执行，请检查流程状态后重试",
+  "catcatchFlowActionFailed": "任务流操作失败：{error}",
+  "catcatchSkipped": "已跳过（无需处理）",
+  "catcatchRetryStep": "重试此步骤",
+  "catcatchCollapseSegments": "收起 {count} 个分片",
+  "catcatchShowSegments": "显示 {count} 个分片",
+  "catcatchSelectedResources": "已选 {selected}/{total} 个资源",
+  "catcatchDetectedMediaResources": "检测到 {count} 个媒体资源",
+  "catcatchFlowSelectOrCombine": "（选择一个资源或合并一组音视频）",
+  "catcatchSelectMultiple": "（点击选择，可多选）",
+  "catcatchWaitingForResources": "正在等待任务流资源",
+  "catcatchDownloadSelected": "下载选中的 {count} 个资源",
+  "catcatchSelectResources": "请选择要下载的资源",
+  "catcatchPossibleSplit": "⚠ 疑似音视频分离",
+  "catcatchSplitExplanation": "检测到此组资源可能是同一个视频的音频和视频分离的流，您可以选择合并音视频，或仅下载其中一种。",
+  "catcatchAudioStream": "🎵 音频流",
+  "catcatchVideoStream": "🎬 视频流",
+  "catcatchMergeAudioVideo": "合并音视频",
+  "catcatchVideoOnly": "仅视频",
+  "catcatchAudioOnly": "仅音频",
+  "catcatchSegmentsPlaylistPreview": "分片需通过播放列表预览",
+  "catcatchPreviewAudio": "预览音频",
+  "catcatchPreviewVideo": "预览视频",
+  "catcatchDuration": "时长: {duration}",
+  "catcatchSegment": "分片",
+  "catcatchPlaylist": "播放列表",
+  "catcatchFullVideo": "整片",
+  "catcatchSeparateTracks": "分轨",
+  "catcatchPreviewPlaylistOnly": "请通过播放列表预览",
+  "catcatchPreviewUnsupported": "不支持预览",
+  "catcatchUnknownFormat": "未知格式",
+  "catcatchNeedPlaylistProcessing": "需要处理播放列表",
+  "catcatchSpecialFormatDetected": "检测到特殊格式",
+  "catcatchPlaylistInfo": "该资源是一个播放列表（{format}），需要自动解析并下载所有分段后合并为可播放的视频文件。",
+  "catcatchFormatInfo": "下载的文件格式为 {format}，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。",
+  "catcatchContinueBeforeConfirm": "请先继续流程，再确认格式处理",
+  "catcatchAutoProcess": "自动处理",
+  "catcatchKeepOriginalFormat": "保留原始格式",
+  "catcatchResumeSupported": "支持断点续传",
+  "catcatchResumeUnsupported": "该站点不支持断点续传",
+  "catcatchPauseDownload": "暂停下载",
+  "catcatchResumeDownload": "继续下载",
+  "catcatchRestartDownload": "重新下载",
+  "catcatchPendingFormatAction": "正在等待任务流资源",
+  "quitDialogTitle": "退出应用？",
+  "quitDialogRunningTasks": "有 {count} 个任务正在运行，退出将中断这些任务。确定要退出吗？",
+  "quitDialogNoTasks": "确定要退出 Stroom 吗？",
+  "quitDialogCancel": "取消",
+  "quitDialogExit": "退出",
+  "searchPanelNewConversation": "新对话",
+  "searchPanelTitle": "搜索对话",
+  "searchPanelHint": "输入关键词...",
+  "searchPanelByTitle": "搜标题",
+  "searchPanelByContent": "搜内容",
+  "searchPanelResults": "{count} 个结果",
+  "searchPanelPrompt": "输入关键词开始搜索",
+  "searchPanelNoResults": "没有找到匹配的对话",
+  "topicItemNew": "新话题",
+  "topicItemUnpin": "取消置顶",
+  "topicItemPin": "置顶",
+  "topicItemRename": "重命名",
+  "topicItemAutoName": "自动命名",
+  "topicItemDelete": "删除",
+  "galleryChoiceTitle": "选择图片来源",
+  "galleryChoiceDevice": "设备相册",
+  "galleryChoiceDeviceDescription": "浏览设备中的照片和视频",
+  "galleryChoiceApp": "应用相册",
+  "galleryChoiceAppDescription": "从应用内部相册选择",
+  "appMediaUnreadable": "无法读取文件",
+  "appMediaClearSelection": "清除 ({count})",
+  "appMediaConfirmSelectionCount": "确定 ({count})",
+  "appMediaConfirmSelection": "确定",
+  "appMediaEmptyFolder": "此文件夹为空",
+  "appMediaRoot": "返回根目录",
+  "appMediaParentFolder": "返回: {name}",
+  "appMediaSelectedFiles": "已选择 {count} 个文件",
+  "imagePreviewCrop": "裁剪",
+  "imagePreviewEdit": "编辑",
+  "imagePreviewLoadFailed": "无法加载图片",
+  "runningElapsed": "已运行 {elapsed}",
+  "chatAttachmentFile": "传文件",
+  "chatAttachmentCamera": "拍照",
+  "chatAttachmentDeviceGallery": "设备相册",
+  "chatAttachmentDeviceFiles": "设备文件",
+  "chatAttachmentAppFiles": "应用内文件",
+  "fileManagerTodayTime": "今天 {time}",
+  "fileManagerYesterdayTime": "昨天 {time}",
+  "fileManagerDaysAgoTime": "{days}天前 {time}",
+  "markdownGenerating": "正在生成...",
+  "htmlPreview": "预览",
+  "htmlReturnToCard": "返回卡片",
+  "htmlGenerating": "正在生成中...",
+  "htmlFullscreen": "全屏查看",
+  "htmlViewCode": "查看代码",
+  "codeScrollToBottom": "滚动到底部",
+  "codeSave": "保存",
+  "codeDisableWrap": "取消换行",
+  "codeEnableWrap": "换行显示",
+  "codeCopyFailed": "复制失败: {error}",
+  "codeCopied": "已复制",
+  "codeCopy": "复制",
+  "codeEmptySave": "代码为空，无法保存",
+  "codeSaveTitle": "保存代码",
+  "codeSavedTo": "已保存到: {path}",
+  "codeSaveFailed": "保存失败: {error}",
+  "fileManagerCopy": "复制",
+  "fileManagerMove": "移动",
+  "fileManagerRename": "重命名",
+  "fileManagerExport": "导出",
+  "fileManagerDelete": "删除",
+  "fileManagerAncestorFolders": "祖先文件夹",
+  "fileManagerRoot": "根目录",
+  "fileManagerSelectedItems": "已选择 {count} 项",
+  "fileManagerSelectAll": "全选",
+  "fileManagerRenameUndo": "上次批量重命名结果与撤销",
+  "fileManagerSortBy": "排序（{field}）",
+  "fileManagerSortCreated": "按创建时间",
+  "fileManagerSortModified": "按修改时间",
+  "fileManagerSortName": "按文件名",
+  "fileManagerSortSize": "按大小",
+  "fileManagerListView": "列表视图",
+  "fileManagerThumbnailView": "缩略图视图",
+  "fileManagerCreateFolder": "创建文件夹",
+  "fileManagerRefresh": "刷新列表",
+  "fileManagerEmptyFolder": "此文件夹为空",
+  "fileManagerNoFiles": "暂无文件",
+  "fileManagerBackRoot": "返回根目录",
+  "fileManagerBackFolder": "返回: {name}",
+  "fileManagerMultiSelect": "多选",
+  "fileManagerOpen": "打开",
+  "fileManagerPreview": "预览",
+  "fileManagerFolderAndFilesCount": "{files} 个文件, {folders} 个子文件夹",
+  "fileManagerSubfoldersCount": "{count} 个子文件夹",
+  "fileManagerFilesCount": "{count} 个文件",
+  "fileManagerEmptyFolderLabel": "空文件夹",
+  "fileManagerFileExists": "文件 “{name}.{format}” 已存在",
+  "fileManagerRenameFailed": "重命名失败: {error}",
+  "fileManagerChooseTargetFolder": "选择目标文件夹",
+  "fileManagerAlreadyAtDestination": "文件已在目标位置",
+  "fileManagerMoveNameConflict": "目标文件夹已存在同名文件，移动已取消",
+  "fileManagerMoveFailed": "移动失败: {error}",
+  "fileManagerChooseCopyDestination": "选择复制到的目标文件夹",
+  "fileManagerCopyFailed": "复制失败: {error}",
+  "fileManagerDeleteConfirmTitle": "确认删除",
+  "fileManagerDeleteFileConfirm": "确定要删除此文件吗？此操作不可恢复。",
+  "fileManagerCancel": "取消",
+  "fileManagerDeleteFailed": "删除失败: {error}",
+  "fileManagerFolderAlreadyThere": "文件夹已在目标位置，操作已取消",
+  "fileManagerFolderConflict": "所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消",
+  "fileManagerBatchDeleteTitle": "确认批量删除",
+  "fileManagerDeleteSelectedConfirm": "确定要删除选中的 {count} 项吗？此操作不可恢复。",
+  "fileManagerBatchDeleteFailed": "批量删除失败: {error}",
+  "fileManagerExportConflict": "所选文件与文件夹的导出路径冲突",
+  "fileManagerSelectedAlreadyThere": "所选文件已在目标位置，移动已取消",
+  "fileManagerBatchMoveFailed": "批量移动失败: {error}",
+  "fileManagerCopyConflict": "所选文件中存在同名文件，复制已取消（请逐个复制）",
+  "fileManagerBatchCopyFailed": "批量复制失败: {error}",
+  "fileManagerClosedError": "文件页面已关闭",
+  "fileManagerBatchRenameFailed": "批量重命名失败：{error}",
+  "fileManagerFolderNameHint": "输入文件夹名称",
+  "fileManagerCreate": "创建",
+  "fileManagerFolderExists": "文件夹已存在",
+  "fileManagerCreateFolderFailed": "创建文件夹失败: {error}",
+  "fileManagerFolderCreated": "文件夹 “{name}” 创建成功",
+  "fileManagerRenameFolderTitle": "重命名文件夹",
+  "fileManagerNewNameHint": "输入新名称",
+  "fileManagerTargetFolderConflict": "目标位置已存在同名文件夹，操作已取消",
+  "fileManagerMoveFolderTitle": "移动文件夹到…",
+  "fileManagerCopyFolderTitle": "复制文件夹到…",
+  "fileManagerFolderSelfConflict": "目标位置已存在同名文件夹或为文件夹自身，操作已取消",
+  "fileManagerDeleteFolderConfirm": "确定要删除文件夹 “{name}” 吗？其中的 {count} 个文件也将被删除。",
+  "fileManagerDeleteEmptyFolderConfirm": "确定要删除空文件夹 “{name}” 吗？",
+  "fileManagerDeleteFolderTitle": "确认删除文件夹",
+  "fileManagerRefreshFailed": "刷新失败: {error}",
+  "fileManagerRefreshed": "文件列表已刷新",
+  "fileManagerRenameFileTitle": "重命名文件",
+  "fileManagerFormat": "格式",
+  "fileManagerFolderAtDestination": "文件夹已在目标位置",
+  "folderPickerTitle": "选择文件夹",
+  "folderPickerExists": "文件夹已存在",
+  "folderPickerCreateFailed": "创建文件夹失败: {error}",
+  "folderPickerRefreshFailed": "刷新文件夹列表失败: {error}",
+  "folderPickerInstruction": "单击选中，双击进入查看子文件夹",
+  "folderPickerFileName": "文件名",
+  "folderPickerFileNameHint": "输入文件名",
+  "folderPickerBack": "返回上级",
+  "folderPickerPath": "根目录 > {path}",
+  "folderPickerRoot": "根目录",
+  "folderPickerCurrentFolder": "当前文件夹",
+  "folderPickerSubfolders": "子文件夹",
+  "folderPickerExistingFolders": "现有文件夹",
+  "folderPickerCreateNew": "创建新文件夹",
+  "folderPickerFolderNameHint": "输入文件夹名称",
+  "folderPickerCancelCreate": "取消新建",
+  "folderPickerCancel": "取消",
+  "folderPickerConfirm": "确定",
+  "batchRunReadFailed": "无法读取文件列表：{error}",
+  "batchRunPreparing": "准备中…",
+  "batchRunUndo": "撤销",
+  "batchRunRename": "重命名",
+  "batchRunFailedAction": "未能执行{label}",
+  "batchRunCompletedCount": "已{label} {count} 项",
+  "batchRunSummary": "{label}：成功 {completed} 项，失败 {failed} 项，剩余 {remaining} 项",
+  "batchRunFailedItem": "失败：{id} → {name}",
+  "batchRunReportCopied": "已复制执行报告",
+  "batchRunCopyFailed": "复制失败，请重试",
+  "batchRunWorking": "正在{label}…",
+  "batchRunTitle": "批量重命名结果",
+  "batchRunStoppedRetain": "停止后会保留当前已完成的项目，可在结果页撤销。",
+  "batchRunFailedRemaining": "失败；后续项目未执行",
+  "batchRunUndoInfo": "撤销会恢复本次已成功项目的原名；后续列表变化时将拒绝撤销。",
+  "batchRunUncertain": "有项目状态无法确认，请检查文件列表；为避免覆盖，不提供自动撤销。",
+  "batchRunUndoing": "正在恢复原名，请稍候",
+  "batchRunStopping": "正在停止…",
+  "batchRunStopRemaining": "停止后续操作",
+  "batchRunCopyReport": "复制报告",
+  "batchRunUndoRemaining": "继续撤销剩余 {count} 项",
+  "batchRunUndoCompleted": "撤销已完成改名",
+  "batchRunDone": "完成",
+  "codeEditorTitle": "编辑参数值",
+  "codeEditorFormat": "格式化",
+  "codeEditorCancel": "取消",
+  "codeEditorConfirm": "确定",
+  "codeEditorInvalidJson": "JSON 格式有误，请修正后再保存",
+  "codeEditorParamPath": "参数名路径（请求时展开为嵌套 JSON）",
+  "codeEditorErrorPosition": "第 {line} 行第 {column} 列: {message}",
+  "@codeEditorErrorPosition": {
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "column": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorJsonError": "JSON 格式错误: {message}",
+  "@codeEditorJsonError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorInvalidFormat": "JSON 格式不正确",
+  "toolCallCompacted": "已压缩",
+  "mermaidSaveEmpty": "Mermaid 代码为空，无法保存",
+  "mermaidFolderLoadFailed": "获取文件夹失败: {error}",
+  "@mermaidFolderLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveTitle": "保存 Mermaid 图表",
+  "mermaidSaveHint": "选择或创建文件夹保存 .mmd 文件",
+  "mermaidSaveFilenameHint": "输入文件名（自动添加 .mmd 后缀）",
+  "mermaidFilenameEmpty": "文件名不能为空",
+  "mermaidSaveSuccess": "已保存到文本储存区: {folder}/{name}.mmd",
+  "@mermaidSaveSuccess": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveFailed": "保存失败: {error}",
+  "@mermaidSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidPrepareEngine": "正在准备渲染引擎...",
+  "mermaidRetry": "重试",
+  "batchRuleEmpty": "不能为空",
+  "batchRuleNumber": "请输入数字",
+  "batchRulePositive": "请输入大于 0 的数字",
+  "batchRuleMin": "不能小于 {min}",
+  "@batchRuleMin": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleMax": "不能大于 {max}",
+  "@batchRuleMax": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRulePrefix": "前缀",
+  "batchRuleSuffix": "后缀",
+  "batchRuleStart": "起始",
+  "batchRuleStep": "步长",
+  "batchRuleDigits": "位数",
+  "batchRuleSeparator": "分隔符",
+  "batchRuleRestartFolder": "每个目录重新编号",
+  "batchRuleNumberHelp": "编号按预览顺序分配；排除项不占序号。步长可为负数或 0。",
+  "batchRuleFind": "查找内容",
+  "batchRuleReplace": "替换为（留空删除）",
+  "batchRuleCaseSensitive": "区分大小写",
+  "batchRuleRegex": "正则表达式",
+  "batchRuleFirstOnly": "仅替换首次匹配",
+  "batchRuleRegexHelp": "捕获组：$1、$2；完整匹配：$0；字面 $：$$。例如 ^IMG_(\\d+)$ → 照片_$1",
+  "batchRuleFindRequired": "填写查找内容后生效。",
+  "batchRuleBeginning": "开头",
+  "batchRuleEnd": "结尾",
+  "batchRulePosition": "指定位置",
+  "batchRuleInsertText": "插入文本",
+  "batchRuleBeforeChar": "第 N 个字符前",
+  "batchRulePositionHelp": "位置从 1 开始；超过末尾时追加。组合 emoji 按一个字符计算。",
+  "batchRuleFromBeginning": "从开头",
+  "batchRuleFromEnd": "从结尾",
+  "batchRuleFromChar": "从第 N 个字符起",
+  "batchRuleCount": "数量",
+  "batchRuleDeleteHelp": "名称删空后需由后续插入规则补充，才能执行。",
+  "batchRuleUpper": "全大写",
+  "batchRuleLower": "全小写",
+  "batchRuleFirstUpper": "首字母大写",
+  "batchRuleTitleCase": "每词首字母大写",
+  "batchRuleTemplate": "新名称模板",
+  "batchRuleTemplateHint": "课程_{n}_{name}",
+  "@batchRuleTemplateHint": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTemplateHelp": "{name} 原名 · {n} 序号 · {folder} 所在目录名\n{created} 创建日期 · {modified} 修改日期 · {ext} 原扩展名\n日期格式 YYYY-MM-DD；缺少日期时会提示。模板替换整个基础名，扩展名仍自动保留。",
+  "@batchRuleTemplateHelp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      },
+      "created": {
+        "type": "String"
+      },
+      "modified": {
+        "type": "String"
+      },
+      "ext": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTrim": "去掉首尾空白",
+  "batchRuleCollapseSpaces": "连续空白合并为一个空格",
+  "batchRuleActions": "规则操作",
+  "batchRuleDuplicate": "复制规则",
+  "batchRuleRemove": "删除规则",
+  "batchRuleMoveUp": "上移规则",
+  "batchRuleMoveDown": "下移规则",
+  "batchDlgSavePreset": "保存重命名方案",
+  "batchDlgPresetName": "方案名称",
+  "batchDlgPresetHint": "保存规则及顺序，不包含排除项或手动名称",
+  "batchDlgCancel": "取消",
+  "batchDlgSave": "保存",
+  "batchDlgOverwriteTitle": "覆盖已有方案？",
+  "batchDlgOverwriteBody": "将更新“{name}”的规则。",
+  "@batchDlgOverwriteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgOverwrite": "覆盖",
+  "batchDlgManagePresets": "管理方案",
+  "batchDlgNoPresets": "尚未保存方案",
+  "batchDlgDeletePreset": "删除方案",
+  "batchDlgDone": "完成",
+  "batchDlgEditName": "单独修改名称",
+  "batchDlgBaseName": "基础名称",
+  "batchDlgOverrideHelp": "此名称覆盖规则结果",
+  "batchDlgExtensionRetained": "扩展名 .{extension} 自动保留",
+  "@batchDlgExtensionRetained": {
+    "placeholders": {
+      "extension": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgConfirm": "确定",
+  "batchDlgHelp": "使用说明",
+  "batchDlgClose": "关闭",
+  "batchDlgLoadPreset": "加载方案（替换规则并清除手动名称）",
+  "batchDlgLoad": "加载方案",
+  "batchDlgSaving": "保存中…",
+  "batchDlgReset": "重置全部规则与参与项目",
+  "batchDlgRuleInstructions": "规则从上到下依次执行；可复制、移动或关闭。扩展名保持不变。",
+  "batchDlgSortName": "名称",
+  "batchDlgSortCreated": "创建时间",
+  "batchDlgSortModified": "修改时间",
+  "batchDlgSortSize": "大小",
+  "batchDlgAscending": "升序",
+  "batchDlgDescending": "降序",
+  "batchDlgFolderSort": "文件夹在前；同名按所在目录排序。",
+  "batchDlgAddRule": "＋ 添加规则",
+  "batchDlgMaxRules": "最多 50 条规则",
+  "batchDlgPreviewWorking": "正在计算预览，可继续修改规则或取消…",
+  "batchDlgSearch": "搜索原名、新名或所在目录",
+  "batchDlgFilterAll": "全部",
+  "batchDlgFilterChanged": "有更改",
+  "batchDlgFilterErrors": "有问题",
+  "batchDlgFilterUnchanged": "未变化",
+  "batchDlgFilterExcluded": "已排除",
+  "batchDlgParticipants": "选择参与项目",
+  "batchDlgIncludeAll": "全部参与",
+  "batchDlgOnlyFiles": "仅文件",
+  "batchDlgOnlyFolders": "仅文件夹",
+  "batchDlgExcludeAll": "全部排除",
+  "batchDlgScope": "参与范围",
+  "batchDlgCopyList": "复制清单",
+  "batchDlgConflictBlock": "同名冲突：阻止执行",
+  "batchDlgConflictSuffix": "同名冲突：追加 (2)、(3)…",
+  "batchDlgNoMatches": "没有符合筛选条件的项目",
+  "batchDlgRoot": "根目录",
+  "batchDlgFile": "文件",
+  "batchDlgFolder": "文件夹",
+  "batchDlgTargetFolder": "目标目录：{folder}",
+  "@batchDlgTargetFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgEditNameTooltip": "单独修改名称",
+  "batchDlgRestoreNameTooltip": "恢复规则生成的名称",
+  "batchDlgCopied": "已复制完整预览清单（CSV）",
+  "batchDlgCopyFailed": "复制失败，请重试",
+  "batchDlgHelpTitle": "批量重命名使用说明",
+  "batchDlgHelpDismiss": "知道了",
+  "batchDlgRulesTab": "规则",
+  "batchDlgPreviewTab": "预览（{count}）",
+  "@batchDlgPreviewTab": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgRenameCount": "重命名 {count} 项",
+  "@batchDlgRenameCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetLoadFailed": "暂时无法读取方案，仍可编辑和执行规则",
+  "batchDlgPreviewFailed": "预览计算失败，请调整规则后重试",
+  "batchDlgSavedName": "已保存方案：{name}",
+  "@batchDlgSavedName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSaveFailed": "保存失败：{error}",
+  "@batchDlgSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgDeleteFailed": "删除失败：{error}",
+  "@batchDlgDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSavePresetFallback": "保存方案",
+  "batchDlgPreviewSummary": "预览 · {changes} 项更改 · {conflicts} 项问题 · {excluded} 项排除",
+  "@batchDlgPreviewSummary": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      },
+      "conflicts": {
+        "type": "String"
+      },
+      "excluded": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgInvalidInput": "请修正规则中的输入；当前预览尚未采用无效输入。",
+  "batchDlgConflictError": "存在冲突或非法名称，无法应用。请调整规则。",
+  "batchDlgManualNameStatus": "手动名称",
+  "batchDlgPendingRename": "待重命名",
+  "batchDlgCsvHeader": "原路径,原名称,目标路径,状态",
+  "batchDlgHelpBody": "1. 选择方案或启用规则，按需复制规则并调整上下顺序。\n\n2. 预览显示实际执行的名称。搜索与筛选只影响显示；取消勾选会排除该项并重新编号。可单独修改名称，或恢复为规则结果。\n\n3. 所有问题解决后才能执行。自动后缀只处理重名，不会覆盖其他文件。互换文件夹名称需要分批改名。\n\n4. 执行中可停止后续项目；当前项目会先完成。完成页显示结果，可撤销本次已完成的改名。列表发生后续变化时会阻止撤销。\n\n仅修改名称及目录路径，文件内容和扩展名保持不变。排除父目录自身的改名不会阻止已勾选子项改名；父目录改名时其内部路径仍会随之移动。",
+  "batchDlgPreviewCount": "预览（{count}）",
+  "@batchDlgPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchBuiltinPhoto": "照片：日期与编号",
+  "batchBuiltinCourse": "课程：统一名称与编号",
+  "batchBuiltinDownloads": "下载文件：清理空白",
+  "taskListDetail": "详情",
+  "taskListOwnershipChecking": "正在确认任务归属",
+  "taskListOwnershipFailed": "任务流记录读取失败，操作暂不可用",
+  "taskListViewFlow": "查看任务流",
+  "taskListPause": "暂停",
+  "taskListClear": "清除任务",
+  "taskListResume": "继续",
+  "taskListRetry": "重试",
+  "taskListDismissError": "关闭错误信息",
+  "taskListRemove": "从列表移除",
+  "taskListSynthesisErrorTitle": "合成错误详情",
+  "taskListClose": "关闭",
+  "taskListOriginalExchange": "原始请求与响应",
+  "taskListOriginalRequest": "原始请求体:",
+  "taskListOriginalResponse": "原始响应体:",
+  "taskFlowIoTypeText": "文本",
+  "taskFlowIoTypeAudio": "音频",
+  "taskFlowIoTypeVideo": "视频",
+  "taskFlowIoTypeImage": "图片",
+  "taskFlowIoTypeLink": "链接",
+  "taskFlowIoTypeFile": "文件",
+  "taskFlowIoTypeAny": "任意",
+  "mermaidZoomOut": "缩小",
+  "mermaidZoomIn": "放大",
+  "mermaidFullscreen": "全屏",
+  "mermaidSaveButton": "保存",
+  "mermaidSourceButton": "查看源码",
+  "mermaidDiagramSemantic": "查看图表",
+  "taskFlowCardCatCatchDeletePersistError": "猫抓子任务删除状态无法保存，请重试",
+  "taskFlowCardSynthesisDeletePersistError": "合成子任务删除状态无法保存，请重试",
+  "taskFlowCardBackgroundDeletePersistError": "后台子任务删除状态无法保存，请重试",
+  "mathParseError": "数学解析错误",
+  "mermaidEmptyPlaceholder": "没有可渲染的 Mermaid 代码",
+  "mathClose": "关闭",
+  "mermaidLoadTimeout": "Mermaid 加载超时：请检查网络连接后重试",
+  "mermaidCdnLoadFailed": "Mermaid 加载失败：无法访问 cdn.jsdelivr.net",
+  "mermaidLoadingDiagram": "图表加载中...",
+  "mermaidEngineInitFailed": "图表渲染引擎初始化失败，请重试",
+  "mermaidPageTimeout": "页面加载超时，请重试",
+  "mermaidCodeLoadFailed": "图表代码加载失败，请重试",
+  "mermaidPageLoadFailed": "页面加载失败: {description}",
+  "@mermaidPageLoadFailed": {
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidLoadingEngine": "加载渲染引擎...",
+  "mermaidRenderErrorTitle": "渲染图表时出错",
+  "taskFlowOutputVideoAudioDownstream": "视频或音频（按下游筛选）",
+  "taskFlowOutputUnknown": "未知",
+  "batchRunCancelledSummary": "{label}已停止：成功 {completed} 项，失败 {failed} 项，未执行 {remaining} 项",
+  "@batchRunCancelledSummary": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "failed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidRenderErrorPrefix": "Mermaid 渲染错误：{message}",
+  "@mermaidRenderErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidInitializeErrorPrefix": "Mermaid 初始化错误：{message}",
+  "@mermaidInitializeErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidResourceError": "Mermaid 图表中的资源加载失败。",
+  "taskFlowParamRecognitionModel": "识别模型",
+  "@taskFlowParamRecognitionModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSynthesisModel": "合成模型",
+  "@taskFlowParamSynthesisModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSaveFolder": "保存文件夹",
+  "@taskFlowParamSaveFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamResourceSelection": "资源选择方式",
+  "@taskFlowParamResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamOutputType": "输出类型",
+  "@taskFlowParamOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVideoFolder": "视频保存文件夹",
+  "@taskFlowParamVideoFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAudioFolder": "音频保存文件夹",
+  "@taskFlowParamAudioFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamExpectedDuration": "预期时长",
+  "@taskFlowParamExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVoice": "语音",
+  "@taskFlowParamVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSpeechRate": "语速",
+  "@taskFlowParamSpeechRate": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAssistant": "助手",
+  "@taskFlowParamAssistant": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintResourceSelection": "手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。",
+  "@taskFlowHintResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintOutputType": "视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。",
+  "@taskFlowHintOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintExpectedDuration": "按视频时长筛选，留空表示不筛选。",
+  "@taskFlowHintExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintVoice": "选择音色（选择后自动切换到对应模型）。",
+  "@taskFlowHintVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowUiUnsupportedBlockStep": "此功能块类型已不受支持，请替换或删除此步骤。",
+  "@taskFlowUiUnsupportedBlockStep": {
+    "description": "TaskFlow block connection validation message."
+  },
+  "taskFlowUiDownstreamTypeMismatch": "下一步需要{requiredType}。下载资源可输出视频或音频，请修改下一步或输出策略。",
+  "@taskFlowUiDownstreamTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiAnyTypeMismatch": "{source}为任意类型，但“{block}”需要明确的文本、链接、图片、音频、视频或文件类型。请修改输入类型、移动或替换功能块，或撤销更改。",
+  "@taskFlowUiAnyTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiTypeMismatch": "{source}为{actualType}，但“{block}”需要{requiredType}。请修改输入类型、移动或替换功能块，或撤销更改。",
+  "@taskFlowUiTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "fileManagerSortFieldCreated": "创建时间",
+  "@fileManagerSortFieldCreated": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldModified": "修改时间",
+  "@fileManagerSortFieldModified": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldName": "文件名",
+  "@fileManagerSortFieldName": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldSize": "大小",
+  "@fileManagerSortFieldSize": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateNewest": "新到旧",
+  "@fileManagerSortDateNewest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateOldest": "旧到新",
+  "@fileManagerSortDateOldest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeLargest": "大到小",
+  "@fileManagerSortSizeLargest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeSmallest": "小到大",
+  "@fileManagerSortSizeSmallest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusRunning": "运行中",
+  "@catcatchStatusRunning": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusCompleted": "已完成",
+  "@catcatchStatusCompleted": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusFailed": "失败",
+  "@catcatchStatusFailed": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusPaused": "已暂停",
+  "@catcatchStatusPaused": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusWaiting": "等待中",
+  "@catcatchStatusWaiting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFetching": "获取网页内容",
+  "@catcatchStepFetching": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepAnalyzing": "分析媒体资源",
+  "@catcatchStepAnalyzing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepParsingPlaylist": "解析播放列表",
+  "@catcatchStepParsingPlaylist": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFiltering": "按时长筛选",
+  "@catcatchStepFiltering": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepUserSelecting": "等待用户选择",
+  "@catcatchStepUserSelecting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepDownloading": "下载",
+  "@catcatchStepDownloading": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepConverting": "转码/合并",
+  "@catcatchStepConverting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepSaving": "保存到本地",
+  "@catcatchStepSaving": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepConnectServer": "连接服务器",
+  "@bgStepConnectServer": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadImage": "上传图片",
+  "@bgStepUploadImage": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitRecognition": "等待识别结果",
+  "@bgStepWaitRecognition": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepParseResult": "解析结果",
+  "@bgStepParseResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveFile": "保存文件",
+  "@bgStepSaveFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadAudio": "上传音频",
+  "@bgStepUploadAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepTranscribing": "转写中",
+  "@bgStepTranscribing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepReceiveResult": "接收结果",
+  "@bgStepReceiveResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSeparateAudio": "分离音频",
+  "@bgStepSeparateAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveToFile": "保存到文件",
+  "@bgStepSaveToFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSendRequest": "发送请求",
+  "@bgStepSendRequest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitReply": "等待回复",
+  "@bgStepWaitReply": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortNameAscending": "A 到 Z",
+  "@fileManagerSortNameAscending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "fileManagerSortNameDescending": "Z 到 A",
+  "@fileManagerSortNameDescending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "taskFlowValidationNoSteps": "任务流没有步骤，请先添加功能块。",
+  "@taskFlowValidationNoSteps": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputRequired": "请添加运行输入。",
+  "@taskFlowValidationInputRequired": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationFlowRemoved": "任务流已删除，请重新选择。",
+  "@taskFlowValidationFlowRemoved": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputTypeChanged": "初始输入类型已修改，请重新选择运行输入。",
+  "@taskFlowValidationInputTypeChanged": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSnapshotMissing": "旧记录没有运行快照，请选择使用最新配置重试。",
+  "@taskFlowValidationSnapshotMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationAssistantModelMissing": "助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型。",
+  "@taskFlowValidationAssistantModelMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSavedFileUnavailable": "已保存的步骤文件不存在、为空或无法读取，请重新运行。",
+  "@taskFlowValidationSavedFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationUnsupportedBlock": "功能块已不受支持，请替换或删除此步骤。",
+  "@taskFlowValidationUnsupportedBlock": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationDownstreamMismatch": "下一步需要{requiredType}。下载资源可输出音频或视频，请修改下一步或输出策略。",
+  "@taskFlowValidationDownstreamMismatch": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationRequiredParameter": "“{parameter}”为必填项，请在“{block}”设置中配置。",
+  "@taskFlowValidationRequiredParameter": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "parameter": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationLegacyModel": "旧版模型选择需要确认，请在“{block}”设置中重新选择模型。",
+  "@taskFlowValidationLegacyModel": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationModelUnavailable": "模型未选择、已删除或供应商配置不可用，请在“{block}”设置中重新选择模型并检查供应商地址和密钥。",
+  "@taskFlowValidationModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantUnavailable": "助手未选择或已删除，请在“{block}”设置中重新选择助手。",
+  "@taskFlowValidationAssistantUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantModelUnavailable": "助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型。",
+  "@taskFlowValidationAssistantModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationPolicyInvalid": "资源选择策略或输出类型无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationPolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationOutputInvalid": "输出类型无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationOutputInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationResourcePolicyInvalid": "资源选择策略无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationResourcePolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputFileUnavailable": "第 {index} 个输入：文件不存在、为空或无法读取，请重新选择文件。",
+  "@taskFlowValidationInputFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputUrlInvalid": "第 {index} 个输入：请输入有效的 HTTP 或 HTTPS 链接。",
+  "@taskFlowValidationInputUrlInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputError": "第 {index} 个输入：{error}",
+  "@taskFlowValidationInputError": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleValidationMaxRules": "最多支持 50 条规则。",
+  "@batchRuleValidationMaxRules": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDigits": "编号位数应为 1–12。",
+  "@batchRuleValidationDigits": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationNumberRange": "编号起始值和步长须在 ±999999999 以内。",
+  "@batchRuleValidationNumberRange": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationReplacementLength": "替换规则过长。",
+  "@batchRuleValidationReplacementLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationRegex": "正则表达式无效。",
+  "@batchRuleValidationRegex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDeleteIndex": "删除位置必须从 1 开始。",
+  "@batchRuleValidationDeleteIndex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationInsertLength": "插入文本过长。",
+  "@batchRuleValidationInsertLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateNumber": "模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内。",
+  "@batchRuleValidationTemplateNumber": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateLength": "模板过长。",
+  "@batchRuleValidationTemplateLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateVariable": "未知模板变量或未闭合的大括号。",
+  "@batchRuleValidationTemplateVariable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleTypeNumber": "编号",
+  "@batchRuleTypeNumber": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeReplace": "替换",
+  "@batchRuleTypeReplace": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeInsert": "插入文本",
+  "@batchRuleTypeInsert": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeDelete": "删除字符",
+  "@batchRuleTypeDelete": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCase": "大小写转换",
+  "@batchRuleTypeCase": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeTemplate": "命名模板",
+  "@batchRuleTypeTemplate": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCleanup": "清理空白",
+  "@batchRuleTypeCleanup": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "taskFlowValidationInputEmpty": "第 {index} 个输入：请输入文本或选择文件。",
+  "@taskFlowValidationInputEmpty": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageTooLarge": "第 {index} 个输入：图片超过 20 MB，请选择较小的图片。",
+  "@taskFlowValidationImageTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAttachmentTooLarge": "第 {index} 个输入：附件超过 10 MB，请选择较小的文件。",
+  "@taskFlowValidationAttachmentTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationFileTypeMismatch": "第 {index} 个输入：文件实际类型为{actualType}，需要{requiredType}，请重新选择文件。",
+  "@taskFlowValidationFileTypeMismatch": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationSvgUnsupported": "第 {index} 个输入：助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG。",
+  "@taskFlowValidationSvgUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageMimeUnsupported": "第 {index} 个输入：助手对话不支持 {mime} 图片附件，请转换为 PNG、JPEG、GIF 或 WebP。",
+  "@taskFlowValidationImageMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAudioMimeUnsupported": "第 {index} 个输入：助手对话不支持 {mime} 音频附件，请转换为 MP3、WAV 或 M4A。",
+  "@taskFlowValidationAudioMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointMediaUnsupported": "第 {index} 个输入：此助手的 Anthropic 对话格式不支持{type}附件，请选择支持此媒体的助手。",
+  "@taskFlowValidationEndpointMediaUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointPdfOnly": "第 {index} 个输入：此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手。",
+  "@taskFlowValidationEndpointPdfOnly": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageCompressionFailed": "第 {index} 个输入：助手对话图片无法压缩到 10 MB 以下，请选择较小图片。",
+  "@taskFlowValidationImageCompressionFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationTextEncodingFailed": "第 {index} 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。",
+  "@taskFlowValidationTextEncodingFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -2937,6 +2937,4554 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Thinking {index}'**
   String chatThinkingNumbered(int index);
+
+  /// No description provided for @taskFlowUiDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved changes?'**
+  String get taskFlowUiDiscardTitle;
+
+  /// No description provided for @taskFlowUiDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All unsaved changes will be lost if you go back.'**
+  String get taskFlowUiDiscardBody;
+
+  /// No description provided for @taskFlowUiContinueEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue editing'**
+  String get taskFlowUiContinueEditing;
+
+  /// No description provided for @taskFlowUiDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get taskFlowUiDiscard;
+
+  /// No description provided for @taskFlowUiUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get taskFlowUiUndo;
+
+  /// No description provided for @taskFlowUiSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get taskFlowUiSave;
+
+  /// No description provided for @taskFlowUiNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a task flow name'**
+  String get taskFlowUiNameHint;
+
+  /// No description provided for @taskFlowUiDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a description (optional)'**
+  String get taskFlowUiDescriptionHint;
+
+  /// No description provided for @taskFlowUiNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a task flow name'**
+  String get taskFlowUiNameRequired;
+
+  /// No description provided for @taskFlowUiStepRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {index}: {message}'**
+  String taskFlowUiStepRequired(Object index, Object message);
+
+  /// No description provided for @taskFlowUiParameterRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'“{parameter}” is required for “{block}”'**
+  String taskFlowUiParameterRequired(Object block, Object parameter);
+
+  /// No description provided for @taskFlowUiSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save. Your changes are still here. Try again.'**
+  String get taskFlowUiSaveFailed;
+
+  /// No description provided for @taskFlowUiRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get taskFlowUiRetry;
+
+  /// No description provided for @taskFlowUiUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Task flow updated'**
+  String get taskFlowUiUpdated;
+
+  /// No description provided for @taskFlowUiCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Task flow created'**
+  String get taskFlowUiCreated;
+
+  /// No description provided for @taskFlowUiTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task Flow'**
+  String get taskFlowUiTitle;
+
+  /// No description provided for @taskFlowUiNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Task not found'**
+  String get taskFlowUiNotFound;
+
+  /// No description provided for @taskFlowUiBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get taskFlowUiBack;
+
+  /// No description provided for @taskFlowUiEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get taskFlowUiEdit;
+
+  /// No description provided for @taskFlowUiInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Input ({label})'**
+  String taskFlowUiInput(Object label);
+
+  /// No description provided for @taskFlowUiInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text or a link'**
+  String get taskFlowUiInputHint;
+
+  /// No description provided for @taskFlowUiStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start task flow'**
+  String get taskFlowUiStart;
+
+  /// No description provided for @taskFlowUiNoInput.
+  ///
+  /// In en, this message translates to:
+  /// **'No inputs yet. Tap below to add a web resource URL.'**
+  String get taskFlowUiNoInput;
+
+  /// No description provided for @taskFlowUiAddResource.
+  ///
+  /// In en, this message translates to:
+  /// **'Add web resource'**
+  String get taskFlowUiAddResource;
+
+  /// No description provided for @taskFlowUiUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a video or audio webpage URL'**
+  String get taskFlowUiUrlHint;
+
+  /// No description provided for @taskFlowUiDeleteInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this input'**
+  String get taskFlowUiDeleteInput;
+
+  /// No description provided for @taskFlowUiHour.
+  ///
+  /// In en, this message translates to:
+  /// **'hr'**
+  String get taskFlowUiHour;
+
+  /// No description provided for @taskFlowUiMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'min'**
+  String get taskFlowUiMinute;
+
+  /// No description provided for @taskFlowUiSecond.
+  ///
+  /// In en, this message translates to:
+  /// **'sec'**
+  String get taskFlowUiSecond;
+
+  /// No description provided for @taskFlowUiPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview: '**
+  String get taskFlowUiPreview;
+
+  /// No description provided for @taskFlowUiDurationFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'hh:mm:ss'**
+  String get taskFlowUiDurationFormat;
+
+  /// No description provided for @taskFlowUiDurationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional: filter video resources by duration. Leave blank to show all available resources.'**
+  String get taskFlowUiDurationHint;
+
+  /// No description provided for @taskFlowUiSelectImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Select images (multiple)'**
+  String get taskFlowUiSelectImages;
+
+  /// No description provided for @taskFlowUiSelectAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Select audio (multiple)'**
+  String get taskFlowUiSelectAudio;
+
+  /// No description provided for @taskFlowUiSelectFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Select files (multiple)'**
+  String get taskFlowUiSelectFiles;
+
+  /// No description provided for @taskFlowUiSelectVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Select videos (multiple)'**
+  String get taskFlowUiSelectVideo;
+
+  /// No description provided for @taskFlowUiRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get taskFlowUiRemove;
+
+  /// No description provided for @taskFlowUiRemovedFileCleanupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clean up the removed file: {error}'**
+  String taskFlowUiRemovedFileCleanupFailed(Object error);
+
+  /// No description provided for @taskFlowUiInitialInput.
+  ///
+  /// In en, this message translates to:
+  /// **'0. Initial input'**
+  String get taskFlowUiInitialInput;
+
+  /// No description provided for @taskFlowUiInputType.
+  ///
+  /// In en, this message translates to:
+  /// **'Input type: {type}'**
+  String taskFlowUiInputType(Object type);
+
+  /// No description provided for @taskFlowUiUserFlowInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Input provided when the user runs the task flow'**
+  String get taskFlowUiUserFlowInput;
+
+  /// No description provided for @taskFlowUiBlockInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Input: {type}'**
+  String taskFlowUiBlockInput(Object type);
+
+  /// No description provided for @taskFlowUiBlockOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Output: {type}'**
+  String taskFlowUiBlockOutput(Object type);
+
+  /// No description provided for @taskFlowUiParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameters:'**
+  String get taskFlowUiParameters;
+
+  /// No description provided for @taskFlowUiClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get taskFlowUiClose;
+
+  /// No description provided for @taskFlowUiSelectAppImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Select images from the app (multiple)'**
+  String get taskFlowUiSelectAppImages;
+
+  /// No description provided for @taskFlowUiNoImages.
+  ///
+  /// In en, this message translates to:
+  /// **'No images'**
+  String get taskFlowUiNoImages;
+
+  /// No description provided for @taskFlowUiSelectAppAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Select audio from the app (multiple)'**
+  String get taskFlowUiSelectAppAudio;
+
+  /// No description provided for @taskFlowUiNoAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio'**
+  String get taskFlowUiNoAudio;
+
+  /// No description provided for @taskFlowUiSelectAppVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Select videos from the app (multiple)'**
+  String get taskFlowUiSelectAppVideo;
+
+  /// No description provided for @taskFlowUiNoVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'No videos'**
+  String get taskFlowUiNoVideo;
+
+  /// No description provided for @taskFlowUiFileSelectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not select the file: {error}'**
+  String taskFlowUiFileSelectFailed(Object error);
+
+  /// No description provided for @taskFlowUiFileTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” exceeds {limit} MB. Choose a smaller file.'**
+  String taskFlowUiFileTooLarge(Object limit, Object name);
+
+  /// No description provided for @taskFlowUiFileUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is empty or unreadable'**
+  String taskFlowUiFileUnreadable(Object name);
+
+  /// No description provided for @taskFlowUiSomeFilesMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Some files are missing and were skipped'**
+  String get taskFlowUiSomeFilesMissing;
+
+  /// No description provided for @taskFlowUiQueuedOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Task flow added to the queue'**
+  String get taskFlowUiQueuedOne;
+
+  /// No description provided for @taskFlowUiQueuedMany.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} task flows to the queue'**
+  String taskFlowUiQueuedMany(Object count);
+
+  /// No description provided for @taskFlowUiRunTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This Run'**
+  String get taskFlowUiRunTitle;
+
+  /// No description provided for @taskFlowUiCancelBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel entire batch'**
+  String get taskFlowUiCancelBatch;
+
+  /// No description provided for @taskFlowUiRestoringRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring task flow records…'**
+  String get taskFlowUiRestoringRecords;
+
+  /// No description provided for @taskFlowUiRecordsPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load task flow records. Task actions are paused.'**
+  String get taskFlowUiRecordsPaused;
+
+  /// No description provided for @taskFlowUiRecordsCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Records for this run have been cleared'**
+  String get taskFlowUiRecordsCleared;
+
+  /// No description provided for @taskFlowUiRunsFinished.
+  ///
+  /// In en, this message translates to:
+  /// **'{finished} of {total} runs finished'**
+  String taskFlowUiRunsFinished(Object finished, Object total);
+
+  /// No description provided for @taskFlowUiRecordsRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **' · {count} records cleared'**
+  String taskFlowUiRecordsRemoved(Object count);
+
+  /// No description provided for @taskFlowUiTemporaryFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary intermediate files'**
+  String get taskFlowUiTemporaryFiles;
+
+  /// No description provided for @taskFlowUiAddBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Add block'**
+  String get taskFlowUiAddBlock;
+
+  /// No description provided for @taskFlowUiInsertBlockBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert block before step {index}'**
+  String taskFlowUiInsertBlockBefore(Object index);
+
+  /// No description provided for @taskFlowUiIncompatibleAdjacentBlocks.
+  ///
+  /// In en, this message translates to:
+  /// **'No block is compatible with both adjacent steps. Adjust the adjacent steps first.'**
+  String get taskFlowUiIncompatibleAdjacentBlocks;
+
+  /// No description provided for @taskFlowUiInsertBeforeStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert before step {index}'**
+  String taskFlowUiInsertBeforeStep(Object index);
+
+  /// No description provided for @taskFlowUiUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get taskFlowUiUnknown;
+
+  /// No description provided for @taskFlowUiChooseBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a block'**
+  String get taskFlowUiChooseBlock;
+
+  /// No description provided for @taskFlowUiInsertBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert block'**
+  String get taskFlowUiInsertBlock;
+
+  /// No description provided for @taskFlowUiPreviousOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous step output'**
+  String get taskFlowUiPreviousOutput;
+
+  /// No description provided for @taskFlowUiNextStepNeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'; next step needs: {label}'**
+  String taskFlowUiNextStepNeeds(Object label);
+
+  /// No description provided for @taskFlowUiNoCompatibleBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'No block is compatible with the current type'**
+  String get taskFlowUiNoCompatibleBlock;
+
+  /// No description provided for @taskFlowUiReplaceBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace block'**
+  String get taskFlowUiReplaceBlock;
+
+  /// No description provided for @taskFlowUiBlockCompatibility.
+  ///
+  /// In en, this message translates to:
+  /// **'You can only replace this with a block that has compatible input and output types.'**
+  String get taskFlowUiBlockCompatibility;
+
+  /// No description provided for @taskFlowUiTemporaryCleanupTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up after the next step saves its result successfully; the final step is always kept.'**
+  String get taskFlowUiTemporaryCleanupTooltip;
+
+  /// No description provided for @taskFlowUiSetParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Set parameters'**
+  String get taskFlowUiSetParameters;
+
+  /// No description provided for @taskFlowUiReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get taskFlowUiReplace;
+
+  /// No description provided for @taskFlowUiViewParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view parameters'**
+  String get taskFlowUiViewParameters;
+
+  /// No description provided for @taskFlowUiTapSetParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to set parameters'**
+  String get taskFlowUiTapSetParameters;
+
+  /// No description provided for @taskFlowUiUnknownBlockType.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown block: {name}'**
+  String taskFlowUiUnknownBlockType(Object name);
+
+  /// No description provided for @taskFlowUiBlockUnregistered.
+  ///
+  /// In en, this message translates to:
+  /// **'This block type is not registered'**
+  String get taskFlowUiBlockUnregistered;
+
+  /// No description provided for @taskFlowUiStepActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for step {index}'**
+  String taskFlowUiStepActions(Object index);
+
+  /// No description provided for @taskFlowUiInsertBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert before'**
+  String get taskFlowUiInsertBefore;
+
+  /// No description provided for @taskFlowUiInsertAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert after'**
+  String get taskFlowUiInsertAfter;
+
+  /// No description provided for @taskFlowUiCopyBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate block'**
+  String get taskFlowUiCopyBlock;
+
+  /// No description provided for @taskFlowUiMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get taskFlowUiMoveUp;
+
+  /// No description provided for @taskFlowUiMoveUpDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up (already first)'**
+  String get taskFlowUiMoveUpDisabled;
+
+  /// No description provided for @taskFlowUiMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get taskFlowUiMoveDown;
+
+  /// No description provided for @taskFlowUiMoveDownDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down (already last)'**
+  String get taskFlowUiMoveDownDisabled;
+
+  /// No description provided for @taskFlowUiDeleteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete block'**
+  String get taskFlowUiDeleteBlock;
+
+  /// No description provided for @taskFlowUiInputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Input: {label}'**
+  String taskFlowUiInputLabel(Object label);
+
+  /// No description provided for @taskFlowUiOutputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Output: {label}'**
+  String taskFlowUiOutputLabel(Object label);
+
+  /// No description provided for @taskFlowUiUnregisteredBlockType.
+  ///
+  /// In en, this message translates to:
+  /// **'Block type “{name}” is not registered'**
+  String taskFlowUiUnregisteredBlockType(Object name);
+
+  /// No description provided for @taskFlowUiBlockSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} settings'**
+  String taskFlowUiBlockSettings(Object label);
+
+  /// No description provided for @taskFlowUiSendToAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'The user message sent to the assistant is the previous step’s output'**
+  String get taskFlowUiSendToAssistant;
+
+  /// No description provided for @taskFlowUiTempSpaceInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'This step outputs to the flow’s temporary space. Its output is cleaned up after the next step saves successfully. The original save folder is preserved and restored when temporary mode is disabled.'**
+  String get taskFlowUiTempSpaceInfo;
+
+  /// No description provided for @taskFlowUiNoExtraParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'This block has no additional parameters'**
+  String get taskFlowUiNoExtraParameters;
+
+  /// No description provided for @taskFlowUiCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get taskFlowUiCancel;
+
+  /// No description provided for @taskFlowUiConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get taskFlowUiConfirm;
+
+  /// No description provided for @taskFlowUiConfigureModelFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure a model first'**
+  String get taskFlowUiConfigureModelFirst;
+
+  /// No description provided for @taskFlowUiModelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No model is selected or the model is unavailable. Select another model.'**
+  String get taskFlowUiModelUnavailable;
+
+  /// No description provided for @taskFlowUiModelIndexed.
+  ///
+  /// In en, this message translates to:
+  /// **'Model {index}'**
+  String taskFlowUiModelIndexed(Object index);
+
+  /// No description provided for @taskFlowUiUnnamedProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed provider'**
+  String get taskFlowUiUnnamedProvider;
+
+  /// No description provided for @taskFlowUiCustomModelParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom model parameters'**
+  String get taskFlowUiCustomModelParameters;
+
+  /// No description provided for @taskFlowUiTtsVoiceMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'No TTS models have configured voices. You can enter an ID manually.'**
+  String get taskFlowUiTtsVoiceMissing;
+
+  /// No description provided for @taskFlowUiVoiceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice is unavailable. Select another voice.'**
+  String get taskFlowUiVoiceUnavailable;
+
+  /// No description provided for @taskFlowUiSelectVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a voice'**
+  String get taskFlowUiSelectVoice;
+
+  /// No description provided for @taskFlowUiAssistantUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant unavailable'**
+  String get taskFlowUiAssistantUnavailable;
+
+  /// No description provided for @taskFlowUiAssistantUseCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Not specified (use the currently selected assistant)'**
+  String get taskFlowUiAssistantUseCurrent;
+
+  /// No description provided for @taskFlowUiAssistantDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'The configured assistant was deleted. Select another assistant.'**
+  String get taskFlowUiAssistantDeleted;
+
+  /// No description provided for @taskFlowUiChooseAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an assistant'**
+  String get taskFlowUiChooseAssistant;
+
+  /// No description provided for @taskFlowUiOnlyCustomAssistants.
+  ///
+  /// In en, this message translates to:
+  /// **'Only “My Assistants” can be selected (add one in “Chat → Assistants”)'**
+  String get taskFlowUiOnlyCustomAssistants;
+
+  /// No description provided for @taskFlowUiMyAssistants.
+  ///
+  /// In en, this message translates to:
+  /// **'My Assistants'**
+  String get taskFlowUiMyAssistants;
+
+  /// No description provided for @taskFlowUiNoCustomAssistants.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom assistants yet. Create one in “Chat → Assistants”.'**
+  String get taskFlowUiNoCustomAssistants;
+
+  /// No description provided for @taskFlowUiYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get taskFlowUiYes;
+
+  /// No description provided for @taskFlowUiNo.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get taskFlowUiNo;
+
+  /// No description provided for @taskFlowUiDefaultRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Default (root folder)'**
+  String get taskFlowUiDefaultRoot;
+
+  /// No description provided for @taskFlowUiSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get taskFlowUiSelect;
+
+  /// No description provided for @taskFlowUiSelectSaveFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a save folder'**
+  String get taskFlowUiSelectSaveFolder;
+
+  /// No description provided for @taskFlowUiCatCatchVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get taskFlowUiCatCatchVideo;
+
+  /// No description provided for @taskFlowUiCatCatchAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get taskFlowUiCatCatchAudio;
+
+  /// No description provided for @taskFlowUiCatCatchEither.
+  ///
+  /// In en, this message translates to:
+  /// **'Video or audio (filter based on downstream steps)'**
+  String get taskFlowUiCatCatchEither;
+
+  /// No description provided for @taskFlowUiManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual'**
+  String get taskFlowUiManual;
+
+  /// No description provided for @taskFlowUiAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get taskFlowUiAutomatic;
+
+  /// No description provided for @taskFlowUiAutomaticPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic with confirmation'**
+  String get taskFlowUiAutomaticPrompt;
+
+  /// No description provided for @taskFlowUiEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Task Flow'**
+  String get taskFlowUiEditTitle;
+
+  /// No description provided for @taskFlowUiCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New Task Flow'**
+  String get taskFlowUiCreateTitle;
+
+  /// No description provided for @taskFlowUiStepNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {index}: {message}'**
+  String taskFlowUiStepNumber(Object index, Object message);
+
+  /// No description provided for @taskFlowUiInputTypeValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Input type: {type}'**
+  String taskFlowUiInputTypeValue(Object type);
+
+  /// No description provided for @taskFlowUiBlockInputValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Input: {type}'**
+  String taskFlowUiBlockInputValue(Object type);
+
+  /// No description provided for @taskFlowUiBlockOutputValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Output: {type}'**
+  String taskFlowUiBlockOutputValue(Object type);
+
+  /// No description provided for @taskFlowUiCleanupError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clean up the removed file: {error}'**
+  String taskFlowUiCleanupError(Object error);
+
+  /// No description provided for @taskFlowUiSelectFileError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not select the file: {error}'**
+  String taskFlowUiSelectFileError(Object error);
+
+  /// No description provided for @taskFlowUiLargeFile.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” exceeds {limit} MB. Choose a smaller file.'**
+  String taskFlowUiLargeFile(Object limit, Object name);
+
+  /// No description provided for @taskFlowUiUnreadableFile.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is empty or unreadable'**
+  String taskFlowUiUnreadableFile(Object name);
+
+  /// No description provided for @taskFlowUiTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary'**
+  String get taskFlowUiTemporary;
+
+  /// No description provided for @taskFlowUiTemporaryFileHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary file (cleaned up after the next step succeeds)'**
+  String get taskFlowUiTemporaryFileHint;
+
+  /// No description provided for @taskFlowUiUnregisteredBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block type “{name}” is not registered'**
+  String taskFlowUiUnregisteredBlock(Object name);
+
+  /// No description provided for @taskFlowUiRunSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{finished} of {total} runs finished'**
+  String taskFlowUiRunSummary(Object finished, Object total);
+
+  /// No description provided for @taskFlowUiClearedRecordCount.
+  ///
+  /// In en, this message translates to:
+  /// **' · {count} records cleared'**
+  String taskFlowUiClearedRecordCount(Object count);
+
+  /// No description provided for @taskFlowUiInputOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Input: {input} → Output: {output}'**
+  String taskFlowUiInputOutput(Object input, Object output);
+
+  /// No description provided for @taskFlowCardTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Task Flow'**
+  String get taskFlowCardTag;
+
+  /// No description provided for @taskFlowCardQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued (waiting for resources)'**
+  String get taskFlowCardQueued;
+
+  /// No description provided for @taskFlowCardCompletedProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total} completed'**
+  String taskFlowCardCompletedProgress(Object done, Object total);
+
+  /// No description provided for @taskFlowCardCountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {label}'**
+  String taskFlowCardCountLabel(Object count, Object label);
+
+  /// No description provided for @taskFlowCardFailedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get taskFlowCardFailedLabel;
+
+  /// No description provided for @taskFlowCardSkippedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'skipped'**
+  String get taskFlowCardSkippedLabel;
+
+  /// No description provided for @taskFlowCardCancelledLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'cancelled'**
+  String get taskFlowCardCancelledLabel;
+
+  /// No description provided for @taskFlowCardInterruptedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'interrupted'**
+  String get taskFlowCardInterruptedLabel;
+
+  /// No description provided for @taskFlowCardCancelFlow.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel flow'**
+  String get taskFlowCardCancelFlow;
+
+  /// No description provided for @taskFlowCardRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get taskFlowCardRetry;
+
+  /// No description provided for @taskFlowCardCancelBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel entire batch'**
+  String get taskFlowCardCancelBatch;
+
+  /// No description provided for @taskFlowCardDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get taskFlowCardDelete;
+
+  /// No description provided for @taskFlowCardRetryFlow.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry task flow'**
+  String get taskFlowCardRetryFlow;
+
+  /// No description provided for @taskFlowCardNoSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'This run has no snapshot. It will start over using the current flow configuration.'**
+  String get taskFlowCardNoSnapshot;
+
+  /// No description provided for @taskFlowCardRetryInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting over downloads files and calls models again. Retry with the configuration used at launch, or explicitly choose the latest configuration. To reuse completed steps, choose “Resume from interrupted step.”'**
+  String get taskFlowCardRetryInfo;
+
+  /// No description provided for @taskFlowCardRunLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Run with latest configuration'**
+  String get taskFlowCardRunLatest;
+
+  /// No description provided for @taskFlowCardRetryOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry with original configuration'**
+  String get taskFlowCardRetryOriginal;
+
+  /// No description provided for @taskFlowCardDeleteRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete task flow record'**
+  String get taskFlowCardDeleteRecord;
+
+  /// No description provided for @taskFlowCardDeleteBatchConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting this run will cancel unfinished tasks in the batch and clear their subtask records. Delete?'**
+  String get taskFlowCardDeleteBatchConfirm;
+
+  /// No description provided for @taskFlowCardDeleteRunningConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This flow is running. Deleting it will cancel its active tasks. Delete?'**
+  String get taskFlowCardDeleteRunningConfirm;
+
+  /// No description provided for @taskFlowCardDeleteRecordConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this flow record and its subtask records?'**
+  String get taskFlowCardDeleteRecordConfirm;
+
+  /// No description provided for @taskFlowCardDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this flow record?'**
+  String get taskFlowCardDeleteConfirm;
+
+  /// No description provided for @taskFlowCardSaveCancelStateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the flow cancellation state. Try deleting again.'**
+  String get taskFlowCardSaveCancelStateError;
+
+  /// No description provided for @taskFlowCardStillRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'The flow is still running after cancellation.'**
+  String get taskFlowCardStillRunning;
+
+  /// No description provided for @taskFlowCardSaveDeleteStateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the flow record deletion state. Try deleting again.'**
+  String get taskFlowCardSaveDeleteStateError;
+
+  /// No description provided for @taskFlowCardConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get taskFlowCardConfirm;
+
+  /// No description provided for @taskFlowCardWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get taskFlowCardWaiting;
+
+  /// No description provided for @taskFlowCardRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get taskFlowCardRunning;
+
+  /// No description provided for @taskFlowCardPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get taskFlowCardPaused;
+
+  /// No description provided for @taskFlowCardCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get taskFlowCardCompleted;
+
+  /// No description provided for @taskFlowCardFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get taskFlowCardFailed;
+
+  /// No description provided for @taskFlowCardCanceled.
+  ///
+  /// In en, this message translates to:
+  /// **'Canceled'**
+  String get taskFlowCardCanceled;
+
+  /// No description provided for @taskFlowCardInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted'**
+  String get taskFlowCardInterrupted;
+
+  /// No description provided for @taskFlowCardSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get taskFlowCardSucceeded;
+
+  /// No description provided for @taskFlowCardPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause flow'**
+  String get taskFlowCardPause;
+
+  /// No description provided for @taskFlowCardResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume flow'**
+  String get taskFlowCardResume;
+
+  /// No description provided for @taskFlowCardResumeInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume from interrupted step'**
+  String get taskFlowCardResumeInterrupted;
+
+  /// No description provided for @taskFlowCardCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get taskFlowCardCancel;
+
+  /// No description provided for @unifiedTaskType.
+  ///
+  /// In en, this message translates to:
+  /// **'Task type'**
+  String get unifiedTaskType;
+
+  /// No description provided for @unifiedTaskCreatedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get unifiedTaskCreatedAt;
+
+  /// No description provided for @unifiedTaskCompletedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get unifiedTaskCompletedAt;
+
+  /// No description provided for @unifiedTaskResultStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Result status'**
+  String get unifiedTaskResultStatus;
+
+  /// No description provided for @unifiedTaskPartialResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial result; content may be incomplete'**
+  String get unifiedTaskPartialResult;
+
+  /// No description provided for @unifiedTaskErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Error details'**
+  String get unifiedTaskErrorDetails;
+
+  /// No description provided for @unifiedTaskViewErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View error details'**
+  String get unifiedTaskViewErrorDetails;
+
+  /// No description provided for @unifiedTaskOcrPerImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognize each image'**
+  String get unifiedTaskOcrPerImage;
+
+  /// No description provided for @unifiedTaskOcrPageIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}'**
+  String unifiedTaskOcrPageIndex(Object index);
+
+  /// No description provided for @unifiedTaskOcrPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to recognize'**
+  String get unifiedTaskOcrPending;
+
+  /// No description provided for @unifiedTaskOcrRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognizing'**
+  String get unifiedTaskOcrRunning;
+
+  /// No description provided for @unifiedTaskCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get unifiedTaskCompleted;
+
+  /// No description provided for @unifiedTaskIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Incomplete result'**
+  String get unifiedTaskIncomplete;
+
+  /// No description provided for @unifiedTaskOcrFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognition failed'**
+  String get unifiedTaskOcrFailed;
+
+  /// No description provided for @unifiedTaskCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Canceled'**
+  String get unifiedTaskCancelled;
+
+  /// No description provided for @unifiedTaskWaitingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to start...'**
+  String get unifiedTaskWaitingStart;
+
+  /// No description provided for @unifiedTaskSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get unifiedTaskSteps;
+
+  /// No description provided for @unifiedTaskStartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Start now'**
+  String get unifiedTaskStartNow;
+
+  /// No description provided for @unifiedTaskOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open file'**
+  String get unifiedTaskOpenFile;
+
+  /// No description provided for @unifiedTaskRetrySave.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry saving only'**
+  String get unifiedTaskRetrySave;
+
+  /// No description provided for @unifiedTaskRetryPartialSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry saving partial result only'**
+  String get unifiedTaskRetryPartialSave;
+
+  /// No description provided for @unifiedTaskSavePartialResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Save partial result'**
+  String get unifiedTaskSavePartialResult;
+
+  /// No description provided for @unifiedTaskRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get unifiedTaskRetry;
+
+  /// No description provided for @unifiedTaskCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get unifiedTaskCancel;
+
+  /// No description provided for @unifiedTaskDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get unifiedTaskDelete;
+
+  /// No description provided for @unifiedTaskFormatUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview is not supported for this format'**
+  String get unifiedTaskFormatUnsupported;
+
+  /// No description provided for @unifiedTaskLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Load failed: {error}'**
+  String unifiedTaskLoadFailed(Object error);
+
+  /// No description provided for @unifiedTaskPlaybackFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback failed: {error}'**
+  String unifiedTaskPlaybackFailed(Object error);
+
+  /// No description provided for @unifiedTaskAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file'**
+  String get unifiedTaskAudioFile;
+
+  /// No description provided for @unifiedTaskPreviewLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load preview'**
+  String get unifiedTaskPreviewLoadFailed;
+
+  /// No description provided for @unifiedTaskUnknownSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown size'**
+  String get unifiedTaskUnknownSize;
+
+  /// No description provided for @unifiedTaskUnnamedRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled recording'**
+  String get unifiedTaskUnnamedRecording;
+
+  /// No description provided for @unifiedTaskPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get unifiedTaskPause;
+
+  /// No description provided for @unifiedTaskClearTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear task'**
+  String get unifiedTaskClearTask;
+
+  /// No description provided for @unifiedTaskContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get unifiedTaskContinue;
+
+  /// No description provided for @unifiedTaskRemoveFromList.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from list'**
+  String get unifiedTaskRemoveFromList;
+
+  /// No description provided for @unifiedTaskSynthesisText.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesized text'**
+  String get unifiedTaskSynthesisText;
+
+  /// No description provided for @unifiedTaskStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get unifiedTaskStatus;
+
+  /// No description provided for @unifiedTaskDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get unifiedTaskDetails;
+
+  /// No description provided for @unifiedTaskSynthesisError.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesis error details'**
+  String get unifiedTaskSynthesisError;
+
+  /// No description provided for @unifiedTaskClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get unifiedTaskClose;
+
+  /// No description provided for @unifiedTaskRawRequestResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw request and response'**
+  String get unifiedTaskRawRequestResponse;
+
+  /// No description provided for @unifiedTaskRawRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw request body:'**
+  String get unifiedTaskRawRequestBody;
+
+  /// No description provided for @unifiedTaskRawResponseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw response body:'**
+  String get unifiedTaskRawResponseBody;
+
+  /// No description provided for @commonJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get commonJustNow;
+
+  /// No description provided for @commonMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String commonMinutesAgo(Object count);
+
+  /// No description provided for @commonHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hr ago'**
+  String commonHoursAgo(Object count);
+
+  /// No description provided for @unifiedDurationSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} sec'**
+  String unifiedDurationSeconds(Object seconds);
+
+  /// No description provided for @unifiedDurationMinutesSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min {seconds} sec'**
+  String unifiedDurationMinutesSeconds(Object minutes, Object seconds);
+
+  /// No description provided for @unifiedDurationHoursMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr {minutes} min'**
+  String unifiedDurationHoursMinutes(Object hours, Object minutes);
+
+  /// No description provided for @unifiedTaskTypeOcr.
+  ///
+  /// In en, this message translates to:
+  /// **'Image text recognition'**
+  String get unifiedTaskTypeOcr;
+
+  /// No description provided for @unifiedTaskTypeAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio transcription'**
+  String get unifiedTaskTypeAsr;
+
+  /// No description provided for @unifiedTaskTypeAudioSeparation.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio separation'**
+  String get unifiedTaskTypeAudioSeparation;
+
+  /// No description provided for @unifiedTaskTypeChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant chat'**
+  String get unifiedTaskTypeChat;
+
+  /// No description provided for @unifiedTaskPlayAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Play audio'**
+  String get unifiedTaskPlayAudio;
+
+  /// No description provided for @unifiedTaskPauseAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause audio'**
+  String get unifiedTaskPauseAudio;
+
+  /// No description provided for @catcatchFlowActionNotStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Flow action did not start. Check the flow status and try again.'**
+  String get catcatchFlowActionNotStarted;
+
+  /// No description provided for @catcatchFlowActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Flow action failed: {error}'**
+  String catcatchFlowActionFailed(Object error);
+
+  /// No description provided for @catcatchSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped (nothing to process)'**
+  String get catcatchSkipped;
+
+  /// No description provided for @catcatchRetryStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry this step'**
+  String get catcatchRetryStep;
+
+  /// No description provided for @catcatchCollapseSegments.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide {count} segments'**
+  String catcatchCollapseSegments(Object count);
+
+  /// No description provided for @catcatchShowSegments.
+  ///
+  /// In en, this message translates to:
+  /// **'Show {count} segments'**
+  String catcatchShowSegments(Object count);
+
+  /// No description provided for @catcatchSelectedResources.
+  ///
+  /// In en, this message translates to:
+  /// **'{selected} of {total} resources selected'**
+  String catcatchSelectedResources(Object selected, Object total);
+
+  /// No description provided for @catcatchDetectedMediaResources.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} media resources detected'**
+  String catcatchDetectedMediaResources(Object count);
+
+  /// No description provided for @catcatchFlowSelectOrCombine.
+  ///
+  /// In en, this message translates to:
+  /// **'(select one resource or combine an audio/video pair)'**
+  String get catcatchFlowSelectOrCombine;
+
+  /// No description provided for @catcatchSelectMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'(tap to select; multiple allowed)'**
+  String get catcatchSelectMultiple;
+
+  /// No description provided for @catcatchWaitingForResources.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for flow resources'**
+  String get catcatchWaitingForResources;
+
+  /// No description provided for @catcatchDownloadSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Download {count} selected resources'**
+  String catcatchDownloadSelected(Object count);
+
+  /// No description provided for @catcatchSelectResources.
+  ///
+  /// In en, this message translates to:
+  /// **'Select resources to download'**
+  String get catcatchSelectResources;
+
+  /// No description provided for @catcatchPossibleSplit.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠ Possible separate audio and video streams'**
+  String get catcatchPossibleSplit;
+
+  /// No description provided for @catcatchSplitExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'These resources may be separate audio and video streams for the same video. You can combine them or download only one stream.'**
+  String get catcatchSplitExplanation;
+
+  /// No description provided for @catcatchAudioStream.
+  ///
+  /// In en, this message translates to:
+  /// **'🎵 Audio stream'**
+  String get catcatchAudioStream;
+
+  /// No description provided for @catcatchVideoStream.
+  ///
+  /// In en, this message translates to:
+  /// **'🎬 Video stream'**
+  String get catcatchVideoStream;
+
+  /// No description provided for @catcatchMergeAudioVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Combine audio and video'**
+  String get catcatchMergeAudioVideo;
+
+  /// No description provided for @catcatchVideoOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Video only'**
+  String get catcatchVideoOnly;
+
+  /// No description provided for @catcatchAudioOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio only'**
+  String get catcatchAudioOnly;
+
+  /// No description provided for @catcatchSegmentsPlaylistPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview segments using the playlist'**
+  String get catcatchSegmentsPlaylistPreview;
+
+  /// No description provided for @catcatchPreviewAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview audio'**
+  String get catcatchPreviewAudio;
+
+  /// No description provided for @catcatchPreviewVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview video'**
+  String get catcatchPreviewVideo;
+
+  /// No description provided for @catcatchDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration: {duration}'**
+  String catcatchDuration(Object duration);
+
+  /// No description provided for @catcatchSegment.
+  ///
+  /// In en, this message translates to:
+  /// **'Segment'**
+  String get catcatchSegment;
+
+  /// No description provided for @catcatchPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist'**
+  String get catcatchPlaylist;
+
+  /// No description provided for @catcatchFullVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Full video'**
+  String get catcatchFullVideo;
+
+  /// No description provided for @catcatchSeparateTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate tracks'**
+  String get catcatchSeparateTracks;
+
+  /// No description provided for @catcatchPreviewPlaylistOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview using the playlist'**
+  String get catcatchPreviewPlaylistOnly;
+
+  /// No description provided for @catcatchPreviewUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview is not supported'**
+  String get catcatchPreviewUnsupported;
+
+  /// No description provided for @catcatchUnknownFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown format'**
+  String get catcatchUnknownFormat;
+
+  /// No description provided for @catcatchNeedPlaylistProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist processing required'**
+  String get catcatchNeedPlaylistProcessing;
+
+  /// No description provided for @catcatchSpecialFormatDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Special format detected'**
+  String get catcatchSpecialFormatDetected;
+
+  /// No description provided for @catcatchPlaylistInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'This resource is a playlist ({format}). It must be parsed and all segments downloaded and combined into a playable video.'**
+  String catcatchPlaylistInfo(Object format);
+
+  /// No description provided for @catcatchFormatInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'The downloaded file is in {format}, not standard MP4. The built-in pure Dart remux engine will convert it to MP4 (TS/FLV/EV1 require no external dependencies).'**
+  String catcatchFormatInfo(Object format);
+
+  /// No description provided for @catcatchContinueBeforeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume the flow before confirming format handling'**
+  String get catcatchContinueBeforeConfirm;
+
+  /// No description provided for @catcatchAutoProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Process automatically'**
+  String get catcatchAutoProcess;
+
+  /// No description provided for @catcatchKeepOriginalFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep original format'**
+  String get catcatchKeepOriginalFormat;
+
+  /// No description provided for @catcatchResumeSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume supported'**
+  String get catcatchResumeSupported;
+
+  /// No description provided for @catcatchResumeUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This site does not support resuming'**
+  String get catcatchResumeUnsupported;
+
+  /// No description provided for @catcatchPauseDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause download'**
+  String get catcatchPauseDownload;
+
+  /// No description provided for @catcatchResumeDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume download'**
+  String get catcatchResumeDownload;
+
+  /// No description provided for @catcatchRestartDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download again'**
+  String get catcatchRestartDownload;
+
+  /// No description provided for @catcatchPendingFormatAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for flow resources'**
+  String get catcatchPendingFormatAction;
+
+  /// No description provided for @quitDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit app?'**
+  String get quitDialogTitle;
+
+  /// No description provided for @quitDialogRunningTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} tasks are running. Quitting will interrupt them. Do you want to quit?'**
+  String quitDialogRunningTasks(Object count);
+
+  /// No description provided for @quitDialogNoTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Do you want to quit Stroom?'**
+  String get quitDialogNoTasks;
+
+  /// No description provided for @quitDialogCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get quitDialogCancel;
+
+  /// No description provided for @quitDialogExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit'**
+  String get quitDialogExit;
+
+  /// No description provided for @searchPanelNewConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation'**
+  String get searchPanelNewConversation;
+
+  /// No description provided for @searchPanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search conversations'**
+  String get searchPanelTitle;
+
+  /// No description provided for @searchPanelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a keyword...'**
+  String get searchPanelHint;
+
+  /// No description provided for @searchPanelByTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search titles'**
+  String get searchPanelByTitle;
+
+  /// No description provided for @searchPanelByContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Search content'**
+  String get searchPanelByContent;
+
+  /// No description provided for @searchPanelResults.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} results'**
+  String searchPanelResults(Object count);
+
+  /// No description provided for @searchPanelPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a keyword to search'**
+  String get searchPanelPrompt;
+
+  /// No description provided for @searchPanelNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching conversations found'**
+  String get searchPanelNoResults;
+
+  /// No description provided for @topicItemNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New topic'**
+  String get topicItemNew;
+
+  /// No description provided for @topicItemUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get topicItemUnpin;
+
+  /// No description provided for @topicItemPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get topicItemPin;
+
+  /// No description provided for @topicItemRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get topicItemRename;
+
+  /// No description provided for @topicItemAutoName.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto name'**
+  String get topicItemAutoName;
+
+  /// No description provided for @topicItemDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get topicItemDelete;
+
+  /// No description provided for @galleryChoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an image source'**
+  String get galleryChoiceTitle;
+
+  /// No description provided for @galleryChoiceDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Device gallery'**
+  String get galleryChoiceDevice;
+
+  /// No description provided for @galleryChoiceDeviceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse photos and videos on your device'**
+  String get galleryChoiceDeviceDescription;
+
+  /// No description provided for @galleryChoiceApp.
+  ///
+  /// In en, this message translates to:
+  /// **'App gallery'**
+  String get galleryChoiceApp;
+
+  /// No description provided for @galleryChoiceAppDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from the app gallery'**
+  String get galleryChoiceAppDescription;
+
+  /// No description provided for @appMediaUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file'**
+  String get appMediaUnreadable;
+
+  /// No description provided for @appMediaClearSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear ({count})'**
+  String appMediaClearSelection(Object count);
+
+  /// No description provided for @appMediaConfirmSelectionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Done ({count})'**
+  String appMediaConfirmSelectionCount(Object count);
+
+  /// No description provided for @appMediaConfirmSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get appMediaConfirmSelection;
+
+  /// No description provided for @appMediaEmptyFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is empty'**
+  String get appMediaEmptyFolder;
+
+  /// No description provided for @appMediaRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to root folder'**
+  String get appMediaRoot;
+
+  /// No description provided for @appMediaParentFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Back: {name}'**
+  String appMediaParentFolder(Object name);
+
+  /// No description provided for @appMediaSelectedFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files selected'**
+  String appMediaSelectedFiles(Object count);
+
+  /// No description provided for @imagePreviewCrop.
+  ///
+  /// In en, this message translates to:
+  /// **'Crop'**
+  String get imagePreviewCrop;
+
+  /// No description provided for @imagePreviewEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get imagePreviewEdit;
+
+  /// No description provided for @imagePreviewLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load image'**
+  String get imagePreviewLoadFailed;
+
+  /// No description provided for @runningElapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Running for {elapsed}'**
+  String runningElapsed(Object elapsed);
+
+  /// No description provided for @chatAttachmentFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach file'**
+  String get chatAttachmentFile;
+
+  /// No description provided for @chatAttachmentCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get chatAttachmentCamera;
+
+  /// No description provided for @chatAttachmentDeviceGallery.
+  ///
+  /// In en, this message translates to:
+  /// **'Device gallery'**
+  String get chatAttachmentDeviceGallery;
+
+  /// No description provided for @chatAttachmentDeviceFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Device files'**
+  String get chatAttachmentDeviceFiles;
+
+  /// No description provided for @chatAttachmentAppFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'App files'**
+  String get chatAttachmentAppFiles;
+
+  /// No description provided for @fileManagerTodayTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Today {time}'**
+  String fileManagerTodayTime(Object time);
+
+  /// No description provided for @fileManagerYesterdayTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday {time}'**
+  String fileManagerYesterdayTime(Object time);
+
+  /// No description provided for @fileManagerDaysAgoTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days ago {time}'**
+  String fileManagerDaysAgoTime(Object days, Object time);
+
+  /// No description provided for @markdownGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating...'**
+  String get markdownGenerating;
+
+  /// No description provided for @htmlPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get htmlPreview;
+
+  /// No description provided for @htmlReturnToCard.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to card'**
+  String get htmlReturnToCard;
+
+  /// No description provided for @htmlGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating...'**
+  String get htmlGenerating;
+
+  /// No description provided for @htmlFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'View fullscreen'**
+  String get htmlFullscreen;
+
+  /// No description provided for @htmlViewCode.
+  ///
+  /// In en, this message translates to:
+  /// **'View code'**
+  String get htmlViewCode;
+
+  /// No description provided for @codeScrollToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll to bottom'**
+  String get codeScrollToBottom;
+
+  /// No description provided for @codeSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get codeSave;
+
+  /// No description provided for @codeDisableWrap.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable wrapping'**
+  String get codeDisableWrap;
+
+  /// No description provided for @codeEnableWrap.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap lines'**
+  String get codeEnableWrap;
+
+  /// No description provided for @codeCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed: {error}'**
+  String codeCopyFailed(Object error);
+
+  /// No description provided for @codeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get codeCopied;
+
+  /// No description provided for @codeCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get codeCopy;
+
+  /// No description provided for @codeEmptySave.
+  ///
+  /// In en, this message translates to:
+  /// **'Code is empty and cannot be saved'**
+  String get codeEmptySave;
+
+  /// No description provided for @codeSaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save code'**
+  String get codeSaveTitle;
+
+  /// No description provided for @codeSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to: {path}'**
+  String codeSavedTo(Object path);
+
+  /// No description provided for @codeSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String codeSaveFailed(Object error);
+
+  /// No description provided for @fileManagerCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get fileManagerCopy;
+
+  /// No description provided for @fileManagerMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get fileManagerMove;
+
+  /// No description provided for @fileManagerRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get fileManagerRename;
+
+  /// No description provided for @fileManagerExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get fileManagerExport;
+
+  /// No description provided for @fileManagerDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get fileManagerDelete;
+
+  /// No description provided for @fileManagerAncestorFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'Ancestor folders'**
+  String get fileManagerAncestorFolders;
+
+  /// No description provided for @fileManagerRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Root'**
+  String get fileManagerRoot;
+
+  /// No description provided for @fileManagerSelectedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String fileManagerSelectedItems(Object count);
+
+  /// No description provided for @fileManagerSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get fileManagerSelectAll;
+
+  /// No description provided for @fileManagerRenameUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Last batch rename result and undo'**
+  String get fileManagerRenameUndo;
+
+  /// No description provided for @fileManagerSortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort ({field})'**
+  String fileManagerSortBy(Object field);
+
+  /// No description provided for @fileManagerSortCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by created date'**
+  String get fileManagerSortCreated;
+
+  /// No description provided for @fileManagerSortModified.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by modified date'**
+  String get fileManagerSortModified;
+
+  /// No description provided for @fileManagerSortName.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by name'**
+  String get fileManagerSortName;
+
+  /// No description provided for @fileManagerSortSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by size'**
+  String get fileManagerSortSize;
+
+  /// No description provided for @fileManagerListView.
+  ///
+  /// In en, this message translates to:
+  /// **'List view'**
+  String get fileManagerListView;
+
+  /// No description provided for @fileManagerThumbnailView.
+  ///
+  /// In en, this message translates to:
+  /// **'Thumbnail view'**
+  String get fileManagerThumbnailView;
+
+  /// No description provided for @fileManagerCreateFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Create folder'**
+  String get fileManagerCreateFolder;
+
+  /// No description provided for @fileManagerRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh list'**
+  String get fileManagerRefresh;
+
+  /// No description provided for @fileManagerEmptyFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is empty'**
+  String get fileManagerEmptyFolder;
+
+  /// No description provided for @fileManagerNoFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No files'**
+  String get fileManagerNoFiles;
+
+  /// No description provided for @fileManagerBackRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to root'**
+  String get fileManagerBackRoot;
+
+  /// No description provided for @fileManagerBackFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Back: {name}'**
+  String fileManagerBackFolder(Object name);
+
+  /// No description provided for @fileManagerMultiSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple'**
+  String get fileManagerMultiSelect;
+
+  /// No description provided for @fileManagerOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get fileManagerOpen;
+
+  /// No description provided for @fileManagerPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get fileManagerPreview;
+
+  /// No description provided for @fileManagerFolderAndFilesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{files} files, {folders} subfolders'**
+  String fileManagerFolderAndFilesCount(Object files, Object folders);
+
+  /// No description provided for @fileManagerSubfoldersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} subfolders'**
+  String fileManagerSubfoldersCount(Object count);
+
+  /// No description provided for @fileManagerFilesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files'**
+  String fileManagerFilesCount(Object count);
+
+  /// No description provided for @fileManagerEmptyFolderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty folder'**
+  String get fileManagerEmptyFolderLabel;
+
+  /// No description provided for @fileManagerFileExists.
+  ///
+  /// In en, this message translates to:
+  /// **'File “{name}.{format}” already exists'**
+  String fileManagerFileExists(Object format, Object name);
+
+  /// No description provided for @fileManagerRenameFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename failed: {error}'**
+  String fileManagerRenameFailed(Object error);
+
+  /// No description provided for @fileManagerChooseTargetFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a destination folder'**
+  String get fileManagerChooseTargetFolder;
+
+  /// No description provided for @fileManagerAlreadyAtDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is already at the destination'**
+  String get fileManagerAlreadyAtDestination;
+
+  /// No description provided for @fileManagerMoveNameConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'A file with the same name already exists in the destination. Move canceled.'**
+  String get fileManagerMoveNameConflict;
+
+  /// No description provided for @fileManagerMoveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Move failed: {error}'**
+  String fileManagerMoveFailed(Object error);
+
+  /// No description provided for @fileManagerChooseCopyDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder to copy to'**
+  String get fileManagerChooseCopyDestination;
+
+  /// No description provided for @fileManagerCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed: {error}'**
+  String fileManagerCopyFailed(Object error);
+
+  /// No description provided for @fileManagerDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm deletion'**
+  String get fileManagerDeleteConfirmTitle;
+
+  /// No description provided for @fileManagerDeleteFileConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this file? This action cannot be undone.'**
+  String get fileManagerDeleteFileConfirm;
+
+  /// No description provided for @fileManagerCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get fileManagerCancel;
+
+  /// No description provided for @fileManagerDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete failed: {error}'**
+  String fileManagerDeleteFailed(Object error);
+
+  /// No description provided for @fileManagerFolderAlreadyThere.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder is already at the destination. Operation canceled.'**
+  String get fileManagerFolderAlreadyThere;
+
+  /// No description provided for @fileManagerFolderConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with the same name exists at the destination, or the destination is inside the selected folder. Operation canceled.'**
+  String get fileManagerFolderConflict;
+
+  /// No description provided for @fileManagerBatchDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm bulk deletion'**
+  String get fileManagerBatchDeleteTitle;
+
+  /// No description provided for @fileManagerDeleteSelectedConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the {count} selected items? This action cannot be undone.'**
+  String fileManagerDeleteSelectedConfirm(Object count);
+
+  /// No description provided for @fileManagerBatchDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk delete failed: {error}'**
+  String fileManagerBatchDeleteFailed(Object error);
+
+  /// No description provided for @fileManagerExportConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Export paths for the selected files and folders conflict'**
+  String get fileManagerExportConflict;
+
+  /// No description provided for @fileManagerSelectedAlreadyThere.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected file is already at the destination. Move canceled.'**
+  String get fileManagerSelectedAlreadyThere;
+
+  /// No description provided for @fileManagerBatchMoveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk move failed: {error}'**
+  String fileManagerBatchMoveFailed(Object error);
+
+  /// No description provided for @fileManagerCopyConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'The selection contains files with duplicate names. Copy canceled; copy them one at a time.'**
+  String get fileManagerCopyConflict;
+
+  /// No description provided for @fileManagerBatchCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk copy failed: {error}'**
+  String fileManagerBatchCopyFailed(Object error);
+
+  /// No description provided for @fileManagerClosedError.
+  ///
+  /// In en, this message translates to:
+  /// **'The file page is closed'**
+  String get fileManagerClosedError;
+
+  /// No description provided for @fileManagerBatchRenameFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk rename failed: {error}'**
+  String fileManagerBatchRenameFailed(Object error);
+
+  /// No description provided for @fileManagerFolderNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a folder name'**
+  String get fileManagerFolderNameHint;
+
+  /// No description provided for @fileManagerCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get fileManagerCreate;
+
+  /// No description provided for @fileManagerFolderExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder already exists'**
+  String get fileManagerFolderExists;
+
+  /// No description provided for @fileManagerCreateFolderFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create folder: {error}'**
+  String fileManagerCreateFolderFailed(Object error);
+
+  /// No description provided for @fileManagerFolderCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder “{name}” created'**
+  String fileManagerFolderCreated(Object name);
+
+  /// No description provided for @fileManagerRenameFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename folder'**
+  String get fileManagerRenameFolderTitle;
+
+  /// No description provided for @fileManagerNewNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a new name'**
+  String get fileManagerNewNameHint;
+
+  /// No description provided for @fileManagerTargetFolderConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with the same name already exists at the destination. Operation canceled.'**
+  String get fileManagerTargetFolderConflict;
+
+  /// No description provided for @fileManagerMoveFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move folder to…'**
+  String get fileManagerMoveFolderTitle;
+
+  /// No description provided for @fileManagerCopyFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy folder to…'**
+  String get fileManagerCopyFolderTitle;
+
+  /// No description provided for @fileManagerFolderSelfConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with the same name exists at the destination, or the destination is the folder itself. Operation canceled.'**
+  String get fileManagerFolderSelfConflict;
+
+  /// No description provided for @fileManagerDeleteFolderConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete folder “{name}”? Its {count} files will also be deleted.'**
+  String fileManagerDeleteFolderConfirm(Object count, Object name);
+
+  /// No description provided for @fileManagerDeleteEmptyFolderConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete empty folder “{name}”?'**
+  String fileManagerDeleteEmptyFolderConfirm(Object name);
+
+  /// No description provided for @fileManagerDeleteFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm folder deletion'**
+  String get fileManagerDeleteFolderTitle;
+
+  /// No description provided for @fileManagerRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh failed: {error}'**
+  String fileManagerRefreshFailed(Object error);
+
+  /// No description provided for @fileManagerRefreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'File list refreshed'**
+  String get fileManagerRefreshed;
+
+  /// No description provided for @fileManagerRenameFileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename file'**
+  String get fileManagerRenameFileTitle;
+
+  /// No description provided for @fileManagerFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get fileManagerFormat;
+
+  /// No description provided for @fileManagerFolderAtDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder is already at the destination'**
+  String get fileManagerFolderAtDestination;
+
+  /// No description provided for @folderPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder'**
+  String get folderPickerTitle;
+
+  /// No description provided for @folderPickerExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder already exists'**
+  String get folderPickerExists;
+
+  /// No description provided for @folderPickerCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create folder: {error}'**
+  String folderPickerCreateFailed(Object error);
+
+  /// No description provided for @folderPickerRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not refresh folder list: {error}'**
+  String folderPickerRefreshFailed(Object error);
+
+  /// No description provided for @folderPickerInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Click to select; double-click to open a folder'**
+  String get folderPickerInstruction;
+
+  /// No description provided for @folderPickerFileName.
+  ///
+  /// In en, this message translates to:
+  /// **'File name'**
+  String get folderPickerFileName;
+
+  /// No description provided for @folderPickerFileNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a file name'**
+  String get folderPickerFileNameHint;
+
+  /// No description provided for @folderPickerBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go up one level'**
+  String get folderPickerBack;
+
+  /// No description provided for @folderPickerPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Root > {path}'**
+  String folderPickerPath(Object path);
+
+  /// No description provided for @folderPickerRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Root'**
+  String get folderPickerRoot;
+
+  /// No description provided for @folderPickerCurrentFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Current folder'**
+  String get folderPickerCurrentFolder;
+
+  /// No description provided for @folderPickerSubfolders.
+  ///
+  /// In en, this message translates to:
+  /// **'Subfolders'**
+  String get folderPickerSubfolders;
+
+  /// No description provided for @folderPickerExistingFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing folders'**
+  String get folderPickerExistingFolders;
+
+  /// No description provided for @folderPickerCreateNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Create new folder'**
+  String get folderPickerCreateNew;
+
+  /// No description provided for @folderPickerFolderNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a folder name'**
+  String get folderPickerFolderNameHint;
+
+  /// No description provided for @folderPickerCancelCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel creation'**
+  String get folderPickerCancelCreate;
+
+  /// No description provided for @folderPickerCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get folderPickerCancel;
+
+  /// No description provided for @folderPickerConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get folderPickerConfirm;
+
+  /// No description provided for @batchRunReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file list: {error}'**
+  String batchRunReadFailed(Object error);
+
+  /// No description provided for @batchRunPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get batchRunPreparing;
+
+  /// No description provided for @batchRunUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get batchRunUndo;
+
+  /// No description provided for @batchRunRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get batchRunRename;
+
+  /// No description provided for @batchRunFailedAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not {label}'**
+  String batchRunFailedAction(Object label);
+
+  /// No description provided for @batchRunCompletedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} {count} items'**
+  String batchRunCompletedCount(Object count, Object label);
+
+  /// No description provided for @batchRunSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {completed} succeeded, {failed} failed, {remaining} remaining'**
+  String batchRunSummary(
+    Object completed,
+    Object failed,
+    Object label,
+    Object remaining,
+  );
+
+  /// No description provided for @batchRunFailedItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed: {id} → {name}'**
+  String batchRunFailedItem(Object id, Object name);
+
+  /// No description provided for @batchRunReportCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Execution report copied'**
+  String get batchRunReportCopied;
+
+  /// No description provided for @batchRunCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed. Try again.'**
+  String get batchRunCopyFailed;
+
+  /// No description provided for @batchRunWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}…'**
+  String batchRunWorking(Object label);
+
+  /// No description provided for @batchRunTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch rename results'**
+  String get batchRunTitle;
+
+  /// No description provided for @batchRunStoppedRetain.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping keeps completed items. You can undo them on the results page.'**
+  String get batchRunStoppedRetain;
+
+  /// No description provided for @batchRunFailedRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed; remaining items were not processed'**
+  String get batchRunFailedRemaining;
+
+  /// No description provided for @batchRunUndoInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo restores the original names for items completed in this run. Undo is refused if the file list has changed since.'**
+  String get batchRunUndoInfo;
+
+  /// No description provided for @batchRunUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'Some item states could not be confirmed. Check the file list; automatic undo is unavailable to avoid overwriting files.'**
+  String get batchRunUncertain;
+
+  /// No description provided for @batchRunUndoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring original names…'**
+  String get batchRunUndoing;
+
+  /// No description provided for @batchRunStopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping…'**
+  String get batchRunStopping;
+
+  /// No description provided for @batchRunStopRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop remaining items'**
+  String get batchRunStopRemaining;
+
+  /// No description provided for @batchRunCopyReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy report'**
+  String get batchRunCopyReport;
+
+  /// No description provided for @batchRunUndoRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue undoing the remaining {count}'**
+  String batchRunUndoRemaining(Object count);
+
+  /// No description provided for @batchRunUndoCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo completed renames'**
+  String get batchRunUndoCompleted;
+
+  /// No description provided for @batchRunDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get batchRunDone;
+
+  /// No description provided for @codeEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit parameter value'**
+  String get codeEditorTitle;
+
+  /// No description provided for @codeEditorFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get codeEditorFormat;
+
+  /// No description provided for @codeEditorCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get codeEditorCancel;
+
+  /// No description provided for @codeEditorConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get codeEditorConfirm;
+
+  /// No description provided for @codeEditorInvalidJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid JSON. Fix it before saving.'**
+  String get codeEditorInvalidJson;
+
+  /// No description provided for @codeEditorParamPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name path (expanded into nested JSON when sent)'**
+  String get codeEditorParamPath;
+
+  /// No description provided for @codeEditorErrorPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Line {line}, column {column}: {message}'**
+  String codeEditorErrorPosition(String line, String column, String message);
+
+  /// No description provided for @codeEditorJsonError.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON format error: {message}'**
+  String codeEditorJsonError(String message);
+
+  /// No description provided for @codeEditorInvalidFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid JSON format'**
+  String get codeEditorInvalidFormat;
+
+  /// No description provided for @toolCallCompacted.
+  ///
+  /// In en, this message translates to:
+  /// **'Compacted'**
+  String get toolCallCompacted;
+
+  /// No description provided for @mermaidSaveEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid code is empty. Nothing to save.'**
+  String get mermaidSaveEmpty;
+
+  /// No description provided for @mermaidFolderLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load folders: {error}'**
+  String mermaidFolderLoadFailed(String error);
+
+  /// No description provided for @mermaidSaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Mermaid diagram'**
+  String get mermaidSaveTitle;
+
+  /// No description provided for @mermaidSaveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose or create a folder for the .mmd file'**
+  String get mermaidSaveHint;
+
+  /// No description provided for @mermaidSaveFilenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a file name (.mmd is added automatically)'**
+  String get mermaidSaveFilenameHint;
+
+  /// No description provided for @mermaidFilenameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'File name cannot be empty'**
+  String get mermaidFilenameEmpty;
+
+  /// No description provided for @mermaidSaveSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to text storage: {folder}/{name}.mmd'**
+  String mermaidSaveSuccess(String folder, String name);
+
+  /// No description provided for @mermaidSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String mermaidSaveFailed(String error);
+
+  /// No description provided for @mermaidPrepareEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing rendering engine...'**
+  String get mermaidPrepareEngine;
+
+  /// No description provided for @mermaidRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get mermaidRetry;
+
+  /// No description provided for @batchRuleEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot be empty'**
+  String get batchRuleEmpty;
+
+  /// No description provided for @batchRuleNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a number'**
+  String get batchRuleNumber;
+
+  /// No description provided for @batchRulePositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a number greater than 0'**
+  String get batchRulePositive;
+
+  /// No description provided for @batchRuleMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Must be at least {min}'**
+  String batchRuleMin(String min);
+
+  /// No description provided for @batchRuleMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Must be no greater than {max}'**
+  String batchRuleMax(String max);
+
+  /// No description provided for @batchRulePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefix'**
+  String get batchRulePrefix;
+
+  /// No description provided for @batchRuleSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'Suffix'**
+  String get batchRuleSuffix;
+
+  /// No description provided for @batchRuleStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get batchRuleStart;
+
+  /// No description provided for @batchRuleStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step'**
+  String get batchRuleStep;
+
+  /// No description provided for @batchRuleDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'Digits'**
+  String get batchRuleDigits;
+
+  /// No description provided for @batchRuleSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Separator'**
+  String get batchRuleSeparator;
+
+  /// No description provided for @batchRuleRestartFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart numbering in each folder'**
+  String get batchRuleRestartFolder;
+
+  /// No description provided for @batchRuleNumberHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Numbers follow preview order; excluded items do not use a number. Step can be negative or 0.'**
+  String get batchRuleNumberHelp;
+
+  /// No description provided for @batchRuleFind.
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get batchRuleFind;
+
+  /// No description provided for @batchRuleReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace with (leave empty to delete)'**
+  String get batchRuleReplace;
+
+  /// No description provided for @batchRuleCaseSensitive.
+  ///
+  /// In en, this message translates to:
+  /// **'Case sensitive'**
+  String get batchRuleCaseSensitive;
+
+  /// No description provided for @batchRuleRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression'**
+  String get batchRuleRegex;
+
+  /// No description provided for @batchRuleFirstOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace first match only'**
+  String get batchRuleFirstOnly;
+
+  /// No description provided for @batchRuleRegexHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture groups: \$1, \$2; full match: \$0; literal \$: \$\$. Example: ^IMG_(\\d+)\$ → Photo_\$1'**
+  String get batchRuleRegexHelp;
+
+  /// No description provided for @batchRuleFindRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text to find to enable this rule.'**
+  String get batchRuleFindRequired;
+
+  /// No description provided for @batchRuleBeginning.
+  ///
+  /// In en, this message translates to:
+  /// **'Beginning'**
+  String get batchRuleBeginning;
+
+  /// No description provided for @batchRuleEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get batchRuleEnd;
+
+  /// No description provided for @batchRulePosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Position'**
+  String get batchRulePosition;
+
+  /// No description provided for @batchRuleInsertText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text to insert'**
+  String get batchRuleInsertText;
+
+  /// No description provided for @batchRuleBeforeChar.
+  ///
+  /// In en, this message translates to:
+  /// **'Before character N'**
+  String get batchRuleBeforeChar;
+
+  /// No description provided for @batchRulePositionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Positions start at 1; values beyond the end are appended. Combined emoji count as one character.'**
+  String get batchRulePositionHelp;
+
+  /// No description provided for @batchRuleFromBeginning.
+  ///
+  /// In en, this message translates to:
+  /// **'From beginning'**
+  String get batchRuleFromBeginning;
+
+  /// No description provided for @batchRuleFromEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'From end'**
+  String get batchRuleFromEnd;
+
+  /// No description provided for @batchRuleFromChar.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting at character N'**
+  String get batchRuleFromChar;
+
+  /// No description provided for @batchRuleCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Count'**
+  String get batchRuleCount;
+
+  /// No description provided for @batchRuleDeleteHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'If deletion empties the name, a later insert rule must add text before execution.'**
+  String get batchRuleDeleteHelp;
+
+  /// No description provided for @batchRuleUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'UPPERCASE'**
+  String get batchRuleUpper;
+
+  /// No description provided for @batchRuleLower.
+  ///
+  /// In en, this message translates to:
+  /// **'lowercase'**
+  String get batchRuleLower;
+
+  /// No description provided for @batchRuleFirstUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'Capitalize first letter'**
+  String get batchRuleFirstUpper;
+
+  /// No description provided for @batchRuleTitleCase.
+  ///
+  /// In en, this message translates to:
+  /// **'Capitalize Each Word'**
+  String get batchRuleTitleCase;
+
+  /// No description provided for @batchRuleTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'New name template'**
+  String get batchRuleTemplate;
+
+  /// No description provided for @batchRuleTemplateHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Course_{n}_{name}'**
+  String batchRuleTemplateHint(String n, String name);
+
+  /// No description provided for @batchRuleTemplateHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} original name · {n} sequence · {folder} folder name\n{created} creation date · {modified} modified date · {ext} original extension\nDate format YYYY-MM-DD; missing dates are reported. The template replaces the whole base name; the extension is kept automatically.'**
+  String batchRuleTemplateHelp(
+    String name,
+    String n,
+    String folder,
+    String created,
+    String modified,
+    String ext,
+  );
+
+  /// No description provided for @batchRuleTrim.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim leading and trailing spaces'**
+  String get batchRuleTrim;
+
+  /// No description provided for @batchRuleCollapseSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace consecutive spaces with one space'**
+  String get batchRuleCollapseSpaces;
+
+  /// No description provided for @batchRuleActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule actions'**
+  String get batchRuleActions;
+
+  /// No description provided for @batchRuleDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate rule'**
+  String get batchRuleDuplicate;
+
+  /// No description provided for @batchRuleRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete rule'**
+  String get batchRuleRemove;
+
+  /// No description provided for @batchRuleMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move rule up'**
+  String get batchRuleMoveUp;
+
+  /// No description provided for @batchRuleMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move rule down'**
+  String get batchRuleMoveDown;
+
+  /// No description provided for @batchDlgSavePreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Save preset'**
+  String get batchDlgSavePreset;
+
+  /// No description provided for @batchDlgPresetName.
+  ///
+  /// In en, this message translates to:
+  /// **'Preset name'**
+  String get batchDlgPresetName;
+
+  /// No description provided for @batchDlgPresetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Saves rules and order, but not exclusions or manual names'**
+  String get batchDlgPresetHint;
+
+  /// No description provided for @batchDlgCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get batchDlgCancel;
+
+  /// No description provided for @batchDlgSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get batchDlgSave;
+
+  /// No description provided for @batchDlgOverwriteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite existing preset?'**
+  String get batchDlgOverwriteTitle;
+
+  /// No description provided for @batchDlgOverwriteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the rules in “{name}”.'**
+  String batchDlgOverwriteBody(String name);
+
+  /// No description provided for @batchDlgOverwrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite'**
+  String get batchDlgOverwrite;
+
+  /// No description provided for @batchDlgManagePresets.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage presets'**
+  String get batchDlgManagePresets;
+
+  /// No description provided for @batchDlgNoPresets.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved presets'**
+  String get batchDlgNoPresets;
+
+  /// No description provided for @batchDlgDeletePreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete preset'**
+  String get batchDlgDeletePreset;
+
+  /// No description provided for @batchDlgDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get batchDlgDone;
+
+  /// No description provided for @batchDlgEditName.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit name individually'**
+  String get batchDlgEditName;
+
+  /// No description provided for @batchDlgBaseName.
+  ///
+  /// In en, this message translates to:
+  /// **'Base name'**
+  String get batchDlgBaseName;
+
+  /// No description provided for @batchDlgOverrideHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This name overrides the rule result'**
+  String get batchDlgOverrideHelp;
+
+  /// No description provided for @batchDlgExtensionRetained.
+  ///
+  /// In en, this message translates to:
+  /// **'Extension .{extension} is kept automatically'**
+  String batchDlgExtensionRetained(String extension);
+
+  /// No description provided for @batchDlgConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get batchDlgConfirm;
+
+  /// No description provided for @batchDlgHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Instructions'**
+  String get batchDlgHelp;
+
+  /// No description provided for @batchDlgClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get batchDlgClose;
+
+  /// No description provided for @batchDlgLoadPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Load preset (replaces rules and clears manual names)'**
+  String get batchDlgLoadPreset;
+
+  /// No description provided for @batchDlgLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'Load preset'**
+  String get batchDlgLoad;
+
+  /// No description provided for @batchDlgSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get batchDlgSaving;
+
+  /// No description provided for @batchDlgReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset all rules and included items'**
+  String get batchDlgReset;
+
+  /// No description provided for @batchDlgRuleInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules run from top to bottom. Copy, move, or disable them. File extensions stay unchanged.'**
+  String get batchDlgRuleInstructions;
+
+  /// No description provided for @batchDlgSortName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get batchDlgSortName;
+
+  /// No description provided for @batchDlgSortCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get batchDlgSortCreated;
+
+  /// No description provided for @batchDlgSortModified.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified'**
+  String get batchDlgSortModified;
+
+  /// No description provided for @batchDlgSortSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get batchDlgSortSize;
+
+  /// No description provided for @batchDlgAscending.
+  ///
+  /// In en, this message translates to:
+  /// **'Ascending'**
+  String get batchDlgAscending;
+
+  /// No description provided for @batchDlgDescending.
+  ///
+  /// In en, this message translates to:
+  /// **'Descending'**
+  String get batchDlgDescending;
+
+  /// No description provided for @batchDlgFolderSort.
+  ///
+  /// In en, this message translates to:
+  /// **'Folders come first; same names are sorted by folder.'**
+  String get batchDlgFolderSort;
+
+  /// No description provided for @batchDlgAddRule.
+  ///
+  /// In en, this message translates to:
+  /// **'＋ Add rule'**
+  String get batchDlgAddRule;
+
+  /// No description provided for @batchDlgMaxRules.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum 50 rules'**
+  String get batchDlgMaxRules;
+
+  /// No description provided for @batchDlgPreviewWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating preview… You can keep editing rules or cancel.'**
+  String get batchDlgPreviewWorking;
+
+  /// No description provided for @batchDlgSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search original name, new name, or folder'**
+  String get batchDlgSearch;
+
+  /// No description provided for @batchDlgFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get batchDlgFilterAll;
+
+  /// No description provided for @batchDlgFilterChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed'**
+  String get batchDlgFilterChanged;
+
+  /// No description provided for @batchDlgFilterErrors.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues'**
+  String get batchDlgFilterErrors;
+
+  /// No description provided for @batchDlgFilterUnchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Unchanged'**
+  String get batchDlgFilterUnchanged;
+
+  /// No description provided for @batchDlgFilterExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded'**
+  String get batchDlgFilterExcluded;
+
+  /// No description provided for @batchDlgParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose included items'**
+  String get batchDlgParticipants;
+
+  /// No description provided for @batchDlgIncludeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Include all'**
+  String get batchDlgIncludeAll;
+
+  /// No description provided for @batchDlgOnlyFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files only'**
+  String get batchDlgOnlyFiles;
+
+  /// No description provided for @batchDlgOnlyFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'Folders only'**
+  String get batchDlgOnlyFolders;
+
+  /// No description provided for @batchDlgExcludeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude all'**
+  String get batchDlgExcludeAll;
+
+  /// No description provided for @batchDlgScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Included items'**
+  String get batchDlgScope;
+
+  /// No description provided for @batchDlgCopyList.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy list'**
+  String get batchDlgCopyList;
+
+  /// No description provided for @batchDlgConflictBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Name conflict: block execution'**
+  String get batchDlgConflictBlock;
+
+  /// No description provided for @batchDlgConflictSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'Name conflict: append (2), (3)…'**
+  String get batchDlgConflictSuffix;
+
+  /// No description provided for @batchDlgNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No items match the filter'**
+  String get batchDlgNoMatches;
+
+  /// No description provided for @batchDlgRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Root'**
+  String get batchDlgRoot;
+
+  /// No description provided for @batchDlgFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get batchDlgFile;
+
+  /// No description provided for @batchDlgFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder'**
+  String get batchDlgFolder;
+
+  /// No description provided for @batchDlgTargetFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Target folder: {folder}'**
+  String batchDlgTargetFolder(String folder);
+
+  /// No description provided for @batchDlgEditNameTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit name individually'**
+  String get batchDlgEditNameTooltip;
+
+  /// No description provided for @batchDlgRestoreNameTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore rule-generated name'**
+  String get batchDlgRestoreNameTooltip;
+
+  /// No description provided for @batchDlgCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Full preview list copied (CSV)'**
+  String get batchDlgCopied;
+
+  /// No description provided for @batchDlgCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed. Try again.'**
+  String get batchDlgCopyFailed;
+
+  /// No description provided for @batchDlgHelpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch rename instructions'**
+  String get batchDlgHelpTitle;
+
+  /// No description provided for @batchDlgHelpDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get batchDlgHelpDismiss;
+
+  /// No description provided for @batchDlgRulesTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules'**
+  String get batchDlgRulesTab;
+
+  /// No description provided for @batchDlgPreviewTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview ({count})'**
+  String batchDlgPreviewTab(String count);
+
+  /// No description provided for @batchDlgRenameCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename {count} items'**
+  String batchDlgRenameCount(String count);
+
+  /// No description provided for @batchDlgPresetLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load presets. You can still edit and run rules.'**
+  String get batchDlgPresetLoadFailed;
+
+  /// No description provided for @batchDlgPreviewFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not calculate preview. Adjust the rules and try again.'**
+  String get batchDlgPreviewFailed;
+
+  /// No description provided for @batchDlgSavedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Preset saved: {name}'**
+  String batchDlgSavedName(String name);
+
+  /// No description provided for @batchDlgSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String batchDlgSaveFailed(String error);
+
+  /// No description provided for @batchDlgDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete failed: {error}'**
+  String batchDlgDeleteFailed(String error);
+
+  /// No description provided for @batchDlgSavePresetFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Save preset'**
+  String get batchDlgSavePresetFallback;
+
+  /// No description provided for @batchDlgPreviewSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview · {changes} changes · {conflicts} issues · {excluded} excluded'**
+  String batchDlgPreviewSummary(
+    String changes,
+    String conflicts,
+    String excluded,
+  );
+
+  /// No description provided for @batchDlgInvalidInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix invalid rule inputs. The preview does not include them yet.'**
+  String get batchDlgInvalidInput;
+
+  /// No description provided for @batchDlgConflictError.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflicts or invalid names prevent applying. Adjust the rules.'**
+  String get batchDlgConflictError;
+
+  /// No description provided for @batchDlgManualNameStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual name'**
+  String get batchDlgManualNameStatus;
+
+  /// No description provided for @batchDlgPendingRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to rename'**
+  String get batchDlgPendingRename;
+
+  /// No description provided for @batchDlgCsvHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Original path,Original name,Target path,Status'**
+  String get batchDlgCsvHeader;
+
+  /// No description provided for @batchDlgHelpBody.
+  ///
+  /// In en, this message translates to:
+  /// **'1. Choose a preset or enable rules, then copy rules and adjust their order as needed.\n\n2. The preview shows the names that will be used. Search and filters affect display only. Unchecking an item excludes it and recalculates numbering. Edit a name individually or restore the rule result.\n\n3. Resolve all issues before running. Automatic suffixes handle duplicate names without overwriting files. Rename folders that exchange names in separate batches.\n\n4. You can stop later items during execution; the current item finishes first. The results page shows completed changes and lets you undo them. Undo is blocked if the list has changed since execution.\n\nThis changes names and folder paths only; file contents and extensions stay unchanged. Renaming a parent folder does not prevent checked children from being renamed, and renaming a parent moves its children with it.'**
+  String get batchDlgHelpBody;
+
+  /// No description provided for @batchDlgPreviewCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview ({count})'**
+  String batchDlgPreviewCount(String count);
+
+  /// No description provided for @batchBuiltinPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos: date and number'**
+  String get batchBuiltinPhoto;
+
+  /// No description provided for @batchBuiltinCourse.
+  ///
+  /// In en, this message translates to:
+  /// **'Courses: consistent name and number'**
+  String get batchBuiltinCourse;
+
+  /// No description provided for @batchBuiltinDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads: clean whitespace'**
+  String get batchBuiltinDownloads;
+
+  /// No description provided for @taskListDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get taskListDetail;
+
+  /// No description provided for @taskListOwnershipChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirming task ownership'**
+  String get taskListOwnershipChecking;
+
+  /// No description provided for @taskListOwnershipFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read task flow record; actions are unavailable'**
+  String get taskListOwnershipFailed;
+
+  /// No description provided for @taskListViewFlow.
+  ///
+  /// In en, this message translates to:
+  /// **'View task flow'**
+  String get taskListViewFlow;
+
+  /// No description provided for @taskListPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get taskListPause;
+
+  /// No description provided for @taskListClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear task'**
+  String get taskListClear;
+
+  /// No description provided for @taskListResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get taskListResume;
+
+  /// No description provided for @taskListRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get taskListRetry;
+
+  /// No description provided for @taskListDismissError.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss error'**
+  String get taskListDismissError;
+
+  /// No description provided for @taskListRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from list'**
+  String get taskListRemove;
+
+  /// No description provided for @taskListSynthesisErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesis error details'**
+  String get taskListSynthesisErrorTitle;
+
+  /// No description provided for @taskListClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get taskListClose;
+
+  /// No description provided for @taskListOriginalExchange.
+  ///
+  /// In en, this message translates to:
+  /// **'Original request and response'**
+  String get taskListOriginalExchange;
+
+  /// No description provided for @taskListOriginalRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Original request body:'**
+  String get taskListOriginalRequest;
+
+  /// No description provided for @taskListOriginalResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Original response body:'**
+  String get taskListOriginalResponse;
+
+  /// No description provided for @taskFlowIoTypeText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get taskFlowIoTypeText;
+
+  /// No description provided for @taskFlowIoTypeAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get taskFlowIoTypeAudio;
+
+  /// No description provided for @taskFlowIoTypeVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get taskFlowIoTypeVideo;
+
+  /// No description provided for @taskFlowIoTypeImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get taskFlowIoTypeImage;
+
+  /// No description provided for @taskFlowIoTypeLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get taskFlowIoTypeLink;
+
+  /// No description provided for @taskFlowIoTypeFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get taskFlowIoTypeFile;
+
+  /// No description provided for @taskFlowIoTypeAny.
+  ///
+  /// In en, this message translates to:
+  /// **'Any'**
+  String get taskFlowIoTypeAny;
+
+  /// No description provided for @mermaidZoomOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom out'**
+  String get mermaidZoomOut;
+
+  /// No description provided for @mermaidZoomIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom in'**
+  String get mermaidZoomIn;
+
+  /// No description provided for @mermaidFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Fullscreen'**
+  String get mermaidFullscreen;
+
+  /// No description provided for @mermaidSaveButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get mermaidSaveButton;
+
+  /// No description provided for @mermaidSourceButton.
+  ///
+  /// In en, this message translates to:
+  /// **'View source'**
+  String get mermaidSourceButton;
+
+  /// No description provided for @mermaidDiagramSemantic.
+  ///
+  /// In en, this message translates to:
+  /// **'View diagram'**
+  String get mermaidDiagramSemantic;
+
+  /// No description provided for @taskFlowCardCatCatchDeletePersistError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save CatCatch child task deletion state. Try again.'**
+  String get taskFlowCardCatCatchDeletePersistError;
+
+  /// No description provided for @taskFlowCardSynthesisDeletePersistError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save synthesis child task deletion state. Try again.'**
+  String get taskFlowCardSynthesisDeletePersistError;
+
+  /// No description provided for @taskFlowCardBackgroundDeletePersistError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save background child task deletion state. Try again.'**
+  String get taskFlowCardBackgroundDeletePersistError;
+
+  /// No description provided for @mathParseError.
+  ///
+  /// In en, this message translates to:
+  /// **'Math parse error'**
+  String get mathParseError;
+
+  /// No description provided for @mermaidEmptyPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'No Mermaid code to render'**
+  String get mermaidEmptyPlaceholder;
+
+  /// No description provided for @mathClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get mathClose;
+
+  /// No description provided for @mermaidLoadTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid loading timed out. Check your network and try again.'**
+  String get mermaidLoadTimeout;
+
+  /// No description provided for @mermaidCdnLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach cdn.jsdelivr.net to load Mermaid.'**
+  String get mermaidCdnLoadFailed;
+
+  /// No description provided for @mermaidLoadingDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading diagram…'**
+  String get mermaidLoadingDiagram;
+
+  /// No description provided for @mermaidEngineInitFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not initialize the diagram renderer. Try again.'**
+  String get mermaidEngineInitFailed;
+
+  /// No description provided for @mermaidPageTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Page load timed out. Try again.'**
+  String get mermaidPageTimeout;
+
+  /// No description provided for @mermaidCodeLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load diagram code. Try again.'**
+  String get mermaidCodeLoadFailed;
+
+  /// No description provided for @mermaidPageLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Page load failed: {description}'**
+  String mermaidPageLoadFailed(String description);
+
+  /// No description provided for @mermaidLoadingEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading rendering engine…'**
+  String get mermaidLoadingEngine;
+
+  /// No description provided for @mermaidRenderErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagram rendering error'**
+  String get mermaidRenderErrorTitle;
+
+  /// No description provided for @taskFlowOutputVideoAudioDownstream.
+  ///
+  /// In en, this message translates to:
+  /// **'Video or audio (filtered by downstream)'**
+  String get taskFlowOutputVideoAudioDownstream;
+
+  /// No description provided for @taskFlowOutputUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get taskFlowOutputUnknown;
+
+  /// No description provided for @batchRunCancelledSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped: {completed} succeeded, {failed} failed, {remaining} remaining'**
+  String batchRunCancelledSummary(
+    String label,
+    String completed,
+    String failed,
+    String remaining,
+  );
+
+  /// No description provided for @mermaidRenderErrorPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid render error: {message}'**
+  String mermaidRenderErrorPrefix(String message);
+
+  /// No description provided for @mermaidInitializeErrorPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid initialization error: {message}'**
+  String mermaidInitializeErrorPrefix(String message);
+
+  /// No description provided for @mermaidResourceError.
+  ///
+  /// In en, this message translates to:
+  /// **'A resource in the Mermaid diagram failed to load.'**
+  String get mermaidResourceError;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognition model'**
+  String get taskFlowParamRecognitionModel;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesis model'**
+  String get taskFlowParamSynthesisModel;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Save folder'**
+  String get taskFlowParamSaveFolder;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Resource selection'**
+  String get taskFlowParamResourceSelection;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Output type'**
+  String get taskFlowParamOutputType;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Video save folder'**
+  String get taskFlowParamVideoFolder;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio save folder'**
+  String get taskFlowParamAudioFolder;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected duration'**
+  String get taskFlowParamExpectedDuration;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get taskFlowParamVoice;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech rate'**
+  String get taskFlowParamSpeechRate;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get taskFlowParamAssistant;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual mode lets you choose. Automatic mode follows the existing rules. Ask when ambiguous selects automatically only when there is one safe choice; otherwise it opens the resource list for confirmation.'**
+  String get taskFlowHintResourceSelection;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose video or audio explicitly. Follow downstream filters resources by the next block’s input type. If the next block accepts both types or there is no next block, both types are kept.'**
+  String get taskFlowHintOutputType;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter resources by video duration. Leave blank to skip filtering.'**
+  String get taskFlowHintExpectedDuration;
+
+  /// Localized label or help text for the built-in TaskFlow block parameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a voice. The matching synthesis model is selected automatically.'**
+  String get taskFlowHintVoice;
+
+  /// TaskFlow block connection validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'This block type is no longer supported. Replace it or remove this step.'**
+  String get taskFlowUiUnsupportedBlockStep;
+
+  /// TaskFlow block connection validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The next block requires {requiredType}. The downloader can output video or audio. Change the next step or output policy.'**
+  String taskFlowUiDownstreamTypeMismatch(String requiredType);
+
+  /// TaskFlow block connection validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} has any type, but “{block}” needs an explicit text, link, image, audio, video, or file type. Change the input type, move or replace the block, or undo the change.'**
+  String taskFlowUiAnyTypeMismatch(String source, String block);
+
+  /// TaskFlow block connection validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} has {actualType}, but “{block}” requires {requiredType}. Change the input type, move or replace the block, or undo the change.'**
+  String taskFlowUiTypeMismatch(
+    String source,
+    String actualType,
+    String block,
+    String requiredType,
+  );
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Created date'**
+  String get fileManagerSortFieldCreated;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified date'**
+  String get fileManagerSortFieldModified;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get fileManagerSortFieldName;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get fileManagerSortFieldSize;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'newest first'**
+  String get fileManagerSortDateNewest;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'oldest first'**
+  String get fileManagerSortDateOldest;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'largest first'**
+  String get fileManagerSortSizeLargest;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'smallest first'**
+  String get fileManagerSortSizeSmallest;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get catcatchStatusRunning;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get catcatchStatusCompleted;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get catcatchStatusFailed;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get catcatchStatusPaused;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get catcatchStatusWaiting;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching webpage'**
+  String get catcatchStepFetching;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing media'**
+  String get catcatchStepAnalyzing;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Parsing playlist'**
+  String get catcatchStepParsingPlaylist;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Filtering by duration'**
+  String get catcatchStepFiltering;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for selection'**
+  String get catcatchStepUserSelecting;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get catcatchStepDownloading;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Converting/merging'**
+  String get catcatchStepConverting;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving locally'**
+  String get catcatchStepSaving;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to server'**
+  String get bgStepConnectServer;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading images'**
+  String get bgStepUploadImage;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for recognition'**
+  String get bgStepWaitRecognition;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Parsing result'**
+  String get bgStepParseResult;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving file'**
+  String get bgStepSaveFile;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading audio'**
+  String get bgStepUploadAudio;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing'**
+  String get bgStepTranscribing;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving result'**
+  String get bgStepReceiveResult;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Separating audio'**
+  String get bgStepSeparateAudio;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving to file'**
+  String get bgStepSaveToFile;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending request'**
+  String get bgStepSendRequest;
+
+  /// Localized app-owned task state, step, or sort presentation.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for reply'**
+  String get bgStepWaitReply;
+
+  /// Alphabetical file sort direction.
+  ///
+  /// In en, this message translates to:
+  /// **'A to Z'**
+  String get fileManagerSortNameAscending;
+
+  /// Alphabetical file sort direction.
+  ///
+  /// In en, this message translates to:
+  /// **'Z to A'**
+  String get fileManagerSortNameDescending;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'This task flow has no steps. Add a block first.'**
+  String get taskFlowValidationNoSteps;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one input to run this task flow.'**
+  String get taskFlowValidationInputRequired;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'This task flow was deleted. Select it again.'**
+  String get taskFlowValidationFlowRemoved;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The initial input type changed. Choose the run input again.'**
+  String get taskFlowValidationInputTypeChanged;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'This older record has no run snapshot. Retry using the latest configuration.'**
+  String get taskFlowValidationSnapshotMissing;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The assistant model is missing or unavailable. Select a model on the chat page or set a default model for the assistant.'**
+  String get taskFlowValidationAssistantModelMissing;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'A saved step file is missing, empty, or unreadable. Run the task flow again.'**
+  String get taskFlowValidationSavedFileUnavailable;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'This block type is no longer supported. Replace or remove this step.'**
+  String get taskFlowValidationUnsupportedBlock;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The next block requires {requiredType}. The downloader can output audio or video. Change the next step or output policy.'**
+  String taskFlowValidationDownstreamMismatch(String requiredType);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'“{parameter}” is required for “{block}”. Configure it in the block settings.'**
+  String taskFlowValidationRequiredParameter(String parameter, String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The legacy model selection needs confirmation. Choose the model again in “{block}” settings.'**
+  String taskFlowValidationLegacyModel(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The model is missing or unavailable from its provider. Choose it again in “{block}” settings and check the provider URL and key.'**
+  String taskFlowValidationModelUnavailable(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The assistant is missing or was deleted. Choose it again in “{block}” settings.'**
+  String taskFlowValidationAssistantUnavailable(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The assistant model was deleted or its provider configuration is unavailable. Choose a model again in assistant settings.'**
+  String get taskFlowValidationAssistantModelUnavailable;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The resource selection policy or output type is invalid. Choose it again in “{block}” settings.'**
+  String taskFlowValidationPolicyInvalid(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The output type is invalid. Choose it again in “{block}” settings.'**
+  String taskFlowValidationOutputInvalid(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The resource selection policy is invalid. Choose it again in “{block}” settings.'**
+  String taskFlowValidationResourcePolicyInvalid(String block);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: The file is missing, empty, or unreadable. Choose it again.'**
+  String taskFlowValidationInputFileUnavailable(String index);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Enter a valid HTTP or HTTPS link.'**
+  String taskFlowValidationInputUrlInvalid(String index);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: {error}'**
+  String taskFlowValidationInputError(String index, String error);
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'At most 50 rules are allowed.'**
+  String get batchRuleValidationMaxRules;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The number of digits must be from 1 to 12.'**
+  String get batchRuleValidationDigits;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The starting number and step must be within ±999,999,999.'**
+  String get batchRuleValidationNumberRange;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The replacement rule is too long.'**
+  String get batchRuleValidationReplacementLength;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The regular expression is invalid.'**
+  String get batchRuleValidationRegex;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The deletion position must start at 1.'**
+  String get batchRuleValidationDeleteIndex;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The inserted text is too long.'**
+  String get batchRuleValidationInsertLength;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid template number settings: digits must be 1 to 12 and start/step within ±999,999,999.'**
+  String get batchRuleValidationTemplateNumber;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'The template is too long.'**
+  String get batchRuleValidationTemplateLength;
+
+  /// Localized user-facing TaskFlow or batch rule validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown template variable or an unclosed brace.'**
+  String get batchRuleValidationTemplateVariable;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Add numbering'**
+  String get batchRuleTypeNumber;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Find and replace'**
+  String get batchRuleTypeReplace;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert text'**
+  String get batchRuleTypeInsert;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete characters'**
+  String get batchRuleTypeDelete;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Change case'**
+  String get batchRuleTypeCase;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Name template'**
+  String get batchRuleTypeTemplate;
+
+  /// Visible label for a built-in batch rename operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean whitespace'**
+  String get batchRuleTypeCleanup;
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Enter text or choose a file.'**
+  String taskFlowValidationInputEmpty(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: The image is over 20 MB. Choose a smaller image.'**
+  String taskFlowValidationImageTooLarge(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: The attachment is over 10 MB. Choose a smaller file.'**
+  String taskFlowValidationAttachmentTooLarge(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: The file is {actualType}, but {requiredType} is required. Choose another file.'**
+  String taskFlowValidationFileTypeMismatch(
+    String index,
+    String actualType,
+    String requiredType,
+  );
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Assistant chat does not support SVG image attachments. Convert it to PNG or JPEG.'**
+  String taskFlowValidationSvgUnsupported(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Assistant chat does not support {mime} image attachments. Convert it to PNG, JPEG, GIF, or WebP.'**
+  String taskFlowValidationImageMimeUnsupported(String index, String mime);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Assistant chat does not support {mime} audio attachments. Convert it to MP3, WAV, or M4A.'**
+  String taskFlowValidationAudioMimeUnsupported(String index, String mime);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: This Anthropic chat format does not support {type} attachments. Choose an assistant that supports this media.'**
+  String taskFlowValidationEndpointMediaUnsupported(String index, String type);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: This Anthropic chat format supports only image and PDF attachments. Choose a supported file.'**
+  String taskFlowValidationEndpointPdfOnly(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: Assistant chat could not compress the image below 10 MB. Choose a smaller image.'**
+  String taskFlowValidationImageCompressionFailed(String index);
+
+  /// Localized TaskFlow input validation message.
+  ///
+  /// In en, this message translates to:
+  /// **'Input {index}: The text attachment is not valid UTF-8. Convert it and try again.'**
+  String taskFlowValidationTextEncodingFailed(String index);
 }
 
 class _AppLocalizationsDelegate

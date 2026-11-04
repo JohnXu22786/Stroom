@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 enum GalleryChoice { system, app }
 
 /// 相册选择对话框的返回结果
@@ -18,9 +20,7 @@ class GalleryChoiceResult {
 }
 
 /// 显示相册来源选择弹窗，UI 设计与拍照选择面板一致
-Future<GalleryChoiceResult?> showGalleryChoiceDialog(
-  BuildContext context,
-) {
+Future<GalleryChoiceResult?> showGalleryChoiceDialog(BuildContext context) {
   return showModalBottomSheet<GalleryChoiceResult>(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -53,18 +53,18 @@ class _GalleryChoiceSheet extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              '选择图片来源',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              AppLocalizations.of(context)!.galleryChoiceTitle,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             Column(
               children: [
                 _ChoiceCard(
                   icon: Icons.photo_library,
-                  title: '设备相册',
-                  subtitle: '浏览设备中的照片和视频',
+                  title: AppLocalizations.of(context)!.galleryChoiceDevice,
+                  subtitle: AppLocalizations.of(context)!
+                      .galleryChoiceDeviceDescription,
                   color: Colors.blue,
                   onTap: () => Navigator.of(context).pop(
                     const GalleryChoiceResult(choice: GalleryChoice.system),
@@ -73,12 +73,13 @@ class _GalleryChoiceSheet extends StatelessWidget {
                 const SizedBox(height: 8),
                 _ChoiceCard(
                   icon: Icons.folder_outlined,
-                  title: '应用相册',
-                  subtitle: '从应用内部相册选择',
+                  title: AppLocalizations.of(context)!.galleryChoiceApp,
+                  subtitle: AppLocalizations.of(context)!
+                      .galleryChoiceAppDescription,
                   color: Colors.purple,
-                  onTap: () => Navigator.of(context).pop(
-                    const GalleryChoiceResult(choice: GalleryChoice.app),
-                  ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(const GalleryChoiceResult(choice: GalleryChoice.app)),
                 ),
               ],
             ),
@@ -135,17 +136,13 @@ class _ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
+                      style: Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
+                      style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -153,11 +150,7 @@ class _ChoiceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 20, color: cs.onSurfaceVariant),
             ],
           ),
         ),

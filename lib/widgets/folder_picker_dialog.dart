@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../utils/folder_path_utils.dart';
 import '../utils/natural_sort.dart';
 
@@ -25,7 +27,7 @@ class FolderPickerDialog extends StatefulWidget {
   final Future<Set<String>> Function()? onRefreshFolders;
 
   /// 对话框标题
-  final String title;
+  final String? title;
 
   /// 自定义提示文字（显示在标题下方）。若为空则使用默认提示。
   final String? hintText;
@@ -42,7 +44,7 @@ class FolderPickerDialog extends StatefulWidget {
     this.availableFolders = const {},
     this.onCreateFolder,
     this.onRefreshFolders,
-    this.title = '选择文件夹',
+    this.title,
     this.hintText,
     this.fileNameController,
     this.fileNameHintText,
@@ -55,7 +57,7 @@ class FolderPickerDialog extends StatefulWidget {
     Set<String> availableFolders = const {},
     Future<String?> Function(String name)? onCreateFolder,
     Future<Set<String>> Function()? onRefreshFolders,
-    String title = '选择文件夹',
+    String? title,
     String? hintText,
     TextEditingController? fileNameController,
     String? fileNameHintText,
@@ -178,7 +180,9 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     final fullPath = _currentPath.isEmpty ? name : '$_currentPath/$name';
 
     if (_availableFolders.contains(fullPath)) {
-      setState(() => _createError = '文件夹已存在');
+      setState(
+        () => _createError = AppLocalizations.of(context)!.folderPickerExists,
+      );
       return;
     }
 
@@ -196,7 +200,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
         if (mounted) {
           setState(() {
             _isCreating = false;
-            _createError = '创建文件夹失败: $e';
+            _createError = AppLocalizations.of(context)!
+                .folderPickerCreateFailed(e.toString());
           });
         }
         return;
@@ -222,7 +227,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
         if (mounted) {
           setState(() {
             _isCreating = false;
-            _createError = '刷新文件夹列表失败: $e';
+            _createError = AppLocalizations.of(context)!
+                .folderPickerRefreshFailed(e.toString());
           });
         }
         return;
@@ -258,10 +264,13 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.title),
+            Text(
+              widget.title ?? AppLocalizations.of(context)!.folderPickerTitle,
+            ),
             const SizedBox(height: 4),
             Text(
-              widget.hintText ?? '单击选中，双击进入查看子文件夹',
+              widget.hintText ??
+                  AppLocalizations.of(context)!.folderPickerInstruction,
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -281,16 +290,18 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 // 文件名输入（可选）
                 if (widget.fileNameController != null) ...[
                   Text(
-                    '文件名',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
+                    AppLocalizations.of(context)!.folderPickerFileName,
+                    style: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: widget.fileNameController,
                     decoration: InputDecoration(
-                      hintText: widget.fileNameHintText ?? '输入文件名',
+                      hintText:
+                          widget.fileNameHintText ??
+                          AppLocalizations.of(context)!
+                              .folderPickerFileNameHint,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -315,15 +326,15 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                           icon: const Icon(Icons.arrow_back, size: 20),
                           onPressed: _navigateBack,
                           visualDensity: VisualDensity.compact,
-                          tooltip: '返回上级',
+                          tooltip: AppLocalizations.of(context)!
+                              .folderPickerBack,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            '根目录 > $_currentPath',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            AppLocalizations.of(context)!
+                                .folderPickerPath(_currentPath),
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: cs.onSurfaceVariant),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -338,7 +349,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                     context,
                     cs,
                     '',
-                    '根目录',
+                    AppLocalizations.of(context)!.folderPickerRoot,
                     Icons.home_outlined,
                   ),
 
@@ -348,7 +359,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 if (_isInSubFolder &&
                     _availableFolders.contains(_currentPath)) ...[
                   const SizedBox(height: 8),
-                  _sectionLabel(context, '当前文件夹'),
+                  _sectionLabel(
+                    context,
+                    AppLocalizations.of(context)!.folderPickerCurrentFolder,
+                  ),
                   const SizedBox(height: 4),
                   _buildFolderTile(
                     context,
@@ -364,7 +378,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                   const SizedBox(height: 8),
                   _sectionLabel(
                     context,
-                    _isInSubFolder ? '子文件夹' : '现有文件夹',
+                    _isInSubFolder
+                        ? AppLocalizations.of(context)!.folderPickerSubfolders
+                        : AppLocalizations.of(context)!
+                              .folderPickerExistingFolders,
                   ),
                   const SizedBox(height: 4),
                   ConstrainedBox(
@@ -379,9 +396,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             folder,
                             // 显示文件夹基名（不含父路径）
                             _isInSubFolder
-                                ? folder.substring(
-                                    folder.lastIndexOf('/') + 1,
-                                  )
+                                ? folder.substring(folder.lastIndexOf('/') + 1)
                                 : folder,
                             Icons.folder_outlined,
                           ),
@@ -399,9 +414,13 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                     OutlinedButton.icon(
                       key: const Key('folder_picker_start_create_btn'),
                       onPressed: _startNewFolder,
-                      icon: const Icon(Icons.create_new_folder_outlined,
-                          size: 18),
-                      label: const Text('创建新文件夹'),
+                      icon: const Icon(
+                        Icons.create_new_folder_outlined,
+                        size: 18,
+                      ),
+                      label: Text(
+                        AppLocalizations.of(context)!.folderPickerCreateNew,
+                      ),
                     )
                   else
                     Row(
@@ -411,7 +430,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             controller: _newFolderController,
                             focusNode: _newFolderFocusNode,
                             decoration: InputDecoration(
-                              hintText: '输入文件夹名称',
+                              hintText: AppLocalizations.of(context)!
+                                  .folderPickerFolderNameHint,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -438,7 +458,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2),
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.add, size: 20),
                           ),
@@ -448,7 +469,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         IconButton(
                           key: const Key('folder_picker_cancel_create_btn'),
                           icon: const Icon(Icons.close, size: 20),
-                          tooltip: '取消新建',
+                          tooltip: AppLocalizations.of(context)!
+                              .folderPickerCancelCreate,
                           visualDensity: VisualDensity.compact,
                           onPressed: _isCreating ? null : _cancelNewFolder,
                         ),
@@ -464,14 +486,14 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             // 创建进行中禁用：避免在途创建时直接关闭对话框，
             // 导致文件夹已创建但调用方收到「取消」
             onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.folderPickerCancel),
           ),
           FilledButton(
             // 创建进行中禁用：避免在途创建时弹出旧选择
             onPressed: _isCreating
                 ? null
                 : () => Navigator.of(context).pop(_selectedFolder),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.folderPickerConfirm),
           ),
         ],
       ),
@@ -482,9 +504,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   Widget _sectionLabel(BuildContext context, String text) {
     return Text(
       text,
-      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+      style: Theme.of(context).textTheme.labelMedium
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 
@@ -508,7 +529,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             setState(() => _selectedFolder = folder);
 
             // 再检测是否构成双击（在超时内再次点击同一文件夹）
-            final isDoubleTap = _lastTappedFolder == folder &&
+            final isDoubleTap =
+                _lastTappedFolder == folder &&
                 _doubleTapTimer != null &&
                 _doubleTapTimer!.isActive;
 
@@ -524,13 +546,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             } else {
               // 第一次点击 - 启动双击等待计时器
               _lastTappedFolder = folder;
-              _doubleTapTimer = Timer(
-                const Duration(milliseconds: 300),
-                () {
-                  _doubleTapTimer = null;
-                  _lastTappedFolder = null;
-                },
-              );
+              _doubleTapTimer = Timer(const Duration(milliseconds: 300), () {
+                _doubleTapTimer = null;
+                _lastTappedFolder = null;
+              });
             }
           },
           child: Padding(
@@ -540,16 +559,18 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 Icon(
                   icon,
                   size: 20,
-                  color:
-                      isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                  color: isSelected
+                      ? cs.onPrimaryContainer
+                      : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     displayName,
                     style: TextStyle(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
                     ),
                   ),

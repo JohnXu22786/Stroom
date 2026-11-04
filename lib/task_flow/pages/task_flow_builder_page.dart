@@ -29,10 +29,12 @@ import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../services/task_flow_validator.dart';
 import '../utils/block_param_display.dart';
+import '../utils/task_flow_localization.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../widgets/flow_block_card.dart';
 import 'task_flow_run_page.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Unified page for editing AND launching a task flow.
 ///
@@ -73,10 +75,10 @@ class _CatCatchInputEntry {
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
-      : urlController = TextEditingController(),
-        hourController = TextEditingController(),
-        minuteController = TextEditingController(),
-        secondController = TextEditingController();
+    : urlController = TextEditingController(),
+      hourController = TextEditingController(),
+      minuteController = TextEditingController(),
+      secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
@@ -146,7 +148,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref.read(taskFlowListProvider).firstWhere(
+      final flow = ref
+          .read(taskFlowListProvider)
+          .firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -281,16 +285,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('放弃未保存的更改？'),
-        content: const Text('返回后，所有未保存的更改将会丢失。'),
+        title: Text(AppLocalizations.of(context)!.taskFlowUiDiscardTitle),
+        content: Text(AppLocalizations.of(context)!.taskFlowUiDiscardBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('继续编辑'),
+            child: Text(
+              AppLocalizations.of(context)!.taskFlowUiContinueEditing,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('放弃'),
+            child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
           ),
         ],
       ),
@@ -373,18 +379,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isEditing ? '编辑任务流' : '新建任务流'),
+          title: Text(
+            _isEditing
+                ? AppLocalizations.of(context)!.taskFlowUiEditTitle
+                : AppLocalizations.of(context)!.taskFlowUiCreateTitle,
+          ),
           centerTitle: true,
           actions: [
             IconButton(
-              tooltip: '撤销',
+              tooltip: AppLocalizations.of(context)!.taskFlowUiUndo,
               icon: const Icon(Icons.undo),
               onPressed: _isSaving || !_chain.canUndo ? null : _undoBlockEdit,
             ),
             TextButton.icon(
               onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
-              label: const Text('保存'),
+              label: Text(AppLocalizations.of(context)!.taskFlowUiSave),
             ),
           ],
         ),
@@ -449,7 +459,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             controller: _nameController,
             enabled: !_isSaving,
             decoration: InputDecoration(
-              hintText: '输入任务流名称',
+              hintText: AppLocalizations.of(context)!.taskFlowUiNameHint,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -471,7 +481,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             controller: _descController,
             enabled: !_isSaving,
             decoration: InputDecoration(
-              hintText: '添加描述（可选）',
+              hintText: AppLocalizations.of(context)!.taskFlowUiDescriptionHint,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -530,16 +540,30 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (!mounted || _isSaving || _isRunMode) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请输入任务流名称')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.taskFlowUiNameRequired),
+        ),
+      );
       return;
     }
 
     if (_chain.issues.isNotEmpty) {
       final issue = _chain.issues.first;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('步骤 ${issue.blockIndex + 1}：${issue.message}')),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.taskFlowUiStepNumber(
+              issue.blockIndex + 1,
+              localizedChainIssueMessage(
+                issue,
+                _blocks,
+                _inputType,
+                AppLocalizations.of(context)!,
+              ),
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -554,7 +578,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         final raw = block.params[p.key]?.toString() ?? '';
         if (raw.trim().isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('「${def.label}」的「${p.label}」为必填项')),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.taskFlowUiParameterRequired(
+                  localizedBlockTypeLabel(def, AppLocalizations.of(context)!),
+                  localizedBlockParamLabel(
+                    def,
+                    p,
+                    AppLocalizations.of(context)!,
+                  ),
+                ),
+              ),
+            ),
           );
           return;
         }
@@ -562,8 +597,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-    final current =
-        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
+    final current = _editingFlowId == null
+        ? null
+        : notifier.getFlow(_editingFlowId!);
     final flow = TaskFlowDefinition(
       id: _editingFlowId,
       name: name,
@@ -584,14 +620,23 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (!saved) {
       messenger.showSnackBar(
         SnackBar(
-          content: const Text('保存失败，更改仍保留，请重试'),
-          action: SnackBarAction(label: '重试', onPressed: _saveFlow),
+          content: Text(AppLocalizations.of(context)!.taskFlowUiSaveFailed),
+          action: SnackBarAction(
+            label: AppLocalizations.of(context)!.taskFlowUiRetry,
+            onPressed: _saveFlow,
+          ),
         ),
       );
       return;
     }
     messenger.showSnackBar(
-      SnackBar(content: Text(_isEditing ? '任务流已更新' : '任务流已创建')),
+      SnackBar(
+        content: Text(
+          _isEditing
+              ? AppLocalizations.of(context)!.taskFlowUiUpdated
+              : AppLocalizations.of(context)!.taskFlowUiCreated,
+        ),
+      ),
     );
     _isEditing = true;
 
@@ -619,16 +664,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     if (flowName.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('任务流'), centerTitle: true),
+        appBar: AppBar(
+          title: Text(AppLocalizations.of(context)!.taskFlowUiTitle),
+          centerTitle: true,
+        ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('任务未找到', style: TextStyle(fontSize: 16)),
+              Text(
+                AppLocalizations.of(context)!.taskFlowUiNotFound,
+                style: TextStyle(fontSize: 16),
+              ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('返回'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiBack),
               ),
             ],
           ),
@@ -646,7 +697,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             child: IconButton(
               icon: const Icon(Icons.edit),
               onPressed: () => setState(() => _isRunMode = false),
-              tooltip: '编辑',
+              tooltip: AppLocalizations.of(context)!.taskFlowUiEdit,
             ),
           ),
         ],
@@ -729,15 +780,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   bool get _isFileRunInput => const {
-        IOType.image,
-        IOType.audio,
-        IOType.video,
-        IOType.file,
-      }.contains(_runInputType);
+    IOType.image,
+    IOType.audio,
+    IOType.video,
+    IOType.file,
+  }.contains(_runInputType);
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
-    final label = firstDef?.label ?? _inputType.userFacing.label;
+    final strings = AppLocalizations.of(context)!;
+    final label = firstDef == null
+        ? localizedIoTypeLabel(_inputType.userFacing, strings)
+        : localizedBlockTypeLabel(firstDef, strings);
 
     return Card(
       elevation: 0,
@@ -755,7 +809,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 Icon(Icons.input, size: 18, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '输入（$label）',
+                  AppLocalizations.of(context)!.taskFlowUiInput(label),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -773,7 +827,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               TextField(
                 controller: _inputController,
                 decoration: InputDecoration(
-                  hintText: '输入文本或链接',
+                  hintText: AppLocalizations.of(context)!.taskFlowUiInputHint,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -790,10 +844,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed:
-                      !_isStarting && _canStartFlow() ? _startFlow : null,
+                  onPressed: !_isStarting && _canStartFlow()
+                      ? _startFlow
+                      : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('开始任务流'),
+                  label: Text(AppLocalizations.of(context)!.taskFlowUiStart),
                 ),
               ),
             ),
@@ -821,7 +876,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: Text(
-                '暂无输入，点击下方按钮添加网页资源 URL',
+                AppLocalizations.of(context)!.taskFlowUiNoInput,
                 style: TextStyle(
                   fontSize: 13,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -837,7 +892,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             onPressed: () =>
                 setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
             icon: const Icon(Icons.add_link, size: 18),
-            label: const Text('添加网页资源'),
+            label: Text(AppLocalizations.of(context)!.taskFlowUiAddResource),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
             ),
@@ -869,7 +924,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.urlController,
                     decoration: InputDecoration(
-                      hintText: '请输入视频/音频网页URL',
+                      hintText: AppLocalizations.of(context)!.taskFlowUiUrlHint,
                       prefixIcon: const Icon(Icons.link, size: 20),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -898,7 +953,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         _catcatchInputs.removeAt(index);
                       });
                     },
-                    tooltip: '删除此输入',
+                    tooltip: AppLocalizations.of(context)!
+                        .taskFlowUiDeleteInput,
                     padding: EdgeInsets.zero,
                   ),
                 ),
@@ -911,7 +967,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.hourController,
                     decoration: InputDecoration(
-                      labelText: '时',
+                      labelText: AppLocalizations.of(context)!.taskFlowUiHour,
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -934,7 +990,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.minuteController,
                     decoration: InputDecoration(
-                      labelText: '分',
+                      labelText: AppLocalizations.of(context)!.taskFlowUiMinute,
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -957,7 +1013,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.secondController,
                     decoration: InputDecoration(
-                      labelText: '秒',
+                      labelText: AppLocalizations.of(context)!.taskFlowUiSecond,
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -984,7 +1040,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   Icon(Icons.timer_outlined, size: 16, color: cs.primary),
                   const SizedBox(width: 4),
                   Text(
-                    '预览: ',
+                    AppLocalizations.of(context)!.taskFlowUiPreview,
                     style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                   ),
                   Text(
@@ -998,7 +1054,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   ),
                   const Spacer(),
                   Text(
-                    '时:分:秒',
+                    AppLocalizations.of(context)!.taskFlowUiDurationFormat,
                     style: TextStyle(
                       fontSize: 11,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.5),
@@ -1010,7 +1066,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             Padding(
               padding: const EdgeInsets.only(top: 2, left: 4),
               child: Text(
-                '可选：按时长筛选视频资源。留空则展示全部资源供选择',
+                AppLocalizations.of(context)!.taskFlowUiDurationHint,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -1069,20 +1125,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               isImage
                   ? Icons.image_outlined
                   : isAudio
-                      ? Icons.audiotrack
-                      : isFile
-                          ? Icons.insert_drive_file_outlined
-                          : Icons.videocam_outlined,
+                  ? Icons.audiotrack
+                  : isFile
+                  ? Icons.insert_drive_file_outlined
+                  : Icons.videocam_outlined,
               size: 16,
             ),
             label: Text(
               isImage
-                  ? '选择图片（可多选）'
+                  ? AppLocalizations.of(context)!.taskFlowUiSelectImages
                   : isAudio
-                      ? '选择音频（可多选）'
-                      : isFile
-                          ? '选择文件（可多选）'
-                          : '选择视频（可多选）',
+                  ? AppLocalizations.of(context)!.taskFlowUiSelectAudio
+                  : isFile
+                  ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
+                  : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1100,10 +1156,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     isImage
                         ? Icons.image
                         : isAudio
-                            ? Icons.audiotrack
-                            : isFile
-                                ? Icons.insert_drive_file
-                                : Icons.videocam,
+                        ? Icons.audiotrack
+                        : isFile
+                        ? Icons.insert_drive_file
+                        : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
@@ -1124,7 +1180,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       color: cs.error.withValues(alpha: 0.8),
                     ),
                     visualDensity: VisualDensity.compact,
-                    tooltip: '移除',
+                    tooltip: AppLocalizations.of(context)!.taskFlowUiRemove,
                     onPressed: _isStarting || _isPickingFiles
                         ? null
                         : () async {
@@ -1140,7 +1196,14 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               } catch (error) {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('清理已移除文件失败：$error')),
+                                    SnackBar(
+                                      content: Text(
+                                        AppLocalizations.of(context)!
+                                            .taskFlowUiCleanupError(
+                                              error.toString(),
+                                            ),
+                                      ),
+                                    ),
                                   );
                                 }
                               }
@@ -1175,6 +1238,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   Widget _buildRunInitialInput(ColorScheme cs) {
+    final strings = AppLocalizations.of(context)!;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1210,7 +1274,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        '0. 初始输入',
+                        AppLocalizations.of(context)!.taskFlowUiInitialInput,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -1227,7 +1291,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Text(
-                          '输入类型: ${_runInputType.label}',
+                          AppLocalizations.of(context)!.taskFlowUiInputType(
+                            localizedIoTypeLabel(_runInputType, strings),
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
@@ -1241,7 +1307,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    '用户运行任务流时输入',
+                    AppLocalizations.of(context)!.taskFlowUiUserFlowInput,
                     style: TextStyle(
                       fontSize: 9,
                       color: cs.tertiary.withValues(alpha: 0.6),
@@ -1263,41 +1329,60 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   void _showBlockInfo(BlockTypeDefinition? def, TaskFlowBlock block) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(def?.label ?? block.typeKey.name),
+        title: Text(
+          def == null
+              ? block.typeKey.name
+              : localizedBlockTypeLabel(def, strings),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '输入: ${def?.inputType.label ?? '-'}',
+                AppLocalizations.of(context)!.taskFlowUiBlockInputValue(
+                  def == null
+                      ? '-'
+                      : localizedIoTypeLabel(def.inputType, strings),
+                ),
                 style: TextStyle(fontSize: 14, color: cs.onSurface),
               ),
               const SizedBox(height: 4),
               Text(
-                '输出: ${def == null ? '-' : block.outputTypeLabel}',
+                strings.taskFlowUiBlockOutputValue(
+                  def == null
+                      ? '-'
+                      : (block.followsDownstreamOutput
+                            ? strings.taskFlowOutputVideoAudioDownstream
+                            : localizedIoTypeDisplayLabel(
+                                block.outputTypeLabel,
+                                strings,
+                              )),
+                ),
                 style: TextStyle(fontSize: 14, color: cs.onSurface),
               ),
               if (block.params.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text(
-                  '参数:',
+                Text(
+                  AppLocalizations.of(context)!.taskFlowUiParameters,
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) {
-                  final paramDef =
-                      def?.params.where((p) => p.key == e.key).firstOrNull;
+                  final paramDef = def?.params
+                      .where((p) => p.key == e.key)
+                      .firstOrNull;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${paramDef?.label ?? e.key}: ',
+                          '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
                           style: TextStyle(fontSize: 13, color: cs.primary),
                         ),
                         Expanded(
@@ -1327,7 +1412,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
           ),
         ],
       ),
@@ -1355,9 +1440,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       switch (ioType) {
         case IOType.image:
           await _pickMediaPaths<ImageRecord>(
-            title: '选择应用内图片（可多选）',
+            title: AppLocalizations.of(context)!.taskFlowUiSelectAppImages,
             emptyIcon: Icons.image_outlined,
-            emptyText: '暂无图片',
+            emptyText: AppLocalizations.of(context)!.taskFlowUiNoImages,
             fileIcon: Icons.image,
             fileIconColor: Colors.blue,
             loadRecords: ImageManifest.loadRecords,
@@ -1366,9 +1451,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           );
         case IOType.audio:
           await _pickMediaPaths<AudioRecord>(
-            title: '选择应用内音频（可多选）',
+            title: AppLocalizations.of(context)!.taskFlowUiSelectAppAudio,
             emptyIcon: Icons.multitrack_audio_outlined,
-            emptyText: '暂无音频',
+            emptyText: AppLocalizations.of(context)!.taskFlowUiNoAudio,
             fileIcon: Icons.audiotrack,
             fileIconColor: Colors.green,
             loadRecords: FileManifest.loadRecords,
@@ -1377,9 +1462,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           );
         case IOType.video:
           await _pickMediaPaths<VideoRecord>(
-            title: '选择应用内视频（可多选）',
+            title: AppLocalizations.of(context)!.taskFlowUiSelectAppVideo,
             emptyIcon: Icons.videocam_outlined,
-            emptyText: '暂无视频',
+            emptyText: AppLocalizations.of(context)!.taskFlowUiNoVideo,
             fileIcon: Icons.videocam,
             fileIconColor: Colors.orange,
             loadRecords: VideoManifest.loadRecords,
@@ -1439,19 +1524,25 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         } catch (_) {}
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('选择文件失败：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .taskFlowUiFileSelectFailed(error.toString()),
+            ),
+          ),
+        );
       }
     }
   }
 
   Future<Uint8List> _readGenericFile(PlatformFile file) async {
+    final strings = AppLocalizations.of(context)!;
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-          '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件',
-        );
+      strings.taskFlowUiFileTooLarge(file.name, limit ~/ (1024 * 1024)),
+    );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
         IOType.image;
@@ -1465,7 +1556,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         final length = await handle.length();
         final reportedLength = file.lengthSync();
         final header = await handle.read(32);
-        if (header.isEmpty) throw StateError('「${file.name}」为空或无法读取');
+        if (header.isEmpty)
+          throw StateError(strings.taskFlowUiFileUnreadable(file.name));
         final limit = limitFor(header);
         if ((reportedLength != null && reportedLength > limit) ||
             length > limit) {
@@ -1497,7 +1589,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       bytes = builder.takeBytes();
     }
 
-    if (bytes.isEmpty) throw StateError('「${file.name}」为空或无法读取');
+    if (bytes.isEmpty)
+      throw StateError(strings.taskFlowUiFileUnreadable(file.name));
     final limit = limitFor(bytes.take(32).toList());
     final reportedLength = file.lengthSync();
     if ((reportedLength != null && reportedLength > limit) ||
@@ -1572,9 +1665,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       return File(p).existsSync();
     }).toList();
     if (valid.length != paths.length) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('部分文件不存在，已跳过')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.taskFlowUiSomeFilesMissing,
+          ),
+        ),
+      );
     }
     // Skip paths already selected — re-picking the same file must not
     // fan out a duplicate execution.
@@ -1622,10 +1719,169 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return text.isEmpty ? const [] : [FlowRunInput(text: text)];
   }
 
+  String _localizedValidationMessage(
+    TaskFlowValidationException error,
+    AppLocalizations strings,
+  ) {
+    final message = error.message;
+    final blockIndex = error.blockIndex;
+    final block = error.blockId == null
+        ? null
+        : _blocks.where((item) => item.id == error.blockId).firstOrNull;
+    final definition = block?.getDefinition();
+    final blockLabel = definition == null
+        ? ''
+        : localizedBlockTypeLabel(definition, strings);
+
+    switch (message) {
+      case '任务流没有步骤，请先添加功能块':
+        return strings.taskFlowValidationNoSteps;
+      case '请添加运行输入':
+        return strings.taskFlowValidationInputRequired;
+      case '任务流已删除，请重新选择':
+        return strings.taskFlowValidationFlowRemoved;
+      case '初始输入类型已修改，请重新选择运行输入':
+        return strings.taskFlowValidationInputTypeChanged;
+      case '旧记录没有运行快照，请选择使用最新配置重试':
+        return strings.taskFlowValidationSnapshotMissing;
+      case '助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型':
+        return strings.taskFlowValidationAssistantModelMissing;
+      case '已保存的步骤文件不存在、为空或无法读取，请重新运行':
+        return strings.taskFlowValidationSavedFileUnavailable;
+      case '功能块已不受支持，请替换此步骤':
+        return strings.taskFlowValidationUnsupportedBlock;
+      case '助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型':
+        return strings.taskFlowValidationAssistantModelUnavailable;
+      default:
+        break;
+    }
+
+    if (error.inputIndex != null) {
+      final inputNumber = (error.inputIndex! + 1).toString();
+      final separator = message.indexOf('：');
+      final detail = separator < 0
+          ? message
+          : message.substring(separator + 1).trim();
+      if (detail == '文件不存在、为空或无法读取，请重新选择文件') {
+        return strings.taskFlowValidationInputFileUnavailable(inputNumber);
+      }
+      if (detail == '请输入有效的 HTTP 或 HTTPS 链接') {
+        return strings.taskFlowValidationInputUrlInvalid(inputNumber);
+      }
+      if (detail == '输入为空，请重新输入或选择文件') {
+        return strings.taskFlowValidationInputEmpty(inputNumber);
+      }
+      if (detail == '助手对话图片超过 20 MB，请选择较小图片') {
+        return strings.taskFlowValidationImageTooLarge(inputNumber);
+      }
+      if (detail == '助手对话附件超过 10 MB，请选择较小文件') {
+        return strings.taskFlowValidationAttachmentTooLarge(inputNumber);
+      }
+      if (detail == '助手对话图片无法压缩到 10 MB 以下，请选择较小图片') {
+        return strings.taskFlowValidationImageCompressionFailed(inputNumber);
+      }
+      if (detail == '助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG') {
+        return strings.taskFlowValidationSvgUnsupported(inputNumber);
+      }
+      if (detail == '此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手') {
+        return strings.taskFlowValidationEndpointPdfOnly(inputNumber);
+      }
+      if (detail == '文本附件不是有效的 UTF-8 编码，请转换后重试') {
+        return strings.taskFlowValidationTextEncodingFailed(inputNumber);
+      }
+      final typeMismatch = RegExp(r'^文件实际类型为(.+)，需要(.+)，请重新选择文件$')
+          .firstMatch(detail);
+      if (typeMismatch != null) {
+        return strings.taskFlowValidationFileTypeMismatch(
+          inputNumber,
+          localizedIoTypeDisplayLabel(typeMismatch.group(1)!, strings),
+          localizedIoTypeDisplayLabel(typeMismatch.group(2)!, strings),
+        );
+      }
+      final imageMime = RegExp(r'^助手对话不支持 (.+) 图片附件，请转换为 PNG、JPEG、GIF 或 WebP$')
+          .firstMatch(detail);
+      if (imageMime != null) {
+        return strings.taskFlowValidationImageMimeUnsupported(
+          inputNumber,
+          imageMime.group(1)!,
+        );
+      }
+      final audioMime = RegExp(r'^助手对话不支持 (.+) 音频附件，请转换为 MP3、WAV 或 M4A$')
+          .firstMatch(detail);
+      if (audioMime != null) {
+        return strings.taskFlowValidationAudioMimeUnsupported(
+          inputNumber,
+          audioMime.group(1)!,
+        );
+      }
+      final unsupportedEndpointMedia = RegExp(
+        r'^此助手的 Anthropic 对话格式不支持(.+)附件，请选择支持此媒体的助手$',
+      ).firstMatch(detail);
+      if (unsupportedEndpointMedia != null) {
+        return strings.taskFlowValidationEndpointMediaUnsupported(
+          inputNumber,
+          localizedIoTypeDisplayLabel(
+            unsupportedEndpointMedia.group(1)!,
+            strings,
+          ),
+        );
+      }
+      return strings.taskFlowValidationInputError(inputNumber, detail);
+    }
+
+    if (definition != null && block != null) {
+      if (message.contains('为必填项')) {
+        final parameter = definition.params
+            .where((item) => message.contains('「${item.label}」'))
+            .firstOrNull;
+        if (parameter != null) {
+          return strings.taskFlowValidationRequiredParameter(
+            localizedBlockParamLabel(definition, parameter, strings),
+            blockLabel,
+          );
+        }
+      }
+      if (message.startsWith('旧版模型选择需要确认')) {
+        return strings.taskFlowValidationLegacyModel(blockLabel);
+      }
+      if (message.startsWith('模型未选择、已删除或供应商配置不可用')) {
+        return strings.taskFlowValidationModelUnavailable(blockLabel);
+      }
+      if (message.startsWith('助手未选择或已删除')) {
+        return strings.taskFlowValidationAssistantUnavailable(blockLabel);
+      }
+      if (message.startsWith('资源选择策略或输出类型无效')) {
+        return strings.taskFlowValidationPolicyInvalid(blockLabel);
+      }
+      if (message.startsWith('输出类型无效')) {
+        return strings.taskFlowValidationOutputInvalid(blockLabel);
+      }
+      if (message.startsWith('资源选择策略无效')) {
+        return strings.taskFlowValidationResourcePolicyInvalid(blockLabel);
+      }
+      if (blockIndex != null &&
+          (message.startsWith('下游需要') ||
+              message.startsWith('初始输入') ||
+              message.startsWith('上一步输出'))) {
+        return localizedChainIssueMessage(
+          TaskFlowChainIssue(block.id, blockIndex, message),
+          _blocks,
+          _inputType,
+          strings,
+        );
+      }
+    }
+    return message;
+  }
+
   Future<void> _showValidationError(TaskFlowValidationException error) async {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(error.toString())));
+    final strings = AppLocalizations.of(context)!;
+    final message = _localizedValidationMessage(error, strings);
+    final displayedMessage = error.blockIndex == null
+        ? message
+        : strings.taskFlowUiStepNumber(error.blockIndex! + 1, message);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(displayedMessage)));
     if (error.isInputError) return;
     setState(() => _isRunMode = false);
     await WidgetsBinding.instance.endOfFrame;
@@ -1658,9 +1914,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
       return;
     } finally {
@@ -1677,7 +1932,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            inputs.length == 1 ? '任务流已加入队列' : '已将 ${inputs.length} 个任务流加入队列',
+            inputs.length == 1
+                ? AppLocalizations.of(context)!.taskFlowUiQueuedOne
+                : AppLocalizations.of(context)!
+                      .taskFlowUiQueuedMany(inputs.length),
           ),
           duration: const Duration(seconds: 2),
         ),

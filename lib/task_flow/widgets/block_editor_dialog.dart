@@ -18,8 +18,22 @@ import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
+import '../models/io_type.dart';
 import '../models/flow_temporary_output.dart';
+import '../utils/task_flow_localization.dart';
 import 'catcatch_policy_menu.dart';
+import '../../l10n/app_localizations.dart';
+
+String _localizedIoTypeLabel(IOType type, AppLocalizations strings) =>
+    switch (type) {
+      IOType.text => strings.taskFlowIoTypeText,
+      IOType.audio => strings.taskFlowIoTypeAudio,
+      IOType.video => strings.taskFlowIoTypeVideo,
+      IOType.image => strings.taskFlowIoTypeImage,
+      IOType.url => strings.taskFlowIoTypeLink,
+      IOType.file => strings.taskFlowIoTypeFile,
+      IOType.any => strings.taskFlowIoTypeAny,
+    };
 
 /// Which gallery's folders a block's save-folder param lists.
 ///
@@ -130,10 +144,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       flattenProviderModels(ref.read(providerEntriesProvider), configType);
 
   ModelConfig? _selectedTtsModel() => resolveProviderModel(
-        ref.read(providerEntriesProvider),
-        'tts',
-        _params['modelRef'],
-      )?.model;
+    ref.read(providerEntriesProvider),
+    'tts',
+    _params['modelRef'],
+  )?.model;
 
   void _selectModel(ProviderModel model) {
     _params['modelRef'] = providerModelReference(model);
@@ -160,11 +174,14 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('功能块类型 "${widget.block.typeKey.name}" 未注册'),
+              Text(
+                AppLocalizations.of(context)!
+                    .taskFlowUiUnregisteredBlock(widget.block.typeKey.name),
+              ),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('关闭'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
               ),
             ],
           ),
@@ -172,8 +189,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       );
     }
 
-    final outputType = widget.block.copyWithParams(_params).outputTypeLabel;
-    final temporaryOutput = widget.allowTemporaryOutput &&
+    final strings = AppLocalizations.of(context)!;
+    final currentBlock = widget.block.copyWithParams(_params);
+    final outputType = currentBlock.followsDownstreamOutput
+        ? strings.taskFlowOutputVideoAudioDownstream
+        : _localizedIoTypeLabel(
+            currentBlock.getDefinition()?.outputType ?? IOType.any,
+            strings,
+          );
+    final blockLabel = localizedBlockTypeLabel(def, strings);
+    final temporaryOutput =
+        widget.allowTemporaryOutput &&
         isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
@@ -228,14 +254,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${def.label} 设置',
+                        strings.taskFlowUiBlockSettings(blockLabel),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        '输入: ${def.inputType.label}  →  输出: $outputType',
+                        strings.taskFlowUiInputOutput(
+                          _localizedIoTypeLabel(def.inputType, strings),
+                          outputType,
+                        ),
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant,
@@ -247,7 +276,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.pop(context),
-                  tooltip: '关闭',
+                  tooltip: AppLocalizations.of(context)!.taskFlowUiClose,
                 ),
               ],
             ),
@@ -275,7 +304,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '发送给助手的用户消息 = 上一步的输出',
+                            AppLocalizations.of(context)!
+                                .taskFlowUiSendToAssistant,
                             style: TextStyle(fontSize: 12, color: cs.primary),
                           ),
                         ),
@@ -291,7 +321,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '此步骤会输出到任务流的临时空间，下一个步骤成功保存结果后自动清理。原保存文件夹会保留，关闭临时模式后恢复。',
+                      AppLocalizations.of(context)!.taskFlowUiTempSpaceInfo,
                       style: TextStyle(fontSize: 12, color: cs.primary),
                     ),
                   ),
@@ -300,7 +330,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Center(
                       child: Text(
-                        '该功能块无额外参数',
+                        AppLocalizations.of(context)!
+                            .taskFlowUiNoExtraParameters,
                         style: TextStyle(
                           fontSize: 13,
                           color: cs.onSurfaceVariant,
@@ -315,7 +346,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                             !temporaryOutput ||
                             param.type != BlockParamType.filePath,
                       )
-                      .map((param) => _buildParamField(param, cs)),
+                      .map(
+                        (param) => _buildParamField(param, def, cs, strings),
+                      ),
                 const SizedBox(height: 8),
                 // Actions live INSIDE the scrollable list so the sheet can
                 // shrink below the fixed chrome (handle + header) when the
@@ -325,7 +358,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
+                      child: Text(
+                        AppLocalizations.of(context)!.taskFlowUiCancel,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
@@ -348,7 +383,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         );
                         Navigator.pop(context, updated);
                       },
-                      child: const Text('确认'),
+                      child: Text(
+                        AppLocalizations.of(context)!.taskFlowUiConfirm,
+                      ),
                     ),
                   ],
                 ),
@@ -361,8 +398,15 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     );
   }
 
-  Widget _buildParamField(BlockParamDefinition param, ColorScheme cs) {
+  Widget _buildParamField(
+    BlockParamDefinition param,
+    BlockTypeDefinition definition,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     final value = _params[param.key];
+    final label = localizedBlockParamLabel(definition, param, strings);
+    final hint = localizedBlockParamHint(definition, param, strings);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -370,7 +414,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${param.label}${param.required ? ' *' : ''}',
+            '${label}${param.required ? ' *' : ''}',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
@@ -379,11 +423,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           ),
           const SizedBox(height: 4),
           _buildInputField(param, value, cs),
-          if (param.hintText != null && param.hintText!.isNotEmpty)
+          if (hint != null && hint.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                param.hintText!,
+                hint,
                 style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
               ),
             ),
@@ -404,10 +448,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       final selected = _params.containsKey(param.key)
           ? _params[param.key].toString()
           : (isOutput
-              ? (_params['audioOutput'] == true ? 'audio' : 'video')
-              : (_params['automaticResourceSelection'] == true
-                  ? 'automatic'
-                  : 'manual'));
+                ? (_params['audioOutput'] == true ? 'audio' : 'video')
+                : (_params['automaticResourceSelection'] == true
+                      ? 'automatic'
+                      : 'manual'));
       return CatCatchPolicyMenu(
         outputPolicy: isOutput,
         value: selected,
@@ -422,7 +466,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -452,8 +497,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           param.configType,
           value,
         );
-        final selectedIndex =
-            selected == null ? null : models.indexOf(selected);
+        final selectedIndex = selected == null
+            ? null
+            : models.indexOf(selected);
         final customParams =
             selected?.model.customParams ?? const <CustomParam>[];
         return Column(
@@ -463,7 +509,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
               value: selectedIndex,
-              hint: Text(models.isEmpty ? '请先配置模型' : '模型未选择或已失效，请重新选择'),
+              hint: Text(
+                models.isEmpty
+                    ? AppLocalizations.of(context)!
+                          .taskFlowUiConfigureModelFirst
+                    : AppLocalizations.of(context)!.taskFlowUiModelUnavailable,
+              ),
               isDense: true,
               decoration: InputDecoration(
                 isDense: true,
@@ -481,11 +532,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 final dynamic c = models[i].config;
                 final modelName = (m.name as String?)?.isNotEmpty == true
                     ? m.name as String
-                    : (m.modelId as String? ?? '模型 $i');
+                    : (m.modelId as String? ??
+                          AppLocalizations.of(context)!
+                              .taskFlowUiModelIndexed(i));
                 final providerName =
                     (c.providerName as String?)?.isNotEmpty == true
-                        ? c.providerName as String
-                        : '未命名供应商';
+                    ? c.providerName as String
+                    : AppLocalizations.of(context)!.taskFlowUiUnnamedProvider;
                 return DropdownMenuItem<int>(
                   value: i,
                   child: Text(
@@ -501,8 +554,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     final voice = _params['voice'];
                     if (voice != null &&
                         !models[v].model.voices.any(
-                              (entry) => entry.id == voice,
-                            )) {
+                          (entry) => entry.id == voice,
+                        )) {
                       _params['voice'] = '';
                     }
                   });
@@ -526,7 +579,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '模型自定义参数',
+                        AppLocalizations.of(context)!
+                            .taskFlowUiCustomModelParameters,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -601,7 +655,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 horizontal: 10,
                 vertical: 8,
               ),
-              hintText: '所有TTS模型均未配置音色，可手动输入ID',
+              hintText: AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
             ),
             style: const TextStyle(fontSize: 13),
           );
@@ -639,8 +693,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             // A persisted voice id that no longer exists must not show the
             // raw id string — guide re-selection instead.
             currentOption == null && current.isNotEmpty
-                ? '音色已失效，请重新选择'
-                : '选择音色',
+                ? AppLocalizations.of(context)!.taskFlowUiVoiceUnavailable
+                : AppLocalizations.of(context)!.taskFlowUiSelectVoice,
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
           items: voiceOptions.map((o) {
@@ -694,7 +748,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     Expanded(
                       child: Text(
                         display == null
-                            ? (currentId.isEmpty ? '未指定（使用当前选中的助手）' : '助手不存在')
+                            ? (currentId.isEmpty
+                                  ? AppLocalizations.of(context)!
+                                        .taskFlowUiAssistantUseCurrent
+                                  : AppLocalizations.of(context)!
+                                        .taskFlowUiAssistantUnavailable)
                             : '${display.$1} ${display.$2}',
                         style: TextStyle(
                           fontSize: 13,
@@ -719,7 +777,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '配置的助手已删除，请重新选择',
+                  AppLocalizations.of(context)!.taskFlowUiAssistantDeleted,
                   style: TextStyle(fontSize: 11, color: cs.error),
                 ),
               ),
@@ -770,11 +828,14 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final h = totalSec ~/ 3600;
         final m = (totalSec % 3600) ~/ 60;
         final s = totalSec % 60;
-        final hCtrl = _controllers['${param.key}_h'] ??
+        final hCtrl =
+            _controllers['${param.key}_h'] ??
             TextEditingController(text: h == 0 ? '' : '$h');
-        final mCtrl = _controllers['${param.key}_m'] ??
+        final mCtrl =
+            _controllers['${param.key}_m'] ??
             TextEditingController(text: m == 0 ? '' : '$m');
-        final sCtrl = _controllers['${param.key}_s'] ??
+        final sCtrl =
+            _controllers['${param.key}_s'] ??
             TextEditingController(text: s == 0 ? '' : '$s');
         _controllers['${param.key}_h'] = hCtrl;
         _controllers['${param.key}_m'] = mCtrl;
@@ -789,20 +850,21 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         }
 
         InputDecoration dec() => InputDecoration(
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
-              ),
-            );
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+        );
         return Row(
           children: [
             Expanded(
               child: TextField(
                 controller: hCtrl,
-                decoration: dec().copyWith(hintText: '时'),
+                decoration: dec().copyWith(
+                  hintText: AppLocalizations.of(context)!.taskFlowUiHour,
+                ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 style: const TextStyle(fontSize: 13),
@@ -813,7 +875,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             Expanded(
               child: TextField(
                 controller: mCtrl,
-                decoration: dec().copyWith(hintText: '分'),
+                decoration: dec().copyWith(
+                  hintText: AppLocalizations.of(context)!.taskFlowUiMinute,
+                ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 style: const TextStyle(fontSize: 13),
@@ -824,7 +888,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             Expanded(
               child: TextField(
                 controller: sCtrl,
-                decoration: dec().copyWith(hintText: '秒'),
+                decoration: dec().copyWith(
+                  hintText: AppLocalizations.of(context)!.taskFlowUiSecond,
+                ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 style: const TextStyle(fontSize: 13),
@@ -835,7 +901,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -865,7 +932,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           dense: true,
           contentPadding: EdgeInsets.zero,
           title: Text(
-            value == true ? '是' : '否',
+            value == true
+                ? AppLocalizations.of(context)!.taskFlowUiYes
+                : AppLocalizations.of(context)!.taskFlowUiNo,
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
         );
@@ -885,7 +954,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 child: Text(
                   value?.toString().isNotEmpty == true
                       ? value.toString()
-                      : '默认 (根目录)',
+                      : AppLocalizations.of(context)!.taskFlowUiDefaultRoot,
                   style: TextStyle(
                     fontSize: 13,
                     color: value?.toString().isNotEmpty == true
@@ -903,7 +972,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text('选择', style: TextStyle(fontSize: 12)),
+                child: Text(
+                  AppLocalizations.of(context)!.taskFlowUiSelect,
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -928,7 +1000,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       context,
       currentFolder: currentValue,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: AppLocalizations.of(context)!.taskFlowUiSelectSaveFolder,
     );
     if (result != null && mounted) {
       setState(() => _params[key] = result);
@@ -972,7 +1044,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           children: [
             Center(
               child: Text(
-                '选择助手',
+                AppLocalizations.of(context)!.taskFlowUiChooseAssistant,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -982,7 +1054,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             const SizedBox(height: 4),
             Center(
               child: Text(
-                '只能选择"我的助手"（在"聊天 → 助手"中添加）',
+                AppLocalizations.of(context)!.taskFlowUiOnlyCustomAssistants,
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
             ),
@@ -991,7 +1063,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '我的助手',
+                AppLocalizations.of(context)!.taskFlowUiMyAssistants,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -1004,7 +1076,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Center(
                   child: Text(
-                    '还没有自定义助手，可在"聊天 → 助手"中创建',
+                    AppLocalizations.of(context)!.taskFlowUiNoCustomAssistants,
                     style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ),

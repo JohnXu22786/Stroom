@@ -11,6 +11,7 @@ import 'package:chewie/chewie.dart';
 
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
+import '../../l10n/app_localizations.dart';
 
 const _audioPreviewExtensions = {
   'oga',
@@ -136,7 +137,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {
           _loading = false;
-          _error = '不支持此格式预览';
+          _error = AppLocalizations.of(context)!.unifiedTaskFormatUnsupported;
         });
         return;
       }
@@ -188,7 +189,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '加载失败: $e';
+        _error = AppLocalizations.of(context)!
+            .unifiedTaskLoadFailed(e.toString());
       });
     }
   }
@@ -244,7 +246,8 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     _disposeAudioPlayer();
     setState(() {
       _loading = false;
-      _error = '播放失败: $error';
+      _error = AppLocalizations.of(context)!
+          .unifiedTaskPlaybackFailed(error.toString());
     });
   }
 
@@ -426,7 +429,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
-            Text('音频文件', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              AppLocalizations.of(context)!.unifiedTaskAudioFile,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               '${widget.resource.name}.${widget.resource.ext}',
@@ -438,23 +444,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
             const SizedBox(height: 20),
             Slider(
               value: _audioDuration.inMilliseconds > 0
                   ? (_audioPosition.inMilliseconds /
-                          _audioDuration.inMilliseconds)
-                      .clamp(0.0, 1.0)
-                      .toDouble()
+                            _audioDuration.inMilliseconds)
+                        .clamp(0.0, 1.0)
+                        .toDouble()
                   : 0.0,
               onChanged: _audioDuration > Duration.zero
                   ? (value) {
                       final position = Duration(
-                        milliseconds:
-                            (value * _audioDuration.inMilliseconds).round(),
+                        milliseconds: (value * _audioDuration.inMilliseconds)
+                            .round(),
                       );
                       _seekAudio(position);
                     }
@@ -468,7 +474,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               ],
             ),
             IconButton(
-              tooltip: _isAudioPlaying ? 'Pause audio' : 'Play audio',
+              tooltip: _isAudioPlaying
+                  ? AppLocalizations.of(context)!.unifiedTaskPauseAudio
+                  : AppLocalizations.of(context)!.unifiedTaskPlayAudio,
               iconSize: 48,
               onPressed: _toggleAudioPlayback,
               icon: Icon(
@@ -488,11 +496,14 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       );
     }
 
-    return const Center(child: Text('无法加载预览'));
+    return Center(
+      child: Text(AppLocalizations.of(context)!.unifiedTaskPreviewLoadFailed),
+    );
   }
 
   String _formatSize(int? bytes) {
-    if (bytes == null) return '未知大小';
+    if (bytes == null)
+      return AppLocalizations.of(context)!.unifiedTaskUnknownSize;
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) {

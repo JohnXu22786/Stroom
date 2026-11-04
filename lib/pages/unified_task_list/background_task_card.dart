@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/ocr_batch_execution.dart';
+import '../../l10n/app_localizations.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/text_provider.dart';
@@ -15,6 +16,23 @@ import '../audio_separation_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
+
+String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
+    switch (label) {
+      '连接服务器' => strings.bgStepConnectServer,
+      '上传图片' => strings.bgStepUploadImage,
+      '等待识别结果' => strings.bgStepWaitRecognition,
+      '解析结果' => strings.bgStepParseResult,
+      '保存文件' => strings.bgStepSaveFile,
+      '上传音频' => strings.bgStepUploadAudio,
+      '转写中' => strings.bgStepTranscribing,
+      '接收结果' => strings.bgStepReceiveResult,
+      '分离音频' => strings.bgStepSeparateAudio,
+      '保存到文件' => strings.bgStepSaveToFile,
+      '发送请求' => strings.bgStepSendRequest,
+      '等待回复' => strings.bgStepWaitReply,
+      _ => label,
+    };
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
@@ -63,6 +81,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     final hasRawData =
         widget.task.rawRequest != null || widget.task.rawResponse != null;
 
@@ -109,7 +128,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       children: [
                         Row(
                           children: [
-                            _taskTypeBadge(widget.task.type, colorScheme),
+                            _taskTypeBadge(
+                              widget.task.type,
+                              colorScheme,
+                              strings,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -127,10 +150,13 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            buildStatusChip(widget.task.status),
+                            buildStatusChip(widget.task.status, strings),
                             const SizedBox(width: 8),
                             Text(
-                              formatRelativeTime(widget.task.createdAt),
+                              formatRelativeTime(
+                                widget.task.createdAt,
+                                strings,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[500],
@@ -177,6 +203,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: _buildDetailContent(
+                    context,
                     widget.task,
                     colorScheme,
                     ref,
@@ -196,30 +223,37 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   }
 
   Widget _buildDetailContent(
+    BuildContext context,
     BackgroundTask task,
     ColorScheme cs,
     WidgetRef ref,
     bool hasRawData,
   ) {
+    final strings = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Type and time info
-        buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
+        buildInfoRow(
+          cs,
+          Icons.category_outlined,
+          strings.unifiedTaskType,
+          _taskTypeLabel(task.type, strings),
+        ),
         const SizedBox(height: 4),
         buildInfoRow(
           cs,
           Icons.access_time,
-          '创建时间',
-          formatRelativeTime(task.createdAt),
+          strings.unifiedTaskCreatedAt,
+          formatRelativeTime(task.createdAt, strings),
         ),
         if (task.completedAt != null) ...[
           const SizedBox(height: 4),
           buildInfoRow(
             cs,
             Icons.check_circle_outline,
-            '完成时间',
-            formatRelativeTime(task.completedAt!),
+            strings.unifiedTaskCompletedAt,
+            formatRelativeTime(task.completedAt!, strings),
           ),
         ],
         if (task.resultSavedAsPartial) ...[
@@ -227,17 +261,17 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           buildInfoRow(
             cs,
             Icons.warning_amber_outlined,
-            '结果状态',
-            '部分结果，内容可能不完整',
+            strings.unifiedTaskResultStatus,
+            strings.unifiedTaskPartialResult,
           ),
         ],
 
         // Step chain timeline — always visible in expanded mode
         const SizedBox(height: 10),
-        _buildStepTimeline(task, cs),
+        _buildStepTimeline(task, cs, AppLocalizations.of(context)!),
         if (task.ocrPageOutcomes.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _buildOcrPageOutcomes(task, cs),
+          _buildOcrPageOutcomes(task, cs, AppLocalizations.of(context)!),
         ],
 
         // Error message for failed tasks
@@ -263,7 +297,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '错误详情',
+                      strings.unifiedTaskErrorDetails,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -275,8 +309,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       TextButton.icon(
                         onPressed: () => _showErrorDetailDialog(context, task),
                         icon: const Icon(Icons.preview, size: 14),
-                        label: const Text(
-                          '查看错误详情',
+                        label: Text(
+                          strings.unifiedTaskViewErrorDetails,
                           style: TextStyle(fontSize: 12),
                         ),
                         style: TextButton.styleFrom(
@@ -304,7 +338,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
 
         // Action buttons
         const SizedBox(height: 12),
-        _buildActionButtons(task, cs, ref),
+        _buildActionButtons(task, cs, ref, AppLocalizations.of(context)!),
       ],
     );
   }
@@ -318,12 +352,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     );
   }
 
-  Widget _buildOcrPageOutcomes(BackgroundTask task, ColorScheme cs) {
+  Widget _buildOcrPageOutcomes(
+    BackgroundTask task,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '逐张识别',
+          strings.unifiedTaskOcrPerImage,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -339,15 +377,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                 _ocrPageOutcomeIcon(outcome.status, cs),
                 const SizedBox(width: 8),
                 Text(
-                  '第 ' + (outcome.imageIndex + 1).toString() + ' 张',
+                  strings.unifiedTaskOcrPageIndex(outcome.imageIndex + 1),
                   style: TextStyle(fontSize: 12, color: cs.onSurface),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _ocrPageOutcomeLabel(outcome.status),
+                  _ocrPageOutcomeLabel(outcome.status, strings),
                   style: TextStyle(
                     fontSize: 12,
-                    color: outcome.status == OcrPageOutcomeStatus.failed ||
+                    color:
+                        outcome.status == OcrPageOutcomeStatus.failed ||
                             outcome.status == OcrPageOutcomeStatus.incomplete
                         ? Colors.red
                         : cs.onSurfaceVariant,
@@ -397,31 +436,38 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     }
   }
 
-  String _ocrPageOutcomeLabel(OcrPageOutcomeStatus status) {
+  String _ocrPageOutcomeLabel(
+    OcrPageOutcomeStatus status,
+    AppLocalizations strings,
+  ) {
     switch (status) {
       case OcrPageOutcomeStatus.pending:
-        return '待识别';
+        return strings.unifiedTaskOcrPending;
       case OcrPageOutcomeStatus.running:
-        return '识别中';
+        return strings.unifiedTaskOcrRunning;
       case OcrPageOutcomeStatus.succeeded:
-        return '已完成';
+        return strings.unifiedTaskCompleted;
       case OcrPageOutcomeStatus.incomplete:
-        return '结果不完整';
+        return strings.unifiedTaskIncomplete;
       case OcrPageOutcomeStatus.failed:
-        return '识别失败';
+        return strings.unifiedTaskOcrFailed;
       case OcrPageOutcomeStatus.cancelled:
-        return '已取消';
+        return strings.unifiedTaskCancelled;
     }
   }
 
-  Widget _buildStepTimeline(BackgroundTask task, ColorScheme colorScheme) {
+  Widget _buildStepTimeline(
+    BackgroundTask task,
+    ColorScheme colorScheme,
+    AppLocalizations strings,
+  ) {
     final steps = task.steps;
 
     if (steps.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(
-          '等待开始...',
+          strings.unifiedTaskWaitingStart,
           style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
         ),
       );
@@ -431,7 +477,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '执行步骤',
+          strings.unifiedTaskSteps,
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
@@ -470,19 +516,19 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          step.label,
+                          _localizedBackgroundStepLabel(step.label, strings),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: step.completed
                                 ? Colors.green.shade700
                                 : step.skipped
-                                    ? Colors.orange.shade700
-                                    : step.running
-                                        ? colorScheme.primary
-                                        : step.failed
-                                            ? Colors.red.shade700
-                                            : colorScheme.onSurface,
+                                ? Colors.orange.shade700
+                                : step.running
+                                ? colorScheme.primary
+                                : step.failed
+                                ? Colors.red.shade700
+                                : colorScheme.onSurface,
                           ),
                         ),
                         // Show step error detail directly (no folding)
@@ -543,6 +589,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     BackgroundTask task,
     ColorScheme cs,
     WidgetRef ref,
+    AppLocalizations strings,
   ) {
     // Chat tasks have no standalone page (they run inside a flow) — the
     // 立即开始/重试 buttons would be dead taps, so hide them.
@@ -555,7 +602,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         if (hasRetryPage && task.status == TaskStatus.waiting)
           _actionButton(
             icon: Icons.play_arrow,
-            label: '立即开始',
+            label: strings.unifiedTaskStartNow,
             color: Colors.purple,
             onPressed: () => _navigateToTaskPage(context, task),
           ),
@@ -564,7 +611,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             task.downloadedFilePath != null)
           _actionButton(
             icon: Icons.folder_open,
-            label: '打开文件',
+            label: strings.unifiedTaskOpenFile,
             color: Colors.green,
             onPressed: () => openFile(task.downloadedFilePath!, context),
           ),
@@ -576,10 +623,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           _actionButton(
             icon: Icons.save_outlined,
             label: task.resultIsComplete
-                ? '仅重试保存'
+                ? strings.unifiedTaskRetrySave
                 : task.partialSaveRequested
-                    ? '仅重试保存部分结果'
-                    : '保存部分结果',
+                ? strings.unifiedTaskRetryPartialSave
+                : strings.unifiedTaskSavePartialResult,
             color: Colors.blue,
             onPressed: () => _retryOcrSave(task, ref),
           ),
@@ -587,7 +634,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         if (hasRetryPage && task.status == TaskStatus.failed)
           _actionButton(
             icon: Icons.refresh,
-            label: '重试',
+            label: strings.unifiedTaskRetry,
             color: Colors.blue,
             onPressed: () => _navigateToTaskPage(context, task),
           ),
@@ -596,7 +643,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             task.status == TaskStatus.running)
           _actionButton(
             icon: Icons.stop_circle_outlined,
-            label: '取消',
+            label: strings.unifiedTaskCancel,
             color: Colors.red,
             onPressed: () =>
                 ref.read(backgroundTasksProvider.notifier).cancelTask(task.id),
@@ -608,8 +655,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
               ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
             },
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            label: const Text(
-              '删除',
+            label: Text(
+              strings.unifiedTaskDelete,
               style: TextStyle(fontSize: 13, color: Colors.red),
             ),
             style: TextButton.styleFrom(
@@ -656,10 +703,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => AsrPage(
-              retryData: task.retryData,
-              retryTaskId: task.id,
-            ),
+            builder: (_) =>
+                AsrPage(retryData: task.retryData, retryTaskId: task.id),
           ),
         );
         break;
@@ -703,7 +748,20 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   // Helper widgets
   // ===========================================================================
 
-  Widget _taskTypeBadge(BackgroundTaskType type, ColorScheme cs) {
+  String _taskTypeLabel(BackgroundTaskType type, AppLocalizations strings) =>
+      switch (type) {
+        BackgroundTaskType.ocr => strings.taskFlowBlockOcr,
+        BackgroundTaskType.asr => strings.taskFlowBlockAsr,
+        BackgroundTaskType.audioSeparation =>
+          strings.taskFlowBlockAudioSeparation,
+        BackgroundTaskType.chat => strings.taskFlowBlockChat,
+      };
+
+  Widget _taskTypeBadge(
+    BackgroundTaskType type,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -716,7 +774,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           Icon(_taskTypeIcon(type), size: 12, color: _taskTypeColor(type)),
           const SizedBox(width: 3),
           Text(
-            type.label,
+            _taskTypeLabel(type, strings),
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,

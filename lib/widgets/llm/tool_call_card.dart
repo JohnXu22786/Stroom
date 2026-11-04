@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../l10n/app_localizations.dart';
 import '../../models/tool_call.dart';
 import '../../services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
@@ -38,7 +40,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
     // - 新工具调用复用同一 element（例如列表原地替换）时；
     // - 状态从可折叠（completed/error）退回进行中（pending/running）时
     //   （同 id 重跑场景），保证"完成后自动收起"的不变量始终成立。
-    final oldCollapsible = oldWidget.data.status == ToolCallStatus.completed ||
+    final oldCollapsible =
+        oldWidget.data.status == ToolCallStatus.completed ||
         oldWidget.data.status == ToolCallStatus.error;
     if (oldWidget.data.id != widget.data.id ||
         (oldCollapsible && !_collapsible)) {
@@ -124,8 +127,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
                         color: Colors.blueGrey.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
-                        '已压缩',
+                      child: Text(
+                        AppLocalizations.of(context)!.toolCallCompacted,
                         style: TextStyle(fontSize: 10, color: Colors.blueGrey),
                       ),
                     ),
@@ -169,8 +172,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.white,
                       borderRadius: BorderRadius.circular(4),
-                      border:
-                          Border.all(color: borderColor.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: borderColor.withValues(alpha: 0.5),
+                      ),
                     ),
                     child: Text(
                       // 软删除语义：compacted 后渲染占位符（数据仍保留，

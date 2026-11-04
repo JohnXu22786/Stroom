@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// Popup choices used by CatCatch's output and resource-selection settings.
 class CatCatchPolicyMenu extends StatelessWidget {
   final bool outputPolicy;
@@ -13,32 +15,36 @@ class CatCatchPolicyMenu extends StatelessWidget {
     required this.onSelected,
   });
 
-  static const _outputOptions = <String, String>{
-    'video': '视频',
-    'audio': '音频',
-    'followDownstream': '视频或音频（按下游筛选）',
-  };
-  static const _selectionOptions = <String, String>{
-    'manual': '手动',
-    'automatic': '自动',
-    'automaticWithPrompt': '自动并询问',
-  };
-
   @override
   Widget build(BuildContext context) {
-    final options = outputPolicy ? _outputOptions : _selectionOptions;
+    final strings = AppLocalizations.of(context)!;
+    final options = outputPolicy
+        ? <String, String>{
+            'video': strings.taskFlowUiCatCatchVideo,
+            'audio': strings.taskFlowUiCatCatchAudio,
+            'followDownstream': strings.taskFlowUiCatCatchEither,
+          }
+        : <String, String>{
+            'manual': strings.taskFlowUiManual,
+            'automatic': strings.taskFlowUiAutomatic,
+            'automaticWithPrompt': strings.taskFlowUiAutomaticPrompt,
+          };
     return PopupMenuButton<String>(
-      key: ValueKey(outputPolicy
-          ? 'catcatch-output-policy'
-          : 'catcatch-resource-selection-policy'),
+      key: ValueKey(
+        outputPolicy
+            ? 'catcatch-output-policy'
+            : 'catcatch-resource-selection-policy',
+      ),
       initialValue: value,
       position: PopupMenuPosition.under,
       onSelected: onSelected,
       itemBuilder: (context) => options.entries
-          .map((entry) => PopupMenuItem<String>(
-                value: entry.key,
-                child: Text(entry.value),
-              ))
+          .map(
+            (entry) => PopupMenuItem<String>(
+              value: entry.key,
+              child: Text(entry.value),
+            ),
+          )
           .toList(),
       child: InputDecorator(
         decoration: InputDecoration(

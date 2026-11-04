@@ -590,5 +590,1425 @@
         "type": "int"
       }
     }
+  },
+  "taskFlowUiDiscardTitle": "Discard unsaved changes?",
+  "taskFlowUiDiscardBody": "All unsaved changes will be lost if you go back.",
+  "taskFlowUiContinueEditing": "Continue editing",
+  "taskFlowUiDiscard": "Discard",
+  "taskFlowUiUndo": "Undo",
+  "taskFlowUiSave": "Save",
+  "taskFlowUiNameHint": "Enter a task flow name",
+  "taskFlowUiDescriptionHint": "Add a description (optional)",
+  "taskFlowUiNameRequired": "Enter a task flow name",
+  "taskFlowUiStepRequired": "Step {index}: {message}",
+  "taskFlowUiParameterRequired": "“{parameter}” is required for “{block}”",
+  "taskFlowUiSaveFailed": "Could not save. Your changes are still here. Try again.",
+  "taskFlowUiRetry": "Retry",
+  "taskFlowUiUpdated": "Task flow updated",
+  "taskFlowUiCreated": "Task flow created",
+  "taskFlowUiTitle": "Task Flow",
+  "taskFlowUiNotFound": "Task not found",
+  "taskFlowUiBack": "Back",
+  "taskFlowUiEdit": "Edit",
+  "taskFlowUiInput": "Input ({label})",
+  "taskFlowUiInputHint": "Enter text or a link",
+  "taskFlowUiStart": "Start task flow",
+  "taskFlowUiNoInput": "No inputs yet. Tap below to add a web resource URL.",
+  "taskFlowUiAddResource": "Add web resource",
+  "taskFlowUiUrlHint": "Enter a video or audio webpage URL",
+  "taskFlowUiDeleteInput": "Remove this input",
+  "taskFlowUiHour": "hr",
+  "taskFlowUiMinute": "min",
+  "taskFlowUiSecond": "sec",
+  "taskFlowUiPreview": "Preview: ",
+  "taskFlowUiDurationFormat": "hh:mm:ss",
+  "taskFlowUiDurationHint": "Optional: filter video resources by duration. Leave blank to show all available resources.",
+  "taskFlowUiSelectImages": "Select images (multiple)",
+  "taskFlowUiSelectAudio": "Select audio (multiple)",
+  "taskFlowUiSelectFiles": "Select files (multiple)",
+  "taskFlowUiSelectVideo": "Select videos (multiple)",
+  "taskFlowUiRemove": "Remove",
+  "taskFlowUiRemovedFileCleanupFailed": "Could not clean up the removed file: {error}",
+  "taskFlowUiInitialInput": "0. Initial input",
+  "taskFlowUiInputType": "Input type: {type}",
+  "taskFlowUiUserFlowInput": "Input provided when the user runs the task flow",
+  "taskFlowUiBlockInput": "Input: {type}",
+  "taskFlowUiBlockOutput": "Output: {type}",
+  "taskFlowUiParameters": "Parameters:",
+  "taskFlowUiClose": "Close",
+  "taskFlowUiSelectAppImages": "Select images from the app (multiple)",
+  "taskFlowUiNoImages": "No images",
+  "taskFlowUiSelectAppAudio": "Select audio from the app (multiple)",
+  "taskFlowUiNoAudio": "No audio",
+  "taskFlowUiSelectAppVideo": "Select videos from the app (multiple)",
+  "taskFlowUiNoVideo": "No videos",
+  "taskFlowUiFileSelectFailed": "Could not select the file: {error}",
+  "taskFlowUiFileTooLarge": "“{name}” exceeds {limit} MB. Choose a smaller file.",
+  "taskFlowUiFileUnreadable": "“{name}” is empty or unreadable",
+  "taskFlowUiSomeFilesMissing": "Some files are missing and were skipped",
+  "taskFlowUiQueuedOne": "Task flow added to the queue",
+  "taskFlowUiQueuedMany": "Added {count} task flows to the queue",
+  "taskFlowUiRunTitle": "This Run",
+  "taskFlowUiCancelBatch": "Cancel entire batch",
+  "taskFlowUiRestoringRecords": "Restoring task flow records…",
+  "taskFlowUiRecordsPaused": "Could not load task flow records. Task actions are paused.",
+  "taskFlowUiRecordsCleared": "Records for this run have been cleared",
+  "taskFlowUiRunsFinished": "{finished} of {total} runs finished",
+  "taskFlowUiRecordsRemoved": " · {count} records cleared",
+  "taskFlowUiTemporaryFiles": "Temporary intermediate files",
+  "taskFlowUiAddBlock": "Add block",
+  "taskFlowUiInsertBlockBefore": "Insert block before step {index}",
+  "taskFlowUiIncompatibleAdjacentBlocks": "No block is compatible with both adjacent steps. Adjust the adjacent steps first.",
+  "taskFlowUiInsertBeforeStep": "Insert before step {index}",
+  "taskFlowUiUnknown": "Unknown",
+  "taskFlowUiChooseBlock": "Choose a block",
+  "taskFlowUiInsertBlock": "Insert block",
+  "taskFlowUiPreviousOutput": "Previous step output",
+  "taskFlowUiNextStepNeeds": "; next step needs: {label}",
+  "taskFlowUiNoCompatibleBlock": "No block is compatible with the current type",
+  "taskFlowUiReplaceBlock": "Replace block",
+  "taskFlowUiBlockCompatibility": "You can only replace this with a block that has compatible input and output types.",
+  "taskFlowUiTemporaryCleanupTooltip": "Clean up after the next step saves its result successfully; the final step is always kept.",
+  "taskFlowUiSetParameters": "Set parameters",
+  "taskFlowUiReplace": "Replace",
+  "taskFlowUiViewParameters": "Tap to view parameters",
+  "taskFlowUiTapSetParameters": "Tap to set parameters",
+  "taskFlowUiUnknownBlockType": "Unknown block: {name}",
+  "taskFlowUiBlockUnregistered": "This block type is not registered",
+  "taskFlowUiStepActions": "Actions for step {index}",
+  "taskFlowUiInsertBefore": "Insert before",
+  "taskFlowUiInsertAfter": "Insert after",
+  "taskFlowUiCopyBlock": "Duplicate block",
+  "taskFlowUiMoveUp": "Move up",
+  "taskFlowUiMoveUpDisabled": "Move up (already first)",
+  "taskFlowUiMoveDown": "Move down",
+  "taskFlowUiMoveDownDisabled": "Move down (already last)",
+  "taskFlowUiDeleteBlock": "Delete block",
+  "taskFlowUiInputLabel": "Input: {label}",
+  "taskFlowUiOutputLabel": "Output: {label}",
+  "taskFlowUiUnregisteredBlockType": "Block type “{name}” is not registered",
+  "taskFlowUiBlockSettings": "{label} settings",
+  "taskFlowUiSendToAssistant": "The user message sent to the assistant is the previous step’s output",
+  "taskFlowUiTempSpaceInfo": "This step outputs to the flow’s temporary space. Its output is cleaned up after the next step saves successfully. The original save folder is preserved and restored when temporary mode is disabled.",
+  "taskFlowUiNoExtraParameters": "This block has no additional parameters",
+  "taskFlowUiCancel": "Cancel",
+  "taskFlowUiConfirm": "Confirm",
+  "taskFlowUiConfigureModelFirst": "Configure a model first",
+  "taskFlowUiModelUnavailable": "No model is selected or the model is unavailable. Select another model.",
+  "taskFlowUiModelIndexed": "Model {index}",
+  "taskFlowUiUnnamedProvider": "Unnamed provider",
+  "taskFlowUiCustomModelParameters": "Custom model parameters",
+  "taskFlowUiTtsVoiceMissing": "No TTS models have configured voices. You can enter an ID manually.",
+  "taskFlowUiVoiceUnavailable": "Voice is unavailable. Select another voice.",
+  "taskFlowUiSelectVoice": "Select a voice",
+  "taskFlowUiAssistantUnavailable": "Assistant unavailable",
+  "taskFlowUiAssistantUseCurrent": "Not specified (use the currently selected assistant)",
+  "taskFlowUiAssistantDeleted": "The configured assistant was deleted. Select another assistant.",
+  "taskFlowUiChooseAssistant": "Choose an assistant",
+  "taskFlowUiOnlyCustomAssistants": "Only “My Assistants” can be selected (add one in “Chat → Assistants”)",
+  "taskFlowUiMyAssistants": "My Assistants",
+  "taskFlowUiNoCustomAssistants": "No custom assistants yet. Create one in “Chat → Assistants”.",
+  "taskFlowUiYes": "Yes",
+  "taskFlowUiNo": "No",
+  "taskFlowUiDefaultRoot": "Default (root folder)",
+  "taskFlowUiSelect": "Select",
+  "taskFlowUiSelectSaveFolder": "Choose a save folder",
+  "taskFlowUiCatCatchVideo": "Video",
+  "taskFlowUiCatCatchAudio": "Audio",
+  "taskFlowUiCatCatchEither": "Video or audio (filter based on downstream steps)",
+  "taskFlowUiManual": "Manual",
+  "taskFlowUiAutomatic": "Automatic",
+  "taskFlowUiAutomaticPrompt": "Automatic with confirmation",
+  "taskFlowUiEditTitle": "Edit Task Flow",
+  "taskFlowUiCreateTitle": "New Task Flow",
+  "taskFlowUiStepNumber": "Step {index}: {message}",
+  "taskFlowUiInputTypeValue": "Input type: {type}",
+  "taskFlowUiBlockInputValue": "Input: {type}",
+  "taskFlowUiBlockOutputValue": "Output: {type}",
+  "taskFlowUiCleanupError": "Could not clean up the removed file: {error}",
+  "taskFlowUiSelectFileError": "Could not select the file: {error}",
+  "taskFlowUiLargeFile": "“{name}” exceeds {limit} MB. Choose a smaller file.",
+  "taskFlowUiUnreadableFile": "“{name}” is empty or unreadable",
+  "taskFlowUiTemporary": "Temporary",
+  "taskFlowUiTemporaryFileHint": "Temporary file (cleaned up after the next step succeeds)",
+  "taskFlowUiUnregisteredBlock": "Block type “{name}” is not registered",
+  "taskFlowUiRunSummary": "{finished} of {total} runs finished",
+  "taskFlowUiClearedRecordCount": " · {count} records cleared",
+  "taskFlowUiInputOutput": "Input: {input} → Output: {output}",
+  "taskFlowCardTag": "Task Flow",
+  "taskFlowCardQueued": "Queued (waiting for resources)",
+  "taskFlowCardCompletedProgress": "{done} of {total} completed",
+  "taskFlowCardCountLabel": "{count} {label}",
+  "taskFlowCardFailedLabel": "failed",
+  "taskFlowCardSkippedLabel": "skipped",
+  "taskFlowCardCancelledLabel": "cancelled",
+  "taskFlowCardInterruptedLabel": "interrupted",
+  "taskFlowCardCancelFlow": "Cancel flow",
+  "taskFlowCardRetry": "Retry",
+  "taskFlowCardCancelBatch": "Cancel entire batch",
+  "taskFlowCardDelete": "Delete",
+  "taskFlowCardRetryFlow": "Retry task flow",
+  "taskFlowCardNoSnapshot": "This run has no snapshot. It will start over using the current flow configuration.",
+  "taskFlowCardRetryInfo": "Starting over downloads files and calls models again. Retry with the configuration used at launch, or explicitly choose the latest configuration. To reuse completed steps, choose “Resume from interrupted step.”",
+  "taskFlowCardRunLatest": "Run with latest configuration",
+  "taskFlowCardRetryOriginal": "Retry with original configuration",
+  "taskFlowCardDeleteRecord": "Delete task flow record",
+  "taskFlowCardDeleteBatchConfirm": "Deleting this run will cancel unfinished tasks in the batch and clear their subtask records. Delete?",
+  "taskFlowCardDeleteRunningConfirm": "This flow is running. Deleting it will cancel its active tasks. Delete?",
+  "taskFlowCardDeleteRecordConfirm": "Delete this flow record and its subtask records?",
+  "taskFlowCardDeleteConfirm": "Delete this flow record?",
+  "taskFlowCardSaveCancelStateError": "Could not save the flow cancellation state. Try deleting again.",
+  "taskFlowCardStillRunning": "The flow is still running after cancellation.",
+  "taskFlowCardSaveDeleteStateError": "Could not save the flow record deletion state. Try deleting again.",
+  "taskFlowCardConfirm": "Confirm",
+  "taskFlowCardWaiting": "Waiting",
+  "taskFlowCardRunning": "Running",
+  "taskFlowCardPaused": "Paused",
+  "taskFlowCardCompleted": "Completed",
+  "taskFlowCardFailed": "Failed",
+  "taskFlowCardCanceled": "Canceled",
+  "taskFlowCardInterrupted": "Interrupted",
+  "taskFlowCardSucceeded": "Skipped",
+  "taskFlowCardPause": "Pause flow",
+  "taskFlowCardResume": "Resume flow",
+  "taskFlowCardResumeInterrupted": "Resume from interrupted step",
+  "taskFlowCardCancel": "Cancel",
+  "unifiedTaskType": "Task type",
+  "unifiedTaskCreatedAt": "Created",
+  "unifiedTaskCompletedAt": "Completed",
+  "unifiedTaskResultStatus": "Result status",
+  "unifiedTaskPartialResult": "Partial result; content may be incomplete",
+  "unifiedTaskErrorDetails": "Error details",
+  "unifiedTaskViewErrorDetails": "View error details",
+  "unifiedTaskOcrPerImage": "Recognize each image",
+  "unifiedTaskOcrPageIndex": "Image {index}",
+  "unifiedTaskOcrPending": "Waiting to recognize",
+  "unifiedTaskOcrRunning": "Recognizing",
+  "unifiedTaskCompleted": "Completed",
+  "unifiedTaskIncomplete": "Incomplete result",
+  "unifiedTaskOcrFailed": "Recognition failed",
+  "unifiedTaskCancelled": "Canceled",
+  "unifiedTaskWaitingStart": "Waiting to start...",
+  "unifiedTaskSteps": "Steps",
+  "unifiedTaskStartNow": "Start now",
+  "unifiedTaskOpenFile": "Open file",
+  "unifiedTaskRetrySave": "Retry saving only",
+  "unifiedTaskRetryPartialSave": "Retry saving partial result only",
+  "unifiedTaskSavePartialResult": "Save partial result",
+  "unifiedTaskRetry": "Retry",
+  "unifiedTaskCancel": "Cancel",
+  "unifiedTaskDelete": "Delete",
+  "unifiedTaskFormatUnsupported": "Preview is not supported for this format",
+  "unifiedTaskLoadFailed": "Load failed: {error}",
+  "unifiedTaskPlaybackFailed": "Playback failed: {error}",
+  "unifiedTaskAudioFile": "Audio file",
+  "unifiedTaskPreviewLoadFailed": "Could not load preview",
+  "unifiedTaskUnknownSize": "Unknown size",
+  "unifiedTaskUnnamedRecording": "Untitled recording",
+  "unifiedTaskPause": "Pause",
+  "unifiedTaskClearTask": "Clear task",
+  "unifiedTaskContinue": "Continue",
+  "unifiedTaskRemoveFromList": "Remove from list",
+  "unifiedTaskSynthesisText": "Synthesized text",
+  "unifiedTaskStatus": "Status",
+  "unifiedTaskDetails": "Details",
+  "unifiedTaskSynthesisError": "Synthesis error details",
+  "unifiedTaskClose": "Close",
+  "unifiedTaskRawRequestResponse": "Raw request and response",
+  "unifiedTaskRawRequestBody": "Raw request body:",
+  "unifiedTaskRawResponseBody": "Raw response body:",
+  "commonJustNow": "Just now",
+  "commonMinutesAgo": "{count} min ago",
+  "commonHoursAgo": "{count} hr ago",
+  "unifiedDurationSeconds": "{seconds} sec",
+  "unifiedDurationMinutesSeconds": "{minutes} min {seconds} sec",
+  "unifiedDurationHoursMinutes": "{hours} hr {minutes} min",
+  "unifiedTaskTypeOcr": "Image text recognition",
+  "unifiedTaskTypeAsr": "Audio transcription",
+  "unifiedTaskTypeAudioSeparation": "Audio separation",
+  "unifiedTaskTypeChat": "Assistant chat",
+  "unifiedTaskPlayAudio": "Play audio",
+  "unifiedTaskPauseAudio": "Pause audio",
+  "catcatchFlowActionNotStarted": "Flow action did not start. Check the flow status and try again.",
+  "catcatchFlowActionFailed": "Flow action failed: {error}",
+  "catcatchSkipped": "Skipped (nothing to process)",
+  "catcatchRetryStep": "Retry this step",
+  "catcatchCollapseSegments": "Hide {count} segments",
+  "catcatchShowSegments": "Show {count} segments",
+  "catcatchSelectedResources": "{selected} of {total} resources selected",
+  "catcatchDetectedMediaResources": "{count} media resources detected",
+  "catcatchFlowSelectOrCombine": "(select one resource or combine an audio/video pair)",
+  "catcatchSelectMultiple": "(tap to select; multiple allowed)",
+  "catcatchWaitingForResources": "Waiting for flow resources",
+  "catcatchDownloadSelected": "Download {count} selected resources",
+  "catcatchSelectResources": "Select resources to download",
+  "catcatchPossibleSplit": "⚠ Possible separate audio and video streams",
+  "catcatchSplitExplanation": "These resources may be separate audio and video streams for the same video. You can combine them or download only one stream.",
+  "catcatchAudioStream": "🎵 Audio stream",
+  "catcatchVideoStream": "🎬 Video stream",
+  "catcatchMergeAudioVideo": "Combine audio and video",
+  "catcatchVideoOnly": "Video only",
+  "catcatchAudioOnly": "Audio only",
+  "catcatchSegmentsPlaylistPreview": "Preview segments using the playlist",
+  "catcatchPreviewAudio": "Preview audio",
+  "catcatchPreviewVideo": "Preview video",
+  "catcatchDuration": "Duration: {duration}",
+  "catcatchSegment": "Segment",
+  "catcatchPlaylist": "Playlist",
+  "catcatchFullVideo": "Full video",
+  "catcatchSeparateTracks": "Separate tracks",
+  "catcatchPreviewPlaylistOnly": "Preview using the playlist",
+  "catcatchPreviewUnsupported": "Preview is not supported",
+  "catcatchUnknownFormat": "Unknown format",
+  "catcatchNeedPlaylistProcessing": "Playlist processing required",
+  "catcatchSpecialFormatDetected": "Special format detected",
+  "catcatchPlaylistInfo": "This resource is a playlist ({format}). It must be parsed and all segments downloaded and combined into a playable video.",
+  "catcatchFormatInfo": "The downloaded file is in {format}, not standard MP4. The built-in pure Dart remux engine will convert it to MP4 (TS/FLV/EV1 require no external dependencies).",
+  "catcatchContinueBeforeConfirm": "Resume the flow before confirming format handling",
+  "catcatchAutoProcess": "Process automatically",
+  "catcatchKeepOriginalFormat": "Keep original format",
+  "catcatchResumeSupported": "Resume supported",
+  "catcatchResumeUnsupported": "This site does not support resuming",
+  "catcatchPauseDownload": "Pause download",
+  "catcatchResumeDownload": "Resume download",
+  "catcatchRestartDownload": "Download again",
+  "catcatchPendingFormatAction": "Waiting for flow resources",
+  "quitDialogTitle": "Quit app?",
+  "quitDialogRunningTasks": "{count} tasks are running. Quitting will interrupt them. Do you want to quit?",
+  "quitDialogNoTasks": "Do you want to quit Stroom?",
+  "quitDialogCancel": "Cancel",
+  "quitDialogExit": "Quit",
+  "searchPanelNewConversation": "New conversation",
+  "searchPanelTitle": "Search conversations",
+  "searchPanelHint": "Enter a keyword...",
+  "searchPanelByTitle": "Search titles",
+  "searchPanelByContent": "Search content",
+  "searchPanelResults": "{count} results",
+  "searchPanelPrompt": "Enter a keyword to search",
+  "searchPanelNoResults": "No matching conversations found",
+  "topicItemNew": "New topic",
+  "topicItemUnpin": "Unpin",
+  "topicItemPin": "Pin",
+  "topicItemRename": "Rename",
+  "topicItemAutoName": "Auto name",
+  "topicItemDelete": "Delete",
+  "galleryChoiceTitle": "Choose an image source",
+  "galleryChoiceDevice": "Device gallery",
+  "galleryChoiceDeviceDescription": "Browse photos and videos on your device",
+  "galleryChoiceApp": "App gallery",
+  "galleryChoiceAppDescription": "Choose from the app gallery",
+  "appMediaUnreadable": "Could not read file",
+  "appMediaClearSelection": "Clear ({count})",
+  "appMediaConfirmSelectionCount": "Done ({count})",
+  "appMediaConfirmSelection": "Done",
+  "appMediaEmptyFolder": "This folder is empty",
+  "appMediaRoot": "Go to root folder",
+  "appMediaParentFolder": "Back: {name}",
+  "appMediaSelectedFiles": "{count} files selected",
+  "imagePreviewCrop": "Crop",
+  "imagePreviewEdit": "Edit",
+  "imagePreviewLoadFailed": "Could not load image",
+  "runningElapsed": "Running for {elapsed}",
+  "chatAttachmentFile": "Attach file",
+  "chatAttachmentCamera": "Take photo",
+  "chatAttachmentDeviceGallery": "Device gallery",
+  "chatAttachmentDeviceFiles": "Device files",
+  "chatAttachmentAppFiles": "App files",
+  "fileManagerTodayTime": "Today {time}",
+  "fileManagerYesterdayTime": "Yesterday {time}",
+  "fileManagerDaysAgoTime": "{days} days ago {time}",
+  "markdownGenerating": "Generating...",
+  "htmlPreview": "Preview",
+  "htmlReturnToCard": "Return to card",
+  "htmlGenerating": "Generating...",
+  "htmlFullscreen": "View fullscreen",
+  "htmlViewCode": "View code",
+  "codeScrollToBottom": "Scroll to bottom",
+  "codeSave": "Save",
+  "codeDisableWrap": "Disable wrapping",
+  "codeEnableWrap": "Wrap lines",
+  "codeCopyFailed": "Copy failed: {error}",
+  "codeCopied": "Copied",
+  "codeCopy": "Copy",
+  "codeEmptySave": "Code is empty and cannot be saved",
+  "codeSaveTitle": "Save code",
+  "codeSavedTo": "Saved to: {path}",
+  "codeSaveFailed": "Save failed: {error}",
+  "fileManagerCopy": "Copy",
+  "fileManagerMove": "Move",
+  "fileManagerRename": "Rename",
+  "fileManagerExport": "Export",
+  "fileManagerDelete": "Delete",
+  "fileManagerAncestorFolders": "Ancestor folders",
+  "fileManagerRoot": "Root",
+  "fileManagerSelectedItems": "{count} selected",
+  "fileManagerSelectAll": "Select all",
+  "fileManagerRenameUndo": "Last batch rename result and undo",
+  "fileManagerSortBy": "Sort ({field})",
+  "fileManagerSortCreated": "Sort by created date",
+  "fileManagerSortModified": "Sort by modified date",
+  "fileManagerSortName": "Sort by name",
+  "fileManagerSortSize": "Sort by size",
+  "fileManagerListView": "List view",
+  "fileManagerThumbnailView": "Thumbnail view",
+  "fileManagerCreateFolder": "Create folder",
+  "fileManagerRefresh": "Refresh list",
+  "fileManagerEmptyFolder": "This folder is empty",
+  "fileManagerNoFiles": "No files",
+  "fileManagerBackRoot": "Back to root",
+  "fileManagerBackFolder": "Back: {name}",
+  "fileManagerMultiSelect": "Select multiple",
+  "fileManagerOpen": "Open",
+  "fileManagerPreview": "Preview",
+  "fileManagerFolderAndFilesCount": "{files} files, {folders} subfolders",
+  "fileManagerSubfoldersCount": "{count} subfolders",
+  "fileManagerFilesCount": "{count} files",
+  "fileManagerEmptyFolderLabel": "Empty folder",
+  "fileManagerFileExists": "File “{name}.{format}” already exists",
+  "fileManagerRenameFailed": "Rename failed: {error}",
+  "fileManagerChooseTargetFolder": "Choose a destination folder",
+  "fileManagerAlreadyAtDestination": "The file is already at the destination",
+  "fileManagerMoveNameConflict": "A file with the same name already exists in the destination. Move canceled.",
+  "fileManagerMoveFailed": "Move failed: {error}",
+  "fileManagerChooseCopyDestination": "Choose a folder to copy to",
+  "fileManagerCopyFailed": "Copy failed: {error}",
+  "fileManagerDeleteConfirmTitle": "Confirm deletion",
+  "fileManagerDeleteFileConfirm": "Delete this file? This action cannot be undone.",
+  "fileManagerCancel": "Cancel",
+  "fileManagerDeleteFailed": "Delete failed: {error}",
+  "fileManagerFolderAlreadyThere": "The folder is already at the destination. Operation canceled.",
+  "fileManagerFolderConflict": "A folder with the same name exists at the destination, or the destination is inside the selected folder. Operation canceled.",
+  "fileManagerBatchDeleteTitle": "Confirm bulk deletion",
+  "fileManagerDeleteSelectedConfirm": "Delete the {count} selected items? This action cannot be undone.",
+  "fileManagerBatchDeleteFailed": "Bulk delete failed: {error}",
+  "fileManagerExportConflict": "Export paths for the selected files and folders conflict",
+  "fileManagerSelectedAlreadyThere": "The selected file is already at the destination. Move canceled.",
+  "fileManagerBatchMoveFailed": "Bulk move failed: {error}",
+  "fileManagerCopyConflict": "The selection contains files with duplicate names. Copy canceled; copy them one at a time.",
+  "fileManagerBatchCopyFailed": "Bulk copy failed: {error}",
+  "fileManagerClosedError": "The file page is closed",
+  "fileManagerBatchRenameFailed": "Bulk rename failed: {error}",
+  "fileManagerFolderNameHint": "Enter a folder name",
+  "fileManagerCreate": "Create",
+  "fileManagerFolderExists": "Folder already exists",
+  "fileManagerCreateFolderFailed": "Could not create folder: {error}",
+  "fileManagerFolderCreated": "Folder “{name}” created",
+  "fileManagerRenameFolderTitle": "Rename folder",
+  "fileManagerNewNameHint": "Enter a new name",
+  "fileManagerTargetFolderConflict": "A folder with the same name already exists at the destination. Operation canceled.",
+  "fileManagerMoveFolderTitle": "Move folder to…",
+  "fileManagerCopyFolderTitle": "Copy folder to…",
+  "fileManagerFolderSelfConflict": "A folder with the same name exists at the destination, or the destination is the folder itself. Operation canceled.",
+  "fileManagerDeleteFolderConfirm": "Delete folder “{name}”? Its {count} files will also be deleted.",
+  "fileManagerDeleteEmptyFolderConfirm": "Delete empty folder “{name}”?",
+  "fileManagerDeleteFolderTitle": "Confirm folder deletion",
+  "fileManagerRefreshFailed": "Refresh failed: {error}",
+  "fileManagerRefreshed": "File list refreshed",
+  "fileManagerRenameFileTitle": "Rename file",
+  "fileManagerFormat": "Format",
+  "fileManagerFolderAtDestination": "Folder is already at the destination",
+  "folderPickerTitle": "Choose folder",
+  "folderPickerExists": "Folder already exists",
+  "folderPickerCreateFailed": "Could not create folder: {error}",
+  "folderPickerRefreshFailed": "Could not refresh folder list: {error}",
+  "folderPickerInstruction": "Click to select; double-click to open a folder",
+  "folderPickerFileName": "File name",
+  "folderPickerFileNameHint": "Enter a file name",
+  "folderPickerBack": "Go up one level",
+  "folderPickerPath": "Root > {path}",
+  "folderPickerRoot": "Root",
+  "folderPickerCurrentFolder": "Current folder",
+  "folderPickerSubfolders": "Subfolders",
+  "folderPickerExistingFolders": "Existing folders",
+  "folderPickerCreateNew": "Create new folder",
+  "folderPickerFolderNameHint": "Enter a folder name",
+  "folderPickerCancelCreate": "Cancel creation",
+  "folderPickerCancel": "Cancel",
+  "folderPickerConfirm": "Done",
+  "batchRunReadFailed": "Could not read file list: {error}",
+  "batchRunPreparing": "Preparing…",
+  "batchRunUndo": "Undo",
+  "batchRunRename": "Rename",
+  "batchRunFailedAction": "Could not {label}",
+  "batchRunCompletedCount": "{label} {count} items",
+  "batchRunSummary": "{label}: {completed} succeeded, {failed} failed, {remaining} remaining",
+  "batchRunFailedItem": "Failed: {id} → {name}",
+  "batchRunReportCopied": "Execution report copied",
+  "batchRunCopyFailed": "Copy failed. Try again.",
+  "batchRunWorking": "{label}…",
+  "batchRunTitle": "Batch rename results",
+  "batchRunStoppedRetain": "Stopping keeps completed items. You can undo them on the results page.",
+  "batchRunFailedRemaining": "Failed; remaining items were not processed",
+  "batchRunUndoInfo": "Undo restores the original names for items completed in this run. Undo is refused if the file list has changed since.",
+  "batchRunUncertain": "Some item states could not be confirmed. Check the file list; automatic undo is unavailable to avoid overwriting files.",
+  "batchRunUndoing": "Restoring original names…",
+  "batchRunStopping": "Stopping…",
+  "batchRunStopRemaining": "Stop remaining items",
+  "batchRunCopyReport": "Copy report",
+  "batchRunUndoRemaining": "Continue undoing the remaining {count}",
+  "batchRunUndoCompleted": "Undo completed renames",
+  "batchRunDone": "Done",
+  "codeEditorTitle": "Edit parameter value",
+  "codeEditorFormat": "Format",
+  "codeEditorCancel": "Cancel",
+  "codeEditorConfirm": "OK",
+  "codeEditorInvalidJson": "Invalid JSON. Fix it before saving.",
+  "codeEditorParamPath": "Parameter name path (expanded into nested JSON when sent)",
+  "codeEditorErrorPosition": "Line {line}, column {column}: {message}",
+  "@codeEditorErrorPosition": {
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "column": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorJsonError": "JSON format error: {message}",
+  "@codeEditorJsonError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorInvalidFormat": "Invalid JSON format",
+  "toolCallCompacted": "Compacted",
+  "mermaidSaveEmpty": "Mermaid code is empty. Nothing to save.",
+  "mermaidFolderLoadFailed": "Could not load folders: {error}",
+  "@mermaidFolderLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveTitle": "Save Mermaid diagram",
+  "mermaidSaveHint": "Choose or create a folder for the .mmd file",
+  "mermaidSaveFilenameHint": "Enter a file name (.mmd is added automatically)",
+  "mermaidFilenameEmpty": "File name cannot be empty",
+  "mermaidSaveSuccess": "Saved to text storage: {folder}/{name}.mmd",
+  "@mermaidSaveSuccess": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveFailed": "Save failed: {error}",
+  "@mermaidSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidPrepareEngine": "Preparing rendering engine...",
+  "mermaidRetry": "Retry",
+  "batchRuleEmpty": "Cannot be empty",
+  "batchRuleNumber": "Enter a number",
+  "batchRulePositive": "Enter a number greater than 0",
+  "batchRuleMin": "Must be at least {min}",
+  "@batchRuleMin": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleMax": "Must be no greater than {max}",
+  "@batchRuleMax": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRulePrefix": "Prefix",
+  "batchRuleSuffix": "Suffix",
+  "batchRuleStart": "Start",
+  "batchRuleStep": "Step",
+  "batchRuleDigits": "Digits",
+  "batchRuleSeparator": "Separator",
+  "batchRuleRestartFolder": "Restart numbering in each folder",
+  "batchRuleNumberHelp": "Numbers follow preview order; excluded items do not use a number. Step can be negative or 0.",
+  "batchRuleFind": "Find",
+  "batchRuleReplace": "Replace with (leave empty to delete)",
+  "batchRuleCaseSensitive": "Case sensitive",
+  "batchRuleRegex": "Regular expression",
+  "batchRuleFirstOnly": "Replace first match only",
+  "batchRuleRegexHelp": "Capture groups: $1, $2; full match: $0; literal $: $$. Example: ^IMG_(\\d+)$ → Photo_$1",
+  "batchRuleFindRequired": "Enter text to find to enable this rule.",
+  "batchRuleBeginning": "Beginning",
+  "batchRuleEnd": "End",
+  "batchRulePosition": "Position",
+  "batchRuleInsertText": "Text to insert",
+  "batchRuleBeforeChar": "Before character N",
+  "batchRulePositionHelp": "Positions start at 1; values beyond the end are appended. Combined emoji count as one character.",
+  "batchRuleFromBeginning": "From beginning",
+  "batchRuleFromEnd": "From end",
+  "batchRuleFromChar": "Starting at character N",
+  "batchRuleCount": "Count",
+  "batchRuleDeleteHelp": "If deletion empties the name, a later insert rule must add text before execution.",
+  "batchRuleUpper": "UPPERCASE",
+  "batchRuleLower": "lowercase",
+  "batchRuleFirstUpper": "Capitalize first letter",
+  "batchRuleTitleCase": "Capitalize Each Word",
+  "batchRuleTemplate": "New name template",
+  "batchRuleTemplateHint": "Course_{n}_{name}",
+  "@batchRuleTemplateHint": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTemplateHelp": "{name} original name · {n} sequence · {folder} folder name\n{created} creation date · {modified} modified date · {ext} original extension\nDate format YYYY-MM-DD; missing dates are reported. The template replaces the whole base name; the extension is kept automatically.",
+  "@batchRuleTemplateHelp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      },
+      "created": {
+        "type": "String"
+      },
+      "modified": {
+        "type": "String"
+      },
+      "ext": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTrim": "Trim leading and trailing spaces",
+  "batchRuleCollapseSpaces": "Replace consecutive spaces with one space",
+  "batchRuleActions": "Rule actions",
+  "batchRuleDuplicate": "Duplicate rule",
+  "batchRuleRemove": "Delete rule",
+  "batchRuleMoveUp": "Move rule up",
+  "batchRuleMoveDown": "Move rule down",
+  "batchDlgSavePreset": "Save preset",
+  "batchDlgPresetName": "Preset name",
+  "batchDlgPresetHint": "Saves rules and order, but not exclusions or manual names",
+  "batchDlgCancel": "Cancel",
+  "batchDlgSave": "Save",
+  "batchDlgOverwriteTitle": "Overwrite existing preset?",
+  "batchDlgOverwriteBody": "Update the rules in “{name}”.",
+  "@batchDlgOverwriteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgOverwrite": "Overwrite",
+  "batchDlgManagePresets": "Manage presets",
+  "batchDlgNoPresets": "No saved presets",
+  "batchDlgDeletePreset": "Delete preset",
+  "batchDlgDone": "Done",
+  "batchDlgEditName": "Edit name individually",
+  "batchDlgBaseName": "Base name",
+  "batchDlgOverrideHelp": "This name overrides the rule result",
+  "batchDlgExtensionRetained": "Extension .{extension} is kept automatically",
+  "@batchDlgExtensionRetained": {
+    "placeholders": {
+      "extension": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgConfirm": "Confirm",
+  "batchDlgHelp": "Instructions",
+  "batchDlgClose": "Close",
+  "batchDlgLoadPreset": "Load preset (replaces rules and clears manual names)",
+  "batchDlgLoad": "Load preset",
+  "batchDlgSaving": "Saving…",
+  "batchDlgReset": "Reset all rules and included items",
+  "batchDlgRuleInstructions": "Rules run from top to bottom. Copy, move, or disable them. File extensions stay unchanged.",
+  "batchDlgSortName": "Name",
+  "batchDlgSortCreated": "Created",
+  "batchDlgSortModified": "Modified",
+  "batchDlgSortSize": "Size",
+  "batchDlgAscending": "Ascending",
+  "batchDlgDescending": "Descending",
+  "batchDlgFolderSort": "Folders come first; same names are sorted by folder.",
+  "batchDlgAddRule": "＋ Add rule",
+  "batchDlgMaxRules": "Maximum 50 rules",
+  "batchDlgPreviewWorking": "Calculating preview… You can keep editing rules or cancel.",
+  "batchDlgSearch": "Search original name, new name, or folder",
+  "batchDlgFilterAll": "All",
+  "batchDlgFilterChanged": "Changed",
+  "batchDlgFilterErrors": "Issues",
+  "batchDlgFilterUnchanged": "Unchanged",
+  "batchDlgFilterExcluded": "Excluded",
+  "batchDlgParticipants": "Choose included items",
+  "batchDlgIncludeAll": "Include all",
+  "batchDlgOnlyFiles": "Files only",
+  "batchDlgOnlyFolders": "Folders only",
+  "batchDlgExcludeAll": "Exclude all",
+  "batchDlgScope": "Included items",
+  "batchDlgCopyList": "Copy list",
+  "batchDlgConflictBlock": "Name conflict: block execution",
+  "batchDlgConflictSuffix": "Name conflict: append (2), (3)…",
+  "batchDlgNoMatches": "No items match the filter",
+  "batchDlgRoot": "Root",
+  "batchDlgFile": "File",
+  "batchDlgFolder": "Folder",
+  "batchDlgTargetFolder": "Target folder: {folder}",
+  "@batchDlgTargetFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgEditNameTooltip": "Edit name individually",
+  "batchDlgRestoreNameTooltip": "Restore rule-generated name",
+  "batchDlgCopied": "Full preview list copied (CSV)",
+  "batchDlgCopyFailed": "Copy failed. Try again.",
+  "batchDlgHelpTitle": "Batch rename instructions",
+  "batchDlgHelpDismiss": "Got it",
+  "batchDlgRulesTab": "Rules",
+  "batchDlgPreviewTab": "Preview ({count})",
+  "@batchDlgPreviewTab": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgRenameCount": "Rename {count} items",
+  "@batchDlgRenameCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetLoadFailed": "Could not load presets. You can still edit and run rules.",
+  "batchDlgPreviewFailed": "Could not calculate preview. Adjust the rules and try again.",
+  "batchDlgSavedName": "Preset saved: {name}",
+  "@batchDlgSavedName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSaveFailed": "Save failed: {error}",
+  "@batchDlgSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgDeleteFailed": "Delete failed: {error}",
+  "@batchDlgDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSavePresetFallback": "Save preset",
+  "batchDlgPreviewSummary": "Preview · {changes} changes · {conflicts} issues · {excluded} excluded",
+  "@batchDlgPreviewSummary": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      },
+      "conflicts": {
+        "type": "String"
+      },
+      "excluded": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgInvalidInput": "Fix invalid rule inputs. The preview does not include them yet.",
+  "batchDlgConflictError": "Conflicts or invalid names prevent applying. Adjust the rules.",
+  "batchDlgManualNameStatus": "Manual name",
+  "batchDlgPendingRename": "Ready to rename",
+  "batchDlgCsvHeader": "Original path,Original name,Target path,Status",
+  "batchDlgHelpBody": "1. Choose a preset or enable rules, then copy rules and adjust their order as needed.\n\n2. The preview shows the names that will be used. Search and filters affect display only. Unchecking an item excludes it and recalculates numbering. Edit a name individually or restore the rule result.\n\n3. Resolve all issues before running. Automatic suffixes handle duplicate names without overwriting files. Rename folders that exchange names in separate batches.\n\n4. You can stop later items during execution; the current item finishes first. The results page shows completed changes and lets you undo them. Undo is blocked if the list has changed since execution.\n\nThis changes names and folder paths only; file contents and extensions stay unchanged. Renaming a parent folder does not prevent checked children from being renamed, and renaming a parent moves its children with it.",
+  "batchDlgPreviewCount": "Preview ({count})",
+  "@batchDlgPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchBuiltinPhoto": "Photos: date and number",
+  "batchBuiltinCourse": "Courses: consistent name and number",
+  "batchBuiltinDownloads": "Downloads: clean whitespace",
+  "taskListDetail": "Details",
+  "taskListOwnershipChecking": "Confirming task ownership",
+  "taskListOwnershipFailed": "Could not read task flow record; actions are unavailable",
+  "taskListViewFlow": "View task flow",
+  "taskListPause": "Pause",
+  "taskListClear": "Clear task",
+  "taskListResume": "Resume",
+  "taskListRetry": "Retry",
+  "taskListDismissError": "Dismiss error",
+  "taskListRemove": "Remove from list",
+  "taskListSynthesisErrorTitle": "Synthesis error details",
+  "taskListClose": "Close",
+  "taskListOriginalExchange": "Original request and response",
+  "taskListOriginalRequest": "Original request body:",
+  "taskListOriginalResponse": "Original response body:",
+  "taskFlowIoTypeText": "Text",
+  "taskFlowIoTypeAudio": "Audio",
+  "taskFlowIoTypeVideo": "Video",
+  "taskFlowIoTypeImage": "Image",
+  "taskFlowIoTypeLink": "Link",
+  "taskFlowIoTypeFile": "File",
+  "taskFlowIoTypeAny": "Any",
+  "mermaidZoomOut": "Zoom out",
+  "mermaidZoomIn": "Zoom in",
+  "mermaidFullscreen": "Fullscreen",
+  "mermaidSaveButton": "Save",
+  "mermaidSourceButton": "View source",
+  "mermaidDiagramSemantic": "View diagram",
+  "taskFlowCardCatCatchDeletePersistError": "Could not save CatCatch child task deletion state. Try again.",
+  "taskFlowCardSynthesisDeletePersistError": "Could not save synthesis child task deletion state. Try again.",
+  "taskFlowCardBackgroundDeletePersistError": "Could not save background child task deletion state. Try again.",
+  "mathParseError": "Math parse error",
+  "mermaidEmptyPlaceholder": "No Mermaid code to render",
+  "mathClose": "Close",
+  "mermaidLoadTimeout": "Mermaid loading timed out. Check your network and try again.",
+  "mermaidCdnLoadFailed": "Could not reach cdn.jsdelivr.net to load Mermaid.",
+  "mermaidLoadingDiagram": "Loading diagram…",
+  "mermaidEngineInitFailed": "Could not initialize the diagram renderer. Try again.",
+  "mermaidPageTimeout": "Page load timed out. Try again.",
+  "mermaidCodeLoadFailed": "Could not load diagram code. Try again.",
+  "mermaidPageLoadFailed": "Page load failed: {description}",
+  "@mermaidPageLoadFailed": {
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidLoadingEngine": "Loading rendering engine…",
+  "mermaidRenderErrorTitle": "Diagram rendering error",
+  "taskFlowOutputVideoAudioDownstream": "Video or audio (filtered by downstream)",
+  "taskFlowOutputUnknown": "Unknown",
+  "batchRunCancelledSummary": "{label} stopped: {completed} succeeded, {failed} failed, {remaining} remaining",
+  "@batchRunCancelledSummary": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "failed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidRenderErrorPrefix": "Mermaid render error: {message}",
+  "@mermaidRenderErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidInitializeErrorPrefix": "Mermaid initialization error: {message}",
+  "@mermaidInitializeErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidResourceError": "A resource in the Mermaid diagram failed to load.",
+  "taskFlowParamRecognitionModel": "Recognition model",
+  "@taskFlowParamRecognitionModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSynthesisModel": "Synthesis model",
+  "@taskFlowParamSynthesisModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSaveFolder": "Save folder",
+  "@taskFlowParamSaveFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamResourceSelection": "Resource selection",
+  "@taskFlowParamResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamOutputType": "Output type",
+  "@taskFlowParamOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVideoFolder": "Video save folder",
+  "@taskFlowParamVideoFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAudioFolder": "Audio save folder",
+  "@taskFlowParamAudioFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamExpectedDuration": "Expected duration",
+  "@taskFlowParamExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVoice": "Voice",
+  "@taskFlowParamVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSpeechRate": "Speech rate",
+  "@taskFlowParamSpeechRate": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAssistant": "Assistant",
+  "@taskFlowParamAssistant": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintResourceSelection": "Manual mode lets you choose. Automatic mode follows the existing rules. Ask when ambiguous selects automatically only when there is one safe choice; otherwise it opens the resource list for confirmation.",
+  "@taskFlowHintResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintOutputType": "Choose video or audio explicitly. Follow downstream filters resources by the next block’s input type. If the next block accepts both types or there is no next block, both types are kept.",
+  "@taskFlowHintOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintExpectedDuration": "Filter resources by video duration. Leave blank to skip filtering.",
+  "@taskFlowHintExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintVoice": "Choose a voice. The matching synthesis model is selected automatically.",
+  "@taskFlowHintVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowUiUnsupportedBlockStep": "This block type is no longer supported. Replace it or remove this step.",
+  "@taskFlowUiUnsupportedBlockStep": {
+    "description": "TaskFlow block connection validation message."
+  },
+  "taskFlowUiDownstreamTypeMismatch": "The next block requires {requiredType}. The downloader can output video or audio. Change the next step or output policy.",
+  "@taskFlowUiDownstreamTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiAnyTypeMismatch": "{source} has any type, but “{block}” needs an explicit text, link, image, audio, video, or file type. Change the input type, move or replace the block, or undo the change.",
+  "@taskFlowUiAnyTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiTypeMismatch": "{source} has {actualType}, but “{block}” requires {requiredType}. Change the input type, move or replace the block, or undo the change.",
+  "@taskFlowUiTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "fileManagerSortFieldCreated": "Created date",
+  "@fileManagerSortFieldCreated": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldModified": "Modified date",
+  "@fileManagerSortFieldModified": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldName": "Name",
+  "@fileManagerSortFieldName": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldSize": "Size",
+  "@fileManagerSortFieldSize": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateNewest": "newest first",
+  "@fileManagerSortDateNewest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateOldest": "oldest first",
+  "@fileManagerSortDateOldest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeLargest": "largest first",
+  "@fileManagerSortSizeLargest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeSmallest": "smallest first",
+  "@fileManagerSortSizeSmallest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusRunning": "Running",
+  "@catcatchStatusRunning": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusCompleted": "Completed",
+  "@catcatchStatusCompleted": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusFailed": "Failed",
+  "@catcatchStatusFailed": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusPaused": "Paused",
+  "@catcatchStatusPaused": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusWaiting": "Waiting",
+  "@catcatchStatusWaiting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFetching": "Fetching webpage",
+  "@catcatchStepFetching": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepAnalyzing": "Analyzing media",
+  "@catcatchStepAnalyzing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepParsingPlaylist": "Parsing playlist",
+  "@catcatchStepParsingPlaylist": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFiltering": "Filtering by duration",
+  "@catcatchStepFiltering": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepUserSelecting": "Waiting for selection",
+  "@catcatchStepUserSelecting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepDownloading": "Downloading",
+  "@catcatchStepDownloading": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepConverting": "Converting/merging",
+  "@catcatchStepConverting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepSaving": "Saving locally",
+  "@catcatchStepSaving": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepConnectServer": "Connecting to server",
+  "@bgStepConnectServer": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadImage": "Uploading images",
+  "@bgStepUploadImage": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitRecognition": "Waiting for recognition",
+  "@bgStepWaitRecognition": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepParseResult": "Parsing result",
+  "@bgStepParseResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveFile": "Saving file",
+  "@bgStepSaveFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadAudio": "Uploading audio",
+  "@bgStepUploadAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepTranscribing": "Transcribing",
+  "@bgStepTranscribing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepReceiveResult": "Receiving result",
+  "@bgStepReceiveResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSeparateAudio": "Separating audio",
+  "@bgStepSeparateAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveToFile": "Saving to file",
+  "@bgStepSaveToFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSendRequest": "Sending request",
+  "@bgStepSendRequest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitReply": "Waiting for reply",
+  "@bgStepWaitReply": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortNameAscending": "A to Z",
+  "@fileManagerSortNameAscending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "fileManagerSortNameDescending": "Z to A",
+  "@fileManagerSortNameDescending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "taskFlowValidationNoSteps": "This task flow has no steps. Add a block first.",
+  "@taskFlowValidationNoSteps": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputRequired": "Add at least one input to run this task flow.",
+  "@taskFlowValidationInputRequired": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationFlowRemoved": "This task flow was deleted. Select it again.",
+  "@taskFlowValidationFlowRemoved": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputTypeChanged": "The initial input type changed. Choose the run input again.",
+  "@taskFlowValidationInputTypeChanged": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSnapshotMissing": "This older record has no run snapshot. Retry using the latest configuration.",
+  "@taskFlowValidationSnapshotMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationAssistantModelMissing": "The assistant model is missing or unavailable. Select a model on the chat page or set a default model for the assistant.",
+  "@taskFlowValidationAssistantModelMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSavedFileUnavailable": "A saved step file is missing, empty, or unreadable. Run the task flow again.",
+  "@taskFlowValidationSavedFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationUnsupportedBlock": "This block type is no longer supported. Replace or remove this step.",
+  "@taskFlowValidationUnsupportedBlock": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationDownstreamMismatch": "The next block requires {requiredType}. The downloader can output audio or video. Change the next step or output policy.",
+  "@taskFlowValidationDownstreamMismatch": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationRequiredParameter": "“{parameter}” is required for “{block}”. Configure it in the block settings.",
+  "@taskFlowValidationRequiredParameter": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "parameter": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationLegacyModel": "The legacy model selection needs confirmation. Choose the model again in “{block}” settings.",
+  "@taskFlowValidationLegacyModel": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationModelUnavailable": "The model is missing or unavailable from its provider. Choose it again in “{block}” settings and check the provider URL and key.",
+  "@taskFlowValidationModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantUnavailable": "The assistant is missing or was deleted. Choose it again in “{block}” settings.",
+  "@taskFlowValidationAssistantUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantModelUnavailable": "The assistant model was deleted or its provider configuration is unavailable. Choose a model again in assistant settings.",
+  "@taskFlowValidationAssistantModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationPolicyInvalid": "The resource selection policy or output type is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationPolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationOutputInvalid": "The output type is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationOutputInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationResourcePolicyInvalid": "The resource selection policy is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationResourcePolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputFileUnavailable": "Input {index}: The file is missing, empty, or unreadable. Choose it again.",
+  "@taskFlowValidationInputFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputUrlInvalid": "Input {index}: Enter a valid HTTP or HTTPS link.",
+  "@taskFlowValidationInputUrlInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputError": "Input {index}: {error}",
+  "@taskFlowValidationInputError": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleValidationMaxRules": "At most 50 rules are allowed.",
+  "@batchRuleValidationMaxRules": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDigits": "The number of digits must be from 1 to 12.",
+  "@batchRuleValidationDigits": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationNumberRange": "The starting number and step must be within ±999,999,999.",
+  "@batchRuleValidationNumberRange": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationReplacementLength": "The replacement rule is too long.",
+  "@batchRuleValidationReplacementLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationRegex": "The regular expression is invalid.",
+  "@batchRuleValidationRegex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDeleteIndex": "The deletion position must start at 1.",
+  "@batchRuleValidationDeleteIndex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationInsertLength": "The inserted text is too long.",
+  "@batchRuleValidationInsertLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateNumber": "Invalid template number settings: digits must be 1 to 12 and start/step within ±999,999,999.",
+  "@batchRuleValidationTemplateNumber": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateLength": "The template is too long.",
+  "@batchRuleValidationTemplateLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateVariable": "Unknown template variable or an unclosed brace.",
+  "@batchRuleValidationTemplateVariable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleTypeNumber": "Add numbering",
+  "@batchRuleTypeNumber": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeReplace": "Find and replace",
+  "@batchRuleTypeReplace": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeInsert": "Insert text",
+  "@batchRuleTypeInsert": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeDelete": "Delete characters",
+  "@batchRuleTypeDelete": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCase": "Change case",
+  "@batchRuleTypeCase": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeTemplate": "Name template",
+  "@batchRuleTypeTemplate": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCleanup": "Clean whitespace",
+  "@batchRuleTypeCleanup": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "taskFlowValidationInputEmpty": "Input {index}: Enter text or choose a file.",
+  "@taskFlowValidationInputEmpty": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageTooLarge": "Input {index}: The image is over 20 MB. Choose a smaller image.",
+  "@taskFlowValidationImageTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAttachmentTooLarge": "Input {index}: The attachment is over 10 MB. Choose a smaller file.",
+  "@taskFlowValidationAttachmentTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationFileTypeMismatch": "Input {index}: The file is {actualType}, but {requiredType} is required. Choose another file.",
+  "@taskFlowValidationFileTypeMismatch": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationSvgUnsupported": "Input {index}: Assistant chat does not support SVG image attachments. Convert it to PNG or JPEG.",
+  "@taskFlowValidationSvgUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageMimeUnsupported": "Input {index}: Assistant chat does not support {mime} image attachments. Convert it to PNG, JPEG, GIF, or WebP.",
+  "@taskFlowValidationImageMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAudioMimeUnsupported": "Input {index}: Assistant chat does not support {mime} audio attachments. Convert it to MP3, WAV, or M4A.",
+  "@taskFlowValidationAudioMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointMediaUnsupported": "Input {index}: This Anthropic chat format does not support {type} attachments. Choose an assistant that supports this media.",
+  "@taskFlowValidationEndpointMediaUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointPdfOnly": "Input {index}: This Anthropic chat format supports only image and PDF attachments. Choose a supported file.",
+  "@taskFlowValidationEndpointPdfOnly": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageCompressionFailed": "Input {index}: Assistant chat could not compress the image below 10 MB. Choose a smaller image.",
+  "@taskFlowValidationImageCompressionFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationTextEncodingFailed": "Input {index}: The text attachment is not valid UTF-8. Convert it and try again.",
+  "@taskFlowValidationTextEncodingFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
   }
 }

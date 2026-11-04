@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/natural_sort.dart';
 
@@ -241,7 +244,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       if (readData == null || readData.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取文件')),
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+            ),
           );
         }
         return;
@@ -261,9 +266,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       }
       if (mounted && !_resultDelivered) {
         _resultDelivered = true;
-        Navigator.of(context).pop([
-          if (readData != null) MapEntry(fileName, readData),
-        ]);
+        Navigator.of(context)
+            .pop([if (readData != null) MapEntry(fileName, readData)]);
       }
       return;
     }
@@ -273,7 +277,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     if (readData == null && widget.config.onRecordsPicked == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取文件')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+          ),
         );
       }
       return;
@@ -324,7 +330,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 key: const Key('media_picker_clear_btn'),
                 onPressed: _clearSelection,
                 child: Text(
-                  '清除 (${_selectedItems.length})',
+                  AppLocalizations.of(context)!
+                      .appMediaClearSelection(_selectedItems.length),
                   style: const TextStyle(color: Colors.red),
                 ),
               ),
@@ -403,13 +410,18 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                               );
                             }
                             if (!context.mounted) return;
-                            Navigator.of(context).pop(
-                              _selectedItems.values.toList(),
-                            );
+                            Navigator.of(context)
+                                .pop(_selectedItems.values.toList());
                           },
                     icon: const Icon(Icons.check, size: 18),
                     label: Text(
-                      hasSelection ? '确定 (${_selectedItems.length})' : '确定',
+                      hasSelection
+                          ? AppLocalizations.of(context)!
+                                .appMediaConfirmSelectionCount(
+                                  _selectedItems.length,
+                                )
+                          : AppLocalizations.of(context)!
+                                .appMediaConfirmSelection,
                     ),
                   ),
                 ),
@@ -441,7 +453,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
             ),
             const SizedBox(height: 12),
             Text(
-              _isRoot ? widget.config.emptyText : '此文件夹为空',
+              _isRoot
+                  ? widget.config.emptyText
+                  : AppLocalizations.of(context)!.appMediaEmptyFolder,
               style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
             ),
           ],
@@ -479,8 +493,10 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
               const SizedBox(width: 12),
               Text(
                 parent.isEmpty
-                    ? '返回根目录'
-                    : '返回: ${FolderPathUtils.getFolderBaseName(parent)}',
+                    ? AppLocalizations.of(context)!.appMediaRoot
+                    : AppLocalizations.of(context)!.appMediaParentFolder(
+                        FolderPathUtils.getFolderBaseName(parent),
+                      ),
                 style: const TextStyle(fontSize: 15, color: Colors.blue),
               ),
               const Spacer(),
@@ -638,7 +654,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             child: Text(
-              '已选择 ${items.length} 个文件',
+              AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,

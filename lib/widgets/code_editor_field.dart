@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/app_localizations.dart';
+
 // ============================================================================
 // 代码编辑辅助（自定义参数 JSON 值编辑器共享组件）
 // ============================================================================
@@ -33,7 +35,11 @@ bool isValidParamName(String name) {
 }
 
 /// 把 JSON 解析异常格式化为「第 X 行第 Y 列」的人类可读信息。
-String formatJsonError(String source, dynamic error) {
+String formatJsonError(
+  String source,
+  dynamic error, {
+  AppLocalizations? strings,
+}) {
   if (error is FormatException) {
     final offset = error.offset;
     final msg = error.message;
@@ -42,11 +48,16 @@ String formatJsonError(String source, dynamic error) {
       final lines = before.split('\n');
       final line = lines.length;
       final col = lines.last.length + 1;
-      return '第 $line 行第 $col 列: $msg';
+      return strings?.codeEditorErrorPosition(
+            line.toString(),
+            col.toString(),
+            msg,
+          ) ??
+          '第 $line 行第 $col 列: $msg';
     }
-    return 'JSON 格式错误: $msg';
+    return strings?.codeEditorJsonError(msg) ?? 'JSON 格式错误: $msg';
   }
-  return 'JSON 格式不正确';
+  return strings?.codeEditorInvalidFormat ?? 'JSON 格式不正确';
 }
 
 /// 智能输入格式化器：括号/引号自动补全、闭合符跳过、选区包裹、
@@ -99,7 +110,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
         if (closing != null) {
           // `ab` + 选中 `b` + `{` → `a{b}`，保持选区包裹内容。
           final inner = oldText.substring(oldSel.start, oldSel.end);
-          final text = newText.substring(0, oldSel.start + 1) +
+          final text =
+              newText.substring(0, oldSel.start + 1) +
               inner +
               closing +
               newText.substring(oldSel.start + 1);
@@ -135,8 +147,9 @@ class CodeSmartInputFormatter extends TextInputFormatter {
 
       final closing = _openers[inserted];
       if (closing != null) {
-        final next =
-            insertPos + 1 < newText.length ? newText[insertPos + 1] : null;
+        final next = insertPos + 1 < newText.length
+            ? newText[insertPos + 1]
+            : null;
         final isQuote = inserted == '"' || inserted == "'";
         if (isQuote) {
           // 下一个字符已是引号：视为输入闭合引号 → 跳过（不重复插入）。
@@ -155,7 +168,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
           // 下一个字符已是本开括号的闭合符：只插入开括号，不再补一个。
           return newValue;
         }
-        final text = newText.substring(0, insertPos + 1) +
+        final text =
+            newText.substring(0, insertPos + 1) +
             closing +
             newText.substring(insertPos + 1);
         return TextEditingValue(
@@ -201,12 +215,14 @@ class CodeSmartInputFormatter extends TextInputFormatter {
         return newValue;
       }
       final deleted = oldText[deletePos];
-      final next =
-          deletePos + 1 < oldText.length ? oldText[deletePos + 1] : null;
+      final next = deletePos + 1 < oldText.length
+          ? oldText[deletePos + 1]
+          : null;
       if (next != null && _openers[deleted] == next) {
         // 光标在成对括号中间退格 → 成对删除。
         return TextEditingValue(
-          text: oldText.substring(0, deletePos) +
+          text:
+              oldText.substring(0, deletePos) +
               oldText.substring(deletePos + 2),
           selection: TextSelection.collapsed(offset: deletePos),
         );
@@ -279,16 +295,20 @@ class CodeSmartInputFormatter extends TextInputFormatter {
     final lineStart = oldText.lastIndexOf('\n', diff - 1) + 1;
     final lineBefore = oldText.substring(lineStart, diff);
     if (lineBefore.trim().isEmpty && lineBefore.length >= _indentUnit.length) {
-      final newIndent =
-          lineBefore.substring(0, lineBefore.length - _indentUnit.length);
-      final text = oldText.substring(0, lineStart) +
+      final newIndent = lineBefore.substring(
+        0,
+        lineBefore.length - _indentUnit.length,
+      );
+      final text =
+          oldText.substring(0, lineStart) +
           newIndent +
           closer +
           oldText.substring(diff);
       return TextEditingValue(
         text: text,
-        selection:
-            TextSelection.collapsed(offset: lineStart + newIndent.length + 1),
+        selection: TextSelection.collapsed(
+          offset: lineStart + newIndent.length + 1,
+        ),
       );
     }
     return null;
@@ -340,8 +360,9 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
 
   void _onScrolled() {
     if (!mounted) return;
-    final offset =
-        _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
     if (offset != _scrollOffset) {
       setState(() => _scrollOffset = offset);
     }
@@ -460,7 +481,11 @@ Future<void> showJsonValueEditorDialog(
         } catch (e) {
           // 用与 jsonDecode 相同的（去首尾空白）源文本计算行列，
           // 否则前导空白会把错误位置整体偏移。
-          liveError = formatJsonError(trimmed, e);
+          liveError = formatJsonError(
+            trimmed,
+            e,
+            strings: AppLocalizations.of(context)!,
+          );
         }
       } else {
         liveError = null;
@@ -476,12 +501,12 @@ Future<void> showJsonValueEditorDialog(
     final text = editingController.text.trim();
     if (text.isEmpty) return;
     try {
-      final pretty = const JsonEncoder.withIndent('  ').convert(
-        jsonDecode(text),
-      );
+      final pretty = const JsonEncoder.withIndent('  ')
+          .convert(jsonDecode(text));
       editingController.text = pretty;
-      editingController.selection =
-          TextSelection.collapsed(offset: pretty.length);
+      editingController.selection = TextSelection.collapsed(
+        offset: pretty.length,
+      );
       liveError = null;
     } catch (_) {
       // 无效 JSON 不格式化，由错误栏提示。
@@ -506,8 +531,8 @@ Future<void> showJsonValueEditorDialog(
                     color: type == 'json' ? Colors.amber.shade700 : null,
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    '编辑参数值',
+                  Text(
+                    AppLocalizations.of(ctx)!.codeEditorTitle,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   if (type == 'json') ...[
@@ -533,12 +558,13 @@ Future<void> showJsonValueEditorDialog(
                     const SizedBox(width: 8),
                     TextButton.icon(
                       icon: const Icon(Icons.format_align_left, size: 16),
-                      label: const Text('格式化'),
+                      label: Text(AppLocalizations.of(ctx)!.codeEditorFormat),
                       style: TextButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
-                      onPressed: (liveError == null &&
+                      onPressed:
+                          (liveError == null &&
                               editingController.text.trim().isNotEmpty)
                           ? () => setDlgState(formatPretty)
                           : null,
@@ -551,7 +577,7 @@ Future<void> showJsonValueEditorDialog(
                       editingController.dispose();
                       Navigator.pop(ctx);
                     },
-                    tooltip: '取消',
+                    tooltip: AppLocalizations.of(ctx)!.codeEditorCancel,
                   ),
                 ],
               ),
@@ -616,7 +642,7 @@ Future<void> showJsonValueEditorDialog(
                 children: [
                   if (liveError != null)
                     Text(
-                      'JSON 格式有误，请修正后再保存',
+                      AppLocalizations.of(ctx)!.codeEditorInvalidJson,
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.red.shade400,
@@ -628,12 +654,12 @@ Future<void> showJsonValueEditorDialog(
                       editingController.dispose();
                       Navigator.pop(ctx);
                     },
-                    child: const Text('取消'),
+                    child: Text(AppLocalizations.of(ctx)!.codeEditorCancel),
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     icon: const Icon(Icons.check, size: 18),
-                    label: const Text('确定'),
+                    label: Text(AppLocalizations.of(ctx)!.codeEditorConfirm),
                     onPressed: liveError != null
                         ? null
                         : () {
@@ -681,7 +707,7 @@ class ParamNamePathPreview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '参数名解析（请求时展开为嵌套 JSON）',
+            AppLocalizations.of(context)!.codeEditorParamPath,
             style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 4),

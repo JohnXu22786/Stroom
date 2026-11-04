@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter/services.dart';
 import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
@@ -288,8 +291,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     final isDark = cs.brightness == Brightness.dark;
 
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor =
-        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+    final textColor = isDark
+        ? const Color(0xfff8f8f2)
+        : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
     const lineHeight = 13.0 * 1.5; // fontSize * height
@@ -309,8 +313,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     const verticalPadding = 40.0 + 12.0;
     const maxVisibleLines = 15;
     final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
-    final contentHeight =
-        lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
+    final contentHeight = lineCount > 0
+        ? lineCount * lineHeight + verticalPadding
+        : 40.0;
     final maxAllowedHeight = maxVisibleLines * lineHeight + verticalPadding;
     final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
     final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax).toDouble();
@@ -562,7 +567,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
             Icons.arrow_downward,
             size: 18,
             color: isDark ? Colors.grey[200] : Colors.grey[700],
-            semanticLabel: '滚动到底部',
+            semanticLabel: AppLocalizations.of(context)!.codeScrollToBottom,
           ),
         ),
       ),
@@ -714,12 +719,12 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
                 // the numbers below them.
                 final codeAreaWidth = wrap
                     ? (constraints.maxWidth -
-                            lineNumWidth -
-                            8.0 -
-                            1.0 -
-                            _selectableCursorWidth)
-                        .clamp(1.0, double.infinity)
-                        .toDouble()
+                              lineNumWidth -
+                              8.0 -
+                              1.0 -
+                              _selectableCursorWidth)
+                          .clamp(1.0, double.infinity)
+                          .toDouble()
                     : double.infinity;
                 final visualHeights = _measureLineHeights(
                   lines,
@@ -784,11 +789,17 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
           // Copy button (with checkmark feedback)
           _buildCopyButton(),
           // Save button — opens the system file save panel
-          _buildActionButton(icon: Icons.save, label: '保存', onTap: _saveCode),
+          _buildActionButton(
+            icon: Icons.save,
+            label: AppLocalizations.of(context)!.codeSave,
+            onTap: _saveCode,
+          ),
           // Wrap toggle button (always present)
           _buildActionButton(
             icon: Icons.wrap_text,
-            label: _wrapEnabled ? '取消换行' : '换行显示',
+            label: _wrapEnabled
+                ? AppLocalizations.of(context)!.codeDisableWrap
+                : AppLocalizations.of(context)!.codeEnableWrap,
             onTap: () {
               setState(() {
                 _wrapEnabled = !_wrapEnabled;
@@ -837,7 +848,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('复制失败: $e'),
+          content: Text(
+            AppLocalizations.of(context)!.codeCopyFailed(e.toString()),
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -858,7 +871,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
           _showCopyFeedback ? Icons.check : Icons.copy,
           key: ValueKey<bool>(_showCopyFeedback),
           size: 20,
-          semanticLabel: _showCopyFeedback ? '已复制' : '复制',
+          semanticLabel: _showCopyFeedback
+              ? AppLocalizations.of(context)!.codeCopied
+              : AppLocalizations.of(context)!.codeCopy,
         ),
       ),
     );
@@ -874,8 +889,8 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       if (widget.code.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('代码为空，无法保存'),
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.codeEmptySave),
               duration: Duration(seconds: 3),
             ),
           );
@@ -885,7 +900,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
 
       final bytes = Uint8List.fromList(utf8.encode(widget.code));
       final outputUri = await saveFileWithType(
-        dialogTitle: '保存代码',
+        dialogTitle: AppLocalizations.of(context)!.codeSaveTitle,
         fileName: 'code.${_primaryExtension()}',
         extensions: _saveExtensions(),
         bytes: bytes,
@@ -895,7 +910,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到: $outputPath'),
+            content: Text(
+              AppLocalizations.of(context)!.codeSavedTo(outputPath),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -904,7 +921,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.codeSaveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );

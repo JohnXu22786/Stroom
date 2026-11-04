@@ -1553,6 +1553,2599 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatThinkingNumbered(int index) {
     return '思考 $index';
   }
+
+  @override
+  String get taskFlowUiDiscardTitle => '放弃未保存的更改？';
+
+  @override
+  String get taskFlowUiDiscardBody => '返回后，所有未保存的更改将会丢失。';
+
+  @override
+  String get taskFlowUiContinueEditing => '继续编辑';
+
+  @override
+  String get taskFlowUiDiscard => '放弃';
+
+  @override
+  String get taskFlowUiUndo => '撤销';
+
+  @override
+  String get taskFlowUiSave => '保存';
+
+  @override
+  String get taskFlowUiNameHint => '输入任务流名称';
+
+  @override
+  String get taskFlowUiDescriptionHint => '添加描述（可选）';
+
+  @override
+  String get taskFlowUiNameRequired => '请输入任务流名称';
+
+  @override
+  String taskFlowUiStepRequired(Object index, Object message) {
+    return '步骤 $index：$message';
+  }
+
+  @override
+  String taskFlowUiParameterRequired(Object block, Object parameter) {
+    return '「$block」的「$parameter」为必填项';
+  }
+
+  @override
+  String get taskFlowUiSaveFailed => '保存失败，更改仍保留，请重试';
+
+  @override
+  String get taskFlowUiRetry => '重试';
+
+  @override
+  String get taskFlowUiUpdated => '任务流已更新';
+
+  @override
+  String get taskFlowUiCreated => '任务流已创建';
+
+  @override
+  String get taskFlowUiTitle => '任务流';
+
+  @override
+  String get taskFlowUiNotFound => '任务未找到';
+
+  @override
+  String get taskFlowUiBack => '返回';
+
+  @override
+  String get taskFlowUiEdit => '编辑';
+
+  @override
+  String taskFlowUiInput(Object label) {
+    return '输入（$label）';
+  }
+
+  @override
+  String get taskFlowUiInputHint => '输入文本或链接';
+
+  @override
+  String get taskFlowUiStart => '开始任务流';
+
+  @override
+  String get taskFlowUiNoInput => '暂无输入，点击下方按钮添加网页资源 URL';
+
+  @override
+  String get taskFlowUiAddResource => '添加网页资源';
+
+  @override
+  String get taskFlowUiUrlHint => '请输入视频/音频网页URL';
+
+  @override
+  String get taskFlowUiDeleteInput => '删除此输入';
+
+  @override
+  String get taskFlowUiHour => '时';
+
+  @override
+  String get taskFlowUiMinute => '分';
+
+  @override
+  String get taskFlowUiSecond => '秒';
+
+  @override
+  String get taskFlowUiPreview => '预览: ';
+
+  @override
+  String get taskFlowUiDurationFormat => '时:分:秒';
+
+  @override
+  String get taskFlowUiDurationHint => '可选：按时长筛选视频资源。留空则展示全部资源供选择';
+
+  @override
+  String get taskFlowUiSelectImages => '选择图片（可多选）';
+
+  @override
+  String get taskFlowUiSelectAudio => '选择音频（可多选）';
+
+  @override
+  String get taskFlowUiSelectFiles => '选择文件（可多选）';
+
+  @override
+  String get taskFlowUiSelectVideo => '选择视频（可多选）';
+
+  @override
+  String get taskFlowUiRemove => '移除';
+
+  @override
+  String taskFlowUiRemovedFileCleanupFailed(Object error) {
+    return '清理已移除文件失败：$error';
+  }
+
+  @override
+  String get taskFlowUiInitialInput => '0. 初始输入';
+
+  @override
+  String taskFlowUiInputType(Object type) {
+    return '输入类型: $type';
+  }
+
+  @override
+  String get taskFlowUiUserFlowInput => '用户运行任务流时输入';
+
+  @override
+  String taskFlowUiBlockInput(Object type) {
+    return '输入: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutput(Object type) {
+    return '输出: $type';
+  }
+
+  @override
+  String get taskFlowUiParameters => '参数:';
+
+  @override
+  String get taskFlowUiClose => '关闭';
+
+  @override
+  String get taskFlowUiSelectAppImages => '选择应用内图片（可多选）';
+
+  @override
+  String get taskFlowUiNoImages => '暂无图片';
+
+  @override
+  String get taskFlowUiSelectAppAudio => '选择应用内音频（可多选）';
+
+  @override
+  String get taskFlowUiNoAudio => '暂无音频';
+
+  @override
+  String get taskFlowUiSelectAppVideo => '选择应用内视频（可多选）';
+
+  @override
+  String get taskFlowUiNoVideo => '暂无视频';
+
+  @override
+  String taskFlowUiFileSelectFailed(Object error) {
+    return '选择文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiFileTooLarge(Object limit, Object name) {
+    return '「$name」超过 $limit MB，请选择较小文件';
+  }
+
+  @override
+  String taskFlowUiFileUnreadable(Object name) {
+    return '「$name」为空或无法读取';
+  }
+
+  @override
+  String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
+
+  @override
+  String get taskFlowUiQueuedOne => '任务流已加入队列';
+
+  @override
+  String taskFlowUiQueuedMany(Object count) {
+    return '已将 $count 个任务流加入队列';
+  }
+
+  @override
+  String get taskFlowUiRunTitle => '本次运行';
+
+  @override
+  String get taskFlowUiCancelBatch => '取消整个批次';
+
+  @override
+  String get taskFlowUiRestoringRecords => '正在恢复任务流记录…';
+
+  @override
+  String get taskFlowUiRecordsPaused => '任务流记录读取失败，任务操作已暂停';
+
+  @override
+  String get taskFlowUiRecordsCleared => '本次运行记录已清除';
+
+  @override
+  String taskFlowUiRunsFinished(Object finished, Object total) {
+    return '$finished/$total 个运行已结束';
+  }
+
+  @override
+  String taskFlowUiRecordsRemoved(Object count) {
+    return ' · $count 个记录已清除';
+  }
+
+  @override
+  String get taskFlowUiTemporaryFiles => '临时中间文件';
+
+  @override
+  String get taskFlowUiAddBlock => '添加功能块';
+
+  @override
+  String taskFlowUiInsertBlockBefore(Object index) {
+    return '在步骤 $index 前插入功能块';
+  }
+
+  @override
+  String get taskFlowUiIncompatibleAdjacentBlocks => '没有同时兼容相邻步骤的功能块，请先调整相邻步骤';
+
+  @override
+  String taskFlowUiInsertBeforeStep(Object index) {
+    return '在步骤 $index 前插入';
+  }
+
+  @override
+  String get taskFlowUiUnknown => '未知';
+
+  @override
+  String get taskFlowUiChooseBlock => '选择功能块';
+
+  @override
+  String get taskFlowUiInsertBlock => '插入功能块';
+
+  @override
+  String get taskFlowUiPreviousOutput => '上一步输出';
+
+  @override
+  String taskFlowUiNextStepNeeds(Object label) {
+    return '，下一步需要: $label';
+  }
+
+  @override
+  String get taskFlowUiNoCompatibleBlock => '没有与当前类型兼容的功能块';
+
+  @override
+  String get taskFlowUiReplaceBlock => '替换功能块';
+
+  @override
+  String get taskFlowUiBlockCompatibility => '只能替换为输入输出兼容的功能块（同类输入输出）';
+
+  @override
+  String get taskFlowUiTemporaryCleanupTooltip => '下一个步骤成功保存结果后清理；最终步骤始终保留';
+
+  @override
+  String get taskFlowUiSetParameters => '设置参数';
+
+  @override
+  String get taskFlowUiReplace => '替换';
+
+  @override
+  String get taskFlowUiViewParameters => '点击查看参数';
+
+  @override
+  String get taskFlowUiTapSetParameters => '点击设置参数';
+
+  @override
+  String taskFlowUiUnknownBlockType(Object name) {
+    return '未知功能块: $name';
+  }
+
+  @override
+  String get taskFlowUiBlockUnregistered => '该功能块类型未注册';
+
+  @override
+  String taskFlowUiStepActions(Object index) {
+    return '步骤 $index 操作';
+  }
+
+  @override
+  String get taskFlowUiInsertBefore => '在前面插入';
+
+  @override
+  String get taskFlowUiInsertAfter => '在后面插入';
+
+  @override
+  String get taskFlowUiCopyBlock => '复制功能块';
+
+  @override
+  String get taskFlowUiMoveUp => '上移';
+
+  @override
+  String get taskFlowUiMoveUpDisabled => '上移（已在最前）';
+
+  @override
+  String get taskFlowUiMoveDown => '下移';
+
+  @override
+  String get taskFlowUiMoveDownDisabled => '下移（已在最后）';
+
+  @override
+  String get taskFlowUiDeleteBlock => '删除功能块';
+
+  @override
+  String taskFlowUiInputLabel(Object label) {
+    return '输入: $label';
+  }
+
+  @override
+  String taskFlowUiOutputLabel(Object label) {
+    return '输出: $label';
+  }
+
+  @override
+  String taskFlowUiUnregisteredBlockType(Object name) {
+    return '功能块类型 “$name” 未注册';
+  }
+
+  @override
+  String taskFlowUiBlockSettings(Object label) {
+    return '$label 设置';
+  }
+
+  @override
+  String get taskFlowUiSendToAssistant => '发送给助手的用户消息 = 上一步的输出';
+
+  @override
+  String get taskFlowUiTempSpaceInfo =>
+      '此步骤会输出到任务流的临时空间，下一个步骤成功保存结果后自动清理。原保存文件夹会保留，关闭临时模式后恢复。';
+
+  @override
+  String get taskFlowUiNoExtraParameters => '该功能块无额外参数';
+
+  @override
+  String get taskFlowUiCancel => '取消';
+
+  @override
+  String get taskFlowUiConfirm => '确认';
+
+  @override
+  String get taskFlowUiConfigureModelFirst => '请先配置模型';
+
+  @override
+  String get taskFlowUiModelUnavailable => '模型未选择或已失效，请重新选择';
+
+  @override
+  String taskFlowUiModelIndexed(Object index) {
+    return '模型 $index';
+  }
+
+  @override
+  String get taskFlowUiUnnamedProvider => '未命名供应商';
+
+  @override
+  String get taskFlowUiCustomModelParameters => '模型自定义参数';
+
+  @override
+  String get taskFlowUiTtsVoiceMissing => '所有TTS模型均未配置音色，可手动输入ID';
+
+  @override
+  String get taskFlowUiVoiceUnavailable => '音色已失效，请重新选择';
+
+  @override
+  String get taskFlowUiSelectVoice => '选择音色';
+
+  @override
+  String get taskFlowUiAssistantUnavailable => '助手不存在';
+
+  @override
+  String get taskFlowUiAssistantUseCurrent => '未指定（使用当前选中的助手）';
+
+  @override
+  String get taskFlowUiAssistantDeleted => '配置的助手已删除，请重新选择';
+
+  @override
+  String get taskFlowUiChooseAssistant => '选择助手';
+
+  @override
+  String get taskFlowUiOnlyCustomAssistants => '只能选择\"我的助手\"（在\"聊天 → 助手\"中添加）';
+
+  @override
+  String get taskFlowUiMyAssistants => '我的助手';
+
+  @override
+  String get taskFlowUiNoCustomAssistants => '还没有自定义助手，可在\"聊天 → 助手\"中创建';
+
+  @override
+  String get taskFlowUiYes => '是';
+
+  @override
+  String get taskFlowUiNo => '否';
+
+  @override
+  String get taskFlowUiDefaultRoot => '默认 (根目录)';
+
+  @override
+  String get taskFlowUiSelect => '选择';
+
+  @override
+  String get taskFlowUiSelectSaveFolder => '选择保存文件夹';
+
+  @override
+  String get taskFlowUiCatCatchVideo => '视频';
+
+  @override
+  String get taskFlowUiCatCatchAudio => '音频';
+
+  @override
+  String get taskFlowUiCatCatchEither => '视频或音频（按下游筛选）';
+
+  @override
+  String get taskFlowUiManual => '手动';
+
+  @override
+  String get taskFlowUiAutomatic => '自动';
+
+  @override
+  String get taskFlowUiAutomaticPrompt => '自动并询问';
+
+  @override
+  String get taskFlowUiEditTitle => '编辑任务流';
+
+  @override
+  String get taskFlowUiCreateTitle => '新建任务流';
+
+  @override
+  String taskFlowUiStepNumber(Object index, Object message) {
+    return '步骤 $index：$message';
+  }
+
+  @override
+  String taskFlowUiInputTypeValue(Object type) {
+    return '输入类型: $type';
+  }
+
+  @override
+  String taskFlowUiBlockInputValue(Object type) {
+    return '输入: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutputValue(Object type) {
+    return '输出: $type';
+  }
+
+  @override
+  String taskFlowUiCleanupError(Object error) {
+    return '清理已移除文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiSelectFileError(Object error) {
+    return '选择文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiLargeFile(Object limit, Object name) {
+    return '「$name」超过 $limit MB，请选择较小文件';
+  }
+
+  @override
+  String taskFlowUiUnreadableFile(Object name) {
+    return '「$name」为空或无法读取';
+  }
+
+  @override
+  String get taskFlowUiTemporary => '临时';
+
+  @override
+  String get taskFlowUiTemporaryFileHint => '临时文件（下一步成功后清理）';
+
+  @override
+  String taskFlowUiUnregisteredBlock(Object name) {
+    return '功能块类型 “$name” 未注册';
+  }
+
+  @override
+  String taskFlowUiRunSummary(Object finished, Object total) {
+    return '$finished/$total 个运行已结束';
+  }
+
+  @override
+  String taskFlowUiClearedRecordCount(Object count) {
+    return ' · $count 个记录已清除';
+  }
+
+  @override
+  String taskFlowUiInputOutput(Object input, Object output) {
+    return '输入: $input → 输出: $output';
+  }
+
+  @override
+  String get taskFlowCardTag => '任务流';
+
+  @override
+  String get taskFlowCardQueued => '排队中（等待资源）';
+
+  @override
+  String taskFlowCardCompletedProgress(Object done, Object total) {
+    return '$done/$total 已完成';
+  }
+
+  @override
+  String taskFlowCardCountLabel(Object count, Object label) {
+    return '$count 个$label';
+  }
+
+  @override
+  String get taskFlowCardFailedLabel => '失败';
+
+  @override
+  String get taskFlowCardSkippedLabel => '跳过';
+
+  @override
+  String get taskFlowCardCancelledLabel => '取消';
+
+  @override
+  String get taskFlowCardInterruptedLabel => '中断';
+
+  @override
+  String get taskFlowCardCancelFlow => '取消流程';
+
+  @override
+  String get taskFlowCardRetry => '重试';
+
+  @override
+  String get taskFlowCardCancelBatch => '取消整个批次';
+
+  @override
+  String get taskFlowCardDelete => '删除';
+
+  @override
+  String get taskFlowCardRetryFlow => '重试任务流';
+
+  @override
+  String get taskFlowCardNoSnapshot => '此历史记录没有运行快照，将使用当前流程配置从头运行。';
+
+  @override
+  String get taskFlowCardRetryInfo =>
+      '从头运行会重新下载并调用模型。可按启动时的原配置重试，或明确选择当前最新配置。要复用已完成步骤，请选择“从中断步骤继续”。';
+
+  @override
+  String get taskFlowCardRunLatest => '按最新配置运行';
+
+  @override
+  String get taskFlowCardRetryOriginal => '按原配置重试';
+
+  @override
+  String get taskFlowCardDeleteRecord => '删除任务流记录';
+
+  @override
+  String get taskFlowCardDeleteBatchConfirm =>
+      '删除此运行记录将取消整个批次尚未完成的任务，并清除其子任务记录。确定删除？';
+
+  @override
+  String get taskFlowCardDeleteRunningConfirm => '任务流正在运行，删除将取消其中正在运行的任务。确定删除？';
+
+  @override
+  String get taskFlowCardDeleteRecordConfirm => '确定删除此任务流记录？其子任务记录也会一并删除。';
+
+  @override
+  String get taskFlowCardDeleteConfirm => '确定删除此任务流记录？';
+
+  @override
+  String get taskFlowCardSaveCancelStateError => '任务流取消状态无法保存，请重试删除';
+
+  @override
+  String get taskFlowCardStillRunning => '任务流取消后仍在运行';
+
+  @override
+  String get taskFlowCardSaveDeleteStateError => '任务流记录删除状态无法保存，请重试删除';
+
+  @override
+  String get taskFlowCardConfirm => '确定';
+
+  @override
+  String get taskFlowCardWaiting => '等待中';
+
+  @override
+  String get taskFlowCardRunning => '进行中';
+
+  @override
+  String get taskFlowCardPaused => '已暂停';
+
+  @override
+  String get taskFlowCardCompleted => '已完成';
+
+  @override
+  String get taskFlowCardFailed => '失败';
+
+  @override
+  String get taskFlowCardCanceled => '已取消';
+
+  @override
+  String get taskFlowCardInterrupted => '已中断';
+
+  @override
+  String get taskFlowCardSucceeded => '已跳过';
+
+  @override
+  String get taskFlowCardPause => '暂停流程';
+
+  @override
+  String get taskFlowCardResume => '继续流程';
+
+  @override
+  String get taskFlowCardResumeInterrupted => '从中断步骤继续';
+
+  @override
+  String get taskFlowCardCancel => '取消';
+
+  @override
+  String get unifiedTaskType => '任务类型';
+
+  @override
+  String get unifiedTaskCreatedAt => '创建时间';
+
+  @override
+  String get unifiedTaskCompletedAt => '完成时间';
+
+  @override
+  String get unifiedTaskResultStatus => '结果状态';
+
+  @override
+  String get unifiedTaskPartialResult => '部分结果，内容可能不完整';
+
+  @override
+  String get unifiedTaskErrorDetails => '错误详情';
+
+  @override
+  String get unifiedTaskViewErrorDetails => '查看错误详情';
+
+  @override
+  String get unifiedTaskOcrPerImage => '逐张识别';
+
+  @override
+  String unifiedTaskOcrPageIndex(Object index) {
+    return '第 $index 张';
+  }
+
+  @override
+  String get unifiedTaskOcrPending => '待识别';
+
+  @override
+  String get unifiedTaskOcrRunning => '识别中';
+
+  @override
+  String get unifiedTaskCompleted => '已完成';
+
+  @override
+  String get unifiedTaskIncomplete => '结果不完整';
+
+  @override
+  String get unifiedTaskOcrFailed => '识别失败';
+
+  @override
+  String get unifiedTaskCancelled => '已取消';
+
+  @override
+  String get unifiedTaskWaitingStart => '等待开始...';
+
+  @override
+  String get unifiedTaskSteps => '执行步骤';
+
+  @override
+  String get unifiedTaskStartNow => '立即开始';
+
+  @override
+  String get unifiedTaskOpenFile => '打开文件';
+
+  @override
+  String get unifiedTaskRetrySave => '仅重试保存';
+
+  @override
+  String get unifiedTaskRetryPartialSave => '仅重试保存部分结果';
+
+  @override
+  String get unifiedTaskSavePartialResult => '保存部分结果';
+
+  @override
+  String get unifiedTaskRetry => '重试';
+
+  @override
+  String get unifiedTaskCancel => '取消';
+
+  @override
+  String get unifiedTaskDelete => '删除';
+
+  @override
+  String get unifiedTaskFormatUnsupported => '不支持此格式预览';
+
+  @override
+  String unifiedTaskLoadFailed(Object error) {
+    return '加载失败: $error';
+  }
+
+  @override
+  String unifiedTaskPlaybackFailed(Object error) {
+    return '播放失败: $error';
+  }
+
+  @override
+  String get unifiedTaskAudioFile => '音频文件';
+
+  @override
+  String get unifiedTaskPreviewLoadFailed => '无法加载预览';
+
+  @override
+  String get unifiedTaskUnknownSize => '未知大小';
+
+  @override
+  String get unifiedTaskUnnamedRecording => '未命名录音';
+
+  @override
+  String get unifiedTaskPause => '暂停';
+
+  @override
+  String get unifiedTaskClearTask => '清除任务';
+
+  @override
+  String get unifiedTaskContinue => '继续';
+
+  @override
+  String get unifiedTaskRemoveFromList => '从列表移除';
+
+  @override
+  String get unifiedTaskSynthesisText => '合成文本';
+
+  @override
+  String get unifiedTaskStatus => '状态';
+
+  @override
+  String get unifiedTaskDetails => '详情';
+
+  @override
+  String get unifiedTaskSynthesisError => '合成错误详情';
+
+  @override
+  String get unifiedTaskClose => '关闭';
+
+  @override
+  String get unifiedTaskRawRequestResponse => '原始请求与响应';
+
+  @override
+  String get unifiedTaskRawRequestBody => '原始请求体:';
+
+  @override
+  String get unifiedTaskRawResponseBody => '原始响应体:';
+
+  @override
+  String get commonJustNow => '刚刚';
+
+  @override
+  String commonMinutesAgo(Object count) {
+    return '$count分钟前';
+  }
+
+  @override
+  String commonHoursAgo(Object count) {
+    return '$count小时前';
+  }
+
+  @override
+  String unifiedDurationSeconds(Object seconds) {
+    return '$seconds秒';
+  }
+
+  @override
+  String unifiedDurationMinutesSeconds(Object minutes, Object seconds) {
+    return '$minutes分$seconds秒';
+  }
+
+  @override
+  String unifiedDurationHoursMinutes(Object hours, Object minutes) {
+    return '$hours时$minutes分';
+  }
+
+  @override
+  String get unifiedTaskTypeOcr => '文字识别';
+
+  @override
+  String get unifiedTaskTypeAsr => '音频转写';
+
+  @override
+  String get unifiedTaskTypeAudioSeparation => '音频分离';
+
+  @override
+  String get unifiedTaskTypeChat => '助手对话';
+
+  @override
+  String get unifiedTaskPlayAudio => '播放音频';
+
+  @override
+  String get unifiedTaskPauseAudio => '暂停音频';
+
+  @override
+  String get catcatchFlowActionNotStarted => '任务流操作未执行，请检查流程状态后重试';
+
+  @override
+  String catcatchFlowActionFailed(Object error) {
+    return '任务流操作失败：$error';
+  }
+
+  @override
+  String get catcatchSkipped => '已跳过（无需处理）';
+
+  @override
+  String get catcatchRetryStep => '重试此步骤';
+
+  @override
+  String catcatchCollapseSegments(Object count) {
+    return '收起 $count 个分片';
+  }
+
+  @override
+  String catcatchShowSegments(Object count) {
+    return '显示 $count 个分片';
+  }
+
+  @override
+  String catcatchSelectedResources(Object selected, Object total) {
+    return '已选 $selected/$total 个资源';
+  }
+
+  @override
+  String catcatchDetectedMediaResources(Object count) {
+    return '检测到 $count 个媒体资源';
+  }
+
+  @override
+  String get catcatchFlowSelectOrCombine => '（选择一个资源或合并一组音视频）';
+
+  @override
+  String get catcatchSelectMultiple => '（点击选择，可多选）';
+
+  @override
+  String get catcatchWaitingForResources => '正在等待任务流资源';
+
+  @override
+  String catcatchDownloadSelected(Object count) {
+    return '下载选中的 $count 个资源';
+  }
+
+  @override
+  String get catcatchSelectResources => '请选择要下载的资源';
+
+  @override
+  String get catcatchPossibleSplit => '⚠ 疑似音视频分离';
+
+  @override
+  String get catcatchSplitExplanation =>
+      '检测到此组资源可能是同一个视频的音频和视频分离的流，您可以选择合并音视频，或仅下载其中一种。';
+
+  @override
+  String get catcatchAudioStream => '🎵 音频流';
+
+  @override
+  String get catcatchVideoStream => '🎬 视频流';
+
+  @override
+  String get catcatchMergeAudioVideo => '合并音视频';
+
+  @override
+  String get catcatchVideoOnly => '仅视频';
+
+  @override
+  String get catcatchAudioOnly => '仅音频';
+
+  @override
+  String get catcatchSegmentsPlaylistPreview => '分片需通过播放列表预览';
+
+  @override
+  String get catcatchPreviewAudio => '预览音频';
+
+  @override
+  String get catcatchPreviewVideo => '预览视频';
+
+  @override
+  String catcatchDuration(Object duration) {
+    return '时长: $duration';
+  }
+
+  @override
+  String get catcatchSegment => '分片';
+
+  @override
+  String get catcatchPlaylist => '播放列表';
+
+  @override
+  String get catcatchFullVideo => '整片';
+
+  @override
+  String get catcatchSeparateTracks => '分轨';
+
+  @override
+  String get catcatchPreviewPlaylistOnly => '请通过播放列表预览';
+
+  @override
+  String get catcatchPreviewUnsupported => '不支持预览';
+
+  @override
+  String get catcatchUnknownFormat => '未知格式';
+
+  @override
+  String get catcatchNeedPlaylistProcessing => '需要处理播放列表';
+
+  @override
+  String get catcatchSpecialFormatDetected => '检测到特殊格式';
+
+  @override
+  String catcatchPlaylistInfo(Object format) {
+    return '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。';
+  }
+
+  @override
+  String catcatchFormatInfo(Object format) {
+    return '下载的文件格式为 $format，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。';
+  }
+
+  @override
+  String get catcatchContinueBeforeConfirm => '请先继续流程，再确认格式处理';
+
+  @override
+  String get catcatchAutoProcess => '自动处理';
+
+  @override
+  String get catcatchKeepOriginalFormat => '保留原始格式';
+
+  @override
+  String get catcatchResumeSupported => '支持断点续传';
+
+  @override
+  String get catcatchResumeUnsupported => '该站点不支持断点续传';
+
+  @override
+  String get catcatchPauseDownload => '暂停下载';
+
+  @override
+  String get catcatchResumeDownload => '继续下载';
+
+  @override
+  String get catcatchRestartDownload => '重新下载';
+
+  @override
+  String get catcatchPendingFormatAction => '正在等待任务流资源';
+
+  @override
+  String get quitDialogTitle => '退出应用？';
+
+  @override
+  String quitDialogRunningTasks(Object count) {
+    return '有 $count 个任务正在运行，退出将中断这些任务。确定要退出吗？';
+  }
+
+  @override
+  String get quitDialogNoTasks => '确定要退出 Stroom 吗？';
+
+  @override
+  String get quitDialogCancel => '取消';
+
+  @override
+  String get quitDialogExit => '退出';
+
+  @override
+  String get searchPanelNewConversation => '新对话';
+
+  @override
+  String get searchPanelTitle => '搜索对话';
+
+  @override
+  String get searchPanelHint => '输入关键词...';
+
+  @override
+  String get searchPanelByTitle => '搜标题';
+
+  @override
+  String get searchPanelByContent => '搜内容';
+
+  @override
+  String searchPanelResults(Object count) {
+    return '$count 个结果';
+  }
+
+  @override
+  String get searchPanelPrompt => '输入关键词开始搜索';
+
+  @override
+  String get searchPanelNoResults => '没有找到匹配的对话';
+
+  @override
+  String get topicItemNew => '新话题';
+
+  @override
+  String get topicItemUnpin => '取消置顶';
+
+  @override
+  String get topicItemPin => '置顶';
+
+  @override
+  String get topicItemRename => '重命名';
+
+  @override
+  String get topicItemAutoName => '自动命名';
+
+  @override
+  String get topicItemDelete => '删除';
+
+  @override
+  String get galleryChoiceTitle => '选择图片来源';
+
+  @override
+  String get galleryChoiceDevice => '设备相册';
+
+  @override
+  String get galleryChoiceDeviceDescription => '浏览设备中的照片和视频';
+
+  @override
+  String get galleryChoiceApp => '应用相册';
+
+  @override
+  String get galleryChoiceAppDescription => '从应用内部相册选择';
+
+  @override
+  String get appMediaUnreadable => '无法读取文件';
+
+  @override
+  String appMediaClearSelection(Object count) {
+    return '清除 ($count)';
+  }
+
+  @override
+  String appMediaConfirmSelectionCount(Object count) {
+    return '确定 ($count)';
+  }
+
+  @override
+  String get appMediaConfirmSelection => '确定';
+
+  @override
+  String get appMediaEmptyFolder => '此文件夹为空';
+
+  @override
+  String get appMediaRoot => '返回根目录';
+
+  @override
+  String appMediaParentFolder(Object name) {
+    return '返回: $name';
+  }
+
+  @override
+  String appMediaSelectedFiles(Object count) {
+    return '已选择 $count 个文件';
+  }
+
+  @override
+  String get imagePreviewCrop => '裁剪';
+
+  @override
+  String get imagePreviewEdit => '编辑';
+
+  @override
+  String get imagePreviewLoadFailed => '无法加载图片';
+
+  @override
+  String runningElapsed(Object elapsed) {
+    return '已运行 $elapsed';
+  }
+
+  @override
+  String get chatAttachmentFile => '传文件';
+
+  @override
+  String get chatAttachmentCamera => '拍照';
+
+  @override
+  String get chatAttachmentDeviceGallery => '设备相册';
+
+  @override
+  String get chatAttachmentDeviceFiles => '设备文件';
+
+  @override
+  String get chatAttachmentAppFiles => '应用内文件';
+
+  @override
+  String fileManagerTodayTime(Object time) {
+    return '今天 $time';
+  }
+
+  @override
+  String fileManagerYesterdayTime(Object time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String fileManagerDaysAgoTime(Object days, Object time) {
+    return '$days天前 $time';
+  }
+
+  @override
+  String get markdownGenerating => '正在生成...';
+
+  @override
+  String get htmlPreview => '预览';
+
+  @override
+  String get htmlReturnToCard => '返回卡片';
+
+  @override
+  String get htmlGenerating => '正在生成中...';
+
+  @override
+  String get htmlFullscreen => '全屏查看';
+
+  @override
+  String get htmlViewCode => '查看代码';
+
+  @override
+  String get codeScrollToBottom => '滚动到底部';
+
+  @override
+  String get codeSave => '保存';
+
+  @override
+  String get codeDisableWrap => '取消换行';
+
+  @override
+  String get codeEnableWrap => '换行显示';
+
+  @override
+  String codeCopyFailed(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get codeCopied => '已复制';
+
+  @override
+  String get codeCopy => '复制';
+
+  @override
+  String get codeEmptySave => '代码为空，无法保存';
+
+  @override
+  String get codeSaveTitle => '保存代码';
+
+  @override
+  String codeSavedTo(Object path) {
+    return '已保存到: $path';
+  }
+
+  @override
+  String codeSaveFailed(Object error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get fileManagerCopy => '复制';
+
+  @override
+  String get fileManagerMove => '移动';
+
+  @override
+  String get fileManagerRename => '重命名';
+
+  @override
+  String get fileManagerExport => '导出';
+
+  @override
+  String get fileManagerDelete => '删除';
+
+  @override
+  String get fileManagerAncestorFolders => '祖先文件夹';
+
+  @override
+  String get fileManagerRoot => '根目录';
+
+  @override
+  String fileManagerSelectedItems(Object count) {
+    return '已选择 $count 项';
+  }
+
+  @override
+  String get fileManagerSelectAll => '全选';
+
+  @override
+  String get fileManagerRenameUndo => '上次批量重命名结果与撤销';
+
+  @override
+  String fileManagerSortBy(Object field) {
+    return '排序（$field）';
+  }
+
+  @override
+  String get fileManagerSortCreated => '按创建时间';
+
+  @override
+  String get fileManagerSortModified => '按修改时间';
+
+  @override
+  String get fileManagerSortName => '按文件名';
+
+  @override
+  String get fileManagerSortSize => '按大小';
+
+  @override
+  String get fileManagerListView => '列表视图';
+
+  @override
+  String get fileManagerThumbnailView => '缩略图视图';
+
+  @override
+  String get fileManagerCreateFolder => '创建文件夹';
+
+  @override
+  String get fileManagerRefresh => '刷新列表';
+
+  @override
+  String get fileManagerEmptyFolder => '此文件夹为空';
+
+  @override
+  String get fileManagerNoFiles => '暂无文件';
+
+  @override
+  String get fileManagerBackRoot => '返回根目录';
+
+  @override
+  String fileManagerBackFolder(Object name) {
+    return '返回: $name';
+  }
+
+  @override
+  String get fileManagerMultiSelect => '多选';
+
+  @override
+  String get fileManagerOpen => '打开';
+
+  @override
+  String get fileManagerPreview => '预览';
+
+  @override
+  String fileManagerFolderAndFilesCount(Object files, Object folders) {
+    return '$files 个文件, $folders 个子文件夹';
+  }
+
+  @override
+  String fileManagerSubfoldersCount(Object count) {
+    return '$count 个子文件夹';
+  }
+
+  @override
+  String fileManagerFilesCount(Object count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String get fileManagerEmptyFolderLabel => '空文件夹';
+
+  @override
+  String fileManagerFileExists(Object format, Object name) {
+    return '文件 “$name.$format” 已存在';
+  }
+
+  @override
+  String fileManagerRenameFailed(Object error) {
+    return '重命名失败: $error';
+  }
+
+  @override
+  String get fileManagerChooseTargetFolder => '选择目标文件夹';
+
+  @override
+  String get fileManagerAlreadyAtDestination => '文件已在目标位置';
+
+  @override
+  String get fileManagerMoveNameConflict => '目标文件夹已存在同名文件，移动已取消';
+
+  @override
+  String fileManagerMoveFailed(Object error) {
+    return '移动失败: $error';
+  }
+
+  @override
+  String get fileManagerChooseCopyDestination => '选择复制到的目标文件夹';
+
+  @override
+  String fileManagerCopyFailed(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get fileManagerDeleteConfirmTitle => '确认删除';
+
+  @override
+  String get fileManagerDeleteFileConfirm => '确定要删除此文件吗？此操作不可恢复。';
+
+  @override
+  String get fileManagerCancel => '取消';
+
+  @override
+  String fileManagerDeleteFailed(Object error) {
+    return '删除失败: $error';
+  }
+
+  @override
+  String get fileManagerFolderAlreadyThere => '文件夹已在目标位置，操作已取消';
+
+  @override
+  String get fileManagerFolderConflict => '所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消';
+
+  @override
+  String get fileManagerBatchDeleteTitle => '确认批量删除';
+
+  @override
+  String fileManagerDeleteSelectedConfirm(Object count) {
+    return '确定要删除选中的 $count 项吗？此操作不可恢复。';
+  }
+
+  @override
+  String fileManagerBatchDeleteFailed(Object error) {
+    return '批量删除失败: $error';
+  }
+
+  @override
+  String get fileManagerExportConflict => '所选文件与文件夹的导出路径冲突';
+
+  @override
+  String get fileManagerSelectedAlreadyThere => '所选文件已在目标位置，移动已取消';
+
+  @override
+  String fileManagerBatchMoveFailed(Object error) {
+    return '批量移动失败: $error';
+  }
+
+  @override
+  String get fileManagerCopyConflict => '所选文件中存在同名文件，复制已取消（请逐个复制）';
+
+  @override
+  String fileManagerBatchCopyFailed(Object error) {
+    return '批量复制失败: $error';
+  }
+
+  @override
+  String get fileManagerClosedError => '文件页面已关闭';
+
+  @override
+  String fileManagerBatchRenameFailed(Object error) {
+    return '批量重命名失败：$error';
+  }
+
+  @override
+  String get fileManagerFolderNameHint => '输入文件夹名称';
+
+  @override
+  String get fileManagerCreate => '创建';
+
+  @override
+  String get fileManagerFolderExists => '文件夹已存在';
+
+  @override
+  String fileManagerCreateFolderFailed(Object error) {
+    return '创建文件夹失败: $error';
+  }
+
+  @override
+  String fileManagerFolderCreated(Object name) {
+    return '文件夹 “$name” 创建成功';
+  }
+
+  @override
+  String get fileManagerRenameFolderTitle => '重命名文件夹';
+
+  @override
+  String get fileManagerNewNameHint => '输入新名称';
+
+  @override
+  String get fileManagerTargetFolderConflict => '目标位置已存在同名文件夹，操作已取消';
+
+  @override
+  String get fileManagerMoveFolderTitle => '移动文件夹到…';
+
+  @override
+  String get fileManagerCopyFolderTitle => '复制文件夹到…';
+
+  @override
+  String get fileManagerFolderSelfConflict => '目标位置已存在同名文件夹或为文件夹自身，操作已取消';
+
+  @override
+  String fileManagerDeleteFolderConfirm(Object count, Object name) {
+    return '确定要删除文件夹 “$name” 吗？其中的 $count 个文件也将被删除。';
+  }
+
+  @override
+  String fileManagerDeleteEmptyFolderConfirm(Object name) {
+    return '确定要删除空文件夹 “$name” 吗？';
+  }
+
+  @override
+  String get fileManagerDeleteFolderTitle => '确认删除文件夹';
+
+  @override
+  String fileManagerRefreshFailed(Object error) {
+    return '刷新失败: $error';
+  }
+
+  @override
+  String get fileManagerRefreshed => '文件列表已刷新';
+
+  @override
+  String get fileManagerRenameFileTitle => '重命名文件';
+
+  @override
+  String get fileManagerFormat => '格式';
+
+  @override
+  String get fileManagerFolderAtDestination => '文件夹已在目标位置';
+
+  @override
+  String get folderPickerTitle => '选择文件夹';
+
+  @override
+  String get folderPickerExists => '文件夹已存在';
+
+  @override
+  String folderPickerCreateFailed(Object error) {
+    return '创建文件夹失败: $error';
+  }
+
+  @override
+  String folderPickerRefreshFailed(Object error) {
+    return '刷新文件夹列表失败: $error';
+  }
+
+  @override
+  String get folderPickerInstruction => '单击选中，双击进入查看子文件夹';
+
+  @override
+  String get folderPickerFileName => '文件名';
+
+  @override
+  String get folderPickerFileNameHint => '输入文件名';
+
+  @override
+  String get folderPickerBack => '返回上级';
+
+  @override
+  String folderPickerPath(Object path) {
+    return '根目录 > $path';
+  }
+
+  @override
+  String get folderPickerRoot => '根目录';
+
+  @override
+  String get folderPickerCurrentFolder => '当前文件夹';
+
+  @override
+  String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerExistingFolders => '现有文件夹';
+
+  @override
+  String get folderPickerCreateNew => '创建新文件夹';
+
+  @override
+  String get folderPickerFolderNameHint => '输入文件夹名称';
+
+  @override
+  String get folderPickerCancelCreate => '取消新建';
+
+  @override
+  String get folderPickerCancel => '取消';
+
+  @override
+  String get folderPickerConfirm => '确定';
+
+  @override
+  String batchRunReadFailed(Object error) {
+    return '无法读取文件列表：$error';
+  }
+
+  @override
+  String get batchRunPreparing => '准备中…';
+
+  @override
+  String get batchRunUndo => '撤销';
+
+  @override
+  String get batchRunRename => '重命名';
+
+  @override
+  String batchRunFailedAction(Object label) {
+    return '未能执行$label';
+  }
+
+  @override
+  String batchRunCompletedCount(Object count, Object label) {
+    return '已$label $count 项';
+  }
+
+  @override
+  String batchRunSummary(
+    Object completed,
+    Object failed,
+    Object label,
+    Object remaining,
+  ) {
+    return '$label：成功 $completed 项，失败 $failed 项，剩余 $remaining 项';
+  }
+
+  @override
+  String batchRunFailedItem(Object id, Object name) {
+    return '失败：$id → $name';
+  }
+
+  @override
+  String get batchRunReportCopied => '已复制执行报告';
+
+  @override
+  String get batchRunCopyFailed => '复制失败，请重试';
+
+  @override
+  String batchRunWorking(Object label) {
+    return '正在$label…';
+  }
+
+  @override
+  String get batchRunTitle => '批量重命名结果';
+
+  @override
+  String get batchRunStoppedRetain => '停止后会保留当前已完成的项目，可在结果页撤销。';
+
+  @override
+  String get batchRunFailedRemaining => '失败；后续项目未执行';
+
+  @override
+  String get batchRunUndoInfo => '撤销会恢复本次已成功项目的原名；后续列表变化时将拒绝撤销。';
+
+  @override
+  String get batchRunUncertain => '有项目状态无法确认，请检查文件列表；为避免覆盖，不提供自动撤销。';
+
+  @override
+  String get batchRunUndoing => '正在恢复原名，请稍候';
+
+  @override
+  String get batchRunStopping => '正在停止…';
+
+  @override
+  String get batchRunStopRemaining => '停止后续操作';
+
+  @override
+  String get batchRunCopyReport => '复制报告';
+
+  @override
+  String batchRunUndoRemaining(Object count) {
+    return '继续撤销剩余 $count 项';
+  }
+
+  @override
+  String get batchRunUndoCompleted => '撤销已完成改名';
+
+  @override
+  String get batchRunDone => '完成';
+
+  @override
+  String get codeEditorTitle => '编辑参数值';
+
+  @override
+  String get codeEditorFormat => '格式化';
+
+  @override
+  String get codeEditorCancel => '取消';
+
+  @override
+  String get codeEditorConfirm => '确定';
+
+  @override
+  String get codeEditorInvalidJson => 'JSON 格式有误，请修正后再保存';
+
+  @override
+  String get codeEditorParamPath => '参数名路径（请求时展开为嵌套 JSON）';
+
+  @override
+  String codeEditorErrorPosition(String line, String column, String message) {
+    return '第 $line 行第 $column 列: $message';
+  }
+
+  @override
+  String codeEditorJsonError(String message) {
+    return 'JSON 格式错误: $message';
+  }
+
+  @override
+  String get codeEditorInvalidFormat => 'JSON 格式不正确';
+
+  @override
+  String get toolCallCompacted => '已压缩';
+
+  @override
+  String get mermaidSaveEmpty => 'Mermaid 代码为空，无法保存';
+
+  @override
+  String mermaidFolderLoadFailed(String error) {
+    return '获取文件夹失败: $error';
+  }
+
+  @override
+  String get mermaidSaveTitle => '保存 Mermaid 图表';
+
+  @override
+  String get mermaidSaveHint => '选择或创建文件夹保存 .mmd 文件';
+
+  @override
+  String get mermaidSaveFilenameHint => '输入文件名（自动添加 .mmd 后缀）';
+
+  @override
+  String get mermaidFilenameEmpty => '文件名不能为空';
+
+  @override
+  String mermaidSaveSuccess(String folder, String name) {
+    return '已保存到文本储存区: $folder/$name.mmd';
+  }
+
+  @override
+  String mermaidSaveFailed(String error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get mermaidPrepareEngine => '正在准备渲染引擎...';
+
+  @override
+  String get mermaidRetry => '重试';
+
+  @override
+  String get batchRuleEmpty => '不能为空';
+
+  @override
+  String get batchRuleNumber => '请输入数字';
+
+  @override
+  String get batchRulePositive => '请输入大于 0 的数字';
+
+  @override
+  String batchRuleMin(String min) {
+    return '不能小于 $min';
+  }
+
+  @override
+  String batchRuleMax(String max) {
+    return '不能大于 $max';
+  }
+
+  @override
+  String get batchRulePrefix => '前缀';
+
+  @override
+  String get batchRuleSuffix => '后缀';
+
+  @override
+  String get batchRuleStart => '起始';
+
+  @override
+  String get batchRuleStep => '步长';
+
+  @override
+  String get batchRuleDigits => '位数';
+
+  @override
+  String get batchRuleSeparator => '分隔符';
+
+  @override
+  String get batchRuleRestartFolder => '每个目录重新编号';
+
+  @override
+  String get batchRuleNumberHelp => '编号按预览顺序分配；排除项不占序号。步长可为负数或 0。';
+
+  @override
+  String get batchRuleFind => '查找内容';
+
+  @override
+  String get batchRuleReplace => '替换为（留空删除）';
+
+  @override
+  String get batchRuleCaseSensitive => '区分大小写';
+
+  @override
+  String get batchRuleRegex => '正则表达式';
+
+  @override
+  String get batchRuleFirstOnly => '仅替换首次匹配';
+
+  @override
+  String get batchRuleRegexHelp =>
+      '捕获组：\$1、\$2；完整匹配：\$0；字面 \$：\$\$。例如 ^IMG_(\\d+)\$ → 照片_\$1';
+
+  @override
+  String get batchRuleFindRequired => '填写查找内容后生效。';
+
+  @override
+  String get batchRuleBeginning => '开头';
+
+  @override
+  String get batchRuleEnd => '结尾';
+
+  @override
+  String get batchRulePosition => '指定位置';
+
+  @override
+  String get batchRuleInsertText => '插入文本';
+
+  @override
+  String get batchRuleBeforeChar => '第 N 个字符前';
+
+  @override
+  String get batchRulePositionHelp => '位置从 1 开始；超过末尾时追加。组合 emoji 按一个字符计算。';
+
+  @override
+  String get batchRuleFromBeginning => '从开头';
+
+  @override
+  String get batchRuleFromEnd => '从结尾';
+
+  @override
+  String get batchRuleFromChar => '从第 N 个字符起';
+
+  @override
+  String get batchRuleCount => '数量';
+
+  @override
+  String get batchRuleDeleteHelp => '名称删空后需由后续插入规则补充，才能执行。';
+
+  @override
+  String get batchRuleUpper => '全大写';
+
+  @override
+  String get batchRuleLower => '全小写';
+
+  @override
+  String get batchRuleFirstUpper => '首字母大写';
+
+  @override
+  String get batchRuleTitleCase => '每词首字母大写';
+
+  @override
+  String get batchRuleTemplate => '新名称模板';
+
+  @override
+  String batchRuleTemplateHint(String n, String name) {
+    return '课程_${n}_$name';
+  }
+
+  @override
+  String batchRuleTemplateHelp(
+    String name,
+    String n,
+    String folder,
+    String created,
+    String modified,
+    String ext,
+  ) {
+    return '$name 原名 · $n 序号 · $folder 所在目录名\n$created 创建日期 · $modified 修改日期 · $ext 原扩展名\n日期格式 YYYY-MM-DD；缺少日期时会提示。模板替换整个基础名，扩展名仍自动保留。';
+  }
+
+  @override
+  String get batchRuleTrim => '去掉首尾空白';
+
+  @override
+  String get batchRuleCollapseSpaces => '连续空白合并为一个空格';
+
+  @override
+  String get batchRuleActions => '规则操作';
+
+  @override
+  String get batchRuleDuplicate => '复制规则';
+
+  @override
+  String get batchRuleRemove => '删除规则';
+
+  @override
+  String get batchRuleMoveUp => '上移规则';
+
+  @override
+  String get batchRuleMoveDown => '下移规则';
+
+  @override
+  String get batchDlgSavePreset => '保存重命名方案';
+
+  @override
+  String get batchDlgPresetName => '方案名称';
+
+  @override
+  String get batchDlgPresetHint => '保存规则及顺序，不包含排除项或手动名称';
+
+  @override
+  String get batchDlgCancel => '取消';
+
+  @override
+  String get batchDlgSave => '保存';
+
+  @override
+  String get batchDlgOverwriteTitle => '覆盖已有方案？';
+
+  @override
+  String batchDlgOverwriteBody(String name) {
+    return '将更新“$name”的规则。';
+  }
+
+  @override
+  String get batchDlgOverwrite => '覆盖';
+
+  @override
+  String get batchDlgManagePresets => '管理方案';
+
+  @override
+  String get batchDlgNoPresets => '尚未保存方案';
+
+  @override
+  String get batchDlgDeletePreset => '删除方案';
+
+  @override
+  String get batchDlgDone => '完成';
+
+  @override
+  String get batchDlgEditName => '单独修改名称';
+
+  @override
+  String get batchDlgBaseName => '基础名称';
+
+  @override
+  String get batchDlgOverrideHelp => '此名称覆盖规则结果';
+
+  @override
+  String batchDlgExtensionRetained(String extension) {
+    return '扩展名 .$extension 自动保留';
+  }
+
+  @override
+  String get batchDlgConfirm => '确定';
+
+  @override
+  String get batchDlgHelp => '使用说明';
+
+  @override
+  String get batchDlgClose => '关闭';
+
+  @override
+  String get batchDlgLoadPreset => '加载方案（替换规则并清除手动名称）';
+
+  @override
+  String get batchDlgLoad => '加载方案';
+
+  @override
+  String get batchDlgSaving => '保存中…';
+
+  @override
+  String get batchDlgReset => '重置全部规则与参与项目';
+
+  @override
+  String get batchDlgRuleInstructions => '规则从上到下依次执行；可复制、移动或关闭。扩展名保持不变。';
+
+  @override
+  String get batchDlgSortName => '名称';
+
+  @override
+  String get batchDlgSortCreated => '创建时间';
+
+  @override
+  String get batchDlgSortModified => '修改时间';
+
+  @override
+  String get batchDlgSortSize => '大小';
+
+  @override
+  String get batchDlgAscending => '升序';
+
+  @override
+  String get batchDlgDescending => '降序';
+
+  @override
+  String get batchDlgFolderSort => '文件夹在前；同名按所在目录排序。';
+
+  @override
+  String get batchDlgAddRule => '＋ 添加规则';
+
+  @override
+  String get batchDlgMaxRules => '最多 50 条规则';
+
+  @override
+  String get batchDlgPreviewWorking => '正在计算预览，可继续修改规则或取消…';
+
+  @override
+  String get batchDlgSearch => '搜索原名、新名或所在目录';
+
+  @override
+  String get batchDlgFilterAll => '全部';
+
+  @override
+  String get batchDlgFilterChanged => '有更改';
+
+  @override
+  String get batchDlgFilterErrors => '有问题';
+
+  @override
+  String get batchDlgFilterUnchanged => '未变化';
+
+  @override
+  String get batchDlgFilterExcluded => '已排除';
+
+  @override
+  String get batchDlgParticipants => '选择参与项目';
+
+  @override
+  String get batchDlgIncludeAll => '全部参与';
+
+  @override
+  String get batchDlgOnlyFiles => '仅文件';
+
+  @override
+  String get batchDlgOnlyFolders => '仅文件夹';
+
+  @override
+  String get batchDlgExcludeAll => '全部排除';
+
+  @override
+  String get batchDlgScope => '参与范围';
+
+  @override
+  String get batchDlgCopyList => '复制清单';
+
+  @override
+  String get batchDlgConflictBlock => '同名冲突：阻止执行';
+
+  @override
+  String get batchDlgConflictSuffix => '同名冲突：追加 (2)、(3)…';
+
+  @override
+  String get batchDlgNoMatches => '没有符合筛选条件的项目';
+
+  @override
+  String get batchDlgRoot => '根目录';
+
+  @override
+  String get batchDlgFile => '文件';
+
+  @override
+  String get batchDlgFolder => '文件夹';
+
+  @override
+  String batchDlgTargetFolder(String folder) {
+    return '目标目录：$folder';
+  }
+
+  @override
+  String get batchDlgEditNameTooltip => '单独修改名称';
+
+  @override
+  String get batchDlgRestoreNameTooltip => '恢复规则生成的名称';
+
+  @override
+  String get batchDlgCopied => '已复制完整预览清单（CSV）';
+
+  @override
+  String get batchDlgCopyFailed => '复制失败，请重试';
+
+  @override
+  String get batchDlgHelpTitle => '批量重命名使用说明';
+
+  @override
+  String get batchDlgHelpDismiss => '知道了';
+
+  @override
+  String get batchDlgRulesTab => '规则';
+
+  @override
+  String batchDlgPreviewTab(String count) {
+    return '预览（$count）';
+  }
+
+  @override
+  String batchDlgRenameCount(String count) {
+    return '重命名 $count 项';
+  }
+
+  @override
+  String get batchDlgPresetLoadFailed => '暂时无法读取方案，仍可编辑和执行规则';
+
+  @override
+  String get batchDlgPreviewFailed => '预览计算失败，请调整规则后重试';
+
+  @override
+  String batchDlgSavedName(String name) {
+    return '已保存方案：$name';
+  }
+
+  @override
+  String batchDlgSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String batchDlgDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String get batchDlgSavePresetFallback => '保存方案';
+
+  @override
+  String batchDlgPreviewSummary(
+    String changes,
+    String conflicts,
+    String excluded,
+  ) {
+    return '预览 · $changes 项更改 · $conflicts 项问题 · $excluded 项排除';
+  }
+
+  @override
+  String get batchDlgInvalidInput => '请修正规则中的输入；当前预览尚未采用无效输入。';
+
+  @override
+  String get batchDlgConflictError => '存在冲突或非法名称，无法应用。请调整规则。';
+
+  @override
+  String get batchDlgManualNameStatus => '手动名称';
+
+  @override
+  String get batchDlgPendingRename => '待重命名';
+
+  @override
+  String get batchDlgCsvHeader => '原路径,原名称,目标路径,状态';
+
+  @override
+  String get batchDlgHelpBody =>
+      '1. 选择方案或启用规则，按需复制规则并调整上下顺序。\n\n2. 预览显示实际执行的名称。搜索与筛选只影响显示；取消勾选会排除该项并重新编号。可单独修改名称，或恢复为规则结果。\n\n3. 所有问题解决后才能执行。自动后缀只处理重名，不会覆盖其他文件。互换文件夹名称需要分批改名。\n\n4. 执行中可停止后续项目；当前项目会先完成。完成页显示结果，可撤销本次已完成的改名。列表发生后续变化时会阻止撤销。\n\n仅修改名称及目录路径，文件内容和扩展名保持不变。排除父目录自身的改名不会阻止已勾选子项改名；父目录改名时其内部路径仍会随之移动。';
+
+  @override
+  String batchDlgPreviewCount(String count) {
+    return '预览（$count）';
+  }
+
+  @override
+  String get batchBuiltinPhoto => '照片：日期与编号';
+
+  @override
+  String get batchBuiltinCourse => '课程：统一名称与编号';
+
+  @override
+  String get batchBuiltinDownloads => '下载文件：清理空白';
+
+  @override
+  String get taskListDetail => '详情';
+
+  @override
+  String get taskListOwnershipChecking => '正在确认任务归属';
+
+  @override
+  String get taskListOwnershipFailed => '任务流记录读取失败，操作暂不可用';
+
+  @override
+  String get taskListViewFlow => '查看任务流';
+
+  @override
+  String get taskListPause => '暂停';
+
+  @override
+  String get taskListClear => '清除任务';
+
+  @override
+  String get taskListResume => '继续';
+
+  @override
+  String get taskListRetry => '重试';
+
+  @override
+  String get taskListDismissError => '关闭错误信息';
+
+  @override
+  String get taskListRemove => '从列表移除';
+
+  @override
+  String get taskListSynthesisErrorTitle => '合成错误详情';
+
+  @override
+  String get taskListClose => '关闭';
+
+  @override
+  String get taskListOriginalExchange => '原始请求与响应';
+
+  @override
+  String get taskListOriginalRequest => '原始请求体:';
+
+  @override
+  String get taskListOriginalResponse => '原始响应体:';
+
+  @override
+  String get taskFlowIoTypeText => '文本';
+
+  @override
+  String get taskFlowIoTypeAudio => '音频';
+
+  @override
+  String get taskFlowIoTypeVideo => '视频';
+
+  @override
+  String get taskFlowIoTypeImage => '图片';
+
+  @override
+  String get taskFlowIoTypeLink => '链接';
+
+  @override
+  String get taskFlowIoTypeFile => '文件';
+
+  @override
+  String get taskFlowIoTypeAny => '任意';
+
+  @override
+  String get mermaidZoomOut => '缩小';
+
+  @override
+  String get mermaidZoomIn => '放大';
+
+  @override
+  String get mermaidFullscreen => '全屏';
+
+  @override
+  String get mermaidSaveButton => '保存';
+
+  @override
+  String get mermaidSourceButton => '查看源码';
+
+  @override
+  String get mermaidDiagramSemantic => '查看图表';
+
+  @override
+  String get taskFlowCardCatCatchDeletePersistError => '猫抓子任务删除状态无法保存，请重试';
+
+  @override
+  String get taskFlowCardSynthesisDeletePersistError => '合成子任务删除状态无法保存，请重试';
+
+  @override
+  String get taskFlowCardBackgroundDeletePersistError => '后台子任务删除状态无法保存，请重试';
+
+  @override
+  String get mathParseError => '数学解析错误';
+
+  @override
+  String get mermaidEmptyPlaceholder => '没有可渲染的 Mermaid 代码';
+
+  @override
+  String get mathClose => '关闭';
+
+  @override
+  String get mermaidLoadTimeout => 'Mermaid 加载超时：请检查网络连接后重试';
+
+  @override
+  String get mermaidCdnLoadFailed => 'Mermaid 加载失败：无法访问 cdn.jsdelivr.net';
+
+  @override
+  String get mermaidLoadingDiagram => '图表加载中...';
+
+  @override
+  String get mermaidEngineInitFailed => '图表渲染引擎初始化失败，请重试';
+
+  @override
+  String get mermaidPageTimeout => '页面加载超时，请重试';
+
+  @override
+  String get mermaidCodeLoadFailed => '图表代码加载失败，请重试';
+
+  @override
+  String mermaidPageLoadFailed(String description) {
+    return '页面加载失败: $description';
+  }
+
+  @override
+  String get mermaidLoadingEngine => '加载渲染引擎...';
+
+  @override
+  String get mermaidRenderErrorTitle => '渲染图表时出错';
+
+  @override
+  String get taskFlowOutputVideoAudioDownstream => '视频或音频（按下游筛选）';
+
+  @override
+  String get taskFlowOutputUnknown => '未知';
+
+  @override
+  String batchRunCancelledSummary(
+    String label,
+    String completed,
+    String failed,
+    String remaining,
+  ) {
+    return '$label已停止：成功 $completed 项，失败 $failed 项，未执行 $remaining 项';
+  }
+
+  @override
+  String mermaidRenderErrorPrefix(String message) {
+    return 'Mermaid 渲染错误：$message';
+  }
+
+  @override
+  String mermaidInitializeErrorPrefix(String message) {
+    return 'Mermaid 初始化错误：$message';
+  }
+
+  @override
+  String get mermaidResourceError => 'Mermaid 图表中的资源加载失败。';
+
+  @override
+  String get taskFlowParamRecognitionModel => '识别模型';
+
+  @override
+  String get taskFlowParamSynthesisModel => '合成模型';
+
+  @override
+  String get taskFlowParamSaveFolder => '保存文件夹';
+
+  @override
+  String get taskFlowParamResourceSelection => '资源选择方式';
+
+  @override
+  String get taskFlowParamOutputType => '输出类型';
+
+  @override
+  String get taskFlowParamVideoFolder => '视频保存文件夹';
+
+  @override
+  String get taskFlowParamAudioFolder => '音频保存文件夹';
+
+  @override
+  String get taskFlowParamExpectedDuration => '预期时长';
+
+  @override
+  String get taskFlowParamVoice => '语音';
+
+  @override
+  String get taskFlowParamSpeechRate => '语速';
+
+  @override
+  String get taskFlowParamAssistant => '助手';
+
+  @override
+  String get taskFlowHintResourceSelection =>
+      '手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。';
+
+  @override
+  String get taskFlowHintOutputType =>
+      '视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。';
+
+  @override
+  String get taskFlowHintExpectedDuration => '按视频时长筛选，留空表示不筛选。';
+
+  @override
+  String get taskFlowHintVoice => '选择音色（选择后自动切换到对应模型）。';
+
+  @override
+  String get taskFlowUiUnsupportedBlockStep => '此功能块类型已不受支持，请替换或删除此步骤。';
+
+  @override
+  String taskFlowUiDownstreamTypeMismatch(String requiredType) {
+    return '下一步需要$requiredType。下载资源可输出视频或音频，请修改下一步或输出策略。';
+  }
+
+  @override
+  String taskFlowUiAnyTypeMismatch(String source, String block) {
+    return '$source为任意类型，但“$block”需要明确的文本、链接、图片、音频、视频或文件类型。请修改输入类型、移动或替换功能块，或撤销更改。';
+  }
+
+  @override
+  String taskFlowUiTypeMismatch(
+    String source,
+    String actualType,
+    String block,
+    String requiredType,
+  ) {
+    return '$source为$actualType，但“$block”需要$requiredType。请修改输入类型、移动或替换功能块，或撤销更改。';
+  }
+
+  @override
+  String get fileManagerSortFieldCreated => '创建时间';
+
+  @override
+  String get fileManagerSortFieldModified => '修改时间';
+
+  @override
+  String get fileManagerSortFieldName => '文件名';
+
+  @override
+  String get fileManagerSortFieldSize => '大小';
+
+  @override
+  String get fileManagerSortDateNewest => '新到旧';
+
+  @override
+  String get fileManagerSortDateOldest => '旧到新';
+
+  @override
+  String get fileManagerSortSizeLargest => '大到小';
+
+  @override
+  String get fileManagerSortSizeSmallest => '小到大';
+
+  @override
+  String get catcatchStatusRunning => '运行中';
+
+  @override
+  String get catcatchStatusCompleted => '已完成';
+
+  @override
+  String get catcatchStatusFailed => '失败';
+
+  @override
+  String get catcatchStatusPaused => '已暂停';
+
+  @override
+  String get catcatchStatusWaiting => '等待中';
+
+  @override
+  String get catcatchStepFetching => '获取网页内容';
+
+  @override
+  String get catcatchStepAnalyzing => '分析媒体资源';
+
+  @override
+  String get catcatchStepParsingPlaylist => '解析播放列表';
+
+  @override
+  String get catcatchStepFiltering => '按时长筛选';
+
+  @override
+  String get catcatchStepUserSelecting => '等待用户选择';
+
+  @override
+  String get catcatchStepDownloading => '下载';
+
+  @override
+  String get catcatchStepConverting => '转码/合并';
+
+  @override
+  String get catcatchStepSaving => '保存到本地';
+
+  @override
+  String get bgStepConnectServer => '连接服务器';
+
+  @override
+  String get bgStepUploadImage => '上传图片';
+
+  @override
+  String get bgStepWaitRecognition => '等待识别结果';
+
+  @override
+  String get bgStepParseResult => '解析结果';
+
+  @override
+  String get bgStepSaveFile => '保存文件';
+
+  @override
+  String get bgStepUploadAudio => '上传音频';
+
+  @override
+  String get bgStepTranscribing => '转写中';
+
+  @override
+  String get bgStepReceiveResult => '接收结果';
+
+  @override
+  String get bgStepSeparateAudio => '分离音频';
+
+  @override
+  String get bgStepSaveToFile => '保存到文件';
+
+  @override
+  String get bgStepSendRequest => '发送请求';
+
+  @override
+  String get bgStepWaitReply => '等待回复';
+
+  @override
+  String get fileManagerSortNameAscending => 'A 到 Z';
+
+  @override
+  String get fileManagerSortNameDescending => 'Z 到 A';
+
+  @override
+  String get taskFlowValidationNoSteps => '任务流没有步骤，请先添加功能块。';
+
+  @override
+  String get taskFlowValidationInputRequired => '请添加运行输入。';
+
+  @override
+  String get taskFlowValidationFlowRemoved => '任务流已删除，请重新选择。';
+
+  @override
+  String get taskFlowValidationInputTypeChanged => '初始输入类型已修改，请重新选择运行输入。';
+
+  @override
+  String get taskFlowValidationSnapshotMissing => '旧记录没有运行快照，请选择使用最新配置重试。';
+
+  @override
+  String get taskFlowValidationAssistantModelMissing =>
+      '助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型。';
+
+  @override
+  String get taskFlowValidationSavedFileUnavailable =>
+      '已保存的步骤文件不存在、为空或无法读取，请重新运行。';
+
+  @override
+  String get taskFlowValidationUnsupportedBlock => '功能块已不受支持，请替换或删除此步骤。';
+
+  @override
+  String taskFlowValidationDownstreamMismatch(String requiredType) {
+    return '下一步需要$requiredType。下载资源可输出音频或视频，请修改下一步或输出策略。';
+  }
+
+  @override
+  String taskFlowValidationRequiredParameter(String parameter, String block) {
+    return '“$parameter”为必填项，请在“$block”设置中配置。';
+  }
+
+  @override
+  String taskFlowValidationLegacyModel(String block) {
+    return '旧版模型选择需要确认，请在“$block”设置中重新选择模型。';
+  }
+
+  @override
+  String taskFlowValidationModelUnavailable(String block) {
+    return '模型未选择、已删除或供应商配置不可用，请在“$block”设置中重新选择模型并检查供应商地址和密钥。';
+  }
+
+  @override
+  String taskFlowValidationAssistantUnavailable(String block) {
+    return '助手未选择或已删除，请在“$block”设置中重新选择助手。';
+  }
+
+  @override
+  String get taskFlowValidationAssistantModelUnavailable =>
+      '助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型。';
+
+  @override
+  String taskFlowValidationPolicyInvalid(String block) {
+    return '资源选择策略或输出类型无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationOutputInvalid(String block) {
+    return '输出类型无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationResourcePolicyInvalid(String block) {
+    return '资源选择策略无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationInputFileUnavailable(String index) {
+    return '第 $index 个输入：文件不存在、为空或无法读取，请重新选择文件。';
+  }
+
+  @override
+  String taskFlowValidationInputUrlInvalid(String index) {
+    return '第 $index 个输入：请输入有效的 HTTP 或 HTTPS 链接。';
+  }
+
+  @override
+  String taskFlowValidationInputError(String index, String error) {
+    return '第 $index 个输入：$error';
+  }
+
+  @override
+  String get batchRuleValidationMaxRules => '最多支持 50 条规则。';
+
+  @override
+  String get batchRuleValidationDigits => '编号位数应为 1–12。';
+
+  @override
+  String get batchRuleValidationNumberRange => '编号起始值和步长须在 ±999999999 以内。';
+
+  @override
+  String get batchRuleValidationReplacementLength => '替换规则过长。';
+
+  @override
+  String get batchRuleValidationRegex => '正则表达式无效。';
+
+  @override
+  String get batchRuleValidationDeleteIndex => '删除位置必须从 1 开始。';
+
+  @override
+  String get batchRuleValidationInsertLength => '插入文本过长。';
+
+  @override
+  String get batchRuleValidationTemplateNumber =>
+      '模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内。';
+
+  @override
+  String get batchRuleValidationTemplateLength => '模板过长。';
+
+  @override
+  String get batchRuleValidationTemplateVariable => '未知模板变量或未闭合的大括号。';
+
+  @override
+  String get batchRuleTypeNumber => '编号';
+
+  @override
+  String get batchRuleTypeReplace => '替换';
+
+  @override
+  String get batchRuleTypeInsert => '插入文本';
+
+  @override
+  String get batchRuleTypeDelete => '删除字符';
+
+  @override
+  String get batchRuleTypeCase => '大小写转换';
+
+  @override
+  String get batchRuleTypeTemplate => '命名模板';
+
+  @override
+  String get batchRuleTypeCleanup => '清理空白';
+
+  @override
+  String taskFlowValidationInputEmpty(String index) {
+    return '第 $index 个输入：请输入文本或选择文件。';
+  }
+
+  @override
+  String taskFlowValidationImageTooLarge(String index) {
+    return '第 $index 个输入：图片超过 20 MB，请选择较小的图片。';
+  }
+
+  @override
+  String taskFlowValidationAttachmentTooLarge(String index) {
+    return '第 $index 个输入：附件超过 10 MB，请选择较小的文件。';
+  }
+
+  @override
+  String taskFlowValidationFileTypeMismatch(
+    String index,
+    String actualType,
+    String requiredType,
+  ) {
+    return '第 $index 个输入：文件实际类型为$actualType，需要$requiredType，请重新选择文件。';
+  }
+
+  @override
+  String taskFlowValidationSvgUnsupported(String index) {
+    return '第 $index 个输入：助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG。';
+  }
+
+  @override
+  String taskFlowValidationImageMimeUnsupported(String index, String mime) {
+    return '第 $index 个输入：助手对话不支持 $mime 图片附件，请转换为 PNG、JPEG、GIF 或 WebP。';
+  }
+
+  @override
+  String taskFlowValidationAudioMimeUnsupported(String index, String mime) {
+    return '第 $index 个输入：助手对话不支持 $mime 音频附件，请转换为 MP3、WAV 或 M4A。';
+  }
+
+  @override
+  String taskFlowValidationEndpointMediaUnsupported(String index, String type) {
+    return '第 $index 个输入：此助手的 Anthropic 对话格式不支持$type附件，请选择支持此媒体的助手。';
+  }
+
+  @override
+  String taskFlowValidationEndpointPdfOnly(String index) {
+    return '第 $index 个输入：此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手。';
+  }
+
+  @override
+  String taskFlowValidationImageCompressionFailed(String index) {
+    return '第 $index 个输入：助手对话图片无法压缩到 10 MB 以下，请选择较小图片。';
+  }
+
+  @override
+  String taskFlowValidationTextEncodingFailed(String index) {
+    return '第 $index 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -3102,5 +5695,2598 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String chatThinkingNumbered(int index) {
     return '思考 $index';
+  }
+
+  @override
+  String get taskFlowUiDiscardTitle => '放弃未保存的更改？';
+
+  @override
+  String get taskFlowUiDiscardBody => '返回后，所有未保存的更改将会丢失。';
+
+  @override
+  String get taskFlowUiContinueEditing => '继续编辑';
+
+  @override
+  String get taskFlowUiDiscard => '放弃';
+
+  @override
+  String get taskFlowUiUndo => '撤销';
+
+  @override
+  String get taskFlowUiSave => '保存';
+
+  @override
+  String get taskFlowUiNameHint => '输入任务流名称';
+
+  @override
+  String get taskFlowUiDescriptionHint => '添加描述（可选）';
+
+  @override
+  String get taskFlowUiNameRequired => '请输入任务流名称';
+
+  @override
+  String taskFlowUiStepRequired(Object index, Object message) {
+    return '步骤 $index：$message';
+  }
+
+  @override
+  String taskFlowUiParameterRequired(Object block, Object parameter) {
+    return '「$block」的「$parameter」为必填项';
+  }
+
+  @override
+  String get taskFlowUiSaveFailed => '保存失败，更改仍保留，请重试';
+
+  @override
+  String get taskFlowUiRetry => '重试';
+
+  @override
+  String get taskFlowUiUpdated => '任务流已更新';
+
+  @override
+  String get taskFlowUiCreated => '任务流已创建';
+
+  @override
+  String get taskFlowUiTitle => '任务流';
+
+  @override
+  String get taskFlowUiNotFound => '任务未找到';
+
+  @override
+  String get taskFlowUiBack => '返回';
+
+  @override
+  String get taskFlowUiEdit => '编辑';
+
+  @override
+  String taskFlowUiInput(Object label) {
+    return '输入（$label）';
+  }
+
+  @override
+  String get taskFlowUiInputHint => '输入文本或链接';
+
+  @override
+  String get taskFlowUiStart => '开始任务流';
+
+  @override
+  String get taskFlowUiNoInput => '暂无输入，点击下方按钮添加网页资源 URL';
+
+  @override
+  String get taskFlowUiAddResource => '添加网页资源';
+
+  @override
+  String get taskFlowUiUrlHint => '请输入视频/音频网页URL';
+
+  @override
+  String get taskFlowUiDeleteInput => '删除此输入';
+
+  @override
+  String get taskFlowUiHour => '时';
+
+  @override
+  String get taskFlowUiMinute => '分';
+
+  @override
+  String get taskFlowUiSecond => '秒';
+
+  @override
+  String get taskFlowUiPreview => '预览: ';
+
+  @override
+  String get taskFlowUiDurationFormat => '时:分:秒';
+
+  @override
+  String get taskFlowUiDurationHint => '可选：按时长筛选视频资源。留空则展示全部资源供选择';
+
+  @override
+  String get taskFlowUiSelectImages => '选择图片（可多选）';
+
+  @override
+  String get taskFlowUiSelectAudio => '选择音频（可多选）';
+
+  @override
+  String get taskFlowUiSelectFiles => '选择文件（可多选）';
+
+  @override
+  String get taskFlowUiSelectVideo => '选择视频（可多选）';
+
+  @override
+  String get taskFlowUiRemove => '移除';
+
+  @override
+  String taskFlowUiRemovedFileCleanupFailed(Object error) {
+    return '清理已移除文件失败：$error';
+  }
+
+  @override
+  String get taskFlowUiInitialInput => '0. 初始输入';
+
+  @override
+  String taskFlowUiInputType(Object type) {
+    return '输入类型: $type';
+  }
+
+  @override
+  String get taskFlowUiUserFlowInput => '用户运行任务流时输入';
+
+  @override
+  String taskFlowUiBlockInput(Object type) {
+    return '输入: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutput(Object type) {
+    return '输出: $type';
+  }
+
+  @override
+  String get taskFlowUiParameters => '参数:';
+
+  @override
+  String get taskFlowUiClose => '关闭';
+
+  @override
+  String get taskFlowUiSelectAppImages => '选择应用内图片（可多选）';
+
+  @override
+  String get taskFlowUiNoImages => '暂无图片';
+
+  @override
+  String get taskFlowUiSelectAppAudio => '选择应用内音频（可多选）';
+
+  @override
+  String get taskFlowUiNoAudio => '暂无音频';
+
+  @override
+  String get taskFlowUiSelectAppVideo => '选择应用内视频（可多选）';
+
+  @override
+  String get taskFlowUiNoVideo => '暂无视频';
+
+  @override
+  String taskFlowUiFileSelectFailed(Object error) {
+    return '选择文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiFileTooLarge(Object limit, Object name) {
+    return '「$name」超过 $limit MB，请选择较小文件';
+  }
+
+  @override
+  String taskFlowUiFileUnreadable(Object name) {
+    return '「$name」为空或无法读取';
+  }
+
+  @override
+  String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
+
+  @override
+  String get taskFlowUiQueuedOne => '任务流已加入队列';
+
+  @override
+  String taskFlowUiQueuedMany(Object count) {
+    return '已将 $count 个任务流加入队列';
+  }
+
+  @override
+  String get taskFlowUiRunTitle => '本次运行';
+
+  @override
+  String get taskFlowUiCancelBatch => '取消整个批次';
+
+  @override
+  String get taskFlowUiRestoringRecords => '正在恢复任务流记录…';
+
+  @override
+  String get taskFlowUiRecordsPaused => '任务流记录读取失败，任务操作已暂停';
+
+  @override
+  String get taskFlowUiRecordsCleared => '本次运行记录已清除';
+
+  @override
+  String taskFlowUiRunsFinished(Object finished, Object total) {
+    return '$finished/$total 个运行已结束';
+  }
+
+  @override
+  String taskFlowUiRecordsRemoved(Object count) {
+    return ' · $count 个记录已清除';
+  }
+
+  @override
+  String get taskFlowUiTemporaryFiles => '临时中间文件';
+
+  @override
+  String get taskFlowUiAddBlock => '添加功能块';
+
+  @override
+  String taskFlowUiInsertBlockBefore(Object index) {
+    return '在步骤 $index 前插入功能块';
+  }
+
+  @override
+  String get taskFlowUiIncompatibleAdjacentBlocks => '没有同时兼容相邻步骤的功能块，请先调整相邻步骤';
+
+  @override
+  String taskFlowUiInsertBeforeStep(Object index) {
+    return '在步骤 $index 前插入';
+  }
+
+  @override
+  String get taskFlowUiUnknown => '未知';
+
+  @override
+  String get taskFlowUiChooseBlock => '选择功能块';
+
+  @override
+  String get taskFlowUiInsertBlock => '插入功能块';
+
+  @override
+  String get taskFlowUiPreviousOutput => '上一步输出';
+
+  @override
+  String taskFlowUiNextStepNeeds(Object label) {
+    return '，下一步需要: $label';
+  }
+
+  @override
+  String get taskFlowUiNoCompatibleBlock => '没有与当前类型兼容的功能块';
+
+  @override
+  String get taskFlowUiReplaceBlock => '替换功能块';
+
+  @override
+  String get taskFlowUiBlockCompatibility => '只能替换为输入输出兼容的功能块（同类输入输出）';
+
+  @override
+  String get taskFlowUiTemporaryCleanupTooltip => '下一个步骤成功保存结果后清理；最终步骤始终保留';
+
+  @override
+  String get taskFlowUiSetParameters => '设置参数';
+
+  @override
+  String get taskFlowUiReplace => '替换';
+
+  @override
+  String get taskFlowUiViewParameters => '点击查看参数';
+
+  @override
+  String get taskFlowUiTapSetParameters => '点击设置参数';
+
+  @override
+  String taskFlowUiUnknownBlockType(Object name) {
+    return '未知功能块: $name';
+  }
+
+  @override
+  String get taskFlowUiBlockUnregistered => '该功能块类型未注册';
+
+  @override
+  String taskFlowUiStepActions(Object index) {
+    return '步骤 $index 操作';
+  }
+
+  @override
+  String get taskFlowUiInsertBefore => '在前面插入';
+
+  @override
+  String get taskFlowUiInsertAfter => '在后面插入';
+
+  @override
+  String get taskFlowUiCopyBlock => '复制功能块';
+
+  @override
+  String get taskFlowUiMoveUp => '上移';
+
+  @override
+  String get taskFlowUiMoveUpDisabled => '上移（已在最前）';
+
+  @override
+  String get taskFlowUiMoveDown => '下移';
+
+  @override
+  String get taskFlowUiMoveDownDisabled => '下移（已在最后）';
+
+  @override
+  String get taskFlowUiDeleteBlock => '删除功能块';
+
+  @override
+  String taskFlowUiInputLabel(Object label) {
+    return '输入: $label';
+  }
+
+  @override
+  String taskFlowUiOutputLabel(Object label) {
+    return '输出: $label';
+  }
+
+  @override
+  String taskFlowUiUnregisteredBlockType(Object name) {
+    return '功能块类型 “$name” 未注册';
+  }
+
+  @override
+  String taskFlowUiBlockSettings(Object label) {
+    return '$label 设置';
+  }
+
+  @override
+  String get taskFlowUiSendToAssistant => '发送给助手的用户消息 = 上一步的输出';
+
+  @override
+  String get taskFlowUiTempSpaceInfo =>
+      '此步骤会输出到任务流的临时空间，下一个步骤成功保存结果后自动清理。原保存文件夹会保留，关闭临时模式后恢复。';
+
+  @override
+  String get taskFlowUiNoExtraParameters => '该功能块无额外参数';
+
+  @override
+  String get taskFlowUiCancel => '取消';
+
+  @override
+  String get taskFlowUiConfirm => '确认';
+
+  @override
+  String get taskFlowUiConfigureModelFirst => '请先配置模型';
+
+  @override
+  String get taskFlowUiModelUnavailable => '模型未选择或已失效，请重新选择';
+
+  @override
+  String taskFlowUiModelIndexed(Object index) {
+    return '模型 $index';
+  }
+
+  @override
+  String get taskFlowUiUnnamedProvider => '未命名供应商';
+
+  @override
+  String get taskFlowUiCustomModelParameters => '模型自定义参数';
+
+  @override
+  String get taskFlowUiTtsVoiceMissing => '所有TTS模型均未配置音色，可手动输入ID';
+
+  @override
+  String get taskFlowUiVoiceUnavailable => '音色已失效，请重新选择';
+
+  @override
+  String get taskFlowUiSelectVoice => '选择音色';
+
+  @override
+  String get taskFlowUiAssistantUnavailable => '助手不存在';
+
+  @override
+  String get taskFlowUiAssistantUseCurrent => '未指定（使用当前选中的助手）';
+
+  @override
+  String get taskFlowUiAssistantDeleted => '配置的助手已删除，请重新选择';
+
+  @override
+  String get taskFlowUiChooseAssistant => '选择助手';
+
+  @override
+  String get taskFlowUiOnlyCustomAssistants => '只能选择\"我的助手\"（在\"聊天 → 助手\"中添加）';
+
+  @override
+  String get taskFlowUiMyAssistants => '我的助手';
+
+  @override
+  String get taskFlowUiNoCustomAssistants => '还没有自定义助手，可在\"聊天 → 助手\"中创建';
+
+  @override
+  String get taskFlowUiYes => '是';
+
+  @override
+  String get taskFlowUiNo => '否';
+
+  @override
+  String get taskFlowUiDefaultRoot => '默认 (根目录)';
+
+  @override
+  String get taskFlowUiSelect => '选择';
+
+  @override
+  String get taskFlowUiSelectSaveFolder => '选择保存文件夹';
+
+  @override
+  String get taskFlowUiCatCatchVideo => '视频';
+
+  @override
+  String get taskFlowUiCatCatchAudio => '音频';
+
+  @override
+  String get taskFlowUiCatCatchEither => '视频或音频（按下游筛选）';
+
+  @override
+  String get taskFlowUiManual => '手动';
+
+  @override
+  String get taskFlowUiAutomatic => '自动';
+
+  @override
+  String get taskFlowUiAutomaticPrompt => '自动并询问';
+
+  @override
+  String get taskFlowUiEditTitle => '编辑任务流';
+
+  @override
+  String get taskFlowUiCreateTitle => '新建任务流';
+
+  @override
+  String taskFlowUiStepNumber(Object index, Object message) {
+    return '步骤 $index：$message';
+  }
+
+  @override
+  String taskFlowUiInputTypeValue(Object type) {
+    return '输入类型: $type';
+  }
+
+  @override
+  String taskFlowUiBlockInputValue(Object type) {
+    return '输入: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutputValue(Object type) {
+    return '输出: $type';
+  }
+
+  @override
+  String taskFlowUiCleanupError(Object error) {
+    return '清理已移除文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiSelectFileError(Object error) {
+    return '选择文件失败：$error';
+  }
+
+  @override
+  String taskFlowUiLargeFile(Object limit, Object name) {
+    return '「$name」超过 $limit MB，请选择较小文件';
+  }
+
+  @override
+  String taskFlowUiUnreadableFile(Object name) {
+    return '「$name」为空或无法读取';
+  }
+
+  @override
+  String get taskFlowUiTemporary => '临时';
+
+  @override
+  String get taskFlowUiTemporaryFileHint => '临时文件（下一步成功后清理）';
+
+  @override
+  String taskFlowUiUnregisteredBlock(Object name) {
+    return '功能块类型 “$name” 未注册';
+  }
+
+  @override
+  String taskFlowUiRunSummary(Object finished, Object total) {
+    return '$finished/$total 个运行已结束';
+  }
+
+  @override
+  String taskFlowUiClearedRecordCount(Object count) {
+    return ' · $count 个记录已清除';
+  }
+
+  @override
+  String taskFlowUiInputOutput(Object input, Object output) {
+    return '输入: $input → 输出: $output';
+  }
+
+  @override
+  String get taskFlowCardTag => '任务流';
+
+  @override
+  String get taskFlowCardQueued => '排队中（等待资源）';
+
+  @override
+  String taskFlowCardCompletedProgress(Object done, Object total) {
+    return '$done/$total 已完成';
+  }
+
+  @override
+  String taskFlowCardCountLabel(Object count, Object label) {
+    return '$count 个$label';
+  }
+
+  @override
+  String get taskFlowCardFailedLabel => '失败';
+
+  @override
+  String get taskFlowCardSkippedLabel => '跳过';
+
+  @override
+  String get taskFlowCardCancelledLabel => '取消';
+
+  @override
+  String get taskFlowCardInterruptedLabel => '中断';
+
+  @override
+  String get taskFlowCardCancelFlow => '取消流程';
+
+  @override
+  String get taskFlowCardRetry => '重试';
+
+  @override
+  String get taskFlowCardCancelBatch => '取消整个批次';
+
+  @override
+  String get taskFlowCardDelete => '删除';
+
+  @override
+  String get taskFlowCardRetryFlow => '重试任务流';
+
+  @override
+  String get taskFlowCardNoSnapshot => '此历史记录没有运行快照，将使用当前流程配置从头运行。';
+
+  @override
+  String get taskFlowCardRetryInfo =>
+      '从头运行会重新下载并调用模型。可按启动时的原配置重试，或明确选择当前最新配置。要复用已完成步骤，请选择“从中断步骤继续”。';
+
+  @override
+  String get taskFlowCardRunLatest => '按最新配置运行';
+
+  @override
+  String get taskFlowCardRetryOriginal => '按原配置重试';
+
+  @override
+  String get taskFlowCardDeleteRecord => '删除任务流记录';
+
+  @override
+  String get taskFlowCardDeleteBatchConfirm =>
+      '删除此运行记录将取消整个批次尚未完成的任务，并清除其子任务记录。确定删除？';
+
+  @override
+  String get taskFlowCardDeleteRunningConfirm => '任务流正在运行，删除将取消其中正在运行的任务。确定删除？';
+
+  @override
+  String get taskFlowCardDeleteRecordConfirm => '确定删除此任务流记录？其子任务记录也会一并删除。';
+
+  @override
+  String get taskFlowCardDeleteConfirm => '确定删除此任务流记录？';
+
+  @override
+  String get taskFlowCardSaveCancelStateError => '任务流取消状态无法保存，请重试删除';
+
+  @override
+  String get taskFlowCardStillRunning => '任务流取消后仍在运行';
+
+  @override
+  String get taskFlowCardSaveDeleteStateError => '任务流记录删除状态无法保存，请重试删除';
+
+  @override
+  String get taskFlowCardConfirm => '确定';
+
+  @override
+  String get taskFlowCardWaiting => '等待中';
+
+  @override
+  String get taskFlowCardRunning => '进行中';
+
+  @override
+  String get taskFlowCardPaused => '已暂停';
+
+  @override
+  String get taskFlowCardCompleted => '已完成';
+
+  @override
+  String get taskFlowCardFailed => '失败';
+
+  @override
+  String get taskFlowCardCanceled => '已取消';
+
+  @override
+  String get taskFlowCardInterrupted => '已中断';
+
+  @override
+  String get taskFlowCardSucceeded => '已跳过';
+
+  @override
+  String get taskFlowCardPause => '暂停流程';
+
+  @override
+  String get taskFlowCardResume => '继续流程';
+
+  @override
+  String get taskFlowCardResumeInterrupted => '从中断步骤继续';
+
+  @override
+  String get taskFlowCardCancel => '取消';
+
+  @override
+  String get unifiedTaskType => '任务类型';
+
+  @override
+  String get unifiedTaskCreatedAt => '创建时间';
+
+  @override
+  String get unifiedTaskCompletedAt => '完成时间';
+
+  @override
+  String get unifiedTaskResultStatus => '结果状态';
+
+  @override
+  String get unifiedTaskPartialResult => '部分结果，内容可能不完整';
+
+  @override
+  String get unifiedTaskErrorDetails => '错误详情';
+
+  @override
+  String get unifiedTaskViewErrorDetails => '查看错误详情';
+
+  @override
+  String get unifiedTaskOcrPerImage => '逐张识别';
+
+  @override
+  String unifiedTaskOcrPageIndex(Object index) {
+    return '第 $index 张';
+  }
+
+  @override
+  String get unifiedTaskOcrPending => '待识别';
+
+  @override
+  String get unifiedTaskOcrRunning => '识别中';
+
+  @override
+  String get unifiedTaskCompleted => '已完成';
+
+  @override
+  String get unifiedTaskIncomplete => '结果不完整';
+
+  @override
+  String get unifiedTaskOcrFailed => '识别失败';
+
+  @override
+  String get unifiedTaskCancelled => '已取消';
+
+  @override
+  String get unifiedTaskWaitingStart => '等待开始...';
+
+  @override
+  String get unifiedTaskSteps => '执行步骤';
+
+  @override
+  String get unifiedTaskStartNow => '立即开始';
+
+  @override
+  String get unifiedTaskOpenFile => '打开文件';
+
+  @override
+  String get unifiedTaskRetrySave => '仅重试保存';
+
+  @override
+  String get unifiedTaskRetryPartialSave => '仅重试保存部分结果';
+
+  @override
+  String get unifiedTaskSavePartialResult => '保存部分结果';
+
+  @override
+  String get unifiedTaskRetry => '重试';
+
+  @override
+  String get unifiedTaskCancel => '取消';
+
+  @override
+  String get unifiedTaskDelete => '删除';
+
+  @override
+  String get unifiedTaskFormatUnsupported => '不支持此格式预览';
+
+  @override
+  String unifiedTaskLoadFailed(Object error) {
+    return '加载失败: $error';
+  }
+
+  @override
+  String unifiedTaskPlaybackFailed(Object error) {
+    return '播放失败: $error';
+  }
+
+  @override
+  String get unifiedTaskAudioFile => '音频文件';
+
+  @override
+  String get unifiedTaskPreviewLoadFailed => '无法加载预览';
+
+  @override
+  String get unifiedTaskUnknownSize => '未知大小';
+
+  @override
+  String get unifiedTaskUnnamedRecording => '未命名录音';
+
+  @override
+  String get unifiedTaskPause => '暂停';
+
+  @override
+  String get unifiedTaskClearTask => '清除任务';
+
+  @override
+  String get unifiedTaskContinue => '继续';
+
+  @override
+  String get unifiedTaskRemoveFromList => '从列表移除';
+
+  @override
+  String get unifiedTaskSynthesisText => '合成文本';
+
+  @override
+  String get unifiedTaskStatus => '状态';
+
+  @override
+  String get unifiedTaskDetails => '详情';
+
+  @override
+  String get unifiedTaskSynthesisError => '合成错误详情';
+
+  @override
+  String get unifiedTaskClose => '关闭';
+
+  @override
+  String get unifiedTaskRawRequestResponse => '原始请求与响应';
+
+  @override
+  String get unifiedTaskRawRequestBody => '原始请求体:';
+
+  @override
+  String get unifiedTaskRawResponseBody => '原始响应体:';
+
+  @override
+  String get commonJustNow => '刚刚';
+
+  @override
+  String commonMinutesAgo(Object count) {
+    return '$count分钟前';
+  }
+
+  @override
+  String commonHoursAgo(Object count) {
+    return '$count小时前';
+  }
+
+  @override
+  String unifiedDurationSeconds(Object seconds) {
+    return '$seconds秒';
+  }
+
+  @override
+  String unifiedDurationMinutesSeconds(Object minutes, Object seconds) {
+    return '$minutes分$seconds秒';
+  }
+
+  @override
+  String unifiedDurationHoursMinutes(Object hours, Object minutes) {
+    return '$hours时$minutes分';
+  }
+
+  @override
+  String get unifiedTaskTypeOcr => '文字识别';
+
+  @override
+  String get unifiedTaskTypeAsr => '音频转写';
+
+  @override
+  String get unifiedTaskTypeAudioSeparation => '音频分离';
+
+  @override
+  String get unifiedTaskTypeChat => '助手对话';
+
+  @override
+  String get unifiedTaskPlayAudio => '播放音频';
+
+  @override
+  String get unifiedTaskPauseAudio => '暂停音频';
+
+  @override
+  String get catcatchFlowActionNotStarted => '任务流操作未执行，请检查流程状态后重试';
+
+  @override
+  String catcatchFlowActionFailed(Object error) {
+    return '任务流操作失败：$error';
+  }
+
+  @override
+  String get catcatchSkipped => '已跳过（无需处理）';
+
+  @override
+  String get catcatchRetryStep => '重试此步骤';
+
+  @override
+  String catcatchCollapseSegments(Object count) {
+    return '收起 $count 个分片';
+  }
+
+  @override
+  String catcatchShowSegments(Object count) {
+    return '显示 $count 个分片';
+  }
+
+  @override
+  String catcatchSelectedResources(Object selected, Object total) {
+    return '已选 $selected/$total 个资源';
+  }
+
+  @override
+  String catcatchDetectedMediaResources(Object count) {
+    return '检测到 $count 个媒体资源';
+  }
+
+  @override
+  String get catcatchFlowSelectOrCombine => '（选择一个资源或合并一组音视频）';
+
+  @override
+  String get catcatchSelectMultiple => '（点击选择，可多选）';
+
+  @override
+  String get catcatchWaitingForResources => '正在等待任务流资源';
+
+  @override
+  String catcatchDownloadSelected(Object count) {
+    return '下载选中的 $count 个资源';
+  }
+
+  @override
+  String get catcatchSelectResources => '请选择要下载的资源';
+
+  @override
+  String get catcatchPossibleSplit => '⚠ 疑似音视频分离';
+
+  @override
+  String get catcatchSplitExplanation =>
+      '检测到此组资源可能是同一个视频的音频和视频分离的流，您可以选择合并音视频，或仅下载其中一种。';
+
+  @override
+  String get catcatchAudioStream => '🎵 音频流';
+
+  @override
+  String get catcatchVideoStream => '🎬 视频流';
+
+  @override
+  String get catcatchMergeAudioVideo => '合并音视频';
+
+  @override
+  String get catcatchVideoOnly => '仅视频';
+
+  @override
+  String get catcatchAudioOnly => '仅音频';
+
+  @override
+  String get catcatchSegmentsPlaylistPreview => '分片需通过播放列表预览';
+
+  @override
+  String get catcatchPreviewAudio => '预览音频';
+
+  @override
+  String get catcatchPreviewVideo => '预览视频';
+
+  @override
+  String catcatchDuration(Object duration) {
+    return '时长: $duration';
+  }
+
+  @override
+  String get catcatchSegment => '分片';
+
+  @override
+  String get catcatchPlaylist => '播放列表';
+
+  @override
+  String get catcatchFullVideo => '整片';
+
+  @override
+  String get catcatchSeparateTracks => '分轨';
+
+  @override
+  String get catcatchPreviewPlaylistOnly => '请通过播放列表预览';
+
+  @override
+  String get catcatchPreviewUnsupported => '不支持预览';
+
+  @override
+  String get catcatchUnknownFormat => '未知格式';
+
+  @override
+  String get catcatchNeedPlaylistProcessing => '需要处理播放列表';
+
+  @override
+  String get catcatchSpecialFormatDetected => '检测到特殊格式';
+
+  @override
+  String catcatchPlaylistInfo(Object format) {
+    return '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。';
+  }
+
+  @override
+  String catcatchFormatInfo(Object format) {
+    return '下载的文件格式为 $format，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。';
+  }
+
+  @override
+  String get catcatchContinueBeforeConfirm => '请先继续流程，再确认格式处理';
+
+  @override
+  String get catcatchAutoProcess => '自动处理';
+
+  @override
+  String get catcatchKeepOriginalFormat => '保留原始格式';
+
+  @override
+  String get catcatchResumeSupported => '支持断点续传';
+
+  @override
+  String get catcatchResumeUnsupported => '该站点不支持断点续传';
+
+  @override
+  String get catcatchPauseDownload => '暂停下载';
+
+  @override
+  String get catcatchResumeDownload => '继续下载';
+
+  @override
+  String get catcatchRestartDownload => '重新下载';
+
+  @override
+  String get catcatchPendingFormatAction => '正在等待任务流资源';
+
+  @override
+  String get quitDialogTitle => '退出应用？';
+
+  @override
+  String quitDialogRunningTasks(Object count) {
+    return '有 $count 个任务正在运行，退出将中断这些任务。确定要退出吗？';
+  }
+
+  @override
+  String get quitDialogNoTasks => '确定要退出 Stroom 吗？';
+
+  @override
+  String get quitDialogCancel => '取消';
+
+  @override
+  String get quitDialogExit => '退出';
+
+  @override
+  String get searchPanelNewConversation => '新对话';
+
+  @override
+  String get searchPanelTitle => '搜索对话';
+
+  @override
+  String get searchPanelHint => '输入关键词...';
+
+  @override
+  String get searchPanelByTitle => '搜标题';
+
+  @override
+  String get searchPanelByContent => '搜内容';
+
+  @override
+  String searchPanelResults(Object count) {
+    return '$count 个结果';
+  }
+
+  @override
+  String get searchPanelPrompt => '输入关键词开始搜索';
+
+  @override
+  String get searchPanelNoResults => '没有找到匹配的对话';
+
+  @override
+  String get topicItemNew => '新话题';
+
+  @override
+  String get topicItemUnpin => '取消置顶';
+
+  @override
+  String get topicItemPin => '置顶';
+
+  @override
+  String get topicItemRename => '重命名';
+
+  @override
+  String get topicItemAutoName => '自动命名';
+
+  @override
+  String get topicItemDelete => '删除';
+
+  @override
+  String get galleryChoiceTitle => '选择图片来源';
+
+  @override
+  String get galleryChoiceDevice => '设备相册';
+
+  @override
+  String get galleryChoiceDeviceDescription => '浏览设备中的照片和视频';
+
+  @override
+  String get galleryChoiceApp => '应用相册';
+
+  @override
+  String get galleryChoiceAppDescription => '从应用内部相册选择';
+
+  @override
+  String get appMediaUnreadable => '无法读取文件';
+
+  @override
+  String appMediaClearSelection(Object count) {
+    return '清除 ($count)';
+  }
+
+  @override
+  String appMediaConfirmSelectionCount(Object count) {
+    return '确定 ($count)';
+  }
+
+  @override
+  String get appMediaConfirmSelection => '确定';
+
+  @override
+  String get appMediaEmptyFolder => '此文件夹为空';
+
+  @override
+  String get appMediaRoot => '返回根目录';
+
+  @override
+  String appMediaParentFolder(Object name) {
+    return '返回: $name';
+  }
+
+  @override
+  String appMediaSelectedFiles(Object count) {
+    return '已选择 $count 个文件';
+  }
+
+  @override
+  String get imagePreviewCrop => '裁剪';
+
+  @override
+  String get imagePreviewEdit => '编辑';
+
+  @override
+  String get imagePreviewLoadFailed => '无法加载图片';
+
+  @override
+  String runningElapsed(Object elapsed) {
+    return '已运行 $elapsed';
+  }
+
+  @override
+  String get chatAttachmentFile => '传文件';
+
+  @override
+  String get chatAttachmentCamera => '拍照';
+
+  @override
+  String get chatAttachmentDeviceGallery => '设备相册';
+
+  @override
+  String get chatAttachmentDeviceFiles => '设备文件';
+
+  @override
+  String get chatAttachmentAppFiles => '应用内文件';
+
+  @override
+  String fileManagerTodayTime(Object time) {
+    return '今天 $time';
+  }
+
+  @override
+  String fileManagerYesterdayTime(Object time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String fileManagerDaysAgoTime(Object days, Object time) {
+    return '$days天前 $time';
+  }
+
+  @override
+  String get markdownGenerating => '正在生成...';
+
+  @override
+  String get htmlPreview => '预览';
+
+  @override
+  String get htmlReturnToCard => '返回卡片';
+
+  @override
+  String get htmlGenerating => '正在生成中...';
+
+  @override
+  String get htmlFullscreen => '全屏查看';
+
+  @override
+  String get htmlViewCode => '查看代码';
+
+  @override
+  String get codeScrollToBottom => '滚动到底部';
+
+  @override
+  String get codeSave => '保存';
+
+  @override
+  String get codeDisableWrap => '取消换行';
+
+  @override
+  String get codeEnableWrap => '换行显示';
+
+  @override
+  String codeCopyFailed(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get codeCopied => '已复制';
+
+  @override
+  String get codeCopy => '复制';
+
+  @override
+  String get codeEmptySave => '代码为空，无法保存';
+
+  @override
+  String get codeSaveTitle => '保存代码';
+
+  @override
+  String codeSavedTo(Object path) {
+    return '已保存到: $path';
+  }
+
+  @override
+  String codeSaveFailed(Object error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get fileManagerCopy => '复制';
+
+  @override
+  String get fileManagerMove => '移动';
+
+  @override
+  String get fileManagerRename => '重命名';
+
+  @override
+  String get fileManagerExport => '导出';
+
+  @override
+  String get fileManagerDelete => '删除';
+
+  @override
+  String get fileManagerAncestorFolders => '祖先文件夹';
+
+  @override
+  String get fileManagerRoot => '根目录';
+
+  @override
+  String fileManagerSelectedItems(Object count) {
+    return '已选择 $count 项';
+  }
+
+  @override
+  String get fileManagerSelectAll => '全选';
+
+  @override
+  String get fileManagerRenameUndo => '上次批量重命名结果与撤销';
+
+  @override
+  String fileManagerSortBy(Object field) {
+    return '排序（$field）';
+  }
+
+  @override
+  String get fileManagerSortCreated => '按创建时间';
+
+  @override
+  String get fileManagerSortModified => '按修改时间';
+
+  @override
+  String get fileManagerSortName => '按文件名';
+
+  @override
+  String get fileManagerSortSize => '按大小';
+
+  @override
+  String get fileManagerListView => '列表视图';
+
+  @override
+  String get fileManagerThumbnailView => '缩略图视图';
+
+  @override
+  String get fileManagerCreateFolder => '创建文件夹';
+
+  @override
+  String get fileManagerRefresh => '刷新列表';
+
+  @override
+  String get fileManagerEmptyFolder => '此文件夹为空';
+
+  @override
+  String get fileManagerNoFiles => '暂无文件';
+
+  @override
+  String get fileManagerBackRoot => '返回根目录';
+
+  @override
+  String fileManagerBackFolder(Object name) {
+    return '返回: $name';
+  }
+
+  @override
+  String get fileManagerMultiSelect => '多选';
+
+  @override
+  String get fileManagerOpen => '打开';
+
+  @override
+  String get fileManagerPreview => '预览';
+
+  @override
+  String fileManagerFolderAndFilesCount(Object files, Object folders) {
+    return '$files 个文件, $folders 个子文件夹';
+  }
+
+  @override
+  String fileManagerSubfoldersCount(Object count) {
+    return '$count 个子文件夹';
+  }
+
+  @override
+  String fileManagerFilesCount(Object count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String get fileManagerEmptyFolderLabel => '空文件夹';
+
+  @override
+  String fileManagerFileExists(Object format, Object name) {
+    return '文件 “$name.$format” 已存在';
+  }
+
+  @override
+  String fileManagerRenameFailed(Object error) {
+    return '重命名失败: $error';
+  }
+
+  @override
+  String get fileManagerChooseTargetFolder => '选择目标文件夹';
+
+  @override
+  String get fileManagerAlreadyAtDestination => '文件已在目标位置';
+
+  @override
+  String get fileManagerMoveNameConflict => '目标文件夹已存在同名文件，移动已取消';
+
+  @override
+  String fileManagerMoveFailed(Object error) {
+    return '移动失败: $error';
+  }
+
+  @override
+  String get fileManagerChooseCopyDestination => '选择复制到的目标文件夹';
+
+  @override
+  String fileManagerCopyFailed(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get fileManagerDeleteConfirmTitle => '确认删除';
+
+  @override
+  String get fileManagerDeleteFileConfirm => '确定要删除此文件吗？此操作不可恢复。';
+
+  @override
+  String get fileManagerCancel => '取消';
+
+  @override
+  String fileManagerDeleteFailed(Object error) {
+    return '删除失败: $error';
+  }
+
+  @override
+  String get fileManagerFolderAlreadyThere => '文件夹已在目标位置，操作已取消';
+
+  @override
+  String get fileManagerFolderConflict => '所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消';
+
+  @override
+  String get fileManagerBatchDeleteTitle => '确认批量删除';
+
+  @override
+  String fileManagerDeleteSelectedConfirm(Object count) {
+    return '确定要删除选中的 $count 项吗？此操作不可恢复。';
+  }
+
+  @override
+  String fileManagerBatchDeleteFailed(Object error) {
+    return '批量删除失败: $error';
+  }
+
+  @override
+  String get fileManagerExportConflict => '所选文件与文件夹的导出路径冲突';
+
+  @override
+  String get fileManagerSelectedAlreadyThere => '所选文件已在目标位置，移动已取消';
+
+  @override
+  String fileManagerBatchMoveFailed(Object error) {
+    return '批量移动失败: $error';
+  }
+
+  @override
+  String get fileManagerCopyConflict => '所选文件中存在同名文件，复制已取消（请逐个复制）';
+
+  @override
+  String fileManagerBatchCopyFailed(Object error) {
+    return '批量复制失败: $error';
+  }
+
+  @override
+  String get fileManagerClosedError => '文件页面已关闭';
+
+  @override
+  String fileManagerBatchRenameFailed(Object error) {
+    return '批量重命名失败：$error';
+  }
+
+  @override
+  String get fileManagerFolderNameHint => '输入文件夹名称';
+
+  @override
+  String get fileManagerCreate => '创建';
+
+  @override
+  String get fileManagerFolderExists => '文件夹已存在';
+
+  @override
+  String fileManagerCreateFolderFailed(Object error) {
+    return '创建文件夹失败: $error';
+  }
+
+  @override
+  String fileManagerFolderCreated(Object name) {
+    return '文件夹 “$name” 创建成功';
+  }
+
+  @override
+  String get fileManagerRenameFolderTitle => '重命名文件夹';
+
+  @override
+  String get fileManagerNewNameHint => '输入新名称';
+
+  @override
+  String get fileManagerTargetFolderConflict => '目标位置已存在同名文件夹，操作已取消';
+
+  @override
+  String get fileManagerMoveFolderTitle => '移动文件夹到…';
+
+  @override
+  String get fileManagerCopyFolderTitle => '复制文件夹到…';
+
+  @override
+  String get fileManagerFolderSelfConflict => '目标位置已存在同名文件夹或为文件夹自身，操作已取消';
+
+  @override
+  String fileManagerDeleteFolderConfirm(Object count, Object name) {
+    return '确定要删除文件夹 “$name” 吗？其中的 $count 个文件也将被删除。';
+  }
+
+  @override
+  String fileManagerDeleteEmptyFolderConfirm(Object name) {
+    return '确定要删除空文件夹 “$name” 吗？';
+  }
+
+  @override
+  String get fileManagerDeleteFolderTitle => '确认删除文件夹';
+
+  @override
+  String fileManagerRefreshFailed(Object error) {
+    return '刷新失败: $error';
+  }
+
+  @override
+  String get fileManagerRefreshed => '文件列表已刷新';
+
+  @override
+  String get fileManagerRenameFileTitle => '重命名文件';
+
+  @override
+  String get fileManagerFormat => '格式';
+
+  @override
+  String get fileManagerFolderAtDestination => '文件夹已在目标位置';
+
+  @override
+  String get folderPickerTitle => '选择文件夹';
+
+  @override
+  String get folderPickerExists => '文件夹已存在';
+
+  @override
+  String folderPickerCreateFailed(Object error) {
+    return '创建文件夹失败: $error';
+  }
+
+  @override
+  String folderPickerRefreshFailed(Object error) {
+    return '刷新文件夹列表失败: $error';
+  }
+
+  @override
+  String get folderPickerInstruction => '单击选中，双击进入查看子文件夹';
+
+  @override
+  String get folderPickerFileName => '文件名';
+
+  @override
+  String get folderPickerFileNameHint => '输入文件名';
+
+  @override
+  String get folderPickerBack => '返回上级';
+
+  @override
+  String folderPickerPath(Object path) {
+    return '根目录 > $path';
+  }
+
+  @override
+  String get folderPickerRoot => '根目录';
+
+  @override
+  String get folderPickerCurrentFolder => '当前文件夹';
+
+  @override
+  String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerExistingFolders => '现有文件夹';
+
+  @override
+  String get folderPickerCreateNew => '创建新文件夹';
+
+  @override
+  String get folderPickerFolderNameHint => '输入文件夹名称';
+
+  @override
+  String get folderPickerCancelCreate => '取消新建';
+
+  @override
+  String get folderPickerCancel => '取消';
+
+  @override
+  String get folderPickerConfirm => '确定';
+
+  @override
+  String batchRunReadFailed(Object error) {
+    return '无法读取文件列表：$error';
+  }
+
+  @override
+  String get batchRunPreparing => '准备中…';
+
+  @override
+  String get batchRunUndo => '撤销';
+
+  @override
+  String get batchRunRename => '重命名';
+
+  @override
+  String batchRunFailedAction(Object label) {
+    return '未能执行$label';
+  }
+
+  @override
+  String batchRunCompletedCount(Object count, Object label) {
+    return '已$label $count 项';
+  }
+
+  @override
+  String batchRunSummary(
+    Object completed,
+    Object failed,
+    Object label,
+    Object remaining,
+  ) {
+    return '$label：成功 $completed 项，失败 $failed 项，剩余 $remaining 项';
+  }
+
+  @override
+  String batchRunFailedItem(Object id, Object name) {
+    return '失败：$id → $name';
+  }
+
+  @override
+  String get batchRunReportCopied => '已复制执行报告';
+
+  @override
+  String get batchRunCopyFailed => '复制失败，请重试';
+
+  @override
+  String batchRunWorking(Object label) {
+    return '正在$label…';
+  }
+
+  @override
+  String get batchRunTitle => '批量重命名结果';
+
+  @override
+  String get batchRunStoppedRetain => '停止后会保留当前已完成的项目，可在结果页撤销。';
+
+  @override
+  String get batchRunFailedRemaining => '失败；后续项目未执行';
+
+  @override
+  String get batchRunUndoInfo => '撤销会恢复本次已成功项目的原名；后续列表变化时将拒绝撤销。';
+
+  @override
+  String get batchRunUncertain => '有项目状态无法确认，请检查文件列表；为避免覆盖，不提供自动撤销。';
+
+  @override
+  String get batchRunUndoing => '正在恢复原名，请稍候';
+
+  @override
+  String get batchRunStopping => '正在停止…';
+
+  @override
+  String get batchRunStopRemaining => '停止后续操作';
+
+  @override
+  String get batchRunCopyReport => '复制报告';
+
+  @override
+  String batchRunUndoRemaining(Object count) {
+    return '继续撤销剩余 $count 项';
+  }
+
+  @override
+  String get batchRunUndoCompleted => '撤销已完成改名';
+
+  @override
+  String get batchRunDone => '完成';
+
+  @override
+  String get codeEditorTitle => '编辑参数值';
+
+  @override
+  String get codeEditorFormat => '格式化';
+
+  @override
+  String get codeEditorCancel => '取消';
+
+  @override
+  String get codeEditorConfirm => '确定';
+
+  @override
+  String get codeEditorInvalidJson => 'JSON 格式有误，请修正后再保存';
+
+  @override
+  String get codeEditorParamPath => '参数名路径（请求时展开为嵌套 JSON）';
+
+  @override
+  String codeEditorErrorPosition(String line, String column, String message) {
+    return '第 $line 行第 $column 列: $message';
+  }
+
+  @override
+  String codeEditorJsonError(String message) {
+    return 'JSON 格式错误: $message';
+  }
+
+  @override
+  String get codeEditorInvalidFormat => 'JSON 格式不正确';
+
+  @override
+  String get toolCallCompacted => '已压缩';
+
+  @override
+  String get mermaidSaveEmpty => 'Mermaid 代码为空，无法保存';
+
+  @override
+  String mermaidFolderLoadFailed(String error) {
+    return '获取文件夹失败: $error';
+  }
+
+  @override
+  String get mermaidSaveTitle => '保存 Mermaid 图表';
+
+  @override
+  String get mermaidSaveHint => '选择或创建文件夹保存 .mmd 文件';
+
+  @override
+  String get mermaidSaveFilenameHint => '输入文件名（自动添加 .mmd 后缀）';
+
+  @override
+  String get mermaidFilenameEmpty => '文件名不能为空';
+
+  @override
+  String mermaidSaveSuccess(String folder, String name) {
+    return '已保存到文本储存区: $folder/$name.mmd';
+  }
+
+  @override
+  String mermaidSaveFailed(String error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get mermaidPrepareEngine => '正在准备渲染引擎...';
+
+  @override
+  String get mermaidRetry => '重试';
+
+  @override
+  String get batchRuleEmpty => '不能为空';
+
+  @override
+  String get batchRuleNumber => '请输入数字';
+
+  @override
+  String get batchRulePositive => '请输入大于 0 的数字';
+
+  @override
+  String batchRuleMin(String min) {
+    return '不能小于 $min';
+  }
+
+  @override
+  String batchRuleMax(String max) {
+    return '不能大于 $max';
+  }
+
+  @override
+  String get batchRulePrefix => '前缀';
+
+  @override
+  String get batchRuleSuffix => '后缀';
+
+  @override
+  String get batchRuleStart => '起始';
+
+  @override
+  String get batchRuleStep => '步长';
+
+  @override
+  String get batchRuleDigits => '位数';
+
+  @override
+  String get batchRuleSeparator => '分隔符';
+
+  @override
+  String get batchRuleRestartFolder => '每个目录重新编号';
+
+  @override
+  String get batchRuleNumberHelp => '编号按预览顺序分配；排除项不占序号。步长可为负数或 0。';
+
+  @override
+  String get batchRuleFind => '查找内容';
+
+  @override
+  String get batchRuleReplace => '替换为（留空删除）';
+
+  @override
+  String get batchRuleCaseSensitive => '区分大小写';
+
+  @override
+  String get batchRuleRegex => '正则表达式';
+
+  @override
+  String get batchRuleFirstOnly => '仅替换首次匹配';
+
+  @override
+  String get batchRuleRegexHelp =>
+      '捕获组：\$1、\$2；完整匹配：\$0；字面 \$：\$\$。例如 ^IMG_(\\d+)\$ → 照片_\$1';
+
+  @override
+  String get batchRuleFindRequired => '填写查找内容后生效。';
+
+  @override
+  String get batchRuleBeginning => '开头';
+
+  @override
+  String get batchRuleEnd => '结尾';
+
+  @override
+  String get batchRulePosition => '指定位置';
+
+  @override
+  String get batchRuleInsertText => '插入文本';
+
+  @override
+  String get batchRuleBeforeChar => '第 N 个字符前';
+
+  @override
+  String get batchRulePositionHelp => '位置从 1 开始；超过末尾时追加。组合 emoji 按一个字符计算。';
+
+  @override
+  String get batchRuleFromBeginning => '从开头';
+
+  @override
+  String get batchRuleFromEnd => '从结尾';
+
+  @override
+  String get batchRuleFromChar => '从第 N 个字符起';
+
+  @override
+  String get batchRuleCount => '数量';
+
+  @override
+  String get batchRuleDeleteHelp => '名称删空后需由后续插入规则补充，才能执行。';
+
+  @override
+  String get batchRuleUpper => '全大写';
+
+  @override
+  String get batchRuleLower => '全小写';
+
+  @override
+  String get batchRuleFirstUpper => '首字母大写';
+
+  @override
+  String get batchRuleTitleCase => '每词首字母大写';
+
+  @override
+  String get batchRuleTemplate => '新名称模板';
+
+  @override
+  String batchRuleTemplateHint(String n, String name) {
+    return '课程_${n}_$name';
+  }
+
+  @override
+  String batchRuleTemplateHelp(
+    String name,
+    String n,
+    String folder,
+    String created,
+    String modified,
+    String ext,
+  ) {
+    return '$name 原名 · $n 序号 · $folder 所在目录名\n$created 创建日期 · $modified 修改日期 · $ext 原扩展名\n日期格式 YYYY-MM-DD；缺少日期时会提示。模板替换整个基础名，扩展名仍自动保留。';
+  }
+
+  @override
+  String get batchRuleTrim => '去掉首尾空白';
+
+  @override
+  String get batchRuleCollapseSpaces => '连续空白合并为一个空格';
+
+  @override
+  String get batchRuleActions => '规则操作';
+
+  @override
+  String get batchRuleDuplicate => '复制规则';
+
+  @override
+  String get batchRuleRemove => '删除规则';
+
+  @override
+  String get batchRuleMoveUp => '上移规则';
+
+  @override
+  String get batchRuleMoveDown => '下移规则';
+
+  @override
+  String get batchDlgSavePreset => '保存重命名方案';
+
+  @override
+  String get batchDlgPresetName => '方案名称';
+
+  @override
+  String get batchDlgPresetHint => '保存规则及顺序，不包含排除项或手动名称';
+
+  @override
+  String get batchDlgCancel => '取消';
+
+  @override
+  String get batchDlgSave => '保存';
+
+  @override
+  String get batchDlgOverwriteTitle => '覆盖已有方案？';
+
+  @override
+  String batchDlgOverwriteBody(String name) {
+    return '将更新“$name”的规则。';
+  }
+
+  @override
+  String get batchDlgOverwrite => '覆盖';
+
+  @override
+  String get batchDlgManagePresets => '管理方案';
+
+  @override
+  String get batchDlgNoPresets => '尚未保存方案';
+
+  @override
+  String get batchDlgDeletePreset => '删除方案';
+
+  @override
+  String get batchDlgDone => '完成';
+
+  @override
+  String get batchDlgEditName => '单独修改名称';
+
+  @override
+  String get batchDlgBaseName => '基础名称';
+
+  @override
+  String get batchDlgOverrideHelp => '此名称覆盖规则结果';
+
+  @override
+  String batchDlgExtensionRetained(String extension) {
+    return '扩展名 .$extension 自动保留';
+  }
+
+  @override
+  String get batchDlgConfirm => '确定';
+
+  @override
+  String get batchDlgHelp => '使用说明';
+
+  @override
+  String get batchDlgClose => '关闭';
+
+  @override
+  String get batchDlgLoadPreset => '加载方案（替换规则并清除手动名称）';
+
+  @override
+  String get batchDlgLoad => '加载方案';
+
+  @override
+  String get batchDlgSaving => '保存中…';
+
+  @override
+  String get batchDlgReset => '重置全部规则与参与项目';
+
+  @override
+  String get batchDlgRuleInstructions => '规则从上到下依次执行；可复制、移动或关闭。扩展名保持不变。';
+
+  @override
+  String get batchDlgSortName => '名称';
+
+  @override
+  String get batchDlgSortCreated => '创建时间';
+
+  @override
+  String get batchDlgSortModified => '修改时间';
+
+  @override
+  String get batchDlgSortSize => '大小';
+
+  @override
+  String get batchDlgAscending => '升序';
+
+  @override
+  String get batchDlgDescending => '降序';
+
+  @override
+  String get batchDlgFolderSort => '文件夹在前；同名按所在目录排序。';
+
+  @override
+  String get batchDlgAddRule => '＋ 添加规则';
+
+  @override
+  String get batchDlgMaxRules => '最多 50 条规则';
+
+  @override
+  String get batchDlgPreviewWorking => '正在计算预览，可继续修改规则或取消…';
+
+  @override
+  String get batchDlgSearch => '搜索原名、新名或所在目录';
+
+  @override
+  String get batchDlgFilterAll => '全部';
+
+  @override
+  String get batchDlgFilterChanged => '有更改';
+
+  @override
+  String get batchDlgFilterErrors => '有问题';
+
+  @override
+  String get batchDlgFilterUnchanged => '未变化';
+
+  @override
+  String get batchDlgFilterExcluded => '已排除';
+
+  @override
+  String get batchDlgParticipants => '选择参与项目';
+
+  @override
+  String get batchDlgIncludeAll => '全部参与';
+
+  @override
+  String get batchDlgOnlyFiles => '仅文件';
+
+  @override
+  String get batchDlgOnlyFolders => '仅文件夹';
+
+  @override
+  String get batchDlgExcludeAll => '全部排除';
+
+  @override
+  String get batchDlgScope => '参与范围';
+
+  @override
+  String get batchDlgCopyList => '复制清单';
+
+  @override
+  String get batchDlgConflictBlock => '同名冲突：阻止执行';
+
+  @override
+  String get batchDlgConflictSuffix => '同名冲突：追加 (2)、(3)…';
+
+  @override
+  String get batchDlgNoMatches => '没有符合筛选条件的项目';
+
+  @override
+  String get batchDlgRoot => '根目录';
+
+  @override
+  String get batchDlgFile => '文件';
+
+  @override
+  String get batchDlgFolder => '文件夹';
+
+  @override
+  String batchDlgTargetFolder(String folder) {
+    return '目标目录：$folder';
+  }
+
+  @override
+  String get batchDlgEditNameTooltip => '单独修改名称';
+
+  @override
+  String get batchDlgRestoreNameTooltip => '恢复规则生成的名称';
+
+  @override
+  String get batchDlgCopied => '已复制完整预览清单（CSV）';
+
+  @override
+  String get batchDlgCopyFailed => '复制失败，请重试';
+
+  @override
+  String get batchDlgHelpTitle => '批量重命名使用说明';
+
+  @override
+  String get batchDlgHelpDismiss => '知道了';
+
+  @override
+  String get batchDlgRulesTab => '规则';
+
+  @override
+  String batchDlgPreviewTab(String count) {
+    return '预览（$count）';
+  }
+
+  @override
+  String batchDlgRenameCount(String count) {
+    return '重命名 $count 项';
+  }
+
+  @override
+  String get batchDlgPresetLoadFailed => '暂时无法读取方案，仍可编辑和执行规则';
+
+  @override
+  String get batchDlgPreviewFailed => '预览计算失败，请调整规则后重试';
+
+  @override
+  String batchDlgSavedName(String name) {
+    return '已保存方案：$name';
+  }
+
+  @override
+  String batchDlgSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String batchDlgDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String get batchDlgSavePresetFallback => '保存方案';
+
+  @override
+  String batchDlgPreviewSummary(
+    String changes,
+    String conflicts,
+    String excluded,
+  ) {
+    return '预览 · $changes 项更改 · $conflicts 项问题 · $excluded 项排除';
+  }
+
+  @override
+  String get batchDlgInvalidInput => '请修正规则中的输入；当前预览尚未采用无效输入。';
+
+  @override
+  String get batchDlgConflictError => '存在冲突或非法名称，无法应用。请调整规则。';
+
+  @override
+  String get batchDlgManualNameStatus => '手动名称';
+
+  @override
+  String get batchDlgPendingRename => '待重命名';
+
+  @override
+  String get batchDlgCsvHeader => '原路径,原名称,目标路径,状态';
+
+  @override
+  String get batchDlgHelpBody =>
+      '1. 选择方案或启用规则，按需复制规则并调整上下顺序。\n\n2. 预览显示实际执行的名称。搜索与筛选只影响显示；取消勾选会排除该项并重新编号。可单独修改名称，或恢复为规则结果。\n\n3. 所有问题解决后才能执行。自动后缀只处理重名，不会覆盖其他文件。互换文件夹名称需要分批改名。\n\n4. 执行中可停止后续项目；当前项目会先完成。完成页显示结果，可撤销本次已完成的改名。列表发生后续变化时会阻止撤销。\n\n仅修改名称及目录路径，文件内容和扩展名保持不变。排除父目录自身的改名不会阻止已勾选子项改名；父目录改名时其内部路径仍会随之移动。';
+
+  @override
+  String batchDlgPreviewCount(String count) {
+    return '预览（$count）';
+  }
+
+  @override
+  String get batchBuiltinPhoto => '照片：日期与编号';
+
+  @override
+  String get batchBuiltinCourse => '课程：统一名称与编号';
+
+  @override
+  String get batchBuiltinDownloads => '下载文件：清理空白';
+
+  @override
+  String get taskListDetail => '详情';
+
+  @override
+  String get taskListOwnershipChecking => '正在确认任务归属';
+
+  @override
+  String get taskListOwnershipFailed => '任务流记录读取失败，操作暂不可用';
+
+  @override
+  String get taskListViewFlow => '查看任务流';
+
+  @override
+  String get taskListPause => '暂停';
+
+  @override
+  String get taskListClear => '清除任务';
+
+  @override
+  String get taskListResume => '继续';
+
+  @override
+  String get taskListRetry => '重试';
+
+  @override
+  String get taskListDismissError => '关闭错误信息';
+
+  @override
+  String get taskListRemove => '从列表移除';
+
+  @override
+  String get taskListSynthesisErrorTitle => '合成错误详情';
+
+  @override
+  String get taskListClose => '关闭';
+
+  @override
+  String get taskListOriginalExchange => '原始请求与响应';
+
+  @override
+  String get taskListOriginalRequest => '原始请求体:';
+
+  @override
+  String get taskListOriginalResponse => '原始响应体:';
+
+  @override
+  String get taskFlowIoTypeText => '文本';
+
+  @override
+  String get taskFlowIoTypeAudio => '音频';
+
+  @override
+  String get taskFlowIoTypeVideo => '视频';
+
+  @override
+  String get taskFlowIoTypeImage => '图片';
+
+  @override
+  String get taskFlowIoTypeLink => '链接';
+
+  @override
+  String get taskFlowIoTypeFile => '文件';
+
+  @override
+  String get taskFlowIoTypeAny => '任意';
+
+  @override
+  String get mermaidZoomOut => '缩小';
+
+  @override
+  String get mermaidZoomIn => '放大';
+
+  @override
+  String get mermaidFullscreen => '全屏';
+
+  @override
+  String get mermaidSaveButton => '保存';
+
+  @override
+  String get mermaidSourceButton => '查看源码';
+
+  @override
+  String get mermaidDiagramSemantic => '查看图表';
+
+  @override
+  String get taskFlowCardCatCatchDeletePersistError => '猫抓子任务删除状态无法保存，请重试';
+
+  @override
+  String get taskFlowCardSynthesisDeletePersistError => '合成子任务删除状态无法保存，请重试';
+
+  @override
+  String get taskFlowCardBackgroundDeletePersistError => '后台子任务删除状态无法保存，请重试';
+
+  @override
+  String get mathParseError => '数学解析错误';
+
+  @override
+  String get mermaidEmptyPlaceholder => '没有可渲染的 Mermaid 代码';
+
+  @override
+  String get mathClose => '关闭';
+
+  @override
+  String get mermaidLoadTimeout => 'Mermaid 加载超时：请检查网络连接后重试';
+
+  @override
+  String get mermaidCdnLoadFailed => 'Mermaid 加载失败：无法访问 cdn.jsdelivr.net';
+
+  @override
+  String get mermaidLoadingDiagram => '图表加载中...';
+
+  @override
+  String get mermaidEngineInitFailed => '图表渲染引擎初始化失败，请重试';
+
+  @override
+  String get mermaidPageTimeout => '页面加载超时，请重试';
+
+  @override
+  String get mermaidCodeLoadFailed => '图表代码加载失败，请重试';
+
+  @override
+  String mermaidPageLoadFailed(String description) {
+    return '页面加载失败: $description';
+  }
+
+  @override
+  String get mermaidLoadingEngine => '加载渲染引擎...';
+
+  @override
+  String get mermaidRenderErrorTitle => '渲染图表时出错';
+
+  @override
+  String get taskFlowOutputVideoAudioDownstream => '视频或音频（按下游筛选）';
+
+  @override
+  String get taskFlowOutputUnknown => '未知';
+
+  @override
+  String batchRunCancelledSummary(
+    String label,
+    String completed,
+    String failed,
+    String remaining,
+  ) {
+    return '$label已停止：成功 $completed 项，失败 $failed 项，未执行 $remaining 项';
+  }
+
+  @override
+  String mermaidRenderErrorPrefix(String message) {
+    return 'Mermaid 渲染错误：$message';
+  }
+
+  @override
+  String mermaidInitializeErrorPrefix(String message) {
+    return 'Mermaid 初始化错误：$message';
+  }
+
+  @override
+  String get mermaidResourceError => 'Mermaid 图表中的资源加载失败。';
+
+  @override
+  String get taskFlowParamRecognitionModel => '识别模型';
+
+  @override
+  String get taskFlowParamSynthesisModel => '合成模型';
+
+  @override
+  String get taskFlowParamSaveFolder => '保存文件夹';
+
+  @override
+  String get taskFlowParamResourceSelection => '资源选择方式';
+
+  @override
+  String get taskFlowParamOutputType => '输出类型';
+
+  @override
+  String get taskFlowParamVideoFolder => '视频保存文件夹';
+
+  @override
+  String get taskFlowParamAudioFolder => '音频保存文件夹';
+
+  @override
+  String get taskFlowParamExpectedDuration => '预期时长';
+
+  @override
+  String get taskFlowParamVoice => '语音';
+
+  @override
+  String get taskFlowParamSpeechRate => '语速';
+
+  @override
+  String get taskFlowParamAssistant => '助手';
+
+  @override
+  String get taskFlowHintResourceSelection =>
+      '手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。';
+
+  @override
+  String get taskFlowHintOutputType =>
+      '视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。';
+
+  @override
+  String get taskFlowHintExpectedDuration => '按视频时长筛选，留空表示不筛选。';
+
+  @override
+  String get taskFlowHintVoice => '选择音色（选择后自动切换到对应模型）。';
+
+  @override
+  String get taskFlowUiUnsupportedBlockStep => '此功能块类型已不受支持，请替换或删除此步骤。';
+
+  @override
+  String taskFlowUiDownstreamTypeMismatch(String requiredType) {
+    return '下一步需要$requiredType。下载资源可输出视频或音频，请修改下一步或输出策略。';
+  }
+
+  @override
+  String taskFlowUiAnyTypeMismatch(String source, String block) {
+    return '$source为任意类型，但“$block”需要明确的文本、链接、图片、音频、视频或文件类型。请修改输入类型、移动或替换功能块，或撤销更改。';
+  }
+
+  @override
+  String taskFlowUiTypeMismatch(
+    String source,
+    String actualType,
+    String block,
+    String requiredType,
+  ) {
+    return '$source为$actualType，但“$block”需要$requiredType。请修改输入类型、移动或替换功能块，或撤销更改。';
+  }
+
+  @override
+  String get fileManagerSortFieldCreated => '创建时间';
+
+  @override
+  String get fileManagerSortFieldModified => '修改时间';
+
+  @override
+  String get fileManagerSortFieldName => '文件名';
+
+  @override
+  String get fileManagerSortFieldSize => '大小';
+
+  @override
+  String get fileManagerSortDateNewest => '新到旧';
+
+  @override
+  String get fileManagerSortDateOldest => '旧到新';
+
+  @override
+  String get fileManagerSortSizeLargest => '大到小';
+
+  @override
+  String get fileManagerSortSizeSmallest => '小到大';
+
+  @override
+  String get catcatchStatusRunning => '运行中';
+
+  @override
+  String get catcatchStatusCompleted => '已完成';
+
+  @override
+  String get catcatchStatusFailed => '失败';
+
+  @override
+  String get catcatchStatusPaused => '已暂停';
+
+  @override
+  String get catcatchStatusWaiting => '等待中';
+
+  @override
+  String get catcatchStepFetching => '获取网页内容';
+
+  @override
+  String get catcatchStepAnalyzing => '分析媒体资源';
+
+  @override
+  String get catcatchStepParsingPlaylist => '解析播放列表';
+
+  @override
+  String get catcatchStepFiltering => '按时长筛选';
+
+  @override
+  String get catcatchStepUserSelecting => '等待用户选择';
+
+  @override
+  String get catcatchStepDownloading => '下载';
+
+  @override
+  String get catcatchStepConverting => '转码/合并';
+
+  @override
+  String get catcatchStepSaving => '保存到本地';
+
+  @override
+  String get bgStepConnectServer => '连接服务器';
+
+  @override
+  String get bgStepUploadImage => '上传图片';
+
+  @override
+  String get bgStepWaitRecognition => '等待识别结果';
+
+  @override
+  String get bgStepParseResult => '解析结果';
+
+  @override
+  String get bgStepSaveFile => '保存文件';
+
+  @override
+  String get bgStepUploadAudio => '上传音频';
+
+  @override
+  String get bgStepTranscribing => '转写中';
+
+  @override
+  String get bgStepReceiveResult => '接收结果';
+
+  @override
+  String get bgStepSeparateAudio => '分离音频';
+
+  @override
+  String get bgStepSaveToFile => '保存到文件';
+
+  @override
+  String get bgStepSendRequest => '发送请求';
+
+  @override
+  String get bgStepWaitReply => '等待回复';
+
+  @override
+  String get fileManagerSortNameAscending => 'A 到 Z';
+
+  @override
+  String get fileManagerSortNameDescending => 'Z 到 A';
+
+  @override
+  String get taskFlowValidationNoSteps => '任务流没有步骤，请先添加功能块。';
+
+  @override
+  String get taskFlowValidationInputRequired => '请添加运行输入。';
+
+  @override
+  String get taskFlowValidationFlowRemoved => '任务流已删除，请重新选择。';
+
+  @override
+  String get taskFlowValidationInputTypeChanged => '初始输入类型已修改，请重新选择运行输入。';
+
+  @override
+  String get taskFlowValidationSnapshotMissing => '旧记录没有运行快照，请选择使用最新配置重试。';
+
+  @override
+  String get taskFlowValidationAssistantModelMissing =>
+      '助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型。';
+
+  @override
+  String get taskFlowValidationSavedFileUnavailable =>
+      '已保存的步骤文件不存在、为空或无法读取，请重新运行。';
+
+  @override
+  String get taskFlowValidationUnsupportedBlock => '功能块已不受支持，请替换或删除此步骤。';
+
+  @override
+  String taskFlowValidationDownstreamMismatch(String requiredType) {
+    return '下一步需要$requiredType。下载资源可输出音频或视频，请修改下一步或输出策略。';
+  }
+
+  @override
+  String taskFlowValidationRequiredParameter(String parameter, String block) {
+    return '“$parameter”为必填项，请在“$block”设置中配置。';
+  }
+
+  @override
+  String taskFlowValidationLegacyModel(String block) {
+    return '旧版模型选择需要确认，请在“$block”设置中重新选择模型。';
+  }
+
+  @override
+  String taskFlowValidationModelUnavailable(String block) {
+    return '模型未选择、已删除或供应商配置不可用，请在“$block”设置中重新选择模型并检查供应商地址和密钥。';
+  }
+
+  @override
+  String taskFlowValidationAssistantUnavailable(String block) {
+    return '助手未选择或已删除，请在“$block”设置中重新选择助手。';
+  }
+
+  @override
+  String get taskFlowValidationAssistantModelUnavailable =>
+      '助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型。';
+
+  @override
+  String taskFlowValidationPolicyInvalid(String block) {
+    return '资源选择策略或输出类型无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationOutputInvalid(String block) {
+    return '输出类型无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationResourcePolicyInvalid(String block) {
+    return '资源选择策略无效，请在“$block”设置中重新选择。';
+  }
+
+  @override
+  String taskFlowValidationInputFileUnavailable(String index) {
+    return '第 $index 个输入：文件不存在、为空或无法读取，请重新选择文件。';
+  }
+
+  @override
+  String taskFlowValidationInputUrlInvalid(String index) {
+    return '第 $index 个输入：请输入有效的 HTTP 或 HTTPS 链接。';
+  }
+
+  @override
+  String taskFlowValidationInputError(String index, String error) {
+    return '第 $index 个输入：$error';
+  }
+
+  @override
+  String get batchRuleValidationMaxRules => '最多支持 50 条规则。';
+
+  @override
+  String get batchRuleValidationDigits => '编号位数应为 1–12。';
+
+  @override
+  String get batchRuleValidationNumberRange => '编号起始值和步长须在 ±999999999 以内。';
+
+  @override
+  String get batchRuleValidationReplacementLength => '替换规则过长。';
+
+  @override
+  String get batchRuleValidationRegex => '正则表达式无效。';
+
+  @override
+  String get batchRuleValidationDeleteIndex => '删除位置必须从 1 开始。';
+
+  @override
+  String get batchRuleValidationInsertLength => '插入文本过长。';
+
+  @override
+  String get batchRuleValidationTemplateNumber =>
+      '模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内。';
+
+  @override
+  String get batchRuleValidationTemplateLength => '模板过长。';
+
+  @override
+  String get batchRuleValidationTemplateVariable => '未知模板变量或未闭合的大括号。';
+
+  @override
+  String get batchRuleTypeNumber => '编号';
+
+  @override
+  String get batchRuleTypeReplace => '替换';
+
+  @override
+  String get batchRuleTypeInsert => '插入文本';
+
+  @override
+  String get batchRuleTypeDelete => '删除字符';
+
+  @override
+  String get batchRuleTypeCase => '大小写转换';
+
+  @override
+  String get batchRuleTypeTemplate => '命名模板';
+
+  @override
+  String get batchRuleTypeCleanup => '清理空白';
+
+  @override
+  String taskFlowValidationInputEmpty(String index) {
+    return '第 $index 个输入：请输入文本或选择文件。';
+  }
+
+  @override
+  String taskFlowValidationImageTooLarge(String index) {
+    return '第 $index 个输入：图片超过 20 MB，请选择较小的图片。';
+  }
+
+  @override
+  String taskFlowValidationAttachmentTooLarge(String index) {
+    return '第 $index 个输入：附件超过 10 MB，请选择较小的文件。';
+  }
+
+  @override
+  String taskFlowValidationFileTypeMismatch(
+    String index,
+    String actualType,
+    String requiredType,
+  ) {
+    return '第 $index 个输入：文件实际类型为$actualType，需要$requiredType，请重新选择文件。';
+  }
+
+  @override
+  String taskFlowValidationSvgUnsupported(String index) {
+    return '第 $index 个输入：助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG。';
+  }
+
+  @override
+  String taskFlowValidationImageMimeUnsupported(String index, String mime) {
+    return '第 $index 个输入：助手对话不支持 $mime 图片附件，请转换为 PNG、JPEG、GIF 或 WebP。';
+  }
+
+  @override
+  String taskFlowValidationAudioMimeUnsupported(String index, String mime) {
+    return '第 $index 个输入：助手对话不支持 $mime 音频附件，请转换为 MP3、WAV 或 M4A。';
+  }
+
+  @override
+  String taskFlowValidationEndpointMediaUnsupported(String index, String type) {
+    return '第 $index 个输入：此助手的 Anthropic 对话格式不支持$type附件，请选择支持此媒体的助手。';
+  }
+
+  @override
+  String taskFlowValidationEndpointPdfOnly(String index) {
+    return '第 $index 个输入：此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手。';
+  }
+
+  @override
+  String taskFlowValidationImageCompressionFailed(String index) {
+    return '第 $index 个输入：助手对话图片无法压缩到 10 MB 以下，请选择较小图片。';
+  }
+
+  @override
+  String taskFlowValidationTextEncodingFailed(String index) {
+    return '第 $index 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。';
   }
 }
