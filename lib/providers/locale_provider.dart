@@ -1,3 +1,5 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,8 +39,8 @@ Locale resolveSystemLocale(Locale systemLocale) {
 /// Resolves localization resources with the same override/follow-system
 /// behavior used by MaterialApp, for app services without a BuildContext.
 AppLocalizations appLocalizationsForLocale(Locale? override) {
-  final locale = override ??
-      resolveSystemLocale(WidgetsBinding.instance.platformDispatcher.locale);
+  final locale =
+      override ?? resolveSystemLocale(PlatformDispatcher.instance.locale);
   return lookupAppLocalizations(locale);
 }
 
