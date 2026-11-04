@@ -344,7 +344,7 @@ void main() {
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('batch_rename_dialog')), findsOneWidget);
-    expect(find.text('批量重命名（2 项）'), findsOneWidget);
+    expect(find.text('重命名 2 项'), findsOneWidget);
 
     // 未启用任何操作时，应用按钮禁用
     final applyBtn = find.byKey(const Key('batch_rename_apply_btn'));
@@ -633,7 +633,7 @@ void main() {
     await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
     await tester.pumpAndSettle();
 
-    expect(find.text('重命名完成：成功 1 项，失败 1 项'), findsOneWidget);
+    expect(find.text('重命名：成功 1 项，失败 1 项，剩余 0 项'), findsOneWidget);
   });
 
   testWidgets('窄屏（320dp）下打开面板并启用编号不溢出', (tester) async {

@@ -66,7 +66,7 @@ void main() {
     expect(cards.map((card) => card.block.id), ['download', 'recognition']);
     expect(cards.last.block.params['modelRef'],
         {'configId': 'provider', 'modelId': 'kept-model'});
-    expect(find.textContaining('「语音识别」需要音频'), findsOneWidget);
+    expect(find.textContaining('需要音频'), findsOneWidget);
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(flows.writes, initialWrites);
@@ -78,7 +78,7 @@ void main() {
     expect(restored.map((card) => card.block.id),
         ['download', 'audio', 'recognition']);
     expect(restored.elementAt(1).block.params['saveFolder'], 'kept-folder');
-    expect(find.textContaining('「语音识别」需要音频'), findsNothing);
+    expect(find.textContaining('需要音频'), findsNothing);
   });
 
   testWidgets('parameter edits and initial input changes can both be undone',

@@ -80,18 +80,18 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(httpRequested, isFalse);
-          expect(find.byTooltip('Play audio'), findsOneWidget);
+          expect(find.byTooltip('播放音频'), findsOneWidget);
           expect(find.text('62:00'), findsOneWidget);
           verify(() => player.setAudioSource(any<AudioSource>())).called(1);
 
-          await tester.tap(find.byTooltip('Play audio'));
+          await tester.tap(find.byTooltip('播放音频'));
           await tester.pump();
           verify(() => player.play()).called(1);
 
           errorController.add(PlayerException(1, 'connection lost', 0));
           await tester.pump();
           expect(find.textContaining('connection lost'), findsOneWidget);
-          expect(find.byTooltip('Play audio'), findsNothing);
+          expect(find.byTooltip('播放音频'), findsNothing);
 
           await tester.pumpWidget(const SizedBox.shrink());
           verify(() => player.dispose()).called(1);
@@ -108,32 +108,36 @@ void main() {
       );
     });
 
-    testWidgets('shows unsupported format error for unknown extensions', (
+    testWidgets('localizes unsupported format error when locale changes', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            locale: const Locale('zh', 'CN'),
-            supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            home: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'https://example.com/file.xyz',
-                name: 'file',
-                ext: 'xyz',
+      Widget app(Locale locale) => ProviderScope(
+            child: MaterialApp(
+              locale: locale,
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/file.xyz',
+                  name: 'file',
+                  ext: 'xyz',
+                ),
+                taskTitle: 'Test',
               ),
-              taskTitle: 'Test',
             ),
-          ),
-        ),
-      );
+          );
 
-      // Wait for async init
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpWidget(app(const Locale('zh', 'CN')));
+      await tester.pumpAndSettle();
 
-      // Should show error about unsupported format
       expect(find.text('不支持此格式预览'), findsOneWidget);
+
+      await tester.pumpWidget(app(const Locale('en', 'US')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Preview is not supported for this format'),
+        findsOneWidget,
+      );
     });
   });
 }

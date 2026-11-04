@@ -94,11 +94,39 @@ class MediaPreviewSheet extends ConsumerStatefulWidget {
   ConsumerState<MediaPreviewSheet> createState() => _MediaPreviewSheetState();
 }
 
+class _MediaPreviewError {
+  const _MediaPreviewError.unsupportedFormat()
+      : kind = _MediaPreviewErrorKind.unsupportedFormat,
+        detail = null;
+
+  const _MediaPreviewError.loadFailed(String error)
+      : kind = _MediaPreviewErrorKind.loadFailed,
+        detail = error;
+
+  const _MediaPreviewError.playbackFailed(String error)
+      : kind = _MediaPreviewErrorKind.playbackFailed,
+        detail = error;
+
+  final _MediaPreviewErrorKind kind;
+  final String? detail;
+
+  String localizedMessage(AppLocalizations strings) => switch (kind) {
+        _MediaPreviewErrorKind.unsupportedFormat =>
+          strings.unifiedTaskFormatUnsupported,
+        _MediaPreviewErrorKind.loadFailed =>
+          strings.unifiedTaskLoadFailed(detail!),
+        _MediaPreviewErrorKind.playbackFailed =>
+          strings.unifiedTaskPlaybackFailed(detail!),
+      };
+}
+
+enum _MediaPreviewErrorKind { unsupportedFormat, loadFailed, playbackFailed }
+
 class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _loading = true;
-  String? _error;
+  _MediaPreviewError? _previewError;
   File? _tempFile;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
@@ -110,7 +138,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   @override
   void initState() {
     super.initState();
-    _initPreview();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_initPreview());
+    });
   }
 
   Future<void> _initPreview() async {
@@ -137,7 +167,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {
           _loading = false;
-          _error = AppLocalizations.of(context)!.unifiedTaskFormatUnsupported;
+          _previewError = const _MediaPreviewError.unsupportedFormat();
         });
         return;
       }
@@ -189,8 +219,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error =
-            AppLocalizations.of(context)!.unifiedTaskLoadFailed(e.toString());
+        _previewError = _MediaPreviewError.loadFailed(e.toString());
       });
     }
   }
@@ -246,8 +275,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     _disposeAudioPlayer();
     setState(() {
       _loading = false;
-      _error = AppLocalizations.of(context)!
-          .unifiedTaskPlaybackFailed(error.toString());
+      _previewError = _MediaPreviewError.playbackFailed(error.toString());
     });
   }
 
@@ -397,7 +425,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       );
     }
 
-    if (_error != null) {
+    final strings = AppLocalizations.of(context)!;
+    final previewError = _previewError;
+    if (previewError != null) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
@@ -407,7 +437,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
               const SizedBox(height: 16),
               Text(
-                _error!,
+                previewError.localizedMessage(strings),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),

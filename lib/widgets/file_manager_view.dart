@@ -1713,7 +1713,7 @@ class _FileManagerViewState<T extends FileRecord>
         SnackBar(
           content: Text(
             AppLocalizations.of(context)!
-                .fileManagerFileExists(newName, newFormat),
+                .fileManagerFileExists(newFormat, newName),
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -2797,7 +2797,7 @@ class _FileManagerViewState<T extends FileRecord>
     final fileCount = directCount + subFileCount;
     final message = fileCount > 0
         ? AppLocalizations.of(context)!
-            .fileManagerDeleteFolderConfirm(folderName, fileCount)
+            .fileManagerDeleteFolderConfirm(fileCount, folderName)
         : AppLocalizations.of(context)!
             .fileManagerDeleteEmptyFolderConfirm(folderName);
 

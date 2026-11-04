@@ -1536,7 +1536,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-          strings.taskFlowUiFileTooLarge(file.name, limit ~/ (1024 * 1024)),
+          strings.taskFlowUiFileTooLarge(limit ~/ (1024 * 1024), file.name),
         );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==

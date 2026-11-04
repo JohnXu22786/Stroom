@@ -2718,7 +2718,7 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(renamed, isEmpty);
-          expect(find.text('文件 "report.md" 已存在'), findsOneWidget);
+          expect(find.text('文件 “report.md” 已存在'), findsOneWidget);
         },
       );
     });

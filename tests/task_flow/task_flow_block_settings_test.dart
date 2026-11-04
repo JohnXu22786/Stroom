@@ -133,20 +133,20 @@ void main() {
           .initialValue,
       'automatic',
     );
-    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 音频'), findsOneWidget);
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
     expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
     await tester.tap(find.text('视频').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 视频'), findsOneWidget);
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
     await tester.tap(find.text('视频或音频（按下游筛选）').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频或音频（按下游筛选）'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 视频或音频（按下游筛选）'), findsOneWidget);
     final dialogList = find.byWidgetPredicate(
       (widget) =>
           widget is Scrollable && widget.axisDirection == AxisDirection.down,
