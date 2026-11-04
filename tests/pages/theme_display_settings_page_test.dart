@@ -234,7 +234,7 @@ void main() {
     expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byTooltip('返回'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
-    expect(find.text('English'), findsOneWidget);
-    expect(find.text('Chinese (Simplified)'), findsOneWidget);
+    expect(find.text('英语'), findsOneWidget);
+    expect(find.text('简体中文'), findsOneWidget);
   });
 }
