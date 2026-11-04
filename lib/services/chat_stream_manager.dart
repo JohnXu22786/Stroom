@@ -374,14 +374,22 @@ class ChatStreamManager {
     // 快照消息不在历史中（被删）时安全回退为全量。
     final tailStartId = conv?.compactionTailStartId;
     final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
+    final historyForRequest = requestHistoryOverride == null
+        ? state.history
+        : requestHistoryOverride
+            .map((message) =>
+                state.history
+                    .where((stored) => stored.id == message.id)
+                    .firstOrNull ??
+                message)
+            .toList();
     List<ChatMessage> requestHistory;
-    if (requestHistoryOverride != null) {
-      requestHistory = List<ChatMessage>.from(requestHistoryOverride);
-    } else if (hasSummary && tailStartId != null) {
-      final idx = state.history.indexWhere((m) => m.id == tailStartId);
-      requestHistory = idx >= 0 ? state.history.sublist(idx) : state.history;
+    if (hasSummary && tailStartId != null) {
+      final idx = historyForRequest.indexWhere((m) => m.id == tailStartId);
+      requestHistory =
+          idx >= 0 ? historyForRequest.sublist(idx) : historyForRequest;
     } else {
-      requestHistory = state.history;
+      requestHistory = historyForRequest;
     }
 
     try {
@@ -393,16 +401,26 @@ class ChatStreamManager {
       );
       // 压缩成功：tail 快照已更新，重新计算发送历史
       // （从新尾部起点起，头部被摘要替代）
-      if (compacted && requestHistoryOverride == null) {
+      if (compacted) {
         final newConv = _ref
             ?.read(conversationsProvider)
             .where((c) => c.id == convId)
             .firstOrNull;
         final newTailStartId = newConv?.compactionTailStartId;
         if (newTailStartId != null) {
-          final idx = state.history.indexWhere((m) => m.id == newTailStartId);
+          final postCompactionHistory = requestHistoryOverride == null
+              ? state.history
+              : requestHistoryOverride
+                  .map((message) =>
+                      state.history
+                          .where((stored) => stored.id == message.id)
+                          .firstOrNull ??
+                      message)
+                  .toList();
+          final idx =
+              postCompactionHistory.indexWhere((m) => m.id == newTailStartId);
           if (idx >= 0) {
-            requestHistory = state.history.sublist(idx);
+            requestHistory = postCompactionHistory.sublist(idx);
           }
         }
       }

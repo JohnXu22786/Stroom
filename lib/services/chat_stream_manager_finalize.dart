@@ -66,7 +66,13 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // text into fullReply for ANY thrown object (not just Exception/Error).
     final hadStreamError = streamError != null;
     if (!wasCancelled && !hadStreamError && state.historyOnSuccess != null) {
-      state.history = List<ChatMessage>.from(state.historyOnSuccess!);
+      state.history = state.historyOnSuccess!
+          .map((message) =>
+              state.history
+                  .where((stored) => stored.id == message.id)
+                  .firstOrNull ??
+              message)
+          .toList();
     }
 
     // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
@@ -106,7 +112,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 从 UI 与存储中丢失。同理，纯推理轮取消（fullReply 与工具
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
-      final hasContent = wasCancelled || state.fullReply.isNotEmpty ||
+      final hasContent = wasCancelled ||
+          state.fullReply.isNotEmpty ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
       if (hasContent) {

@@ -506,7 +506,26 @@ extension _ChatPageStreamingExt on _ChatPageState {
       // finalized result. That path replaces the placeholder with the
       // partial message and its interruption ErrorBlock, and synchronizes
       // the complete persisted history back into the page.
-      if (stoppedMsgId != null && mounted) setState(() {});
+      if (stoppedMsgId != null && convId != null && _controller != null) {
+        final partial =
+            ref.read(chatStreamManagerProvider).fullReplyFor(convId);
+        final segments =
+            List<MessageSegment>.from(_chatSegments[stoppedMsgId] ?? const []);
+        if (!segments.any((segment) => segment is ErrorSegment)) {
+          segments.add(ErrorSegment('用户中断了输出'));
+        }
+        _chatSegments[stoppedMsgId] = segments;
+        _controller?.updateMessage(
+          Message.textStream(
+              id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
+          Message.text(
+            id: stoppedMsgId,
+            authorId: _aiUser.id,
+            text: partial,
+          ),
+        );
+        if (mounted) setState(() {});
+      }
       // Keep the manager's streaming set entry until its cancelled result is
       // persisted. The send guard uses this set and prevents a fast resend
       // from replacing the cancelled state before its partial/error is saved.
