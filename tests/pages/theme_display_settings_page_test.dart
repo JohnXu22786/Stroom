@@ -232,7 +232,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('主题与显示'), findsOneWidget);
-    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byTooltip('返回'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Chinese (Simplified)'), findsOneWidget);
