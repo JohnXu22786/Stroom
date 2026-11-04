@@ -17911,6 +17911,48 @@ void main() {
     });
 
     test(
+      'batch removal of a running OCR task does not send a failure notification',
+      () async {
+        const taskId = 'running-ocr-batch-removal-no-notification';
+        SharedPreferences.setMockInitialValues({
+          'notifications_enabled': true,
+        });
+        final notificationService = NotificationService();
+        var failureNotifications = 0;
+        notificationService.onInAppNotification = (payload) {
+          if (payload.taskId == taskId &&
+              payload.type == NotificationType.taskFailed) {
+            failureNotifications++;
+          }
+        };
+        final notifier = BackgroundTaskNotifier();
+
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Running OCR task',
+            taskId: taskId,
+          );
+          var cancellationCalls = 0;
+          notifier.registerCancellation(taskId, () => cancellationCalls++);
+
+          expect(await notifier.removeTasksPersisted([taskId]), isTrue);
+          await notifier.pendingPersistence;
+          await Future<void>.delayed(Duration.zero);
+
+          expect(cancellationCalls, 1);
+          expect(notifier.taskById(taskId), isNull);
+          expect(failureNotifications, 0);
+        } finally {
+          notificationService.onInAppNotification = null;
+          SharedPreferences.setMockInitialValues({});
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'legacy OCR task and step errors hide unclassified provider echoes',
       () {
         const providerEcho = 'HTTP 400: invoice for Jane Doe';

@@ -4455,7 +4455,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     _activeBatchRemovalAddedGenerations.add(addedTaskGenerations);
     try {
       for (final id in removedIds) {
-        cancelTask(id);
+        final task = taskById(id);
+        final generation = task == null
+            ? null
+            : BackgroundTask._generationTokenFor(task);
+        final alreadySuppressingNotification = generation != null &&
+            !_taskNotificationSuppressionGenerations.add(generation);
+        try {
+          cancelTask(id);
+        } finally {
+          if (generation != null && !alreadySuppressingNotification) {
+            _taskNotificationSuppressionGenerations.remove(generation);
+          }
+        }
       }
       while (_removalBarrier != null) {
         await _removalBarrier!.future;
@@ -4822,7 +4834,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
-        updatedTask != null) {
+        updatedTask != null &&
+        !_taskNotificationSuppressionGenerations.contains(
+          BackgroundTask._generationTokenFor(updatedTask!),
+        )) {
       final notificationError = updatedTask!.type == BackgroundTaskType.ocr
           ? updatedTask!.error
           : error;
@@ -4941,6 +4956,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final Map<String, List<BackgroundTask>> _pendingTaskRemovalCleanupTasks =
       <String, List<BackgroundTask>>{};
   final List<Map<String, Set<Object>>> _activeBatchRemovalAddedGenerations = [];
+  final Set<Object> _taskNotificationSuppressionGenerations = <Object>{};
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
