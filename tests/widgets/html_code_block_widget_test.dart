@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
@@ -29,6 +30,9 @@ void main() {
           '<body><h1>Hello World</h1></body></html>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -56,6 +60,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(
               htmlCode: '<h1>Hello</h1>',
@@ -83,6 +90,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>'),
           ),
@@ -104,6 +114,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>'),
           ),
@@ -122,6 +135,9 @@ void main() {
       // not a plain code block.
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(
               htmlCode: '<h1>Hello</h1>',
@@ -139,6 +155,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: ''),
           ),
@@ -151,6 +170,9 @@ void main() {
       // And while generating, the streaming indicator wins over the hint.
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: '', isStreaming: true),
           ),
@@ -167,6 +189,9 @@ void main() {
       const html = '<h1>Hello World</h1>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -190,6 +215,9 @@ void main() {
     testWidgets('eye icon carries the 预览 semantic label', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
           ),
@@ -205,6 +233,9 @@ void main() {
     testWidgets('返回卡片 switches back to the card view', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
           ),
@@ -228,6 +259,9 @@ void main() {
       // NOT silently reset back to the card.
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(
               htmlCode: '<p>growing</p>',
@@ -243,6 +277,9 @@ void main() {
       // Simulate the stream finishing: same widget position, new flags.
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(
               htmlCode: '<p>growing</p>',
@@ -265,6 +302,9 @@ void main() {
       const html = '<div>\n  <p>Line 1</p>\n</div>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -287,6 +327,9 @@ void main() {
       const html = '<div>\n  <p>Line 1</p>\n</div>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -303,6 +346,9 @@ void main() {
     testWidgets('shows (empty) for empty HTML code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: ''),
           ),
@@ -324,6 +370,9 @@ void main() {
           '<body><h1>Hi</h1></body></html>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -343,6 +392,9 @@ void main() {
       const html = '<body><p>no title here</p></body>';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(htmlCode: html),
           ),
@@ -362,6 +414,9 @@ void main() {
       final longTitle = List.filled(30, 'title').join(' ');
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: HtmlCodeBlockWidget(
               htmlCode: '<title>$longTitle</title>',
@@ -415,6 +470,9 @@ void main() {
       final lines = List.generate(50, (i) => '<p>Line $i</p>').join('\n');
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: HtmlCodeBlockWidget(htmlCode: lines),
@@ -437,6 +495,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: HtmlCodeBlockWidget(htmlCode: '<p>Hello</p>'),
@@ -459,6 +520,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: HtmlCodeBlockWidget(

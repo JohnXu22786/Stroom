@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
@@ -73,14 +74,17 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
         }),
       ],
       child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
               body: SingleChildScrollView(
-        child: Consumer(
-            builder: (context, ref, _) => CatCatchTaskCard(
-                  task: ref.watch(catcatchTasksProvider).single,
-                  isFlowManaged: flowManaged,
-                )),
-      )))));
+            child: Consumer(
+                builder: (context, ref, _) => CatCatchTaskCard(
+                      task: ref.watch(catcatchTasksProvider).single,
+                      isFlowManaged: flowManaged,
+                    )),
+          )))));
   await tester.pump();
   return downloads;
 }
@@ -95,24 +99,27 @@ Future<void> _pumpInShortTaskListViewport(
         }),
       ],
       child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
               body: Align(
-        alignment: Alignment.topCenter,
-        child: SizedBox(
-          key: const Key('task_list_main_viewport'),
-          height: 300,
-          child: LayoutBuilder(
-            builder: (context, constraints) => ListView(
-              children: [
-                CatCatchTaskCard(
-                  task: task,
-                  taskListViewportHeight: constraints.maxHeight,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              key: const Key('task_list_main_viewport'),
+              height: 300,
+              child: LayoutBuilder(
+                builder: (context, constraints) => ListView(
+                  children: [
+                    CatCatchTaskCard(
+                      task: task,
+                      taskListViewportHeight: constraints.maxHeight,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      )))));
+          )))));
   await tester.pump();
 }
 

@@ -11,6 +11,7 @@ import 'package:chewie/chewie.dart';
 
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
+import '../../l10n/app_localizations.dart';
 
 const _audioPreviewExtensions = {
   'oga',
@@ -93,11 +94,39 @@ class MediaPreviewSheet extends ConsumerStatefulWidget {
   ConsumerState<MediaPreviewSheet> createState() => _MediaPreviewSheetState();
 }
 
+class _MediaPreviewError {
+  const _MediaPreviewError.unsupportedFormat()
+      : kind = _MediaPreviewErrorKind.unsupportedFormat,
+        detail = null;
+
+  const _MediaPreviewError.loadFailed(String error)
+      : kind = _MediaPreviewErrorKind.loadFailed,
+        detail = error;
+
+  const _MediaPreviewError.playbackFailed(String error)
+      : kind = _MediaPreviewErrorKind.playbackFailed,
+        detail = error;
+
+  final _MediaPreviewErrorKind kind;
+  final String? detail;
+
+  String localizedMessage(AppLocalizations strings) => switch (kind) {
+        _MediaPreviewErrorKind.unsupportedFormat =>
+          strings.unifiedTaskFormatUnsupported,
+        _MediaPreviewErrorKind.loadFailed =>
+          strings.unifiedTaskLoadFailed(detail!),
+        _MediaPreviewErrorKind.playbackFailed =>
+          strings.unifiedTaskPlaybackFailed(detail!),
+      };
+}
+
+enum _MediaPreviewErrorKind { unsupportedFormat, loadFailed, playbackFailed }
+
 class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _loading = true;
-  String? _error;
+  _MediaPreviewError? _previewError;
   File? _tempFile;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
@@ -109,7 +138,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   @override
   void initState() {
     super.initState();
-    _initPreview();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_initPreview());
+    });
   }
 
   Future<void> _initPreview() async {
@@ -136,7 +167,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {
           _loading = false;
-          _error = '不支持此格式预览';
+          _previewError = const _MediaPreviewError.unsupportedFormat();
         });
         return;
       }
@@ -188,7 +219,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '加载失败: $e';
+        _previewError = _MediaPreviewError.loadFailed(e.toString());
       });
     }
   }
@@ -244,7 +275,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     _disposeAudioPlayer();
     setState(() {
       _loading = false;
-      _error = '播放失败: $error';
+      _previewError = _MediaPreviewError.playbackFailed(error.toString());
     });
   }
 
@@ -394,7 +425,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       );
     }
 
-    if (_error != null) {
+    final strings = AppLocalizations.of(context)!;
+    final previewError = _previewError;
+    if (previewError != null) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
@@ -404,7 +437,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
               const SizedBox(height: 16),
               Text(
-                _error!,
+                previewError.localizedMessage(strings),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
@@ -426,7 +459,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
-            Text('音频文件', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              AppLocalizations.of(context)!.unifiedTaskAudioFile,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               '${widget.resource.name}.${widget.resource.ext}',
@@ -468,7 +504,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               ],
             ),
             IconButton(
-              tooltip: _isAudioPlaying ? 'Pause audio' : 'Play audio',
+              tooltip: _isAudioPlaying
+                  ? AppLocalizations.of(context)!.unifiedTaskPauseAudio
+                  : AppLocalizations.of(context)!.unifiedTaskPlayAudio,
               iconSize: 48,
               onPressed: _toggleAudioPlayback,
               icon: Icon(
@@ -488,11 +526,14 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       );
     }
 
-    return const Center(child: Text('无法加载预览'));
+    return Center(
+      child: Text(AppLocalizations.of(context)!.unifiedTaskPreviewLoadFailed),
+    );
   }
 
   String _formatSize(int? bytes) {
-    if (bytes == null) return '未知大小';
+    if (bytes == null)
+      return AppLocalizations.of(context)!.unifiedTaskUnknownSize;
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) {

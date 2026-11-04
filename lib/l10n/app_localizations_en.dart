@@ -346,6 +346,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskFlowBlockChat => 'Assistant Chat';
 
   @override
+  String get taskFlowBlockCustom => 'Custom block';
+
+  @override
   String get taskFlowEdit => 'Edit';
 
   @override
@@ -1724,6 +1727,2694 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String chatThinkingNumbered(int index) {
     return 'Thinking $index';
+  }
+
+  @override
+  String get taskFlowUiDiscardTitle => 'Discard unsaved changes?';
+
+  @override
+  String get taskFlowUiDiscardBody =>
+      'All unsaved changes will be lost if you go back.';
+
+  @override
+  String get taskFlowUiContinueEditing => 'Continue editing';
+
+  @override
+  String get taskFlowUiDiscard => 'Discard';
+
+  @override
+  String get taskFlowUiUndo => 'Undo';
+
+  @override
+  String get taskFlowUiSave => 'Save';
+
+  @override
+  String get taskFlowUiNameHint => 'Enter a task flow name';
+
+  @override
+  String get taskFlowUiDescriptionHint => 'Add a description (optional)';
+
+  @override
+  String get taskFlowUiNameRequired => 'Enter a task flow name';
+
+  @override
+  String taskFlowUiStepRequired(Object index, Object message) {
+    return 'Step $index: $message';
+  }
+
+  @override
+  String taskFlowUiParameterRequired(Object block, Object parameter) {
+    return '“$parameter” is required for “$block”';
+  }
+
+  @override
+  String get taskFlowUiSaveFailed =>
+      'Could not save. Your changes are still here. Try again.';
+
+  @override
+  String get taskFlowUiRetry => 'Retry';
+
+  @override
+  String get taskFlowUiUpdated => 'Task flow updated';
+
+  @override
+  String get taskFlowUiCreated => 'Task flow created';
+
+  @override
+  String get taskFlowUiTitle => 'Task Flow';
+
+  @override
+  String get taskFlowUiNotFound => 'Task not found';
+
+  @override
+  String get taskFlowUiBack => 'Back';
+
+  @override
+  String get taskFlowUiEdit => 'Edit';
+
+  @override
+  String taskFlowUiInput(Object label) {
+    return 'Input ($label)';
+  }
+
+  @override
+  String get taskFlowUiInputHint => 'Enter text or a link';
+
+  @override
+  String get taskFlowUiStart => 'Start task flow';
+
+  @override
+  String get taskFlowUiNoInput =>
+      'No inputs yet. Tap below to add a web resource URL.';
+
+  @override
+  String get taskFlowUiAddResource => 'Add web resource';
+
+  @override
+  String get taskFlowUiUrlHint => 'Enter a video or audio webpage URL';
+
+  @override
+  String get taskFlowUiDeleteInput => 'Remove this input';
+
+  @override
+  String get taskFlowUiHour => 'hr';
+
+  @override
+  String get taskFlowUiMinute => 'min';
+
+  @override
+  String get taskFlowUiSecond => 'sec';
+
+  @override
+  String get taskFlowUiPreview => 'Preview: ';
+
+  @override
+  String get taskFlowUiDurationFormat => 'hh:mm:ss';
+
+  @override
+  String get taskFlowUiDurationHint =>
+      'Optional: filter video resources by duration. Leave blank to show all available resources.';
+
+  @override
+  String get taskFlowUiSelectImages => 'Select images (multiple)';
+
+  @override
+  String get taskFlowUiSelectAudio => 'Select audio (multiple)';
+
+  @override
+  String get taskFlowUiSelectFiles => 'Select files (multiple)';
+
+  @override
+  String get taskFlowUiSelectVideo => 'Select videos (multiple)';
+
+  @override
+  String get taskFlowUiRemove => 'Remove';
+
+  @override
+  String taskFlowUiRemovedFileCleanupFailed(Object error) {
+    return 'Could not clean up the removed file: $error';
+  }
+
+  @override
+  String get taskFlowUiInitialInput => '0. Initial input';
+
+  @override
+  String taskFlowUiInputType(Object type) {
+    return 'Input type: $type';
+  }
+
+  @override
+  String get taskFlowUiUserFlowInput =>
+      'Input provided when the user runs the task flow';
+
+  @override
+  String taskFlowUiBlockInput(Object type) {
+    return 'Input: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutput(Object type) {
+    return 'Output: $type';
+  }
+
+  @override
+  String get taskFlowUiParameters => 'Parameters:';
+
+  @override
+  String get taskFlowUiClose => 'Close';
+
+  @override
+  String get taskFlowUiSelectAppImages =>
+      'Select images from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoImages => 'No images';
+
+  @override
+  String get taskFlowUiSelectAppAudio => 'Select audio from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoAudio => 'No audio';
+
+  @override
+  String get taskFlowUiSelectAppVideo =>
+      'Select videos from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoVideo => 'No videos';
+
+  @override
+  String taskFlowUiFileSelectFailed(Object error) {
+    return 'Could not select the file: $error';
+  }
+
+  @override
+  String taskFlowUiFileTooLarge(Object limit, Object name) {
+    return '“$name” exceeds $limit MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowUiFileUnreadable(Object name) {
+    return '“$name” is empty or unreadable';
+  }
+
+  @override
+  String get taskFlowUiSomeFilesMissing =>
+      'Some files are missing and were skipped';
+
+  @override
+  String get taskFlowUiQueuedOne => 'Task flow added to the queue';
+
+  @override
+  String taskFlowUiQueuedMany(Object count) {
+    return 'Added $count task flows to the queue';
+  }
+
+  @override
+  String get taskFlowUiRunTitle => 'This Run';
+
+  @override
+  String get taskFlowUiCancelBatch => 'Cancel entire batch';
+
+  @override
+  String get taskFlowUiRestoringRecords => 'Restoring task flow records…';
+
+  @override
+  String get taskFlowUiRecordsPaused =>
+      'Could not load task flow records. Task actions are paused.';
+
+  @override
+  String get taskFlowUiRecordsCleared =>
+      'Records for this run have been cleared';
+
+  @override
+  String taskFlowUiRunsFinished(Object finished, Object total) {
+    return '$finished of $total runs finished';
+  }
+
+  @override
+  String taskFlowUiRecordsRemoved(Object count) {
+    return ' · $count records cleared';
+  }
+
+  @override
+  String get taskFlowUiTemporaryFiles => 'Temporary intermediate files';
+
+  @override
+  String get taskFlowUiAddBlock => 'Add block';
+
+  @override
+  String taskFlowUiInsertBlockBefore(Object index) {
+    return 'Insert block before step $index';
+  }
+
+  @override
+  String get taskFlowUiIncompatibleAdjacentBlocks =>
+      'No block is compatible with both adjacent steps. Adjust the adjacent steps first.';
+
+  @override
+  String taskFlowUiInsertBeforeStep(Object index) {
+    return 'Insert before step $index';
+  }
+
+  @override
+  String get taskFlowUiUnknown => 'Unknown';
+
+  @override
+  String get taskFlowUiChooseBlock => 'Choose a block';
+
+  @override
+  String get taskFlowUiInsertBlock => 'Insert block';
+
+  @override
+  String get taskFlowUiPreviousOutput => 'Previous step output';
+
+  @override
+  String taskFlowUiNextStepNeeds(Object label) {
+    return '; next step needs: $label';
+  }
+
+  @override
+  String get taskFlowUiNoCompatibleBlock =>
+      'No block is compatible with the current type';
+
+  @override
+  String get taskFlowUiReplaceBlock => 'Replace block';
+
+  @override
+  String get taskFlowUiBlockCompatibility =>
+      'You can only replace this with a block that has compatible input and output types.';
+
+  @override
+  String get taskFlowUiTemporaryCleanupTooltip =>
+      'Clean up after the next step saves its result successfully; the final step is always kept.';
+
+  @override
+  String get taskFlowUiSetParameters => 'Set parameters';
+
+  @override
+  String get taskFlowUiReplace => 'Replace';
+
+  @override
+  String get taskFlowUiViewParameters => 'Tap to view parameters';
+
+  @override
+  String get taskFlowUiTapSetParameters => 'Tap to set parameters';
+
+  @override
+  String taskFlowUiUnknownBlockType(Object name) {
+    return 'Unknown block: $name';
+  }
+
+  @override
+  String get taskFlowUiBlockUnregistered => 'This block type is not registered';
+
+  @override
+  String taskFlowUiStepActions(Object index) {
+    return 'Actions for step $index';
+  }
+
+  @override
+  String get taskFlowUiInsertBefore => 'Insert before';
+
+  @override
+  String get taskFlowUiInsertAfter => 'Insert after';
+
+  @override
+  String get taskFlowUiCopyBlock => 'Duplicate block';
+
+  @override
+  String get taskFlowUiMoveUp => 'Move up';
+
+  @override
+  String get taskFlowUiMoveUpDisabled => 'Move up (already first)';
+
+  @override
+  String get taskFlowUiMoveDown => 'Move down';
+
+  @override
+  String get taskFlowUiMoveDownDisabled => 'Move down (already last)';
+
+  @override
+  String get taskFlowUiDeleteBlock => 'Delete block';
+
+  @override
+  String taskFlowUiInputLabel(Object label) {
+    return 'Input: $label';
+  }
+
+  @override
+  String taskFlowUiOutputLabel(Object label) {
+    return 'Output: $label';
+  }
+
+  @override
+  String taskFlowUiUnregisteredBlockType(Object name) {
+    return 'Block type “$name” is not registered';
+  }
+
+  @override
+  String taskFlowUiBlockSettings(Object label) {
+    return '$label settings';
+  }
+
+  @override
+  String get taskFlowUiSendToAssistant =>
+      'The user message sent to the assistant is the previous step’s output';
+
+  @override
+  String get taskFlowUiTempSpaceInfo =>
+      'This step outputs to the flow’s temporary space. Its output is cleaned up after the next step saves successfully. The original save folder is preserved and restored when temporary mode is disabled.';
+
+  @override
+  String get taskFlowUiNoExtraParameters =>
+      'This block has no additional parameters';
+
+  @override
+  String get taskFlowUiCancel => 'Cancel';
+
+  @override
+  String get taskFlowUiConfirm => 'Confirm';
+
+  @override
+  String get taskFlowUiConfigureModelFirst => 'Configure a model first';
+
+  @override
+  String get taskFlowUiModelUnavailable =>
+      'No model is selected or the model is unavailable. Select another model.';
+
+  @override
+  String taskFlowUiModelIndexed(Object index) {
+    return 'Model $index';
+  }
+
+  @override
+  String get taskFlowUiUnnamedProvider => 'Unnamed provider';
+
+  @override
+  String get taskFlowUiCustomModelParameters => 'Custom model parameters';
+
+  @override
+  String get taskFlowUiTtsVoiceMissing =>
+      'No TTS models have configured voices. You can enter an ID manually.';
+
+  @override
+  String get taskFlowUiVoiceUnavailable =>
+      'Voice is unavailable. Select another voice.';
+
+  @override
+  String get taskFlowUiSelectVoice => 'Select a voice';
+
+  @override
+  String get taskFlowUiAssistantUnavailable => 'Assistant unavailable';
+
+  @override
+  String get taskFlowUiAssistantUseCurrent =>
+      'Not specified (use the currently selected assistant)';
+
+  @override
+  String get taskFlowUiAssistantDeleted =>
+      'The configured assistant was deleted. Select another assistant.';
+
+  @override
+  String get taskFlowUiChooseAssistant => 'Choose an assistant';
+
+  @override
+  String get taskFlowUiOnlyCustomAssistants =>
+      'Only “My Assistants” can be selected (add one in “Chat → Assistants”)';
+
+  @override
+  String get taskFlowUiMyAssistants => 'My Assistants';
+
+  @override
+  String get taskFlowUiNoCustomAssistants =>
+      'No custom assistants yet. Create one in “Chat → Assistants”.';
+
+  @override
+  String get taskFlowUiYes => 'Yes';
+
+  @override
+  String get taskFlowUiNo => 'No';
+
+  @override
+  String get taskFlowUiDefaultRoot => 'Default (root folder)';
+
+  @override
+  String get taskFlowUiSelect => 'Select';
+
+  @override
+  String get taskFlowUiSelectSaveFolder => 'Choose a save folder';
+
+  @override
+  String get taskFlowUiCatCatchVideo => 'Video';
+
+  @override
+  String get taskFlowUiCatCatchAudio => 'Audio';
+
+  @override
+  String get taskFlowUiCatCatchEither =>
+      'Video or audio (filter based on downstream steps)';
+
+  @override
+  String get taskFlowUiManual => 'Manual';
+
+  @override
+  String get taskFlowUiAutomatic => 'Automatic';
+
+  @override
+  String get taskFlowUiAutomaticPrompt => 'Automatic with confirmation';
+
+  @override
+  String get taskFlowUiEditTitle => 'Edit Task Flow';
+
+  @override
+  String get taskFlowUiCreateTitle => 'New Task Flow';
+
+  @override
+  String taskFlowUiStepNumber(Object index, Object message) {
+    return 'Step $index: $message';
+  }
+
+  @override
+  String taskFlowUiInputTypeValue(Object type) {
+    return 'Input type: $type';
+  }
+
+  @override
+  String taskFlowUiBlockInputValue(Object type) {
+    return 'Input: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutputValue(Object type) {
+    return 'Output: $type';
+  }
+
+  @override
+  String taskFlowUiCleanupError(Object error) {
+    return 'Could not clean up the removed file: $error';
+  }
+
+  @override
+  String taskFlowUiSelectFileError(Object error) {
+    return 'Could not select the file: $error';
+  }
+
+  @override
+  String taskFlowUiLargeFile(Object limit, Object name) {
+    return '“$name” exceeds $limit MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowUiUnreadableFile(Object name) {
+    return '“$name” is empty or unreadable';
+  }
+
+  @override
+  String get taskFlowUiTemporary => 'Temporary';
+
+  @override
+  String get taskFlowUiTemporaryFileHint =>
+      'Temporary file (cleaned up after the next step succeeds)';
+
+  @override
+  String taskFlowUiUnregisteredBlock(Object name) {
+    return 'Block type “$name” is not registered';
+  }
+
+  @override
+  String taskFlowUiRunSummary(Object finished, Object total) {
+    return '$finished of $total runs finished';
+  }
+
+  @override
+  String taskFlowUiClearedRecordCount(Object count) {
+    return ' · $count records cleared';
+  }
+
+  @override
+  String taskFlowUiInputOutput(Object input, Object output) {
+    return 'Input: $input → Output: $output';
+  }
+
+  @override
+  String get taskFlowCardTag => 'Task Flow';
+
+  @override
+  String get taskFlowCardQueued => 'Queued (waiting for resources)';
+
+  @override
+  String taskFlowCardCompletedProgress(Object done, Object total) {
+    return '$done of $total completed';
+  }
+
+  @override
+  String taskFlowCardCountLabel(Object count, Object label) {
+    return '$count $label';
+  }
+
+  @override
+  String get taskFlowCardFailedLabel => 'failed';
+
+  @override
+  String get taskFlowCardSkippedLabel => 'skipped';
+
+  @override
+  String get taskFlowCardCancelledLabel => 'cancelled';
+
+  @override
+  String get taskFlowCardInterruptedLabel => 'interrupted';
+
+  @override
+  String get taskFlowCardCancelFlow => 'Cancel flow';
+
+  @override
+  String get taskFlowCardRetry => 'Retry';
+
+  @override
+  String get taskFlowCardCancelBatch => 'Cancel entire batch';
+
+  @override
+  String get taskFlowCardDelete => 'Delete';
+
+  @override
+  String get taskFlowCardRetryFlow => 'Retry task flow';
+
+  @override
+  String get taskFlowCardNoSnapshot =>
+      'This run has no snapshot. It will start over using the current flow configuration.';
+
+  @override
+  String get taskFlowCardRetryInfo =>
+      'Starting over downloads files and calls models again. Retry with the configuration used at launch, or explicitly choose the latest configuration. To reuse completed steps, choose “Resume from interrupted step.”';
+
+  @override
+  String get taskFlowCardRunLatest => 'Run with latest configuration';
+
+  @override
+  String get taskFlowCardRetryOriginal => 'Retry with original configuration';
+
+  @override
+  String get taskFlowCardDeleteRecord => 'Delete task flow record';
+
+  @override
+  String get taskFlowCardDeleteBatchConfirm =>
+      'Deleting this run will cancel unfinished tasks in the batch and clear their subtask records. Delete?';
+
+  @override
+  String get taskFlowCardDeleteRunningConfirm =>
+      'This flow is running. Deleting it will cancel its active tasks. Delete?';
+
+  @override
+  String get taskFlowCardDeleteRecordConfirm =>
+      'Delete this flow record and its subtask records?';
+
+  @override
+  String get taskFlowCardDeleteConfirm => 'Delete this flow record?';
+
+  @override
+  String get taskFlowCardSaveCancelStateError =>
+      'Could not save the flow cancellation state. Try deleting again.';
+
+  @override
+  String get taskFlowCardStillRunning =>
+      'The flow is still running after cancellation.';
+
+  @override
+  String get taskFlowCardSaveDeleteStateError =>
+      'Could not save the flow record deletion state. Try deleting again.';
+
+  @override
+  String get taskFlowCardConfirm => 'Confirm';
+
+  @override
+  String get taskFlowCardWaiting => 'Waiting';
+
+  @override
+  String get taskFlowCardRunning => 'Running';
+
+  @override
+  String get taskFlowCardPaused => 'Paused';
+
+  @override
+  String get taskFlowCardCompleted => 'Completed';
+
+  @override
+  String get taskFlowCardFailed => 'Failed';
+
+  @override
+  String get taskFlowCardCanceled => 'Canceled';
+
+  @override
+  String get taskFlowCardInterrupted => 'Interrupted';
+
+  @override
+  String get taskFlowCardSucceeded => 'Skipped';
+
+  @override
+  String get taskFlowCardPause => 'Pause flow';
+
+  @override
+  String get taskFlowCardResume => 'Resume flow';
+
+  @override
+  String get taskFlowCardResumeInterrupted => 'Resume from interrupted step';
+
+  @override
+  String get taskFlowCardCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskType => 'Task type';
+
+  @override
+  String get unifiedTaskCreatedAt => 'Created';
+
+  @override
+  String get unifiedTaskCompletedAt => 'Completed';
+
+  @override
+  String get unifiedTaskResultStatus => 'Result status';
+
+  @override
+  String get unifiedTaskPartialResult =>
+      'Partial result; content may be incomplete';
+
+  @override
+  String get unifiedTaskErrorDetails => 'Error details';
+
+  @override
+  String get unifiedTaskViewErrorDetails => 'View error details';
+
+  @override
+  String get unifiedTaskOcrPerImage => 'Recognize each image';
+
+  @override
+  String unifiedTaskOcrPageIndex(Object index) {
+    return 'Image $index';
+  }
+
+  @override
+  String get unifiedTaskOcrPending => 'Waiting to recognize';
+
+  @override
+  String get unifiedTaskOcrRunning => 'Recognizing';
+
+  @override
+  String get unifiedTaskCompleted => 'Completed';
+
+  @override
+  String get unifiedTaskIncomplete => 'Incomplete result';
+
+  @override
+  String get unifiedTaskOcrFailed => 'Recognition failed';
+
+  @override
+  String get unifiedTaskCancelled => 'Canceled';
+
+  @override
+  String get unifiedTaskWaitingStart => 'Waiting to start...';
+
+  @override
+  String get unifiedTaskSteps => 'Steps';
+
+  @override
+  String get unifiedTaskStartNow => 'Start now';
+
+  @override
+  String get unifiedTaskOpenFile => 'Open file';
+
+  @override
+  String get unifiedTaskRetrySave => 'Retry saving only';
+
+  @override
+  String get unifiedTaskRetryPartialSave => 'Retry saving partial result only';
+
+  @override
+  String get unifiedTaskSavePartialResult => 'Save partial result';
+
+  @override
+  String get unifiedTaskRetry => 'Retry';
+
+  @override
+  String get unifiedTaskCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskDelete => 'Delete';
+
+  @override
+  String get unifiedTaskFormatUnsupported =>
+      'Preview is not supported for this format';
+
+  @override
+  String unifiedTaskLoadFailed(Object error) {
+    return 'Load failed: $error';
+  }
+
+  @override
+  String unifiedTaskPlaybackFailed(Object error) {
+    return 'Playback failed: $error';
+  }
+
+  @override
+  String get unifiedTaskAudioFile => 'Audio file';
+
+  @override
+  String get unifiedTaskPreviewLoadFailed => 'Could not load preview';
+
+  @override
+  String get unifiedTaskUnknownSize => 'Unknown size';
+
+  @override
+  String get unifiedTaskUnnamedRecording => 'Untitled recording';
+
+  @override
+  String get unifiedTaskPause => 'Pause';
+
+  @override
+  String get unifiedTaskClearTask => 'Clear task';
+
+  @override
+  String get unifiedTaskContinue => 'Continue';
+
+  @override
+  String get unifiedTaskRemoveFromList => 'Remove from list';
+
+  @override
+  String get unifiedTaskSynthesisText => 'Synthesized text';
+
+  @override
+  String get unifiedTaskStatus => 'Status';
+
+  @override
+  String get unifiedTaskDetails => 'Details';
+
+  @override
+  String get unifiedTaskSynthesisError => 'Synthesis error details';
+
+  @override
+  String get unifiedTaskClose => 'Close';
+
+  @override
+  String get unifiedTaskRawRequestResponse => 'Raw request and response';
+
+  @override
+  String get unifiedTaskRawRequestBody => 'Raw request body:';
+
+  @override
+  String get unifiedTaskRawResponseBody => 'Raw response body:';
+
+  @override
+  String get commonJustNow => 'Just now';
+
+  @override
+  String commonMinutesAgo(Object count) {
+    return '$count min ago';
+  }
+
+  @override
+  String commonHoursAgo(Object count) {
+    return '$count hr ago';
+  }
+
+  @override
+  String unifiedDurationSeconds(Object seconds) {
+    return '$seconds sec';
+  }
+
+  @override
+  String unifiedDurationMinutesSeconds(Object minutes, Object seconds) {
+    return '$minutes min $seconds sec';
+  }
+
+  @override
+  String unifiedDurationHoursMinutes(Object hours, Object minutes) {
+    return '$hours hr $minutes min';
+  }
+
+  @override
+  String get unifiedTaskTypeOcr => 'Image text recognition';
+
+  @override
+  String get unifiedTaskTypeAsr => 'Audio transcription';
+
+  @override
+  String get unifiedTaskTypeAudioSeparation => 'Audio separation';
+
+  @override
+  String get unifiedTaskTypeChat => 'Assistant chat';
+
+  @override
+  String get unifiedTaskPlayAudio => 'Play audio';
+
+  @override
+  String get unifiedTaskPauseAudio => 'Pause audio';
+
+  @override
+  String get catcatchFlowActionNotStarted =>
+      'Flow action did not start. Check the flow status and try again.';
+
+  @override
+  String catcatchFlowActionFailed(Object error) {
+    return 'Flow action failed: $error';
+  }
+
+  @override
+  String get catcatchSkipped => 'Skipped (nothing to process)';
+
+  @override
+  String get catcatchRetryStep => 'Retry this step';
+
+  @override
+  String catcatchCollapseSegments(Object count) {
+    return 'Hide $count segments';
+  }
+
+  @override
+  String catcatchShowSegments(Object count) {
+    return 'Show $count segments';
+  }
+
+  @override
+  String catcatchSelectedResources(Object selected, Object total) {
+    return '$selected of $total resources selected';
+  }
+
+  @override
+  String catcatchDetectedMediaResources(Object count) {
+    return '$count media resources detected';
+  }
+
+  @override
+  String get catcatchFlowSelectOrCombine =>
+      '(select one resource or combine an audio/video pair)';
+
+  @override
+  String get catcatchSelectMultiple => '(tap to select; multiple allowed)';
+
+  @override
+  String get catcatchWaitingForResources => 'Waiting for flow resources';
+
+  @override
+  String catcatchDownloadSelected(Object count) {
+    return 'Download $count selected resources';
+  }
+
+  @override
+  String get catcatchSelectResources => 'Select resources to download';
+
+  @override
+  String get catcatchPossibleSplit =>
+      '⚠ Possible separate audio and video streams';
+
+  @override
+  String get catcatchSplitExplanation =>
+      'These resources may be separate audio and video streams for the same video. You can combine them or download only one stream.';
+
+  @override
+  String get catcatchAudioStream => '🎵 Audio stream';
+
+  @override
+  String get catcatchVideoStream => '🎬 Video stream';
+
+  @override
+  String get catcatchMergeAudioVideo => 'Combine audio and video';
+
+  @override
+  String get catcatchVideoOnly => 'Video only';
+
+  @override
+  String get catcatchAudioOnly => 'Audio only';
+
+  @override
+  String get catcatchSegmentsPlaylistPreview =>
+      'Preview segments using the playlist';
+
+  @override
+  String get catcatchPreviewAudio => 'Preview audio';
+
+  @override
+  String get catcatchPreviewVideo => 'Preview video';
+
+  @override
+  String catcatchDuration(Object duration) {
+    return 'Duration: $duration';
+  }
+
+  @override
+  String get catcatchSegment => 'Segment';
+
+  @override
+  String get catcatchPlaylist => 'Playlist';
+
+  @override
+  String get catcatchFullVideo => 'Full video';
+
+  @override
+  String get catcatchSeparateTracks => 'Separate tracks';
+
+  @override
+  String get catcatchPreviewPlaylistOnly => 'Preview using the playlist';
+
+  @override
+  String get catcatchPreviewUnsupported => 'Preview is not supported';
+
+  @override
+  String get catcatchUnknownFormat => 'Unknown format';
+
+  @override
+  String get catcatchNeedPlaylistProcessing => 'Playlist processing required';
+
+  @override
+  String get catcatchSpecialFormatDetected => 'Special format detected';
+
+  @override
+  String catcatchPlaylistInfo(Object format) {
+    return 'This resource is a playlist ($format). It must be parsed and all segments downloaded and combined into a playable video.';
+  }
+
+  @override
+  String catcatchFormatInfo(Object format) {
+    return 'The downloaded file is in $format, not standard MP4. The built-in pure Dart remux engine will convert it to MP4 (TS/FLV/EV1 require no external dependencies).';
+  }
+
+  @override
+  String get catcatchContinueBeforeConfirm =>
+      'Resume the flow before confirming format handling';
+
+  @override
+  String get catcatchAutoProcess => 'Process automatically';
+
+  @override
+  String get catcatchKeepOriginalFormat => 'Keep original format';
+
+  @override
+  String get catcatchResumeSupported => 'Resume supported';
+
+  @override
+  String get catcatchResumeUnsupported => 'This site does not support resuming';
+
+  @override
+  String get catcatchPauseDownload => 'Pause download';
+
+  @override
+  String get catcatchResumeDownload => 'Resume download';
+
+  @override
+  String get catcatchRestartDownload => 'Download again';
+
+  @override
+  String get catcatchPendingFormatAction => 'Waiting for flow resources';
+
+  @override
+  String get quitDialogTitle => 'Quit app?';
+
+  @override
+  String quitDialogRunningTasks(Object count) {
+    return '$count tasks are running. Quitting will interrupt them. Do you want to quit?';
+  }
+
+  @override
+  String get quitDialogNoTasks => 'Do you want to quit Stroom?';
+
+  @override
+  String get quitDialogCancel => 'Cancel';
+
+  @override
+  String get quitDialogExit => 'Quit';
+
+  @override
+  String get searchPanelNewConversation => 'New conversation';
+
+  @override
+  String get searchPanelTitle => 'Search conversations';
+
+  @override
+  String get searchPanelHint => 'Enter a keyword...';
+
+  @override
+  String get searchPanelByTitle => 'Search titles';
+
+  @override
+  String get searchPanelByContent => 'Search content';
+
+  @override
+  String searchPanelResults(Object count) {
+    return '$count results';
+  }
+
+  @override
+  String get searchPanelPrompt => 'Enter a keyword to search';
+
+  @override
+  String get searchPanelNoResults => 'No matching conversations found';
+
+  @override
+  String get topicItemNew => 'New topic';
+
+  @override
+  String get topicItemUnpin => 'Unpin';
+
+  @override
+  String get topicItemPin => 'Pin';
+
+  @override
+  String get topicItemRename => 'Rename';
+
+  @override
+  String get topicItemAutoName => 'Auto name';
+
+  @override
+  String get topicItemDelete => 'Delete';
+
+  @override
+  String get galleryChoiceTitle => 'Choose an image source';
+
+  @override
+  String get galleryChoiceDevice => 'Device gallery';
+
+  @override
+  String get galleryChoiceDeviceDescription =>
+      'Browse photos and videos on your device';
+
+  @override
+  String get galleryChoiceApp => 'App gallery';
+
+  @override
+  String get galleryChoiceAppDescription => 'Choose from the app gallery';
+
+  @override
+  String get appMediaUnreadable => 'Could not read file';
+
+  @override
+  String appMediaClearSelection(Object count) {
+    return 'Clear ($count)';
+  }
+
+  @override
+  String appMediaConfirmSelectionCount(Object count) {
+    return 'Done ($count)';
+  }
+
+  @override
+  String get appMediaConfirmSelection => 'Done';
+
+  @override
+  String get appMediaEmptyFolder => 'This folder is empty';
+
+  @override
+  String get appMediaRoot => 'Go to root folder';
+
+  @override
+  String appMediaParentFolder(Object name) {
+    return 'Back: $name';
+  }
+
+  @override
+  String appMediaSelectedFiles(Object count) {
+    return '$count files selected';
+  }
+
+  @override
+  String get imagePreviewCrop => 'Crop';
+
+  @override
+  String get imagePreviewEdit => 'Edit';
+
+  @override
+  String get imagePreviewLoadFailed => 'Could not load image';
+
+  @override
+  String runningElapsed(Object elapsed) {
+    return 'Running for $elapsed';
+  }
+
+  @override
+  String get chatAttachmentFile => 'Attach file';
+
+  @override
+  String get chatAttachmentCamera => 'Take photo';
+
+  @override
+  String get chatAttachmentDeviceGallery => 'Device gallery';
+
+  @override
+  String get chatAttachmentDeviceFiles => 'Device files';
+
+  @override
+  String get chatAttachmentAppFiles => 'App files';
+
+  @override
+  String fileManagerTodayTime(Object time) {
+    return 'Today $time';
+  }
+
+  @override
+  String fileManagerYesterdayTime(Object time) {
+    return 'Yesterday $time';
+  }
+
+  @override
+  String fileManagerDaysAgoTime(Object days, Object time) {
+    return '$days days ago $time';
+  }
+
+  @override
+  String get markdownGenerating => 'Generating...';
+
+  @override
+  String get htmlPreview => 'Preview';
+
+  @override
+  String get htmlReturnToCard => 'Return to card';
+
+  @override
+  String get htmlGenerating => 'Generating...';
+
+  @override
+  String get htmlFullscreen => 'View fullscreen';
+
+  @override
+  String get htmlViewCode => 'View code';
+
+  @override
+  String get codeScrollToBottom => 'Scroll to bottom';
+
+  @override
+  String get codeSave => 'Save';
+
+  @override
+  String get codeDisableWrap => 'Disable wrapping';
+
+  @override
+  String get codeEnableWrap => 'Wrap lines';
+
+  @override
+  String codeCopyFailed(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get codeCopied => 'Copied';
+
+  @override
+  String get codeCopy => 'Copy';
+
+  @override
+  String get codeEmptySave => 'Code is empty and cannot be saved';
+
+  @override
+  String get codeSaveTitle => 'Save code';
+
+  @override
+  String codeSavedTo(Object path) {
+    return 'Saved to: $path';
+  }
+
+  @override
+  String codeSaveFailed(Object error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get fileManagerCopy => 'Copy';
+
+  @override
+  String get fileManagerMove => 'Move';
+
+  @override
+  String get fileManagerRename => 'Rename';
+
+  @override
+  String get fileManagerExport => 'Export';
+
+  @override
+  String get fileManagerDelete => 'Delete';
+
+  @override
+  String get fileManagerAncestorFolders => 'Ancestor folders';
+
+  @override
+  String get fileManagerRoot => 'Root';
+
+  @override
+  String fileManagerSelectedItems(Object count) {
+    return '$count selected';
+  }
+
+  @override
+  String get fileManagerSelectAll => 'Select all';
+
+  @override
+  String get fileManagerRenameUndo => 'Last batch rename result and undo';
+
+  @override
+  String fileManagerSortBy(Object field) {
+    return 'Sort ($field)';
+  }
+
+  @override
+  String get fileManagerSortCreated => 'Sort by created date';
+
+  @override
+  String get fileManagerSortModified => 'Sort by modified date';
+
+  @override
+  String get fileManagerSortName => 'Sort by name';
+
+  @override
+  String get fileManagerSortSize => 'Sort by size';
+
+  @override
+  String get fileManagerListView => 'List view';
+
+  @override
+  String get fileManagerThumbnailView => 'Thumbnail view';
+
+  @override
+  String get fileManagerCreateFolder => 'Create folder';
+
+  @override
+  String get fileManagerRefresh => 'Refresh list';
+
+  @override
+  String get fileManagerEmptyFolder => 'This folder is empty';
+
+  @override
+  String get fileManagerNoFiles => 'No files';
+
+  @override
+  String get fileManagerBackRoot => 'Back to root';
+
+  @override
+  String fileManagerBackFolder(Object name) {
+    return 'Back: $name';
+  }
+
+  @override
+  String get fileManagerMultiSelect => 'Select multiple';
+
+  @override
+  String get fileManagerOpen => 'Open';
+
+  @override
+  String get fileManagerPreview => 'Preview';
+
+  @override
+  String fileManagerFolderAndFilesCount(Object files, Object folders) {
+    return '$files files, $folders subfolders';
+  }
+
+  @override
+  String fileManagerSubfoldersCount(Object count) {
+    return '$count subfolders';
+  }
+
+  @override
+  String fileManagerFilesCount(Object count) {
+    return '$count files';
+  }
+
+  @override
+  String get fileManagerEmptyFolderLabel => 'Empty folder';
+
+  @override
+  String fileManagerFileExists(Object format, Object name) {
+    return 'File “$name.$format” already exists';
+  }
+
+  @override
+  String fileManagerRenameFailed(Object error) {
+    return 'Rename failed: $error';
+  }
+
+  @override
+  String get fileManagerChooseTargetFolder => 'Choose a destination folder';
+
+  @override
+  String get fileManagerAlreadyAtDestination =>
+      'The file is already at the destination';
+
+  @override
+  String get fileManagerMoveNameConflict =>
+      'A file with the same name already exists in the destination. Move canceled.';
+
+  @override
+  String fileManagerMoveFailed(Object error) {
+    return 'Move failed: $error';
+  }
+
+  @override
+  String get fileManagerChooseCopyDestination => 'Choose a folder to copy to';
+
+  @override
+  String fileManagerCopyFailed(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get fileManagerDeleteConfirmTitle => 'Confirm deletion';
+
+  @override
+  String get fileManagerDeleteFileConfirm =>
+      'Delete this file? This action cannot be undone.';
+
+  @override
+  String get fileManagerCancel => 'Cancel';
+
+  @override
+  String fileManagerDeleteFailed(Object error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String get fileManagerFolderAlreadyThere =>
+      'The folder is already at the destination. Operation canceled.';
+
+  @override
+  String get fileManagerFolderConflict =>
+      'A folder with the same name exists at the destination, or the destination is inside the selected folder. Operation canceled.';
+
+  @override
+  String get fileManagerBatchDeleteTitle => 'Confirm bulk deletion';
+
+  @override
+  String fileManagerDeleteSelectedConfirm(Object count) {
+    return 'Delete the $count selected items? This action cannot be undone.';
+  }
+
+  @override
+  String fileManagerBatchDeleteFailed(Object error) {
+    return 'Bulk delete failed: $error';
+  }
+
+  @override
+  String get fileManagerExportConflict =>
+      'Export paths for the selected files and folders conflict';
+
+  @override
+  String get fileManagerSelectedAlreadyThere =>
+      'The selected file is already at the destination. Move canceled.';
+
+  @override
+  String fileManagerBatchMoveFailed(Object error) {
+    return 'Bulk move failed: $error';
+  }
+
+  @override
+  String get fileManagerCopyConflict =>
+      'The selection contains files with duplicate names. Copy canceled; copy them one at a time.';
+
+  @override
+  String fileManagerBatchCopyFailed(Object error) {
+    return 'Bulk copy failed: $error';
+  }
+
+  @override
+  String get fileManagerClosedError => 'The file page is closed';
+
+  @override
+  String fileManagerBatchRenameFailed(Object error) {
+    return 'Bulk rename failed: $error';
+  }
+
+  @override
+  String get fileManagerFolderNameHint => 'Enter a folder name';
+
+  @override
+  String get fileManagerCreate => 'Create';
+
+  @override
+  String get fileManagerFolderExists => 'Folder already exists';
+
+  @override
+  String fileManagerCreateFolderFailed(Object error) {
+    return 'Could not create folder: $error';
+  }
+
+  @override
+  String fileManagerFolderCreated(Object name) {
+    return 'Folder “$name” created';
+  }
+
+  @override
+  String get fileManagerRenameFolderTitle => 'Rename folder';
+
+  @override
+  String get fileManagerNewNameHint => 'Enter a new name';
+
+  @override
+  String get fileManagerTargetFolderConflict =>
+      'A folder with the same name already exists at the destination. Operation canceled.';
+
+  @override
+  String get fileManagerMoveFolderTitle => 'Move folder to…';
+
+  @override
+  String get fileManagerCopyFolderTitle => 'Copy folder to…';
+
+  @override
+  String get fileManagerFolderSelfConflict =>
+      'A folder with the same name exists at the destination, or the destination is the folder itself. Operation canceled.';
+
+  @override
+  String fileManagerDeleteFolderConfirm(Object count, Object name) {
+    return 'Delete folder “$name”? Its $count files will also be deleted.';
+  }
+
+  @override
+  String fileManagerDeleteEmptyFolderConfirm(Object name) {
+    return 'Delete empty folder “$name”?';
+  }
+
+  @override
+  String get fileManagerDeleteFolderTitle => 'Confirm folder deletion';
+
+  @override
+  String fileManagerRefreshFailed(Object error) {
+    return 'Refresh failed: $error';
+  }
+
+  @override
+  String get fileManagerRefreshed => 'File list refreshed';
+
+  @override
+  String get fileManagerRenameFileTitle => 'Rename file';
+
+  @override
+  String get fileManagerFormat => 'Format';
+
+  @override
+  String get fileManagerFolderAtDestination =>
+      'Folder is already at the destination';
+
+  @override
+  String get folderPickerTitle => 'Choose folder';
+
+  @override
+  String get folderPickerExists => 'Folder already exists';
+
+  @override
+  String folderPickerCreateFailed(Object error) {
+    return 'Could not create folder: $error';
+  }
+
+  @override
+  String folderPickerRefreshFailed(Object error) {
+    return 'Could not refresh folder list: $error';
+  }
+
+  @override
+  String get folderPickerInstruction =>
+      'Click to select; double-click to open a folder';
+
+  @override
+  String get folderPickerFileName => 'File name';
+
+  @override
+  String get folderPickerFileNameHint => 'Enter a file name';
+
+  @override
+  String get folderPickerBack => 'Go up one level';
+
+  @override
+  String folderPickerPath(Object path) {
+    return 'Root > $path';
+  }
+
+  @override
+  String get folderPickerRoot => 'Root';
+
+  @override
+  String get folderPickerCurrentFolder => 'Current folder';
+
+  @override
+  String get folderPickerSubfolders => 'Subfolders';
+
+  @override
+  String get folderPickerExistingFolders => 'Existing folders';
+
+  @override
+  String get folderPickerCreateNew => 'Create new folder';
+
+  @override
+  String get folderPickerFolderNameHint => 'Enter a folder name';
+
+  @override
+  String get folderPickerCancelCreate => 'Cancel creation';
+
+  @override
+  String get folderPickerCancel => 'Cancel';
+
+  @override
+  String get folderPickerConfirm => 'Done';
+
+  @override
+  String batchRunReadFailed(Object error) {
+    return 'Could not read file list: $error';
+  }
+
+  @override
+  String get batchRunPreparing => 'Preparing…';
+
+  @override
+  String get batchRunUndo => 'Undo';
+
+  @override
+  String get batchRunRename => 'Rename';
+
+  @override
+  String batchRunFailedAction(Object label) {
+    return 'Could not $label';
+  }
+
+  @override
+  String batchRunCompletedCount(Object count, Object label) {
+    return '$label $count items';
+  }
+
+  @override
+  String batchRunSummary(
+    Object completed,
+    Object failed,
+    Object label,
+    Object remaining,
+  ) {
+    return '$label: $completed succeeded, $failed failed, $remaining remaining';
+  }
+
+  @override
+  String batchRunFailedItem(Object id, Object name) {
+    return 'Failed: $id → $name';
+  }
+
+  @override
+  String get batchRunReportCopied => 'Execution report copied';
+
+  @override
+  String get batchRunCopyFailed => 'Copy failed. Try again.';
+
+  @override
+  String batchRunWorking(Object label) {
+    return '$label…';
+  }
+
+  @override
+  String get batchRunTitle => 'Batch rename results';
+
+  @override
+  String get batchRunStoppedRetain =>
+      'Stopping keeps completed items. You can undo them on the results page.';
+
+  @override
+  String get batchRunFailedRemaining =>
+      'Failed; remaining items were not processed';
+
+  @override
+  String get batchRunUndoInfo =>
+      'Undo restores the original names for items completed in this run. Undo is refused if the file list has changed since.';
+
+  @override
+  String get batchRunUncertain =>
+      'Some item states could not be confirmed. Check the file list; automatic undo is unavailable to avoid overwriting files.';
+
+  @override
+  String get batchRunUndoing => 'Restoring original names…';
+
+  @override
+  String get batchRunStopping => 'Stopping…';
+
+  @override
+  String get batchRunStopRemaining => 'Stop remaining items';
+
+  @override
+  String get batchRunCopyReport => 'Copy report';
+
+  @override
+  String batchRunUndoRemaining(Object count) {
+    return 'Continue undoing the remaining $count';
+  }
+
+  @override
+  String get batchRunUndoCompleted => 'Undo completed renames';
+
+  @override
+  String get batchRunDone => 'Done';
+
+  @override
+  String get codeEditorTitle => 'Edit parameter value';
+
+  @override
+  String get codeEditorFormat => 'Format';
+
+  @override
+  String get codeEditorCancel => 'Cancel';
+
+  @override
+  String get codeEditorConfirm => 'OK';
+
+  @override
+  String get codeEditorInvalidJson => 'Invalid JSON. Fix it before saving.';
+
+  @override
+  String get codeEditorParamPath =>
+      'Parameter name path (expanded into nested JSON when sent)';
+
+  @override
+  String codeEditorErrorPosition(String line, String column, String message) {
+    return 'Line $line, column $column: $message';
+  }
+
+  @override
+  String codeEditorJsonError(String message) {
+    return 'JSON format error: $message';
+  }
+
+  @override
+  String get codeEditorInvalidFormat => 'Invalid JSON format';
+
+  @override
+  String get toolCallCompacted => 'Compacted';
+
+  @override
+  String get mermaidSaveEmpty => 'Mermaid code is empty. Nothing to save.';
+
+  @override
+  String mermaidFolderLoadFailed(String error) {
+    return 'Could not load folders: $error';
+  }
+
+  @override
+  String get mermaidSaveTitle => 'Save Mermaid diagram';
+
+  @override
+  String get mermaidSaveHint => 'Choose or create a folder for the .mmd file';
+
+  @override
+  String get mermaidSaveFilenameHint =>
+      'Enter a file name (.mmd is added automatically)';
+
+  @override
+  String get mermaidFilenameEmpty => 'File name cannot be empty';
+
+  @override
+  String mermaidSaveSuccess(String folder, String name) {
+    return 'Saved to text storage: $folder/$name.mmd';
+  }
+
+  @override
+  String mermaidSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get mermaidPrepareEngine => 'Preparing rendering engine...';
+
+  @override
+  String get mermaidRetry => 'Retry';
+
+  @override
+  String get batchRuleEmpty => 'Cannot be empty';
+
+  @override
+  String get batchRuleNumber => 'Enter a number';
+
+  @override
+  String get batchRulePositive => 'Enter a number greater than 0';
+
+  @override
+  String batchRuleMin(String min) {
+    return 'Must be at least $min';
+  }
+
+  @override
+  String batchRuleMax(String max) {
+    return 'Must be no greater than $max';
+  }
+
+  @override
+  String get batchRulePrefix => 'Prefix';
+
+  @override
+  String get batchRuleSuffix => 'Suffix';
+
+  @override
+  String get batchRuleStart => 'Start';
+
+  @override
+  String get batchRuleStep => 'Step';
+
+  @override
+  String get batchRuleDigits => 'Digits';
+
+  @override
+  String get batchRuleSeparator => 'Separator';
+
+  @override
+  String get batchRuleRestartFolder => 'Restart numbering in each folder';
+
+  @override
+  String get batchRuleNumberHelp =>
+      'Numbers follow preview order; excluded items do not use a number. Step can be negative or 0.';
+
+  @override
+  String get batchRuleFind => 'Find';
+
+  @override
+  String get batchRuleReplace => 'Replace with (leave empty to delete)';
+
+  @override
+  String get batchRuleCaseSensitive => 'Case sensitive';
+
+  @override
+  String get batchRuleRegex => 'Regular expression';
+
+  @override
+  String get batchRuleFirstOnly => 'Replace first match only';
+
+  @override
+  String get batchRuleRegexHelp =>
+      'Capture groups: \$1, \$2; full match: \$0; literal \$: \$\$. Example: ^IMG_(\\d+)\$ → Photo_\$1';
+
+  @override
+  String get batchRuleFindRequired => 'Enter text to find to enable this rule.';
+
+  @override
+  String get batchRuleBeginning => 'Beginning';
+
+  @override
+  String get batchRuleEnd => 'End';
+
+  @override
+  String get batchRulePosition => 'Position';
+
+  @override
+  String get batchRuleInsertText => 'Text to insert';
+
+  @override
+  String get batchRuleBeforeChar => 'Before character N';
+
+  @override
+  String get batchRulePositionHelp =>
+      'Positions start at 1; values beyond the end are appended. Combined emoji count as one character.';
+
+  @override
+  String get batchRuleFromBeginning => 'From beginning';
+
+  @override
+  String get batchRuleFromEnd => 'From end';
+
+  @override
+  String get batchRuleFromChar => 'Starting at character N';
+
+  @override
+  String get batchRuleCount => 'Count';
+
+  @override
+  String get batchRuleDeleteHelp =>
+      'If deletion empties the name, a later insert rule must add text before execution.';
+
+  @override
+  String get batchRuleUpper => 'UPPERCASE';
+
+  @override
+  String get batchRuleLower => 'lowercase';
+
+  @override
+  String get batchRuleFirstUpper => 'Capitalize first letter';
+
+  @override
+  String get batchRuleTitleCase => 'Capitalize Each Word';
+
+  @override
+  String get batchRuleTemplate => 'New name template';
+
+  @override
+  String batchRuleTemplateHint(String n, String name) {
+    return 'Course_${n}_$name';
+  }
+
+  @override
+  String batchRuleTemplateHelp(
+    String name,
+    String n,
+    String folder,
+    String created,
+    String modified,
+    String ext,
+  ) {
+    return '$name original name · $n sequence · $folder folder name\n$created creation date · $modified modified date · $ext original extension\nDate format YYYY-MM-DD; missing dates are reported. The template replaces the whole base name; the extension is kept automatically.';
+  }
+
+  @override
+  String get batchRuleTrim => 'Trim leading and trailing spaces';
+
+  @override
+  String get batchRuleCollapseSpaces =>
+      'Replace consecutive spaces with one space';
+
+  @override
+  String get batchRuleActions => 'Rule actions';
+
+  @override
+  String get batchRuleDuplicate => 'Duplicate rule';
+
+  @override
+  String get batchRuleRemove => 'Delete rule';
+
+  @override
+  String get batchRuleMoveUp => 'Move rule up';
+
+  @override
+  String get batchRuleMoveDown => 'Move rule down';
+
+  @override
+  String get batchDlgSavePreset => 'Save preset';
+
+  @override
+  String get batchDlgPresetName => 'Preset name';
+
+  @override
+  String get batchDlgPresetHint =>
+      'Saves rules and order, but not exclusions or manual names';
+
+  @override
+  String get batchDlgCancel => 'Cancel';
+
+  @override
+  String get batchDlgSave => 'Save';
+
+  @override
+  String get batchDlgOverwriteTitle => 'Overwrite existing preset?';
+
+  @override
+  String batchDlgOverwriteBody(String name) {
+    return 'Update the rules in “$name”.';
+  }
+
+  @override
+  String get batchDlgOverwrite => 'Overwrite';
+
+  @override
+  String get batchDlgManagePresets => 'Manage presets';
+
+  @override
+  String get batchDlgNoPresets => 'No saved presets';
+
+  @override
+  String get batchDlgDeletePreset => 'Delete preset';
+
+  @override
+  String get batchDlgDone => 'Done';
+
+  @override
+  String get batchDlgEditName => 'Edit name individually';
+
+  @override
+  String get batchDlgBaseName => 'Base name';
+
+  @override
+  String get batchDlgOverrideHelp => 'This name overrides the rule result';
+
+  @override
+  String batchDlgExtensionRetained(String extension) {
+    return 'Extension .$extension is kept automatically';
+  }
+
+  @override
+  String get batchDlgConfirm => 'Confirm';
+
+  @override
+  String get batchDlgHelp => 'Instructions';
+
+  @override
+  String get batchDlgClose => 'Close';
+
+  @override
+  String get batchDlgLoadPreset =>
+      'Load preset (replaces rules and clears manual names)';
+
+  @override
+  String get batchDlgLoad => 'Load preset';
+
+  @override
+  String get batchDlgSaving => 'Saving…';
+
+  @override
+  String get batchDlgReset => 'Reset all rules and included items';
+
+  @override
+  String get batchDlgRuleInstructions =>
+      'Rules run from top to bottom. Copy, move, or disable them. File extensions stay unchanged.';
+
+  @override
+  String get batchDlgSortName => 'Name';
+
+  @override
+  String get batchDlgSortCreated => 'Created';
+
+  @override
+  String get batchDlgSortModified => 'Modified';
+
+  @override
+  String get batchDlgSortSize => 'Size';
+
+  @override
+  String get batchDlgAscending => 'Ascending';
+
+  @override
+  String get batchDlgDescending => 'Descending';
+
+  @override
+  String get batchDlgFolderSort =>
+      'Folders come first; same names are sorted by folder.';
+
+  @override
+  String get batchDlgAddRule => '＋ Add rule';
+
+  @override
+  String get batchDlgMaxRules => 'Maximum 50 rules';
+
+  @override
+  String get batchDlgPreviewWorking =>
+      'Calculating preview… You can keep editing rules or cancel.';
+
+  @override
+  String get batchDlgSearch => 'Search original name, new name, or folder';
+
+  @override
+  String get batchDlgFilterAll => 'All';
+
+  @override
+  String get batchDlgFilterChanged => 'Changed';
+
+  @override
+  String get batchDlgFilterErrors => 'Issues';
+
+  @override
+  String get batchDlgFilterUnchanged => 'Unchanged';
+
+  @override
+  String get batchDlgFilterExcluded => 'Excluded';
+
+  @override
+  String get batchDlgParticipants => 'Choose included items';
+
+  @override
+  String get batchDlgIncludeAll => 'Include all';
+
+  @override
+  String get batchDlgOnlyFiles => 'Files only';
+
+  @override
+  String get batchDlgOnlyFolders => 'Folders only';
+
+  @override
+  String get batchDlgExcludeAll => 'Exclude all';
+
+  @override
+  String get batchDlgScope => 'Included items';
+
+  @override
+  String get batchDlgCopyList => 'Copy list';
+
+  @override
+  String get batchDlgConflictBlock => 'Name conflict: block execution';
+
+  @override
+  String get batchDlgConflictSuffix => 'Name conflict: append (2), (3)…';
+
+  @override
+  String get batchDlgNoMatches => 'No items match the filter';
+
+  @override
+  String get batchDlgRoot => 'Root';
+
+  @override
+  String get batchDlgFile => 'File';
+
+  @override
+  String get batchDlgFolder => 'Folder';
+
+  @override
+  String batchDlgTargetFolder(String folder) {
+    return 'Target folder: $folder';
+  }
+
+  @override
+  String get batchDlgEditNameTooltip => 'Edit name individually';
+
+  @override
+  String get batchDlgRestoreNameTooltip => 'Restore rule-generated name';
+
+  @override
+  String get batchDlgCopied => 'Full preview list copied (CSV)';
+
+  @override
+  String get batchDlgCopyFailed => 'Copy failed. Try again.';
+
+  @override
+  String get batchDlgHelpTitle => 'Batch rename instructions';
+
+  @override
+  String get batchDlgHelpDismiss => 'Got it';
+
+  @override
+  String get batchDlgRulesTab => 'Rules';
+
+  @override
+  String batchDlgPreviewTab(String count) {
+    return 'Preview ($count)';
+  }
+
+  @override
+  String batchDlgRenameCount(String count) {
+    return 'Rename $count items';
+  }
+
+  @override
+  String get batchDlgPresetLoadFailed =>
+      'Could not load presets. You can still edit and run rules.';
+
+  @override
+  String get batchDlgPreviewFailed =>
+      'Could not calculate preview. Adjust the rules and try again.';
+
+  @override
+  String batchDlgSavedName(String name) {
+    return 'Preset saved: $name';
+  }
+
+  @override
+  String batchDlgSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String batchDlgDeleteFailed(String error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String get batchDlgSavePresetFallback => 'Save preset';
+
+  @override
+  String batchDlgPreviewSummary(
+    String changes,
+    String conflicts,
+    String excluded,
+  ) {
+    return 'Preview · $changes changes · $conflicts issues · $excluded excluded';
+  }
+
+  @override
+  String get batchDlgInvalidInput =>
+      'Fix invalid rule inputs. The preview does not include them yet.';
+
+  @override
+  String get batchDlgConflictError =>
+      'Conflicts or invalid names prevent applying. Adjust the rules.';
+
+  @override
+  String get batchDlgManualNameStatus => 'Manual name';
+
+  @override
+  String get batchDlgPendingRename => 'Ready to rename';
+
+  @override
+  String get batchDlgCsvHeader =>
+      'Original path,Original name,Target path,Status';
+
+  @override
+  String get batchDlgHelpBody =>
+      '1. Choose a preset or enable rules, then copy rules and adjust their order as needed.\n\n2. The preview shows the names that will be used. Search and filters affect display only. Unchecking an item excludes it and recalculates numbering. Edit a name individually or restore the rule result.\n\n3. Resolve all issues before running. Automatic suffixes handle duplicate names without overwriting files. Rename folders that exchange names in separate batches.\n\n4. You can stop later items during execution; the current item finishes first. The results page shows completed changes and lets you undo them. Undo is blocked if the list has changed since execution.\n\nThis changes names and folder paths only; file contents and extensions stay unchanged. Renaming a parent folder does not prevent checked children from being renamed, and renaming a parent moves its children with it.';
+
+  @override
+  String batchDlgPreviewCount(String count) {
+    return 'Preview ($count)';
+  }
+
+  @override
+  String get batchBuiltinPhoto => 'Photos: date and number';
+
+  @override
+  String get batchBuiltinCourse => 'Courses: consistent name and number';
+
+  @override
+  String get batchBuiltinDownloads => 'Downloads: clean whitespace';
+
+  @override
+  String get taskListDetail => 'Details';
+
+  @override
+  String get taskListOwnershipChecking => 'Confirming task ownership';
+
+  @override
+  String get taskListOwnershipFailed =>
+      'Could not read task flow record; actions are unavailable';
+
+  @override
+  String get taskListViewFlow => 'View task flow';
+
+  @override
+  String get taskListPause => 'Pause';
+
+  @override
+  String get taskListClear => 'Clear task';
+
+  @override
+  String get taskListResume => 'Resume';
+
+  @override
+  String get taskListRetry => 'Retry';
+
+  @override
+  String get taskListDismissError => 'Dismiss error';
+
+  @override
+  String get taskListRemove => 'Remove from list';
+
+  @override
+  String get taskListSynthesisErrorTitle => 'Synthesis error details';
+
+  @override
+  String get taskListClose => 'Close';
+
+  @override
+  String get taskListOriginalExchange => 'Original request and response';
+
+  @override
+  String get taskListOriginalRequest => 'Original request body:';
+
+  @override
+  String get taskListOriginalResponse => 'Original response body:';
+
+  @override
+  String get taskFlowIoTypeText => 'Text';
+
+  @override
+  String get taskFlowIoTypeAudio => 'Audio';
+
+  @override
+  String get taskFlowIoTypeVideo => 'Video';
+
+  @override
+  String get taskFlowIoTypeImage => 'Image';
+
+  @override
+  String get taskFlowIoTypeLink => 'Link';
+
+  @override
+  String get taskFlowIoTypeFile => 'File';
+
+  @override
+  String get taskFlowIoTypeAny => 'Any';
+
+  @override
+  String get mermaidZoomOut => 'Zoom out';
+
+  @override
+  String get mermaidZoomIn => 'Zoom in';
+
+  @override
+  String get mermaidFullscreen => 'Fullscreen';
+
+  @override
+  String get mermaidSaveButton => 'Save';
+
+  @override
+  String get mermaidSourceButton => 'View source';
+
+  @override
+  String get mermaidDiagramSemantic => 'View diagram';
+
+  @override
+  String get taskFlowCardCatCatchDeletePersistError =>
+      'Could not save CatCatch child task deletion state. Try again.';
+
+  @override
+  String get taskFlowCardSynthesisDeletePersistError =>
+      'Could not save synthesis child task deletion state. Try again.';
+
+  @override
+  String get taskFlowCardBackgroundDeletePersistError =>
+      'Could not save background child task deletion state. Try again.';
+
+  @override
+  String get mathParseError => 'Math parse error';
+
+  @override
+  String get mermaidEmptyPlaceholder => 'No Mermaid code to render';
+
+  @override
+  String get mathClose => 'Close';
+
+  @override
+  String get mermaidLoadTimeout =>
+      'Mermaid loading timed out. Check your network and try again.';
+
+  @override
+  String get mermaidCdnLoadFailed =>
+      'Could not reach cdn.jsdelivr.net to load Mermaid.';
+
+  @override
+  String get mermaidLoadingDiagram => 'Loading diagram…';
+
+  @override
+  String get mermaidEngineInitFailed =>
+      'Could not initialize the diagram renderer. Try again.';
+
+  @override
+  String get mermaidPageTimeout => 'Page load timed out. Try again.';
+
+  @override
+  String get mermaidCodeLoadFailed => 'Could not load diagram code. Try again.';
+
+  @override
+  String mermaidPageLoadFailed(String description) {
+    return 'Page load failed: $description';
+  }
+
+  @override
+  String get mermaidLoadingEngine => 'Loading rendering engine…';
+
+  @override
+  String get mermaidRenderErrorTitle => 'Diagram rendering error';
+
+  @override
+  String get taskFlowOutputVideoAudioDownstream =>
+      'Video or audio (filtered by downstream)';
+
+  @override
+  String get taskFlowOutputUnknown => 'Unknown';
+
+  @override
+  String batchRunCancelledSummary(
+    String label,
+    String completed,
+    String failed,
+    String remaining,
+  ) {
+    return '$label stopped: $completed succeeded, $failed failed, $remaining remaining';
+  }
+
+  @override
+  String mermaidRenderErrorPrefix(String message) {
+    return 'Mermaid render error: $message';
+  }
+
+  @override
+  String mermaidInitializeErrorPrefix(String message) {
+    return 'Mermaid initialization error: $message';
+  }
+
+  @override
+  String get mermaidResourceError =>
+      'A resource in the Mermaid diagram failed to load.';
+
+  @override
+  String get taskFlowParamRecognitionModel => 'Recognition model';
+
+  @override
+  String get taskFlowParamSynthesisModel => 'Synthesis model';
+
+  @override
+  String get taskFlowParamSaveFolder => 'Save folder';
+
+  @override
+  String get taskFlowParamResourceSelection => 'Resource selection';
+
+  @override
+  String get taskFlowParamOutputType => 'Output type';
+
+  @override
+  String get taskFlowParamVideoFolder => 'Video save folder';
+
+  @override
+  String get taskFlowParamAudioFolder => 'Audio save folder';
+
+  @override
+  String get taskFlowParamExpectedDuration => 'Expected duration';
+
+  @override
+  String get taskFlowParamVoice => 'Voice';
+
+  @override
+  String get taskFlowParamSpeechRate => 'Speech rate';
+
+  @override
+  String get taskFlowParamAssistant => 'Assistant';
+
+  @override
+  String get taskFlowHintResourceSelection =>
+      'Manual mode lets you choose. Automatic mode follows the existing rules. Ask when ambiguous selects automatically only when there is one safe choice; otherwise it opens the resource list for confirmation.';
+
+  @override
+  String get taskFlowHintOutputType =>
+      'Choose video or audio explicitly. Follow downstream filters resources by the next block’s input type. If the next block accepts both types or there is no next block, both types are kept.';
+
+  @override
+  String get taskFlowHintExpectedDuration =>
+      'Filter resources by video duration. Leave blank to skip filtering.';
+
+  @override
+  String get taskFlowHintVoice =>
+      'Choose a voice. The matching synthesis model is selected automatically.';
+
+  @override
+  String get taskFlowUiUnsupportedBlockStep =>
+      'This block type is no longer supported. Replace it or remove this step.';
+
+  @override
+  String taskFlowUiDownstreamTypeMismatch(String requiredType) {
+    return 'The next block requires $requiredType. The downloader can output video or audio. Change the next step or output policy.';
+  }
+
+  @override
+  String taskFlowUiAnyTypeMismatch(String source, String block) {
+    return '$source has any type, but “$block” needs an explicit text, link, image, audio, video, or file type. Change the input type, move or replace the block, or undo the change.';
+  }
+
+  @override
+  String taskFlowUiTypeMismatch(
+    String source,
+    String actualType,
+    String block,
+    String requiredType,
+  ) {
+    return '$source has $actualType, but “$block” requires $requiredType. Change the input type, move or replace the block, or undo the change.';
+  }
+
+  @override
+  String get fileManagerSortFieldCreated => 'Created date';
+
+  @override
+  String get fileManagerSortFieldModified => 'Modified date';
+
+  @override
+  String get fileManagerSortFieldName => 'Name';
+
+  @override
+  String get fileManagerSortFieldSize => 'Size';
+
+  @override
+  String get fileManagerSortDateNewest => 'newest first';
+
+  @override
+  String get fileManagerSortDateOldest => 'oldest first';
+
+  @override
+  String get fileManagerSortSizeLargest => 'largest first';
+
+  @override
+  String get fileManagerSortSizeSmallest => 'smallest first';
+
+  @override
+  String get catcatchStatusRunning => 'Running';
+
+  @override
+  String get catcatchStatusCompleted => 'Completed';
+
+  @override
+  String get catcatchStatusFailed => 'Failed';
+
+  @override
+  String get catcatchStatusPaused => 'Paused';
+
+  @override
+  String get catcatchStatusWaiting => 'Waiting';
+
+  @override
+  String get catcatchStepFetching => 'Fetching webpage';
+
+  @override
+  String get catcatchStepAnalyzing => 'Analyzing media';
+
+  @override
+  String get catcatchStepParsingPlaylist => 'Parsing playlist';
+
+  @override
+  String get catcatchStepFiltering => 'Filtering by duration';
+
+  @override
+  String get catcatchStepUserSelecting => 'Waiting for selection';
+
+  @override
+  String get catcatchStepDownloading => 'Downloading';
+
+  @override
+  String get catcatchStepConverting => 'Converting/merging';
+
+  @override
+  String get catcatchStepSaving => 'Saving locally';
+
+  @override
+  String get bgStepConnectServer => 'Connecting to server';
+
+  @override
+  String get bgStepUploadImage => 'Uploading images';
+
+  @override
+  String get bgStepWaitRecognition => 'Waiting for recognition';
+
+  @override
+  String get bgStepParseResult => 'Parsing result';
+
+  @override
+  String get bgStepSaveFile => 'Saving file';
+
+  @override
+  String get bgStepUploadAudio => 'Uploading audio';
+
+  @override
+  String get bgStepTranscribing => 'Transcribing';
+
+  @override
+  String get bgStepReceiveResult => 'Receiving result';
+
+  @override
+  String get bgStepSeparateAudio => 'Separating audio';
+
+  @override
+  String get bgStepSaveToFile => 'Saving to file';
+
+  @override
+  String get bgStepSendRequest => 'Sending request';
+
+  @override
+  String get bgStepWaitReply => 'Waiting for reply';
+
+  @override
+  String get fileManagerSortNameAscending => 'A to Z';
+
+  @override
+  String get fileManagerSortNameDescending => 'Z to A';
+
+  @override
+  String get taskFlowValidationNoSteps =>
+      'This task flow has no steps. Add a block first.';
+
+  @override
+  String get taskFlowValidationInputRequired =>
+      'Add at least one input to run this task flow.';
+
+  @override
+  String get taskFlowValidationFlowRemoved =>
+      'This task flow was deleted. Select it again.';
+
+  @override
+  String get taskFlowValidationInputTypeChanged =>
+      'The initial input type changed. Choose the run input again.';
+
+  @override
+  String get taskFlowValidationSnapshotMissing =>
+      'This older record has no run snapshot. Retry using the latest configuration.';
+
+  @override
+  String get taskFlowValidationAssistantModelMissing =>
+      'The assistant model is missing or unavailable. Select a model on the chat page or set a default model for the assistant.';
+
+  @override
+  String get taskFlowValidationSavedFileUnavailable =>
+      'A saved step file is missing, empty, or unreadable. Run the task flow again.';
+
+  @override
+  String get taskFlowValidationUnsupportedBlock =>
+      'This block type is no longer supported. Replace or remove this step.';
+
+  @override
+  String taskFlowValidationDownstreamMismatch(String requiredType) {
+    return 'The next block requires $requiredType. The downloader can output audio or video. Change the next step or output policy.';
+  }
+
+  @override
+  String taskFlowValidationRequiredParameter(String parameter, String block) {
+    return '“$parameter” is required for “$block”. Configure it in the block settings.';
+  }
+
+  @override
+  String taskFlowValidationLegacyModel(String block) {
+    return 'The legacy model selection needs confirmation. Choose the model again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationModelUnavailable(String block) {
+    return 'The model is missing or unavailable from its provider. Choose it again in “$block” settings and check the provider URL and key.';
+  }
+
+  @override
+  String taskFlowValidationAssistantUnavailable(String block) {
+    return 'The assistant is missing or was deleted. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String get taskFlowValidationAssistantModelUnavailable =>
+      'The assistant model was deleted or its provider configuration is unavailable. Choose a model again in assistant settings.';
+
+  @override
+  String taskFlowValidationPolicyInvalid(String block) {
+    return 'The resource selection policy or output type is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationOutputInvalid(String block) {
+    return 'The output type is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationResourcePolicyInvalid(String block) {
+    return 'The resource selection policy is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationInputFileUnavailable(String index) {
+    return 'Input $index: The file is missing, empty, or unreadable. Choose it again.';
+  }
+
+  @override
+  String taskFlowValidationInputUrlInvalid(String index) {
+    return 'Input $index: Enter a valid HTTP or HTTPS link.';
+  }
+
+  @override
+  String taskFlowValidationInputError(String index, String error) {
+    return 'Input $index: $error';
+  }
+
+  @override
+  String get batchRuleValidationMaxRules => 'At most 50 rules are allowed.';
+
+  @override
+  String get batchRuleValidationDigits =>
+      'The number of digits must be from 1 to 12.';
+
+  @override
+  String get batchRuleValidationNumberRange =>
+      'The starting number and step must be within ±999,999,999.';
+
+  @override
+  String get batchRuleValidationReplacementLength =>
+      'The replacement rule is too long.';
+
+  @override
+  String get batchRuleValidationRegex => 'The regular expression is invalid.';
+
+  @override
+  String get batchRuleValidationDeleteIndex =>
+      'The deletion position must start at 1.';
+
+  @override
+  String get batchRuleValidationInsertLength =>
+      'The inserted text is too long.';
+
+  @override
+  String get batchRuleValidationTemplateNumber =>
+      'Invalid template number settings: digits must be 1 to 12 and start/step within ±999,999,999.';
+
+  @override
+  String get batchRuleValidationTemplateLength => 'The template is too long.';
+
+  @override
+  String get batchRuleValidationTemplateVariable =>
+      'Unknown template variable or an unclosed brace.';
+
+  @override
+  String get batchRuleTypeNumber => 'Add numbering';
+
+  @override
+  String get batchRuleTypeReplace => 'Find and replace';
+
+  @override
+  String get batchRuleTypeInsert => 'Insert text';
+
+  @override
+  String get batchRuleTypeDelete => 'Delete characters';
+
+  @override
+  String get batchRuleTypeCase => 'Change case';
+
+  @override
+  String get batchRuleTypeTemplate => 'Name template';
+
+  @override
+  String get batchRuleTypeCleanup => 'Clean whitespace';
+
+  @override
+  String taskFlowValidationInputEmpty(String index) {
+    return 'Input $index: Enter text or choose a file.';
+  }
+
+  @override
+  String taskFlowValidationImageTooLarge(String index) {
+    return 'Input $index: The image is over 20 MB. Choose a smaller image.';
+  }
+
+  @override
+  String taskFlowValidationAttachmentTooLarge(String index) {
+    return 'Input $index: The attachment is over 10 MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowValidationFileTypeMismatch(
+    String index,
+    String actualType,
+    String requiredType,
+  ) {
+    return 'Input $index: The file is $actualType, but $requiredType is required. Choose another file.';
+  }
+
+  @override
+  String taskFlowValidationSvgUnsupported(String index) {
+    return 'Input $index: Assistant chat does not support SVG image attachments. Convert it to PNG or JPEG.';
+  }
+
+  @override
+  String taskFlowValidationImageMimeUnsupported(String index, String mime) {
+    return 'Input $index: Assistant chat does not support $mime image attachments. Convert it to PNG, JPEG, GIF, or WebP.';
+  }
+
+  @override
+  String taskFlowValidationAudioMimeUnsupported(String index, String mime) {
+    return 'Input $index: Assistant chat does not support $mime audio attachments. Convert it to MP3, WAV, or M4A.';
+  }
+
+  @override
+  String taskFlowValidationEndpointMediaUnsupported(String index, String type) {
+    return 'Input $index: This Anthropic chat format does not support $type attachments. Choose an assistant that supports this media.';
+  }
+
+  @override
+  String taskFlowValidationEndpointPdfOnly(String index) {
+    return 'Input $index: This Anthropic chat format supports only image and PDF attachments. Choose a supported file.';
+  }
+
+  @override
+  String taskFlowValidationImageCompressionFailed(String index) {
+    return 'Input $index: Assistant chat could not compress the image below 10 MB. Choose a smaller image.';
+  }
+
+  @override
+  String taskFlowValidationTextEncodingFailed(String index) {
+    return 'Input $index: The text attachment is not valid UTF-8. Convert it and try again.';
   }
 }
 
@@ -2068,6 +4759,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get taskFlowBlockChat => 'Assistant Chat';
 
   @override
+  String get taskFlowBlockCustom => 'Custom block';
+
+  @override
   String get taskFlowEdit => 'Edit';
 
   @override
@@ -3446,5 +6140,2693 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String chatThinkingNumbered(int index) {
     return 'Thinking $index';
+  }
+
+  @override
+  String get taskFlowUiDiscardTitle => 'Discard unsaved changes?';
+
+  @override
+  String get taskFlowUiDiscardBody =>
+      'All unsaved changes will be lost if you go back.';
+
+  @override
+  String get taskFlowUiContinueEditing => 'Continue editing';
+
+  @override
+  String get taskFlowUiDiscard => 'Discard';
+
+  @override
+  String get taskFlowUiUndo => 'Undo';
+
+  @override
+  String get taskFlowUiSave => 'Save';
+
+  @override
+  String get taskFlowUiNameHint => 'Enter a task flow name';
+
+  @override
+  String get taskFlowUiDescriptionHint => 'Add a description (optional)';
+
+  @override
+  String get taskFlowUiNameRequired => 'Enter a task flow name';
+
+  @override
+  String taskFlowUiStepRequired(Object index, Object message) {
+    return 'Step $index: $message';
+  }
+
+  @override
+  String taskFlowUiParameterRequired(Object block, Object parameter) {
+    return '“$parameter” is required for “$block”';
+  }
+
+  @override
+  String get taskFlowUiSaveFailed =>
+      'Could not save. Your changes are still here. Try again.';
+
+  @override
+  String get taskFlowUiRetry => 'Retry';
+
+  @override
+  String get taskFlowUiUpdated => 'Task flow updated';
+
+  @override
+  String get taskFlowUiCreated => 'Task flow created';
+
+  @override
+  String get taskFlowUiTitle => 'Task Flow';
+
+  @override
+  String get taskFlowUiNotFound => 'Task not found';
+
+  @override
+  String get taskFlowUiBack => 'Back';
+
+  @override
+  String get taskFlowUiEdit => 'Edit';
+
+  @override
+  String taskFlowUiInput(Object label) {
+    return 'Input ($label)';
+  }
+
+  @override
+  String get taskFlowUiInputHint => 'Enter text or a link';
+
+  @override
+  String get taskFlowUiStart => 'Start task flow';
+
+  @override
+  String get taskFlowUiNoInput =>
+      'No inputs yet. Tap below to add a web resource URL.';
+
+  @override
+  String get taskFlowUiAddResource => 'Add web resource';
+
+  @override
+  String get taskFlowUiUrlHint => 'Enter a video or audio webpage URL';
+
+  @override
+  String get taskFlowUiDeleteInput => 'Remove this input';
+
+  @override
+  String get taskFlowUiHour => 'hr';
+
+  @override
+  String get taskFlowUiMinute => 'min';
+
+  @override
+  String get taskFlowUiSecond => 'sec';
+
+  @override
+  String get taskFlowUiPreview => 'Preview: ';
+
+  @override
+  String get taskFlowUiDurationFormat => 'hh:mm:ss';
+
+  @override
+  String get taskFlowUiDurationHint =>
+      'Optional: filter video resources by duration. Leave blank to show all available resources.';
+
+  @override
+  String get taskFlowUiSelectImages => 'Select images (multiple)';
+
+  @override
+  String get taskFlowUiSelectAudio => 'Select audio (multiple)';
+
+  @override
+  String get taskFlowUiSelectFiles => 'Select files (multiple)';
+
+  @override
+  String get taskFlowUiSelectVideo => 'Select videos (multiple)';
+
+  @override
+  String get taskFlowUiRemove => 'Remove';
+
+  @override
+  String taskFlowUiRemovedFileCleanupFailed(Object error) {
+    return 'Could not clean up the removed file: $error';
+  }
+
+  @override
+  String get taskFlowUiInitialInput => '0. Initial input';
+
+  @override
+  String taskFlowUiInputType(Object type) {
+    return 'Input type: $type';
+  }
+
+  @override
+  String get taskFlowUiUserFlowInput =>
+      'Input provided when the user runs the task flow';
+
+  @override
+  String taskFlowUiBlockInput(Object type) {
+    return 'Input: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutput(Object type) {
+    return 'Output: $type';
+  }
+
+  @override
+  String get taskFlowUiParameters => 'Parameters:';
+
+  @override
+  String get taskFlowUiClose => 'Close';
+
+  @override
+  String get taskFlowUiSelectAppImages =>
+      'Select images from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoImages => 'No images';
+
+  @override
+  String get taskFlowUiSelectAppAudio => 'Select audio from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoAudio => 'No audio';
+
+  @override
+  String get taskFlowUiSelectAppVideo =>
+      'Select videos from the app (multiple)';
+
+  @override
+  String get taskFlowUiNoVideo => 'No videos';
+
+  @override
+  String taskFlowUiFileSelectFailed(Object error) {
+    return 'Could not select the file: $error';
+  }
+
+  @override
+  String taskFlowUiFileTooLarge(Object limit, Object name) {
+    return '“$name” exceeds $limit MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowUiFileUnreadable(Object name) {
+    return '“$name” is empty or unreadable';
+  }
+
+  @override
+  String get taskFlowUiSomeFilesMissing =>
+      'Some files are missing and were skipped';
+
+  @override
+  String get taskFlowUiQueuedOne => 'Task flow added to the queue';
+
+  @override
+  String taskFlowUiQueuedMany(Object count) {
+    return 'Added $count task flows to the queue';
+  }
+
+  @override
+  String get taskFlowUiRunTitle => 'This Run';
+
+  @override
+  String get taskFlowUiCancelBatch => 'Cancel entire batch';
+
+  @override
+  String get taskFlowUiRestoringRecords => 'Restoring task flow records…';
+
+  @override
+  String get taskFlowUiRecordsPaused =>
+      'Could not load task flow records. Task actions are paused.';
+
+  @override
+  String get taskFlowUiRecordsCleared =>
+      'Records for this run have been cleared';
+
+  @override
+  String taskFlowUiRunsFinished(Object finished, Object total) {
+    return '$finished of $total runs finished';
+  }
+
+  @override
+  String taskFlowUiRecordsRemoved(Object count) {
+    return ' · $count records cleared';
+  }
+
+  @override
+  String get taskFlowUiTemporaryFiles => 'Temporary intermediate files';
+
+  @override
+  String get taskFlowUiAddBlock => 'Add block';
+
+  @override
+  String taskFlowUiInsertBlockBefore(Object index) {
+    return 'Insert block before step $index';
+  }
+
+  @override
+  String get taskFlowUiIncompatibleAdjacentBlocks =>
+      'No block is compatible with both adjacent steps. Adjust the adjacent steps first.';
+
+  @override
+  String taskFlowUiInsertBeforeStep(Object index) {
+    return 'Insert before step $index';
+  }
+
+  @override
+  String get taskFlowUiUnknown => 'Unknown';
+
+  @override
+  String get taskFlowUiChooseBlock => 'Choose a block';
+
+  @override
+  String get taskFlowUiInsertBlock => 'Insert block';
+
+  @override
+  String get taskFlowUiPreviousOutput => 'Previous step output';
+
+  @override
+  String taskFlowUiNextStepNeeds(Object label) {
+    return '; next step needs: $label';
+  }
+
+  @override
+  String get taskFlowUiNoCompatibleBlock =>
+      'No block is compatible with the current type';
+
+  @override
+  String get taskFlowUiReplaceBlock => 'Replace block';
+
+  @override
+  String get taskFlowUiBlockCompatibility =>
+      'You can only replace this with a block that has compatible input and output types.';
+
+  @override
+  String get taskFlowUiTemporaryCleanupTooltip =>
+      'Clean up after the next step saves its result successfully; the final step is always kept.';
+
+  @override
+  String get taskFlowUiSetParameters => 'Set parameters';
+
+  @override
+  String get taskFlowUiReplace => 'Replace';
+
+  @override
+  String get taskFlowUiViewParameters => 'Tap to view parameters';
+
+  @override
+  String get taskFlowUiTapSetParameters => 'Tap to set parameters';
+
+  @override
+  String taskFlowUiUnknownBlockType(Object name) {
+    return 'Unknown block: $name';
+  }
+
+  @override
+  String get taskFlowUiBlockUnregistered => 'This block type is not registered';
+
+  @override
+  String taskFlowUiStepActions(Object index) {
+    return 'Actions for step $index';
+  }
+
+  @override
+  String get taskFlowUiInsertBefore => 'Insert before';
+
+  @override
+  String get taskFlowUiInsertAfter => 'Insert after';
+
+  @override
+  String get taskFlowUiCopyBlock => 'Duplicate block';
+
+  @override
+  String get taskFlowUiMoveUp => 'Move up';
+
+  @override
+  String get taskFlowUiMoveUpDisabled => 'Move up (already first)';
+
+  @override
+  String get taskFlowUiMoveDown => 'Move down';
+
+  @override
+  String get taskFlowUiMoveDownDisabled => 'Move down (already last)';
+
+  @override
+  String get taskFlowUiDeleteBlock => 'Delete block';
+
+  @override
+  String taskFlowUiInputLabel(Object label) {
+    return 'Input: $label';
+  }
+
+  @override
+  String taskFlowUiOutputLabel(Object label) {
+    return 'Output: $label';
+  }
+
+  @override
+  String taskFlowUiUnregisteredBlockType(Object name) {
+    return 'Block type “$name” is not registered';
+  }
+
+  @override
+  String taskFlowUiBlockSettings(Object label) {
+    return '$label settings';
+  }
+
+  @override
+  String get taskFlowUiSendToAssistant =>
+      'The user message sent to the assistant is the previous step’s output';
+
+  @override
+  String get taskFlowUiTempSpaceInfo =>
+      'This step outputs to the flow’s temporary space. Its output is cleaned up after the next step saves successfully. The original save folder is preserved and restored when temporary mode is disabled.';
+
+  @override
+  String get taskFlowUiNoExtraParameters =>
+      'This block has no additional parameters';
+
+  @override
+  String get taskFlowUiCancel => 'Cancel';
+
+  @override
+  String get taskFlowUiConfirm => 'Confirm';
+
+  @override
+  String get taskFlowUiConfigureModelFirst => 'Configure a model first';
+
+  @override
+  String get taskFlowUiModelUnavailable =>
+      'No model is selected or the model is unavailable. Select another model.';
+
+  @override
+  String taskFlowUiModelIndexed(Object index) {
+    return 'Model $index';
+  }
+
+  @override
+  String get taskFlowUiUnnamedProvider => 'Unnamed provider';
+
+  @override
+  String get taskFlowUiCustomModelParameters => 'Custom model parameters';
+
+  @override
+  String get taskFlowUiTtsVoiceMissing =>
+      'No TTS models have configured voices. You can enter an ID manually.';
+
+  @override
+  String get taskFlowUiVoiceUnavailable =>
+      'Voice is unavailable. Select another voice.';
+
+  @override
+  String get taskFlowUiSelectVoice => 'Select a voice';
+
+  @override
+  String get taskFlowUiAssistantUnavailable => 'Assistant unavailable';
+
+  @override
+  String get taskFlowUiAssistantUseCurrent =>
+      'Not specified (use the currently selected assistant)';
+
+  @override
+  String get taskFlowUiAssistantDeleted =>
+      'The configured assistant was deleted. Select another assistant.';
+
+  @override
+  String get taskFlowUiChooseAssistant => 'Choose an assistant';
+
+  @override
+  String get taskFlowUiOnlyCustomAssistants =>
+      'Only “My Assistants” can be selected (add one in “Chat → Assistants”)';
+
+  @override
+  String get taskFlowUiMyAssistants => 'My Assistants';
+
+  @override
+  String get taskFlowUiNoCustomAssistants =>
+      'No custom assistants yet. Create one in “Chat → Assistants”.';
+
+  @override
+  String get taskFlowUiYes => 'Yes';
+
+  @override
+  String get taskFlowUiNo => 'No';
+
+  @override
+  String get taskFlowUiDefaultRoot => 'Default (root folder)';
+
+  @override
+  String get taskFlowUiSelect => 'Select';
+
+  @override
+  String get taskFlowUiSelectSaveFolder => 'Choose a save folder';
+
+  @override
+  String get taskFlowUiCatCatchVideo => 'Video';
+
+  @override
+  String get taskFlowUiCatCatchAudio => 'Audio';
+
+  @override
+  String get taskFlowUiCatCatchEither =>
+      'Video or audio (filter based on downstream steps)';
+
+  @override
+  String get taskFlowUiManual => 'Manual';
+
+  @override
+  String get taskFlowUiAutomatic => 'Automatic';
+
+  @override
+  String get taskFlowUiAutomaticPrompt => 'Automatic with confirmation';
+
+  @override
+  String get taskFlowUiEditTitle => 'Edit Task Flow';
+
+  @override
+  String get taskFlowUiCreateTitle => 'New Task Flow';
+
+  @override
+  String taskFlowUiStepNumber(Object index, Object message) {
+    return 'Step $index: $message';
+  }
+
+  @override
+  String taskFlowUiInputTypeValue(Object type) {
+    return 'Input type: $type';
+  }
+
+  @override
+  String taskFlowUiBlockInputValue(Object type) {
+    return 'Input: $type';
+  }
+
+  @override
+  String taskFlowUiBlockOutputValue(Object type) {
+    return 'Output: $type';
+  }
+
+  @override
+  String taskFlowUiCleanupError(Object error) {
+    return 'Could not clean up the removed file: $error';
+  }
+
+  @override
+  String taskFlowUiSelectFileError(Object error) {
+    return 'Could not select the file: $error';
+  }
+
+  @override
+  String taskFlowUiLargeFile(Object limit, Object name) {
+    return '“$name” exceeds $limit MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowUiUnreadableFile(Object name) {
+    return '“$name” is empty or unreadable';
+  }
+
+  @override
+  String get taskFlowUiTemporary => 'Temporary';
+
+  @override
+  String get taskFlowUiTemporaryFileHint =>
+      'Temporary file (cleaned up after the next step succeeds)';
+
+  @override
+  String taskFlowUiUnregisteredBlock(Object name) {
+    return 'Block type “$name” is not registered';
+  }
+
+  @override
+  String taskFlowUiRunSummary(Object finished, Object total) {
+    return '$finished of $total runs finished';
+  }
+
+  @override
+  String taskFlowUiClearedRecordCount(Object count) {
+    return ' · $count records cleared';
+  }
+
+  @override
+  String taskFlowUiInputOutput(Object input, Object output) {
+    return 'Input: $input → Output: $output';
+  }
+
+  @override
+  String get taskFlowCardTag => 'Task Flow';
+
+  @override
+  String get taskFlowCardQueued => 'Queued (waiting for resources)';
+
+  @override
+  String taskFlowCardCompletedProgress(Object done, Object total) {
+    return '$done of $total completed';
+  }
+
+  @override
+  String taskFlowCardCountLabel(Object count, Object label) {
+    return '$count $label';
+  }
+
+  @override
+  String get taskFlowCardFailedLabel => 'failed';
+
+  @override
+  String get taskFlowCardSkippedLabel => 'skipped';
+
+  @override
+  String get taskFlowCardCancelledLabel => 'cancelled';
+
+  @override
+  String get taskFlowCardInterruptedLabel => 'interrupted';
+
+  @override
+  String get taskFlowCardCancelFlow => 'Cancel flow';
+
+  @override
+  String get taskFlowCardRetry => 'Retry';
+
+  @override
+  String get taskFlowCardCancelBatch => 'Cancel entire batch';
+
+  @override
+  String get taskFlowCardDelete => 'Delete';
+
+  @override
+  String get taskFlowCardRetryFlow => 'Retry task flow';
+
+  @override
+  String get taskFlowCardNoSnapshot =>
+      'This run has no snapshot. It will start over using the current flow configuration.';
+
+  @override
+  String get taskFlowCardRetryInfo =>
+      'Starting over downloads files and calls models again. Retry with the configuration used at launch, or explicitly choose the latest configuration. To reuse completed steps, choose “Resume from interrupted step.”';
+
+  @override
+  String get taskFlowCardRunLatest => 'Run with latest configuration';
+
+  @override
+  String get taskFlowCardRetryOriginal => 'Retry with original configuration';
+
+  @override
+  String get taskFlowCardDeleteRecord => 'Delete task flow record';
+
+  @override
+  String get taskFlowCardDeleteBatchConfirm =>
+      'Deleting this run will cancel unfinished tasks in the batch and clear their subtask records. Delete?';
+
+  @override
+  String get taskFlowCardDeleteRunningConfirm =>
+      'This flow is running. Deleting it will cancel its active tasks. Delete?';
+
+  @override
+  String get taskFlowCardDeleteRecordConfirm =>
+      'Delete this flow record and its subtask records?';
+
+  @override
+  String get taskFlowCardDeleteConfirm => 'Delete this flow record?';
+
+  @override
+  String get taskFlowCardSaveCancelStateError =>
+      'Could not save the flow cancellation state. Try deleting again.';
+
+  @override
+  String get taskFlowCardStillRunning =>
+      'The flow is still running after cancellation.';
+
+  @override
+  String get taskFlowCardSaveDeleteStateError =>
+      'Could not save the flow record deletion state. Try deleting again.';
+
+  @override
+  String get taskFlowCardConfirm => 'Confirm';
+
+  @override
+  String get taskFlowCardWaiting => 'Waiting';
+
+  @override
+  String get taskFlowCardRunning => 'Running';
+
+  @override
+  String get taskFlowCardPaused => 'Paused';
+
+  @override
+  String get taskFlowCardCompleted => 'Completed';
+
+  @override
+  String get taskFlowCardFailed => 'Failed';
+
+  @override
+  String get taskFlowCardCanceled => 'Canceled';
+
+  @override
+  String get taskFlowCardInterrupted => 'Interrupted';
+
+  @override
+  String get taskFlowCardSucceeded => 'Skipped';
+
+  @override
+  String get taskFlowCardPause => 'Pause flow';
+
+  @override
+  String get taskFlowCardResume => 'Resume flow';
+
+  @override
+  String get taskFlowCardResumeInterrupted => 'Resume from interrupted step';
+
+  @override
+  String get taskFlowCardCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskType => 'Task type';
+
+  @override
+  String get unifiedTaskCreatedAt => 'Created';
+
+  @override
+  String get unifiedTaskCompletedAt => 'Completed';
+
+  @override
+  String get unifiedTaskResultStatus => 'Result status';
+
+  @override
+  String get unifiedTaskPartialResult =>
+      'Partial result; content may be incomplete';
+
+  @override
+  String get unifiedTaskErrorDetails => 'Error details';
+
+  @override
+  String get unifiedTaskViewErrorDetails => 'View error details';
+
+  @override
+  String get unifiedTaskOcrPerImage => 'Recognize each image';
+
+  @override
+  String unifiedTaskOcrPageIndex(Object index) {
+    return 'Image $index';
+  }
+
+  @override
+  String get unifiedTaskOcrPending => 'Waiting to recognize';
+
+  @override
+  String get unifiedTaskOcrRunning => 'Recognizing';
+
+  @override
+  String get unifiedTaskCompleted => 'Completed';
+
+  @override
+  String get unifiedTaskIncomplete => 'Incomplete result';
+
+  @override
+  String get unifiedTaskOcrFailed => 'Recognition failed';
+
+  @override
+  String get unifiedTaskCancelled => 'Canceled';
+
+  @override
+  String get unifiedTaskWaitingStart => 'Waiting to start...';
+
+  @override
+  String get unifiedTaskSteps => 'Steps';
+
+  @override
+  String get unifiedTaskStartNow => 'Start now';
+
+  @override
+  String get unifiedTaskOpenFile => 'Open file';
+
+  @override
+  String get unifiedTaskRetrySave => 'Retry saving only';
+
+  @override
+  String get unifiedTaskRetryPartialSave => 'Retry saving partial result only';
+
+  @override
+  String get unifiedTaskSavePartialResult => 'Save partial result';
+
+  @override
+  String get unifiedTaskRetry => 'Retry';
+
+  @override
+  String get unifiedTaskCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskDelete => 'Delete';
+
+  @override
+  String get unifiedTaskFormatUnsupported =>
+      'Preview is not supported for this format';
+
+  @override
+  String unifiedTaskLoadFailed(Object error) {
+    return 'Load failed: $error';
+  }
+
+  @override
+  String unifiedTaskPlaybackFailed(Object error) {
+    return 'Playback failed: $error';
+  }
+
+  @override
+  String get unifiedTaskAudioFile => 'Audio file';
+
+  @override
+  String get unifiedTaskPreviewLoadFailed => 'Could not load preview';
+
+  @override
+  String get unifiedTaskUnknownSize => 'Unknown size';
+
+  @override
+  String get unifiedTaskUnnamedRecording => 'Untitled recording';
+
+  @override
+  String get unifiedTaskPause => 'Pause';
+
+  @override
+  String get unifiedTaskClearTask => 'Clear task';
+
+  @override
+  String get unifiedTaskContinue => 'Continue';
+
+  @override
+  String get unifiedTaskRemoveFromList => 'Remove from list';
+
+  @override
+  String get unifiedTaskSynthesisText => 'Synthesized text';
+
+  @override
+  String get unifiedTaskStatus => 'Status';
+
+  @override
+  String get unifiedTaskDetails => 'Details';
+
+  @override
+  String get unifiedTaskSynthesisError => 'Synthesis error details';
+
+  @override
+  String get unifiedTaskClose => 'Close';
+
+  @override
+  String get unifiedTaskRawRequestResponse => 'Raw request and response';
+
+  @override
+  String get unifiedTaskRawRequestBody => 'Raw request body:';
+
+  @override
+  String get unifiedTaskRawResponseBody => 'Raw response body:';
+
+  @override
+  String get commonJustNow => 'Just now';
+
+  @override
+  String commonMinutesAgo(Object count) {
+    return '$count min ago';
+  }
+
+  @override
+  String commonHoursAgo(Object count) {
+    return '$count hr ago';
+  }
+
+  @override
+  String unifiedDurationSeconds(Object seconds) {
+    return '$seconds sec';
+  }
+
+  @override
+  String unifiedDurationMinutesSeconds(Object minutes, Object seconds) {
+    return '$minutes min $seconds sec';
+  }
+
+  @override
+  String unifiedDurationHoursMinutes(Object hours, Object minutes) {
+    return '$hours hr $minutes min';
+  }
+
+  @override
+  String get unifiedTaskTypeOcr => 'Image text recognition';
+
+  @override
+  String get unifiedTaskTypeAsr => 'Audio transcription';
+
+  @override
+  String get unifiedTaskTypeAudioSeparation => 'Audio separation';
+
+  @override
+  String get unifiedTaskTypeChat => 'Assistant chat';
+
+  @override
+  String get unifiedTaskPlayAudio => 'Play audio';
+
+  @override
+  String get unifiedTaskPauseAudio => 'Pause audio';
+
+  @override
+  String get catcatchFlowActionNotStarted =>
+      'Flow action did not start. Check the flow status and try again.';
+
+  @override
+  String catcatchFlowActionFailed(Object error) {
+    return 'Flow action failed: $error';
+  }
+
+  @override
+  String get catcatchSkipped => 'Skipped (nothing to process)';
+
+  @override
+  String get catcatchRetryStep => 'Retry this step';
+
+  @override
+  String catcatchCollapseSegments(Object count) {
+    return 'Hide $count segments';
+  }
+
+  @override
+  String catcatchShowSegments(Object count) {
+    return 'Show $count segments';
+  }
+
+  @override
+  String catcatchSelectedResources(Object selected, Object total) {
+    return '$selected of $total resources selected';
+  }
+
+  @override
+  String catcatchDetectedMediaResources(Object count) {
+    return '$count media resources detected';
+  }
+
+  @override
+  String get catcatchFlowSelectOrCombine =>
+      '(select one resource or combine an audio/video pair)';
+
+  @override
+  String get catcatchSelectMultiple => '(tap to select; multiple allowed)';
+
+  @override
+  String get catcatchWaitingForResources => 'Waiting for flow resources';
+
+  @override
+  String catcatchDownloadSelected(Object count) {
+    return 'Download $count selected resources';
+  }
+
+  @override
+  String get catcatchSelectResources => 'Select resources to download';
+
+  @override
+  String get catcatchPossibleSplit =>
+      '⚠ Possible separate audio and video streams';
+
+  @override
+  String get catcatchSplitExplanation =>
+      'These resources may be separate audio and video streams for the same video. You can combine them or download only one stream.';
+
+  @override
+  String get catcatchAudioStream => '🎵 Audio stream';
+
+  @override
+  String get catcatchVideoStream => '🎬 Video stream';
+
+  @override
+  String get catcatchMergeAudioVideo => 'Combine audio and video';
+
+  @override
+  String get catcatchVideoOnly => 'Video only';
+
+  @override
+  String get catcatchAudioOnly => 'Audio only';
+
+  @override
+  String get catcatchSegmentsPlaylistPreview =>
+      'Preview segments using the playlist';
+
+  @override
+  String get catcatchPreviewAudio => 'Preview audio';
+
+  @override
+  String get catcatchPreviewVideo => 'Preview video';
+
+  @override
+  String catcatchDuration(Object duration) {
+    return 'Duration: $duration';
+  }
+
+  @override
+  String get catcatchSegment => 'Segment';
+
+  @override
+  String get catcatchPlaylist => 'Playlist';
+
+  @override
+  String get catcatchFullVideo => 'Full video';
+
+  @override
+  String get catcatchSeparateTracks => 'Separate tracks';
+
+  @override
+  String get catcatchPreviewPlaylistOnly => 'Preview using the playlist';
+
+  @override
+  String get catcatchPreviewUnsupported => 'Preview is not supported';
+
+  @override
+  String get catcatchUnknownFormat => 'Unknown format';
+
+  @override
+  String get catcatchNeedPlaylistProcessing => 'Playlist processing required';
+
+  @override
+  String get catcatchSpecialFormatDetected => 'Special format detected';
+
+  @override
+  String catcatchPlaylistInfo(Object format) {
+    return 'This resource is a playlist ($format). It must be parsed and all segments downloaded and combined into a playable video.';
+  }
+
+  @override
+  String catcatchFormatInfo(Object format) {
+    return 'The downloaded file is in $format, not standard MP4. The built-in pure Dart remux engine will convert it to MP4 (TS/FLV/EV1 require no external dependencies).';
+  }
+
+  @override
+  String get catcatchContinueBeforeConfirm =>
+      'Resume the flow before confirming format handling';
+
+  @override
+  String get catcatchAutoProcess => 'Process automatically';
+
+  @override
+  String get catcatchKeepOriginalFormat => 'Keep original format';
+
+  @override
+  String get catcatchResumeSupported => 'Resume supported';
+
+  @override
+  String get catcatchResumeUnsupported => 'This site does not support resuming';
+
+  @override
+  String get catcatchPauseDownload => 'Pause download';
+
+  @override
+  String get catcatchResumeDownload => 'Resume download';
+
+  @override
+  String get catcatchRestartDownload => 'Download again';
+
+  @override
+  String get catcatchPendingFormatAction => 'Waiting for flow resources';
+
+  @override
+  String get quitDialogTitle => 'Quit app?';
+
+  @override
+  String quitDialogRunningTasks(Object count) {
+    return '$count tasks are running. Quitting will interrupt them. Do you want to quit?';
+  }
+
+  @override
+  String get quitDialogNoTasks => 'Do you want to quit Stroom?';
+
+  @override
+  String get quitDialogCancel => 'Cancel';
+
+  @override
+  String get quitDialogExit => 'Quit';
+
+  @override
+  String get searchPanelNewConversation => 'New conversation';
+
+  @override
+  String get searchPanelTitle => 'Search conversations';
+
+  @override
+  String get searchPanelHint => 'Enter a keyword...';
+
+  @override
+  String get searchPanelByTitle => 'Search titles';
+
+  @override
+  String get searchPanelByContent => 'Search content';
+
+  @override
+  String searchPanelResults(Object count) {
+    return '$count results';
+  }
+
+  @override
+  String get searchPanelPrompt => 'Enter a keyword to search';
+
+  @override
+  String get searchPanelNoResults => 'No matching conversations found';
+
+  @override
+  String get topicItemNew => 'New topic';
+
+  @override
+  String get topicItemUnpin => 'Unpin';
+
+  @override
+  String get topicItemPin => 'Pin';
+
+  @override
+  String get topicItemRename => 'Rename';
+
+  @override
+  String get topicItemAutoName => 'Auto name';
+
+  @override
+  String get topicItemDelete => 'Delete';
+
+  @override
+  String get galleryChoiceTitle => 'Choose an image source';
+
+  @override
+  String get galleryChoiceDevice => 'Device gallery';
+
+  @override
+  String get galleryChoiceDeviceDescription =>
+      'Browse photos and videos on your device';
+
+  @override
+  String get galleryChoiceApp => 'App gallery';
+
+  @override
+  String get galleryChoiceAppDescription => 'Choose from the app gallery';
+
+  @override
+  String get appMediaUnreadable => 'Could not read file';
+
+  @override
+  String appMediaClearSelection(Object count) {
+    return 'Clear ($count)';
+  }
+
+  @override
+  String appMediaConfirmSelectionCount(Object count) {
+    return 'Done ($count)';
+  }
+
+  @override
+  String get appMediaConfirmSelection => 'Done';
+
+  @override
+  String get appMediaEmptyFolder => 'This folder is empty';
+
+  @override
+  String get appMediaRoot => 'Go to root folder';
+
+  @override
+  String appMediaParentFolder(Object name) {
+    return 'Back: $name';
+  }
+
+  @override
+  String appMediaSelectedFiles(Object count) {
+    return '$count files selected';
+  }
+
+  @override
+  String get imagePreviewCrop => 'Crop';
+
+  @override
+  String get imagePreviewEdit => 'Edit';
+
+  @override
+  String get imagePreviewLoadFailed => 'Could not load image';
+
+  @override
+  String runningElapsed(Object elapsed) {
+    return 'Running for $elapsed';
+  }
+
+  @override
+  String get chatAttachmentFile => 'Attach file';
+
+  @override
+  String get chatAttachmentCamera => 'Take photo';
+
+  @override
+  String get chatAttachmentDeviceGallery => 'Device gallery';
+
+  @override
+  String get chatAttachmentDeviceFiles => 'Device files';
+
+  @override
+  String get chatAttachmentAppFiles => 'App files';
+
+  @override
+  String fileManagerTodayTime(Object time) {
+    return 'Today $time';
+  }
+
+  @override
+  String fileManagerYesterdayTime(Object time) {
+    return 'Yesterday $time';
+  }
+
+  @override
+  String fileManagerDaysAgoTime(Object days, Object time) {
+    return '$days days ago $time';
+  }
+
+  @override
+  String get markdownGenerating => 'Generating...';
+
+  @override
+  String get htmlPreview => 'Preview';
+
+  @override
+  String get htmlReturnToCard => 'Return to card';
+
+  @override
+  String get htmlGenerating => 'Generating...';
+
+  @override
+  String get htmlFullscreen => 'View fullscreen';
+
+  @override
+  String get htmlViewCode => 'View code';
+
+  @override
+  String get codeScrollToBottom => 'Scroll to bottom';
+
+  @override
+  String get codeSave => 'Save';
+
+  @override
+  String get codeDisableWrap => 'Disable wrapping';
+
+  @override
+  String get codeEnableWrap => 'Wrap lines';
+
+  @override
+  String codeCopyFailed(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get codeCopied => 'Copied';
+
+  @override
+  String get codeCopy => 'Copy';
+
+  @override
+  String get codeEmptySave => 'Code is empty and cannot be saved';
+
+  @override
+  String get codeSaveTitle => 'Save code';
+
+  @override
+  String codeSavedTo(Object path) {
+    return 'Saved to: $path';
+  }
+
+  @override
+  String codeSaveFailed(Object error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get fileManagerCopy => 'Copy';
+
+  @override
+  String get fileManagerMove => 'Move';
+
+  @override
+  String get fileManagerRename => 'Rename';
+
+  @override
+  String get fileManagerExport => 'Export';
+
+  @override
+  String get fileManagerDelete => 'Delete';
+
+  @override
+  String get fileManagerAncestorFolders => 'Ancestor folders';
+
+  @override
+  String get fileManagerRoot => 'Root';
+
+  @override
+  String fileManagerSelectedItems(Object count) {
+    return '$count selected';
+  }
+
+  @override
+  String get fileManagerSelectAll => 'Select all';
+
+  @override
+  String get fileManagerRenameUndo => 'Last batch rename result and undo';
+
+  @override
+  String fileManagerSortBy(Object field) {
+    return 'Sort ($field)';
+  }
+
+  @override
+  String get fileManagerSortCreated => 'Sort by created date';
+
+  @override
+  String get fileManagerSortModified => 'Sort by modified date';
+
+  @override
+  String get fileManagerSortName => 'Sort by name';
+
+  @override
+  String get fileManagerSortSize => 'Sort by size';
+
+  @override
+  String get fileManagerListView => 'List view';
+
+  @override
+  String get fileManagerThumbnailView => 'Thumbnail view';
+
+  @override
+  String get fileManagerCreateFolder => 'Create folder';
+
+  @override
+  String get fileManagerRefresh => 'Refresh list';
+
+  @override
+  String get fileManagerEmptyFolder => 'This folder is empty';
+
+  @override
+  String get fileManagerNoFiles => 'No files';
+
+  @override
+  String get fileManagerBackRoot => 'Back to root';
+
+  @override
+  String fileManagerBackFolder(Object name) {
+    return 'Back: $name';
+  }
+
+  @override
+  String get fileManagerMultiSelect => 'Select multiple';
+
+  @override
+  String get fileManagerOpen => 'Open';
+
+  @override
+  String get fileManagerPreview => 'Preview';
+
+  @override
+  String fileManagerFolderAndFilesCount(Object files, Object folders) {
+    return '$files files, $folders subfolders';
+  }
+
+  @override
+  String fileManagerSubfoldersCount(Object count) {
+    return '$count subfolders';
+  }
+
+  @override
+  String fileManagerFilesCount(Object count) {
+    return '$count files';
+  }
+
+  @override
+  String get fileManagerEmptyFolderLabel => 'Empty folder';
+
+  @override
+  String fileManagerFileExists(Object format, Object name) {
+    return 'File “$name.$format” already exists';
+  }
+
+  @override
+  String fileManagerRenameFailed(Object error) {
+    return 'Rename failed: $error';
+  }
+
+  @override
+  String get fileManagerChooseTargetFolder => 'Choose a destination folder';
+
+  @override
+  String get fileManagerAlreadyAtDestination =>
+      'The file is already at the destination';
+
+  @override
+  String get fileManagerMoveNameConflict =>
+      'A file with the same name already exists in the destination. Move canceled.';
+
+  @override
+  String fileManagerMoveFailed(Object error) {
+    return 'Move failed: $error';
+  }
+
+  @override
+  String get fileManagerChooseCopyDestination => 'Choose a folder to copy to';
+
+  @override
+  String fileManagerCopyFailed(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get fileManagerDeleteConfirmTitle => 'Confirm deletion';
+
+  @override
+  String get fileManagerDeleteFileConfirm =>
+      'Delete this file? This action cannot be undone.';
+
+  @override
+  String get fileManagerCancel => 'Cancel';
+
+  @override
+  String fileManagerDeleteFailed(Object error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String get fileManagerFolderAlreadyThere =>
+      'The folder is already at the destination. Operation canceled.';
+
+  @override
+  String get fileManagerFolderConflict =>
+      'A folder with the same name exists at the destination, or the destination is inside the selected folder. Operation canceled.';
+
+  @override
+  String get fileManagerBatchDeleteTitle => 'Confirm bulk deletion';
+
+  @override
+  String fileManagerDeleteSelectedConfirm(Object count) {
+    return 'Delete the $count selected items? This action cannot be undone.';
+  }
+
+  @override
+  String fileManagerBatchDeleteFailed(Object error) {
+    return 'Bulk delete failed: $error';
+  }
+
+  @override
+  String get fileManagerExportConflict =>
+      'Export paths for the selected files and folders conflict';
+
+  @override
+  String get fileManagerSelectedAlreadyThere =>
+      'The selected file is already at the destination. Move canceled.';
+
+  @override
+  String fileManagerBatchMoveFailed(Object error) {
+    return 'Bulk move failed: $error';
+  }
+
+  @override
+  String get fileManagerCopyConflict =>
+      'The selection contains files with duplicate names. Copy canceled; copy them one at a time.';
+
+  @override
+  String fileManagerBatchCopyFailed(Object error) {
+    return 'Bulk copy failed: $error';
+  }
+
+  @override
+  String get fileManagerClosedError => 'The file page is closed';
+
+  @override
+  String fileManagerBatchRenameFailed(Object error) {
+    return 'Bulk rename failed: $error';
+  }
+
+  @override
+  String get fileManagerFolderNameHint => 'Enter a folder name';
+
+  @override
+  String get fileManagerCreate => 'Create';
+
+  @override
+  String get fileManagerFolderExists => 'Folder already exists';
+
+  @override
+  String fileManagerCreateFolderFailed(Object error) {
+    return 'Could not create folder: $error';
+  }
+
+  @override
+  String fileManagerFolderCreated(Object name) {
+    return 'Folder “$name” created';
+  }
+
+  @override
+  String get fileManagerRenameFolderTitle => 'Rename folder';
+
+  @override
+  String get fileManagerNewNameHint => 'Enter a new name';
+
+  @override
+  String get fileManagerTargetFolderConflict =>
+      'A folder with the same name already exists at the destination. Operation canceled.';
+
+  @override
+  String get fileManagerMoveFolderTitle => 'Move folder to…';
+
+  @override
+  String get fileManagerCopyFolderTitle => 'Copy folder to…';
+
+  @override
+  String get fileManagerFolderSelfConflict =>
+      'A folder with the same name exists at the destination, or the destination is the folder itself. Operation canceled.';
+
+  @override
+  String fileManagerDeleteFolderConfirm(Object count, Object name) {
+    return 'Delete folder “$name”? Its $count files will also be deleted.';
+  }
+
+  @override
+  String fileManagerDeleteEmptyFolderConfirm(Object name) {
+    return 'Delete empty folder “$name”?';
+  }
+
+  @override
+  String get fileManagerDeleteFolderTitle => 'Confirm folder deletion';
+
+  @override
+  String fileManagerRefreshFailed(Object error) {
+    return 'Refresh failed: $error';
+  }
+
+  @override
+  String get fileManagerRefreshed => 'File list refreshed';
+
+  @override
+  String get fileManagerRenameFileTitle => 'Rename file';
+
+  @override
+  String get fileManagerFormat => 'Format';
+
+  @override
+  String get fileManagerFolderAtDestination =>
+      'Folder is already at the destination';
+
+  @override
+  String get folderPickerTitle => 'Choose folder';
+
+  @override
+  String get folderPickerExists => 'Folder already exists';
+
+  @override
+  String folderPickerCreateFailed(Object error) {
+    return 'Could not create folder: $error';
+  }
+
+  @override
+  String folderPickerRefreshFailed(Object error) {
+    return 'Could not refresh folder list: $error';
+  }
+
+  @override
+  String get folderPickerInstruction =>
+      'Click to select; double-click to open a folder';
+
+  @override
+  String get folderPickerFileName => 'File name';
+
+  @override
+  String get folderPickerFileNameHint => 'Enter a file name';
+
+  @override
+  String get folderPickerBack => 'Go up one level';
+
+  @override
+  String folderPickerPath(Object path) {
+    return 'Root > $path';
+  }
+
+  @override
+  String get folderPickerRoot => 'Root';
+
+  @override
+  String get folderPickerCurrentFolder => 'Current folder';
+
+  @override
+  String get folderPickerSubfolders => 'Subfolders';
+
+  @override
+  String get folderPickerExistingFolders => 'Existing folders';
+
+  @override
+  String get folderPickerCreateNew => 'Create new folder';
+
+  @override
+  String get folderPickerFolderNameHint => 'Enter a folder name';
+
+  @override
+  String get folderPickerCancelCreate => 'Cancel creation';
+
+  @override
+  String get folderPickerCancel => 'Cancel';
+
+  @override
+  String get folderPickerConfirm => 'Done';
+
+  @override
+  String batchRunReadFailed(Object error) {
+    return 'Could not read file list: $error';
+  }
+
+  @override
+  String get batchRunPreparing => 'Preparing…';
+
+  @override
+  String get batchRunUndo => 'Undo';
+
+  @override
+  String get batchRunRename => 'Rename';
+
+  @override
+  String batchRunFailedAction(Object label) {
+    return 'Could not $label';
+  }
+
+  @override
+  String batchRunCompletedCount(Object count, Object label) {
+    return '$label $count items';
+  }
+
+  @override
+  String batchRunSummary(
+    Object completed,
+    Object failed,
+    Object label,
+    Object remaining,
+  ) {
+    return '$label: $completed succeeded, $failed failed, $remaining remaining';
+  }
+
+  @override
+  String batchRunFailedItem(Object id, Object name) {
+    return 'Failed: $id → $name';
+  }
+
+  @override
+  String get batchRunReportCopied => 'Execution report copied';
+
+  @override
+  String get batchRunCopyFailed => 'Copy failed. Try again.';
+
+  @override
+  String batchRunWorking(Object label) {
+    return '$label…';
+  }
+
+  @override
+  String get batchRunTitle => 'Batch rename results';
+
+  @override
+  String get batchRunStoppedRetain =>
+      'Stopping keeps completed items. You can undo them on the results page.';
+
+  @override
+  String get batchRunFailedRemaining =>
+      'Failed; remaining items were not processed';
+
+  @override
+  String get batchRunUndoInfo =>
+      'Undo restores the original names for items completed in this run. Undo is refused if the file list has changed since.';
+
+  @override
+  String get batchRunUncertain =>
+      'Some item states could not be confirmed. Check the file list; automatic undo is unavailable to avoid overwriting files.';
+
+  @override
+  String get batchRunUndoing => 'Restoring original names…';
+
+  @override
+  String get batchRunStopping => 'Stopping…';
+
+  @override
+  String get batchRunStopRemaining => 'Stop remaining items';
+
+  @override
+  String get batchRunCopyReport => 'Copy report';
+
+  @override
+  String batchRunUndoRemaining(Object count) {
+    return 'Continue undoing the remaining $count';
+  }
+
+  @override
+  String get batchRunUndoCompleted => 'Undo completed renames';
+
+  @override
+  String get batchRunDone => 'Done';
+
+  @override
+  String get codeEditorTitle => 'Edit parameter value';
+
+  @override
+  String get codeEditorFormat => 'Format';
+
+  @override
+  String get codeEditorCancel => 'Cancel';
+
+  @override
+  String get codeEditorConfirm => 'OK';
+
+  @override
+  String get codeEditorInvalidJson => 'Invalid JSON. Fix it before saving.';
+
+  @override
+  String get codeEditorParamPath =>
+      'Parameter name path (expanded into nested JSON when sent)';
+
+  @override
+  String codeEditorErrorPosition(String line, String column, String message) {
+    return 'Line $line, column $column: $message';
+  }
+
+  @override
+  String codeEditorJsonError(String message) {
+    return 'JSON format error: $message';
+  }
+
+  @override
+  String get codeEditorInvalidFormat => 'Invalid JSON format';
+
+  @override
+  String get toolCallCompacted => 'Compacted';
+
+  @override
+  String get mermaidSaveEmpty => 'Mermaid code is empty. Nothing to save.';
+
+  @override
+  String mermaidFolderLoadFailed(String error) {
+    return 'Could not load folders: $error';
+  }
+
+  @override
+  String get mermaidSaveTitle => 'Save Mermaid diagram';
+
+  @override
+  String get mermaidSaveHint => 'Choose or create a folder for the .mmd file';
+
+  @override
+  String get mermaidSaveFilenameHint =>
+      'Enter a file name (.mmd is added automatically)';
+
+  @override
+  String get mermaidFilenameEmpty => 'File name cannot be empty';
+
+  @override
+  String mermaidSaveSuccess(String folder, String name) {
+    return 'Saved to text storage: $folder/$name.mmd';
+  }
+
+  @override
+  String mermaidSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get mermaidPrepareEngine => 'Preparing rendering engine...';
+
+  @override
+  String get mermaidRetry => 'Retry';
+
+  @override
+  String get batchRuleEmpty => 'Cannot be empty';
+
+  @override
+  String get batchRuleNumber => 'Enter a number';
+
+  @override
+  String get batchRulePositive => 'Enter a number greater than 0';
+
+  @override
+  String batchRuleMin(String min) {
+    return 'Must be at least $min';
+  }
+
+  @override
+  String batchRuleMax(String max) {
+    return 'Must be no greater than $max';
+  }
+
+  @override
+  String get batchRulePrefix => 'Prefix';
+
+  @override
+  String get batchRuleSuffix => 'Suffix';
+
+  @override
+  String get batchRuleStart => 'Start';
+
+  @override
+  String get batchRuleStep => 'Step';
+
+  @override
+  String get batchRuleDigits => 'Digits';
+
+  @override
+  String get batchRuleSeparator => 'Separator';
+
+  @override
+  String get batchRuleRestartFolder => 'Restart numbering in each folder';
+
+  @override
+  String get batchRuleNumberHelp =>
+      'Numbers follow preview order; excluded items do not use a number. Step can be negative or 0.';
+
+  @override
+  String get batchRuleFind => 'Find';
+
+  @override
+  String get batchRuleReplace => 'Replace with (leave empty to delete)';
+
+  @override
+  String get batchRuleCaseSensitive => 'Case sensitive';
+
+  @override
+  String get batchRuleRegex => 'Regular expression';
+
+  @override
+  String get batchRuleFirstOnly => 'Replace first match only';
+
+  @override
+  String get batchRuleRegexHelp =>
+      'Capture groups: \$1, \$2; full match: \$0; literal \$: \$\$. Example: ^IMG_(\\d+)\$ → Photo_\$1';
+
+  @override
+  String get batchRuleFindRequired => 'Enter text to find to enable this rule.';
+
+  @override
+  String get batchRuleBeginning => 'Beginning';
+
+  @override
+  String get batchRuleEnd => 'End';
+
+  @override
+  String get batchRulePosition => 'Position';
+
+  @override
+  String get batchRuleInsertText => 'Text to insert';
+
+  @override
+  String get batchRuleBeforeChar => 'Before character N';
+
+  @override
+  String get batchRulePositionHelp =>
+      'Positions start at 1; values beyond the end are appended. Combined emoji count as one character.';
+
+  @override
+  String get batchRuleFromBeginning => 'From beginning';
+
+  @override
+  String get batchRuleFromEnd => 'From end';
+
+  @override
+  String get batchRuleFromChar => 'Starting at character N';
+
+  @override
+  String get batchRuleCount => 'Count';
+
+  @override
+  String get batchRuleDeleteHelp =>
+      'If deletion empties the name, a later insert rule must add text before execution.';
+
+  @override
+  String get batchRuleUpper => 'UPPERCASE';
+
+  @override
+  String get batchRuleLower => 'lowercase';
+
+  @override
+  String get batchRuleFirstUpper => 'Capitalize first letter';
+
+  @override
+  String get batchRuleTitleCase => 'Capitalize Each Word';
+
+  @override
+  String get batchRuleTemplate => 'New name template';
+
+  @override
+  String batchRuleTemplateHint(String n, String name) {
+    return 'Course_${n}_$name';
+  }
+
+  @override
+  String batchRuleTemplateHelp(
+    String name,
+    String n,
+    String folder,
+    String created,
+    String modified,
+    String ext,
+  ) {
+    return '$name original name · $n sequence · $folder folder name\n$created creation date · $modified modified date · $ext original extension\nDate format YYYY-MM-DD; missing dates are reported. The template replaces the whole base name; the extension is kept automatically.';
+  }
+
+  @override
+  String get batchRuleTrim => 'Trim leading and trailing spaces';
+
+  @override
+  String get batchRuleCollapseSpaces =>
+      'Replace consecutive spaces with one space';
+
+  @override
+  String get batchRuleActions => 'Rule actions';
+
+  @override
+  String get batchRuleDuplicate => 'Duplicate rule';
+
+  @override
+  String get batchRuleRemove => 'Delete rule';
+
+  @override
+  String get batchRuleMoveUp => 'Move rule up';
+
+  @override
+  String get batchRuleMoveDown => 'Move rule down';
+
+  @override
+  String get batchDlgSavePreset => 'Save preset';
+
+  @override
+  String get batchDlgPresetName => 'Preset name';
+
+  @override
+  String get batchDlgPresetHint =>
+      'Saves rules and order, but not exclusions or manual names';
+
+  @override
+  String get batchDlgCancel => 'Cancel';
+
+  @override
+  String get batchDlgSave => 'Save';
+
+  @override
+  String get batchDlgOverwriteTitle => 'Overwrite existing preset?';
+
+  @override
+  String batchDlgOverwriteBody(String name) {
+    return 'Update the rules in “$name”.';
+  }
+
+  @override
+  String get batchDlgOverwrite => 'Overwrite';
+
+  @override
+  String get batchDlgManagePresets => 'Manage presets';
+
+  @override
+  String get batchDlgNoPresets => 'No saved presets';
+
+  @override
+  String get batchDlgDeletePreset => 'Delete preset';
+
+  @override
+  String get batchDlgDone => 'Done';
+
+  @override
+  String get batchDlgEditName => 'Edit name individually';
+
+  @override
+  String get batchDlgBaseName => 'Base name';
+
+  @override
+  String get batchDlgOverrideHelp => 'This name overrides the rule result';
+
+  @override
+  String batchDlgExtensionRetained(String extension) {
+    return 'Extension .$extension is kept automatically';
+  }
+
+  @override
+  String get batchDlgConfirm => 'Confirm';
+
+  @override
+  String get batchDlgHelp => 'Instructions';
+
+  @override
+  String get batchDlgClose => 'Close';
+
+  @override
+  String get batchDlgLoadPreset =>
+      'Load preset (replaces rules and clears manual names)';
+
+  @override
+  String get batchDlgLoad => 'Load preset';
+
+  @override
+  String get batchDlgSaving => 'Saving…';
+
+  @override
+  String get batchDlgReset => 'Reset all rules and included items';
+
+  @override
+  String get batchDlgRuleInstructions =>
+      'Rules run from top to bottom. Copy, move, or disable them. File extensions stay unchanged.';
+
+  @override
+  String get batchDlgSortName => 'Name';
+
+  @override
+  String get batchDlgSortCreated => 'Created';
+
+  @override
+  String get batchDlgSortModified => 'Modified';
+
+  @override
+  String get batchDlgSortSize => 'Size';
+
+  @override
+  String get batchDlgAscending => 'Ascending';
+
+  @override
+  String get batchDlgDescending => 'Descending';
+
+  @override
+  String get batchDlgFolderSort =>
+      'Folders come first; same names are sorted by folder.';
+
+  @override
+  String get batchDlgAddRule => '＋ Add rule';
+
+  @override
+  String get batchDlgMaxRules => 'Maximum 50 rules';
+
+  @override
+  String get batchDlgPreviewWorking =>
+      'Calculating preview… You can keep editing rules or cancel.';
+
+  @override
+  String get batchDlgSearch => 'Search original name, new name, or folder';
+
+  @override
+  String get batchDlgFilterAll => 'All';
+
+  @override
+  String get batchDlgFilterChanged => 'Changed';
+
+  @override
+  String get batchDlgFilterErrors => 'Issues';
+
+  @override
+  String get batchDlgFilterUnchanged => 'Unchanged';
+
+  @override
+  String get batchDlgFilterExcluded => 'Excluded';
+
+  @override
+  String get batchDlgParticipants => 'Choose included items';
+
+  @override
+  String get batchDlgIncludeAll => 'Include all';
+
+  @override
+  String get batchDlgOnlyFiles => 'Files only';
+
+  @override
+  String get batchDlgOnlyFolders => 'Folders only';
+
+  @override
+  String get batchDlgExcludeAll => 'Exclude all';
+
+  @override
+  String get batchDlgScope => 'Included items';
+
+  @override
+  String get batchDlgCopyList => 'Copy list';
+
+  @override
+  String get batchDlgConflictBlock => 'Name conflict: block execution';
+
+  @override
+  String get batchDlgConflictSuffix => 'Name conflict: append (2), (3)…';
+
+  @override
+  String get batchDlgNoMatches => 'No items match the filter';
+
+  @override
+  String get batchDlgRoot => 'Root';
+
+  @override
+  String get batchDlgFile => 'File';
+
+  @override
+  String get batchDlgFolder => 'Folder';
+
+  @override
+  String batchDlgTargetFolder(String folder) {
+    return 'Target folder: $folder';
+  }
+
+  @override
+  String get batchDlgEditNameTooltip => 'Edit name individually';
+
+  @override
+  String get batchDlgRestoreNameTooltip => 'Restore rule-generated name';
+
+  @override
+  String get batchDlgCopied => 'Full preview list copied (CSV)';
+
+  @override
+  String get batchDlgCopyFailed => 'Copy failed. Try again.';
+
+  @override
+  String get batchDlgHelpTitle => 'Batch rename instructions';
+
+  @override
+  String get batchDlgHelpDismiss => 'Got it';
+
+  @override
+  String get batchDlgRulesTab => 'Rules';
+
+  @override
+  String batchDlgPreviewTab(String count) {
+    return 'Preview ($count)';
+  }
+
+  @override
+  String batchDlgRenameCount(String count) {
+    return 'Rename $count items';
+  }
+
+  @override
+  String get batchDlgPresetLoadFailed =>
+      'Could not load presets. You can still edit and run rules.';
+
+  @override
+  String get batchDlgPreviewFailed =>
+      'Could not calculate preview. Adjust the rules and try again.';
+
+  @override
+  String batchDlgSavedName(String name) {
+    return 'Preset saved: $name';
+  }
+
+  @override
+  String batchDlgSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String batchDlgDeleteFailed(String error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String get batchDlgSavePresetFallback => 'Save preset';
+
+  @override
+  String batchDlgPreviewSummary(
+    String changes,
+    String conflicts,
+    String excluded,
+  ) {
+    return 'Preview · $changes changes · $conflicts issues · $excluded excluded';
+  }
+
+  @override
+  String get batchDlgInvalidInput =>
+      'Fix invalid rule inputs. The preview does not include them yet.';
+
+  @override
+  String get batchDlgConflictError =>
+      'Conflicts or invalid names prevent applying. Adjust the rules.';
+
+  @override
+  String get batchDlgManualNameStatus => 'Manual name';
+
+  @override
+  String get batchDlgPendingRename => 'Ready to rename';
+
+  @override
+  String get batchDlgCsvHeader =>
+      'Original path,Original name,Target path,Status';
+
+  @override
+  String get batchDlgHelpBody =>
+      '1. Choose a preset or enable rules, then copy rules and adjust their order as needed.\n\n2. The preview shows the names that will be used. Search and filters affect display only. Unchecking an item excludes it and recalculates numbering. Edit a name individually or restore the rule result.\n\n3. Resolve all issues before running. Automatic suffixes handle duplicate names without overwriting files. Rename folders that exchange names in separate batches.\n\n4. You can stop later items during execution; the current item finishes first. The results page shows completed changes and lets you undo them. Undo is blocked if the list has changed since execution.\n\nThis changes names and folder paths only; file contents and extensions stay unchanged. Renaming a parent folder does not prevent checked children from being renamed, and renaming a parent moves its children with it.';
+
+  @override
+  String batchDlgPreviewCount(String count) {
+    return 'Preview ($count)';
+  }
+
+  @override
+  String get batchBuiltinPhoto => 'Photos: date and number';
+
+  @override
+  String get batchBuiltinCourse => 'Courses: consistent name and number';
+
+  @override
+  String get batchBuiltinDownloads => 'Downloads: clean whitespace';
+
+  @override
+  String get taskListDetail => 'Details';
+
+  @override
+  String get taskListOwnershipChecking => 'Confirming task ownership';
+
+  @override
+  String get taskListOwnershipFailed =>
+      'Could not read task flow record; actions are unavailable';
+
+  @override
+  String get taskListViewFlow => 'View task flow';
+
+  @override
+  String get taskListPause => 'Pause';
+
+  @override
+  String get taskListClear => 'Clear task';
+
+  @override
+  String get taskListResume => 'Resume';
+
+  @override
+  String get taskListRetry => 'Retry';
+
+  @override
+  String get taskListDismissError => 'Dismiss error';
+
+  @override
+  String get taskListRemove => 'Remove from list';
+
+  @override
+  String get taskListSynthesisErrorTitle => 'Synthesis error details';
+
+  @override
+  String get taskListClose => 'Close';
+
+  @override
+  String get taskListOriginalExchange => 'Original request and response';
+
+  @override
+  String get taskListOriginalRequest => 'Original request body:';
+
+  @override
+  String get taskListOriginalResponse => 'Original response body:';
+
+  @override
+  String get taskFlowIoTypeText => 'Text';
+
+  @override
+  String get taskFlowIoTypeAudio => 'Audio';
+
+  @override
+  String get taskFlowIoTypeVideo => 'Video';
+
+  @override
+  String get taskFlowIoTypeImage => 'Image';
+
+  @override
+  String get taskFlowIoTypeLink => 'Link';
+
+  @override
+  String get taskFlowIoTypeFile => 'File';
+
+  @override
+  String get taskFlowIoTypeAny => 'Any';
+
+  @override
+  String get mermaidZoomOut => 'Zoom out';
+
+  @override
+  String get mermaidZoomIn => 'Zoom in';
+
+  @override
+  String get mermaidFullscreen => 'Fullscreen';
+
+  @override
+  String get mermaidSaveButton => 'Save';
+
+  @override
+  String get mermaidSourceButton => 'View source';
+
+  @override
+  String get mermaidDiagramSemantic => 'View diagram';
+
+  @override
+  String get taskFlowCardCatCatchDeletePersistError =>
+      'Could not save CatCatch child task deletion state. Try again.';
+
+  @override
+  String get taskFlowCardSynthesisDeletePersistError =>
+      'Could not save synthesis child task deletion state. Try again.';
+
+  @override
+  String get taskFlowCardBackgroundDeletePersistError =>
+      'Could not save background child task deletion state. Try again.';
+
+  @override
+  String get mathParseError => 'Math parse error';
+
+  @override
+  String get mermaidEmptyPlaceholder => 'No Mermaid code to render';
+
+  @override
+  String get mathClose => 'Close';
+
+  @override
+  String get mermaidLoadTimeout =>
+      'Mermaid loading timed out. Check your network and try again.';
+
+  @override
+  String get mermaidCdnLoadFailed =>
+      'Could not reach cdn.jsdelivr.net to load Mermaid.';
+
+  @override
+  String get mermaidLoadingDiagram => 'Loading diagram…';
+
+  @override
+  String get mermaidEngineInitFailed =>
+      'Could not initialize the diagram renderer. Try again.';
+
+  @override
+  String get mermaidPageTimeout => 'Page load timed out. Try again.';
+
+  @override
+  String get mermaidCodeLoadFailed => 'Could not load diagram code. Try again.';
+
+  @override
+  String mermaidPageLoadFailed(String description) {
+    return 'Page load failed: $description';
+  }
+
+  @override
+  String get mermaidLoadingEngine => 'Loading rendering engine…';
+
+  @override
+  String get mermaidRenderErrorTitle => 'Diagram rendering error';
+
+  @override
+  String get taskFlowOutputVideoAudioDownstream =>
+      'Video or audio (filtered by downstream)';
+
+  @override
+  String get taskFlowOutputUnknown => 'Unknown';
+
+  @override
+  String batchRunCancelledSummary(
+    String label,
+    String completed,
+    String failed,
+    String remaining,
+  ) {
+    return '$label stopped: $completed succeeded, $failed failed, $remaining remaining';
+  }
+
+  @override
+  String mermaidRenderErrorPrefix(String message) {
+    return 'Mermaid render error: $message';
+  }
+
+  @override
+  String mermaidInitializeErrorPrefix(String message) {
+    return 'Mermaid initialization error: $message';
+  }
+
+  @override
+  String get mermaidResourceError =>
+      'A resource in the Mermaid diagram failed to load.';
+
+  @override
+  String get taskFlowParamRecognitionModel => 'Recognition model';
+
+  @override
+  String get taskFlowParamSynthesisModel => 'Synthesis model';
+
+  @override
+  String get taskFlowParamSaveFolder => 'Save folder';
+
+  @override
+  String get taskFlowParamResourceSelection => 'Resource selection';
+
+  @override
+  String get taskFlowParamOutputType => 'Output type';
+
+  @override
+  String get taskFlowParamVideoFolder => 'Video save folder';
+
+  @override
+  String get taskFlowParamAudioFolder => 'Audio save folder';
+
+  @override
+  String get taskFlowParamExpectedDuration => 'Expected duration';
+
+  @override
+  String get taskFlowParamVoice => 'Voice';
+
+  @override
+  String get taskFlowParamSpeechRate => 'Speech rate';
+
+  @override
+  String get taskFlowParamAssistant => 'Assistant';
+
+  @override
+  String get taskFlowHintResourceSelection =>
+      'Manual mode lets you choose. Automatic mode follows the existing rules. Ask when ambiguous selects automatically only when there is one safe choice; otherwise it opens the resource list for confirmation.';
+
+  @override
+  String get taskFlowHintOutputType =>
+      'Choose video or audio explicitly. Follow downstream filters resources by the next block’s input type. If the next block accepts both types or there is no next block, both types are kept.';
+
+  @override
+  String get taskFlowHintExpectedDuration =>
+      'Filter resources by video duration. Leave blank to skip filtering.';
+
+  @override
+  String get taskFlowHintVoice =>
+      'Choose a voice. The matching synthesis model is selected automatically.';
+
+  @override
+  String get taskFlowUiUnsupportedBlockStep =>
+      'This block type is no longer supported. Replace it or remove this step.';
+
+  @override
+  String taskFlowUiDownstreamTypeMismatch(String requiredType) {
+    return 'The next block requires $requiredType. The downloader can output video or audio. Change the next step or output policy.';
+  }
+
+  @override
+  String taskFlowUiAnyTypeMismatch(String source, String block) {
+    return '$source has any type, but “$block” needs an explicit text, link, image, audio, video, or file type. Change the input type, move or replace the block, or undo the change.';
+  }
+
+  @override
+  String taskFlowUiTypeMismatch(
+    String source,
+    String actualType,
+    String block,
+    String requiredType,
+  ) {
+    return '$source has $actualType, but “$block” requires $requiredType. Change the input type, move or replace the block, or undo the change.';
+  }
+
+  @override
+  String get fileManagerSortFieldCreated => 'Created date';
+
+  @override
+  String get fileManagerSortFieldModified => 'Modified date';
+
+  @override
+  String get fileManagerSortFieldName => 'Name';
+
+  @override
+  String get fileManagerSortFieldSize => 'Size';
+
+  @override
+  String get fileManagerSortDateNewest => 'newest first';
+
+  @override
+  String get fileManagerSortDateOldest => 'oldest first';
+
+  @override
+  String get fileManagerSortSizeLargest => 'largest first';
+
+  @override
+  String get fileManagerSortSizeSmallest => 'smallest first';
+
+  @override
+  String get catcatchStatusRunning => 'Running';
+
+  @override
+  String get catcatchStatusCompleted => 'Completed';
+
+  @override
+  String get catcatchStatusFailed => 'Failed';
+
+  @override
+  String get catcatchStatusPaused => 'Paused';
+
+  @override
+  String get catcatchStatusWaiting => 'Waiting';
+
+  @override
+  String get catcatchStepFetching => 'Fetching webpage';
+
+  @override
+  String get catcatchStepAnalyzing => 'Analyzing media';
+
+  @override
+  String get catcatchStepParsingPlaylist => 'Parsing playlist';
+
+  @override
+  String get catcatchStepFiltering => 'Filtering by duration';
+
+  @override
+  String get catcatchStepUserSelecting => 'Waiting for selection';
+
+  @override
+  String get catcatchStepDownloading => 'Downloading';
+
+  @override
+  String get catcatchStepConverting => 'Converting/merging';
+
+  @override
+  String get catcatchStepSaving => 'Saving locally';
+
+  @override
+  String get bgStepConnectServer => 'Connecting to server';
+
+  @override
+  String get bgStepUploadImage => 'Uploading images';
+
+  @override
+  String get bgStepWaitRecognition => 'Waiting for recognition';
+
+  @override
+  String get bgStepParseResult => 'Parsing result';
+
+  @override
+  String get bgStepSaveFile => 'Saving file';
+
+  @override
+  String get bgStepUploadAudio => 'Uploading audio';
+
+  @override
+  String get bgStepTranscribing => 'Transcribing';
+
+  @override
+  String get bgStepReceiveResult => 'Receiving result';
+
+  @override
+  String get bgStepSeparateAudio => 'Separating audio';
+
+  @override
+  String get bgStepSaveToFile => 'Saving to file';
+
+  @override
+  String get bgStepSendRequest => 'Sending request';
+
+  @override
+  String get bgStepWaitReply => 'Waiting for reply';
+
+  @override
+  String get fileManagerSortNameAscending => 'A to Z';
+
+  @override
+  String get fileManagerSortNameDescending => 'Z to A';
+
+  @override
+  String get taskFlowValidationNoSteps =>
+      'This task flow has no steps. Add a block first.';
+
+  @override
+  String get taskFlowValidationInputRequired =>
+      'Add at least one input to run this task flow.';
+
+  @override
+  String get taskFlowValidationFlowRemoved =>
+      'This task flow was deleted. Select it again.';
+
+  @override
+  String get taskFlowValidationInputTypeChanged =>
+      'The initial input type changed. Choose the run input again.';
+
+  @override
+  String get taskFlowValidationSnapshotMissing =>
+      'This older record has no run snapshot. Retry using the latest configuration.';
+
+  @override
+  String get taskFlowValidationAssistantModelMissing =>
+      'The assistant model is missing or unavailable. Select a model on the chat page or set a default model for the assistant.';
+
+  @override
+  String get taskFlowValidationSavedFileUnavailable =>
+      'A saved step file is missing, empty, or unreadable. Run the task flow again.';
+
+  @override
+  String get taskFlowValidationUnsupportedBlock =>
+      'This block type is no longer supported. Replace or remove this step.';
+
+  @override
+  String taskFlowValidationDownstreamMismatch(String requiredType) {
+    return 'The next block requires $requiredType. The downloader can output audio or video. Change the next step or output policy.';
+  }
+
+  @override
+  String taskFlowValidationRequiredParameter(String parameter, String block) {
+    return '“$parameter” is required for “$block”. Configure it in the block settings.';
+  }
+
+  @override
+  String taskFlowValidationLegacyModel(String block) {
+    return 'The legacy model selection needs confirmation. Choose the model again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationModelUnavailable(String block) {
+    return 'The model is missing or unavailable from its provider. Choose it again in “$block” settings and check the provider URL and key.';
+  }
+
+  @override
+  String taskFlowValidationAssistantUnavailable(String block) {
+    return 'The assistant is missing or was deleted. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String get taskFlowValidationAssistantModelUnavailable =>
+      'The assistant model was deleted or its provider configuration is unavailable. Choose a model again in assistant settings.';
+
+  @override
+  String taskFlowValidationPolicyInvalid(String block) {
+    return 'The resource selection policy or output type is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationOutputInvalid(String block) {
+    return 'The output type is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationResourcePolicyInvalid(String block) {
+    return 'The resource selection policy is invalid. Choose it again in “$block” settings.';
+  }
+
+  @override
+  String taskFlowValidationInputFileUnavailable(String index) {
+    return 'Input $index: The file is missing, empty, or unreadable. Choose it again.';
+  }
+
+  @override
+  String taskFlowValidationInputUrlInvalid(String index) {
+    return 'Input $index: Enter a valid HTTP or HTTPS link.';
+  }
+
+  @override
+  String taskFlowValidationInputError(String index, String error) {
+    return 'Input $index: $error';
+  }
+
+  @override
+  String get batchRuleValidationMaxRules => 'At most 50 rules are allowed.';
+
+  @override
+  String get batchRuleValidationDigits =>
+      'The number of digits must be from 1 to 12.';
+
+  @override
+  String get batchRuleValidationNumberRange =>
+      'The starting number and step must be within ±999,999,999.';
+
+  @override
+  String get batchRuleValidationReplacementLength =>
+      'The replacement rule is too long.';
+
+  @override
+  String get batchRuleValidationRegex => 'The regular expression is invalid.';
+
+  @override
+  String get batchRuleValidationDeleteIndex =>
+      'The deletion position must start at 1.';
+
+  @override
+  String get batchRuleValidationInsertLength =>
+      'The inserted text is too long.';
+
+  @override
+  String get batchRuleValidationTemplateNumber =>
+      'Invalid template number settings: digits must be 1 to 12 and start/step within ±999,999,999.';
+
+  @override
+  String get batchRuleValidationTemplateLength => 'The template is too long.';
+
+  @override
+  String get batchRuleValidationTemplateVariable =>
+      'Unknown template variable or an unclosed brace.';
+
+  @override
+  String get batchRuleTypeNumber => 'Add numbering';
+
+  @override
+  String get batchRuleTypeReplace => 'Find and replace';
+
+  @override
+  String get batchRuleTypeInsert => 'Insert text';
+
+  @override
+  String get batchRuleTypeDelete => 'Delete characters';
+
+  @override
+  String get batchRuleTypeCase => 'Change case';
+
+  @override
+  String get batchRuleTypeTemplate => 'Name template';
+
+  @override
+  String get batchRuleTypeCleanup => 'Clean whitespace';
+
+  @override
+  String taskFlowValidationInputEmpty(String index) {
+    return 'Input $index: Enter text or choose a file.';
+  }
+
+  @override
+  String taskFlowValidationImageTooLarge(String index) {
+    return 'Input $index: The image is over 20 MB. Choose a smaller image.';
+  }
+
+  @override
+  String taskFlowValidationAttachmentTooLarge(String index) {
+    return 'Input $index: The attachment is over 10 MB. Choose a smaller file.';
+  }
+
+  @override
+  String taskFlowValidationFileTypeMismatch(
+    String index,
+    String actualType,
+    String requiredType,
+  ) {
+    return 'Input $index: The file is $actualType, but $requiredType is required. Choose another file.';
+  }
+
+  @override
+  String taskFlowValidationSvgUnsupported(String index) {
+    return 'Input $index: Assistant chat does not support SVG image attachments. Convert it to PNG or JPEG.';
+  }
+
+  @override
+  String taskFlowValidationImageMimeUnsupported(String index, String mime) {
+    return 'Input $index: Assistant chat does not support $mime image attachments. Convert it to PNG, JPEG, GIF, or WebP.';
+  }
+
+  @override
+  String taskFlowValidationAudioMimeUnsupported(String index, String mime) {
+    return 'Input $index: Assistant chat does not support $mime audio attachments. Convert it to MP3, WAV, or M4A.';
+  }
+
+  @override
+  String taskFlowValidationEndpointMediaUnsupported(String index, String type) {
+    return 'Input $index: This Anthropic chat format does not support $type attachments. Choose an assistant that supports this media.';
+  }
+
+  @override
+  String taskFlowValidationEndpointPdfOnly(String index) {
+    return 'Input $index: This Anthropic chat format supports only image and PDF attachments. Choose a supported file.';
+  }
+
+  @override
+  String taskFlowValidationImageCompressionFailed(String index) {
+    return 'Input $index: Assistant chat could not compress the image below 10 MB. Choose a smaller image.';
+  }
+
+  @override
+  String taskFlowValidationTextEncodingFailed(String index) {
+    return 'Input $index: The text attachment is not valid UTF-8. Convert it and try again.';
   }
 }

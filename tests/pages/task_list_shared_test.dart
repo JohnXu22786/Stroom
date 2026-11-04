@@ -146,7 +146,11 @@ void main() {
         taskFlowExecutionRestoreStatusProvider
             .overrideWith((ref) => FlowExecutionRestoreStatus.restoring),
       ],
-      child: const MaterialApp(home: UnifiedTaskListPage()),
+      child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: UnifiedTaskListPage()),
     ));
     await tester.pump();
     final container = ProviderScope.containerOf(

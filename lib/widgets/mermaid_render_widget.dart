@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:flutter/gestures.dart';
@@ -14,6 +17,7 @@ import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_web_url.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+
 import 'code_block_source_widget.dart';
 
 /// A [OneSequenceGestureRecognizer] that accepts a drag after the pointer moves
@@ -205,14 +209,34 @@ class MermaidRenderWidget extends StatefulWidget {
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
-  static String buildMermaidHtml(String mermaidCode,
-      {bool withJsGestures = true,
-      String? inlineMermaidJs,
-      int? errorDocumentGeneration,
-      int? transformDocumentGeneration}) {
+  static String buildMermaidHtml(
+    String mermaidCode, {
+    bool withJsGestures = true,
+    String? inlineMermaidJs,
+    int? errorDocumentGeneration,
+    int? transformDocumentGeneration,
+    String loadingMessage = 'Loading diagram…',
+    String cdnLoadTimeoutMessage = 'Mermaid loading timed out.',
+    String cdnLoadFailedMessage =
+        'Could not load Mermaid from cdn.jsdelivr.net.',
+    String renderErrorPrefix = 'Mermaid render error: ',
+    String initializeErrorPrefix = 'Mermaid initialization error: ',
+    String resourceErrorMessage = 'A Mermaid resource failed to load.',
+  }) {
     final escaped = _escapeMermaidCode(mermaidCode);
-    final loader = _buildMermaidLoader(inlineMermaidJs);
-    var skeleton = _buildMermaidSkeleton(withJsGestures, loader);
+    final loader = _localizedMermaidLoader(
+      inlineMermaidJs,
+      cdnLoadTimeoutMessage,
+      cdnLoadFailedMessage,
+      renderErrorPrefix,
+      initializeErrorPrefix,
+    );
+    var skeleton = _buildMermaidSkeleton(
+      withJsGestures,
+      loader,
+      loadingMessage,
+      resourceErrorMessage,
+    );
     if (errorDocumentGeneration != null) {
       skeleton = skeleton.replaceFirst(
         "callHandler('onMermaidError', msg);",
@@ -242,6 +266,10 @@ class MermaidRenderWidget extends StatefulWidget {
       reportError('Mermaid resource failed to load');
     }, true);''',
       );
+      skeleton = skeleton.replaceFirst(
+        "'Mermaid resource failed to load'",
+        jsonEncode(resourceErrorMessage),
+      );
     }
     if (transformDocumentGeneration != null) {
       skeleton = skeleton.replaceFirst(
@@ -266,6 +294,60 @@ class MermaidRenderWidget extends StatefulWidget {
   /// UI thread for every render and every rebuild of every diagram).
   static String? _cachedLoaderLibraryJs;
   static String? _cachedLoaderScriptJs;
+  static String? _cachedLocalizedLoaderSource;
+  static String? _cachedLocalizedLoader;
+  static String? _cachedLocalizedLoaderTimeout;
+  static String? _cachedLocalizedLoaderFailure;
+  static String? _cachedLocalizedRenderErrorPrefix;
+  static String? _cachedLocalizedInitializeErrorPrefix;
+
+  static String _localizedMermaidLoader(
+    String? inlineMermaidJs,
+    String cdnLoadTimeoutMessage,
+    String cdnLoadFailedMessage,
+    String renderErrorPrefix,
+    String initializeErrorPrefix,
+  ) {
+    final source = _buildMermaidLoader(inlineMermaidJs);
+    final sameSource = identical(source, _cachedLocalizedLoaderSource) ||
+        source == _cachedLocalizedLoaderSource;
+    if (sameSource &&
+        cdnLoadTimeoutMessage == _cachedLocalizedLoaderTimeout &&
+        cdnLoadFailedMessage == _cachedLocalizedLoaderFailure &&
+        renderErrorPrefix == _cachedLocalizedRenderErrorPrefix &&
+        initializeErrorPrefix == _cachedLocalizedInitializeErrorPrefix) {
+      return _cachedLocalizedLoader!;
+    }
+
+    var loader = source;
+    if (loader.contains('CDN_TIMEOUT_MESSAGE_PLACEHOLDER')) {
+      loader = loader
+          .replaceFirst(
+            'CDN_TIMEOUT_MESSAGE_PLACEHOLDER',
+            jsonEncode(cdnLoadTimeoutMessage),
+          )
+          .replaceFirst(
+            'CDN_LOAD_FAILED_MESSAGE_PLACEHOLDER',
+            jsonEncode(cdnLoadFailedMessage),
+          );
+    }
+    loader = loader
+        .replaceAll(
+          'RENDER_ERROR_PREFIX_PLACEHOLDER',
+          jsonEncode(renderErrorPrefix),
+        )
+        .replaceAll(
+          'INITIALIZE_ERROR_PREFIX_PLACEHOLDER',
+          jsonEncode(initializeErrorPrefix),
+        );
+    _cachedLocalizedLoaderSource = source;
+    _cachedLocalizedLoader = loader;
+    _cachedLocalizedLoaderTimeout = cdnLoadTimeoutMessage;
+    _cachedLocalizedLoaderFailure = cdnLoadFailedMessage;
+    _cachedLocalizedRenderErrorPrefix = renderErrorPrefix;
+    _cachedLocalizedInitializeErrorPrefix = initializeErrorPrefix;
+    return loader;
+  }
 
   /// Builds the JavaScript that loads mermaid.js and initializes the
   /// diagram.
@@ -308,11 +390,11 @@ class MermaidRenderWidget extends StatefulWidget {
           window.fitToViewport();
         }).catch(function(err) {
           if (hint) hint.style.display = 'none';
-          reportError('Mermaid render error: ' + err.message);
+          reportError(RENDER_ERROR_PREFIX_PLACEHOLDER + err.message);
         });
       } catch(e) {
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid initialize error: ' + e.message);
+        reportError(INITIALIZE_ERROR_PREFIX_PLACEHOLDER + e.message);
       }
     })();
 ''';
@@ -332,27 +414,48 @@ class MermaidRenderWidget extends StatefulWidget {
   /// combination, not once per render.
   static String? _cachedSkeletonLoaderJs;
   static bool? _cachedSkeletonWithGestures;
+  static String? _cachedSkeletonLoadingMessage;
+  static String? _cachedSkeletonResourceErrorMessage;
   static String? _cachedSkeletonHtml;
 
   /// Builds the HTML template with the gesture script and the mermaid
   /// loader already spliced in (cached), leaving only the small
   /// [MERMAID_CODE_PLACEHOLDER] to be replaced per render.
-  static String _buildMermaidSkeleton(bool withJsGestures, String loader) {
+  static String _buildMermaidSkeleton(
+    bool withJsGestures,
+    String loader,
+    String loadingMessage,
+    String resourceErrorMessage,
+  ) {
     final cached = _cachedSkeletonHtml;
     if (cached != null &&
         identical(loader, _cachedSkeletonLoaderJs) &&
-        withJsGestures == _cachedSkeletonWithGestures) {
+        withJsGestures == _cachedSkeletonWithGestures &&
+        loadingMessage == _cachedSkeletonLoadingMessage &&
+        resourceErrorMessage == _cachedSkeletonResourceErrorMessage) {
       return cached;
     }
     final skeleton = _mermaidHtmlTemplate
-        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER',
-            withJsGestures ? _mermaidGestureJs : '')
-        .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader);
+        .replaceFirst(
+          'GESTURE_SCRIPT_PLACEHOLDER',
+          withJsGestures ? _mermaidGestureJs : '',
+        )
+        .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader)
+        .replaceFirst('LOADING_HINT_PLACEHOLDER', _escapeHtml(loadingMessage));
     _cachedSkeletonLoaderJs = loader;
     _cachedSkeletonWithGestures = withJsGestures;
+    _cachedSkeletonLoadingMessage = loadingMessage;
+    _cachedSkeletonResourceErrorMessage = resourceErrorMessage;
     _cachedSkeletonHtml = skeleton;
     return skeleton;
   }
+
+  static String _escapeHtml(String text) => text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
 
   /// CDN loader script (constant): the same string instance every time, so
   /// [_buildMermaidSkeleton] can cache the CDN skeleton keyed by identity.
@@ -361,7 +464,7 @@ class MermaidRenderWidget extends StatefulWidget {
       var hint = document.getElementById('loading-hint');
       var mermaidTimer = setTimeout(function() {
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid 加载超时：请检查网络连接后重试');
+        reportError(CDN_TIMEOUT_MESSAGE_PLACEHOLDER);
       }, 20000);
       var script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
@@ -380,17 +483,17 @@ class MermaidRenderWidget extends StatefulWidget {
             window.fitToViewport();
           }).catch(function(err) {
             if (hint) hint.style.display = 'none';
-            reportError('Mermaid render error: ' + err.message);
+            reportError(RENDER_ERROR_PREFIX_PLACEHOLDER + err.message);
           });
         } catch(e) {
           if (hint) hint.style.display = 'none';
-          reportError('Mermaid initialize error: ' + e.message);
+          reportError(INITIALIZE_ERROR_PREFIX_PLACEHOLDER + e.message);
         }
       };
       script.onerror = function() {
         clearTimeout(mermaidTimer);
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid 加载失败：无法访问 cdn.jsdelivr.net');
+        reportError(CDN_LOAD_FAILED_MESSAGE_PLACEHOLDER);
       };
       document.head.appendChild(script);
     })();
@@ -567,7 +670,7 @@ class MermaidRenderWidget extends StatefulWidget {
 </head>
 <body>
   <div id="viewport">
-    <div id="loading-hint">图表加载中...</div>
+    <div id="loading-hint">LOADING_HINT_PLACEHOLDER</div>
     <div id="diagram-container">
       <pre class="mermaid" id="mermaid-code">
 MERMAID_CODE_PLACEHOLDER
@@ -1115,6 +1218,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   bool _canApplyZoomCommands = false;
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
+  String? _localizedHtmlLocaleName;
   String? _errorMessage;
   bool _hasWebViewCreationTimeoutError = false;
   bool _hasWebRetryTimeoutError = false;
@@ -1229,6 +1333,41 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (!kIsWeb) {
       _loadMermaidAsset();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final localeName = AppLocalizations.of(context)!.localeName;
+    final previousLocaleName = _localizedHtmlLocaleName;
+    _localizedHtmlLocaleName = localeName;
+    if (previousLocaleName == null || previousLocaleName == localeName) return;
+
+    // initialData is consumed only when the platform view is created. Re-key
+    // the view and discard its localized HTML when the app locale changes.
+    _initialHtml = null;
+    _webViewKey = UniqueKey();
+    _nativeInitialSourceKey = null;
+    _nativeInitialSourceCode = null;
+    _webViewController = null;
+    _isReady = false;
+    _hasLoadedPage = false;
+    _errorMessage = null;
+    _hasWebViewCreationTimeoutError = false;
+    _hasWebRetryTimeoutError = false;
+    _webLoadUrl = null;
+    _webRetryUrl = null;
+    _webRetryGeneration++;
+    _webSourceUpdateGeneration++;
+    _nativeLoadGeneration++;
+    _mermaidDocumentGeneration++;
+    _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _showSourceCode) return;
+      _armReadyFallback(showNavigationTimeoutError: true);
+      _armWebViewCreationFallback();
+    });
   }
 
   Future<void> _loadMermaidAsset() async {
@@ -1354,10 +1493,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           widget.mermaidCode.trim().isNotEmpty &&
           _webViewController == null &&
           _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] WebView was not created within '
-            '12s, showing an error');
+        debugPrint(
+          '[MermaidRenderWidget] WebView was not created within '
+          '12s, showing an error',
+        );
         setState(() {
-          _errorMessage = '图表渲染引擎初始化失败，请重试';
+          _errorMessage = AppLocalizations.of(context)!.mermaidEngineInitFailed;
           _hasWebViewCreationTimeoutError = true;
         });
       }
@@ -1371,12 +1512,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_isReady && _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
-            'ending the loading state');
+        debugPrint(
+          '[MermaidRenderWidget] onLoadStop did not fire within 3s, '
+          'ending the loading state',
+        );
         setState(() {
           _isReady = true;
           if (showNavigationTimeoutError) {
-            _errorMessage = '页面加载超时，请重试';
+            _errorMessage = AppLocalizations.of(context)!.mermaidPageTimeout;
             _hasWebRetryTimeoutError = true;
           } else {
             _canApplyZoomCommands = true;
@@ -1451,6 +1594,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       inlineMermaidJs: _inlineMermaidJs,
       errorDocumentGeneration: _mermaidDocumentGeneration,
       transformDocumentGeneration: _mermaidDocumentGeneration,
+      loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
+      cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
     );
     _armReadyFallback();
     ctrl.loadData(
@@ -1468,15 +1619,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   ) async {
     String? preparedSourceKey;
     try {
-      final baseUrl = await MermaidRenderWidget.prepareWebAssetUrl(
-        code,
-        (key, source) async {
-          await ctrl.evaluateJavascript(
-            source:
-                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
-          );
-        },
-      );
+      final baseUrl = await MermaidRenderWidget.prepareWebAssetUrl(code, (
+        key,
+        source,
+      ) async {
+        await ctrl.evaluateJavascript(
+          source:
+              'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+        );
+      });
       preparedSourceKey = Uri.parse(baseUrl).queryParameters['sourceKey'];
       if (!mounted || generation != _mermaidDocumentGeneration) {
         if (preparedSourceKey != null) {
@@ -1504,7 +1655,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       }
       if (!mounted || generation != _mermaidDocumentGeneration) return;
       debugPrint('[MermaidRenderWidget] Failed to prepare web source: $error');
-      setState(() => _errorMessage = '图表代码加载失败，请重试');
+      setState(
+        () =>
+            _errorMessage = AppLocalizations.of(context)!.mermaidCodeLoadFailed,
+      );
     }
   }
 
@@ -1687,10 +1841,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final ctrl = _webViewController;
     // Keep every wheel step: before fit completes, Flutter cannot know the
     // final fitted zoom at which JavaScript will apply this delta.
-    _zoomLevel = _clampManualZoom(
-      _zoomLevel + delta,
-      currentZoom: _zoomLevel,
-    );
+    _zoomLevel = _clampManualZoom(_zoomLevel + delta, currentZoom: _zoomLevel);
     if (ctrl == null || !_canApplyZoomCommands) {
       _pendingZoomOperations.add((
         delta: delta,
@@ -1997,10 +2148,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _openFullScreen() {
-    showMermaidPreviewDialog(
-      context: context,
-      mermaidCode: widget.mermaidCode,
-    );
+    showMermaidPreviewDialog(context: context, mermaidCode: widget.mermaidCode);
   }
 
   // ---------------------------------------------------------------------------
@@ -2017,7 +2165,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (content.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mermaid 代码为空，无法保存')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.mermaidSaveEmpty),
+          ),
         );
       }
       _isSaving = false;
@@ -2033,7 +2183,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('获取文件夹失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .mermaidFolderLoadFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2057,10 +2210,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final selectedFolder = await FolderPickerDialog.show(
       context,
       availableFolders: folders,
-      title: '保存 Mermaid 图表',
-      hintText: '选择或创建文件夹保存 .mmd 文件',
+      title: AppLocalizations.of(context)!.mermaidSaveTitle,
+      hintText: AppLocalizations.of(context)!.mermaidSaveHint,
       fileNameController: fileNameController,
-      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
+      fileNameHintText: AppLocalizations.of(context)!.mermaidSaveFilenameHint,
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -2072,7 +2225,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     const mmdExtension = '.mmd';
     final userFileName = enteredFileName.toLowerCase().endsWith(mmdExtension)
         ? enteredFileName.substring(
-            0, enteredFileName.length - mmdExtension.length)
+            0,
+            enteredFileName.length - mmdExtension.length,
+          )
         : enteredFileName;
 
     if (selectedFolder == null || !mounted) {
@@ -2083,7 +2238,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (userFileName.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.mermaidFilenameEmpty),
+          ),
         );
       }
       _isSaving = false;
@@ -2103,8 +2260,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           final records = await TextManifest.loadRecordsUncached();
           var finalName = userFileName;
           var counter = 2;
-          while (records
-              .any((r) => r.name == finalName && r.folder == selectedFolder)) {
+          while (records.any(
+            (r) => r.name == finalName && r.folder == selectedFolder,
+          )) {
             finalName = '$userFileName ($counter)';
             counter++;
           }
@@ -2131,7 +2289,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName$mmdExtension',
+              AppLocalizations.of(context)!.mermaidSaveSuccess(
+                selectedFolder.isEmpty
+                    ? AppLocalizations.of(context)!.folderPickerRoot
+                    : selectedFolder,
+                finalName,
+              ),
             ),
             duration: const Duration(seconds: 2),
           ),
@@ -2142,7 +2305,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.mermaidSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2151,10 +2316,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
   }
 
-  static const _emptyPlaceholderHtml = '''
+  String get _emptyPlaceholderHtml => '''
 <html>
 <body style="background:transparent;display:flex;justify-content:center;align-items:center;height:100%;font-family:sans-serif;color:#999;font-size:14px;padding:16px;text-align:center;">
-<div>No Mermaid code to render</div>
+<div>${AppLocalizations.of(context)!.mermaidEmptyPlaceholder}</div>
 </body>
 </html>''';
 
@@ -2188,6 +2353,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       inlineMermaidJs: _inlineMermaidJs,
       errorDocumentGeneration: _mermaidDocumentGeneration,
       transformDocumentGeneration: _mermaidDocumentGeneration,
+      loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
+      cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
     );
   }
 
@@ -2272,7 +2445,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           children: [
             Positioned.fill(
               child: _buildWebOverlay(
-                _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+                _buildLoadingIndicator(
+                  cs,
+                  AppLocalizations.of(context)!.mermaidPrepareEngine,
+                ),
               ),
             ),
             // Zoom controls overlay — visible even during loading when
@@ -2414,7 +2590,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   );
                 } catch (e) {
                   debugPrint(
-                      '[MermaidRenderWidget] JS handler bridge unavailable: $e');
+                    '[MermaidRenderWidget] JS handler bridge unavailable: $e',
+                  );
                 }
               },
               onLoadStop: (ctrl, url) {
@@ -2495,7 +2672,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   _readyFallbackTimer?.cancel();
                   setState(() {
                     _isReady = true;
-                    _errorMessage = '页面加载失败: ${error.description}';
+                    _errorMessage = AppLocalizations.of(context)!
+                        .mermaidPageLoadFailed(error.description);
                     _hasWebRetryTimeoutError = false;
                   });
                 }
@@ -2509,7 +2687,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               child: _buildWebOverlay(
                 Container(
                   color: cs.surface,
-                  child: _buildLoadingIndicator(cs, '加载渲染引擎...'),
+                  child: _buildLoadingIndicator(
+                    cs,
+                    AppLocalizations.of(context)!.mermaidLoadingEngine,
+                  ),
                 ),
               ),
             ),
@@ -2568,14 +2749,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// only the block-specific "查看图表" toggle is passed as an action
   /// button (it sits right of the common buttons).
   Widget _buildSourceCodeView(
-      ColorScheme cs, bool isDark, double? effectiveHeight) {
+    ColorScheme cs,
+    bool isDark,
+    double? effectiveHeight,
+  ) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
       language: 'mermaid',
       height: effectiveHeight,
-      actionButtons: [
-        _buildSrcCodeActionButton(),
-      ],
+      actionButtons: [_buildSrcCodeActionButton()],
     );
   }
 
@@ -2586,9 +2768,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: _toggleSourceCode,
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.all(8),
-          child: Icon(Icons.image, size: 20, semanticLabel: '查看图表'),
+          child: Icon(
+            Icons.image,
+            size: 20,
+            semanticLabel: AppLocalizations.of(context)!.mermaidDiagramSemantic,
+          ),
         ),
       ),
     );
@@ -2623,29 +2809,29 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // ---- Zoom controls (block-specific, left side) ----
           _buildActionButton(
             icon: Icons.zoom_out,
-            label: '缩小',
+            label: AppLocalizations.of(context)!.mermaidZoomOut,
             onTap: _zoomOut,
           ),
           _buildActionButton(
             icon: Icons.zoom_in,
-            label: '放大',
+            label: AppLocalizations.of(context)!.mermaidZoomIn,
             onTap: _zoomIn,
           ),
 
           // ---- Common buttons (right-aligned, fixed order) ----
           _buildActionButton(
             icon: Icons.fullscreen,
-            label: '全屏',
+            label: AppLocalizations.of(context)!.mermaidFullscreen,
             onTap: _openFullScreen,
           ),
           _buildActionButton(
             icon: Icons.save,
-            label: '保存',
+            label: AppLocalizations.of(context)!.mermaidSaveButton,
             onTap: _saveAsMmd,
           ),
           _buildActionButton(
             icon: Icons.code,
-            label: '查看源码',
+            label: AppLocalizations.of(context)!.mermaidSourceButton,
             onTap: _toggleSourceCode,
           ),
         ],
@@ -2686,12 +2872,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         children: [
           _buildActionButton(
             icon: Icons.zoom_out,
-            label: '缩小',
+            label: AppLocalizations.of(context)!.mermaidZoomOut,
             onTap: _zoomOut,
           ),
           _buildActionButton(
             icon: Icons.zoom_in,
-            label: '放大',
+            label: AppLocalizations.of(context)!.mermaidZoomIn,
             onTap: _zoomIn,
           ),
         ],
@@ -2726,17 +2912,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(
-            strokeWidth: 2,
-            color: cs.primary,
-          ),
+          CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
           const SizedBox(height: 8),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -2746,11 +2926,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Widget _buildEmptyPlaceholder(ColorScheme cs) {
     return Center(
       child: Text(
-        'No Mermaid code to render',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-        ),
+        AppLocalizations.of(context)!.mermaidEmptyPlaceholder,
+        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
       ),
     );
   }
@@ -2765,7 +2942,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Icon(Icons.error_outline, size: 32, color: cs.error),
             const SizedBox(height: 8),
             Text(
-              '渲染图表时出错',
+              AppLocalizations.of(context)!.mermaidRenderErrorTitle,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -2776,10 +2953,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),
@@ -2787,7 +2961,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             OutlinedButton.icon(
               onPressed: _retry,
               icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('重试'),
+              label: Text(AppLocalizations.of(context)!.mermaidRetry),
             ),
           ],
         ),

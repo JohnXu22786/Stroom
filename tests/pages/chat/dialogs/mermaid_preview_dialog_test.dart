@@ -25,7 +25,7 @@ void main() {
 
         expect(
           preview.webView.params.initialData?.data,
-          contains('No Mermaid code to preview'),
+          contains('没有可渲染的 Mermaid 代码'),
         );
         expect(preview.webView.controller.loadedUrls, isEmpty);
         expect(preview.webView.controller.storedSources, isEmpty);

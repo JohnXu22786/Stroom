@@ -6,6 +6,8 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/gallery_choice_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/album_picker_shared.dart';
 import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
@@ -51,6 +53,25 @@ Future<void> _pumpUntil(
 }
 
 void main() {
+  testWidgets('gallery source choice uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showGalleryChoiceDialog(context),
+          child: const Text('Choose source'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Choose source'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose an image source'), findsOneWidget);
+    expect(find.text('Device gallery'), findsOneWidget);
+    expect(find.text('App gallery'), findsOneWidget);
+  });
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
@@ -109,6 +130,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
@@ -185,6 +209,9 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Builder(
                 builder: (context) => ElevatedButton(
                   onPressed: () async {
@@ -468,6 +495,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Builder(
               builder: (context) {
                 return ElevatedButton(

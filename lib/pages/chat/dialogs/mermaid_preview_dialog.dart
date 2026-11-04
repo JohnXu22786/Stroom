@@ -52,6 +52,8 @@ class _MermaidPreviewDialogContent extends StatefulWidget {
 
 class _MermaidPreviewDialogContentState
     extends State<_MermaidPreviewDialogContent> {
+  Key _webViewKey = const Key('mermaid_preview_webview');
+  String? _localizedHtmlLocaleName;
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasError = false;
@@ -97,6 +99,33 @@ class _MermaidPreviewDialogContentState
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final localeName = AppLocalizations.of(context)!.localeName;
+    final previousLocaleName = _localizedHtmlLocaleName;
+    _localizedHtmlLocaleName = localeName;
+    if (previousLocaleName == null || previousLocaleName == localeName) return;
+
+    // initialData is read only when the platform view is created. Recreate it
+    // with HTML built for the newly selected locale.
+    _initialHtml = null;
+    _webViewKey = UniqueKey();
+    _webViewController = null;
+    _hasError = false;
+    _isLoading = !kIsWeb;
+    _webNavigationTimedOut = false;
+    _canApplyZoomDeltasAfterFit = false;
+    _pendingZoomDeltas.clear();
+    _pendingWebSourceKey = null;
+    _pendingWebSourceController = null;
+    _readyFallbackTimer?.cancel();
+    _zoomReadinessRetryTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _armReadyFallback();
+    });
+  }
+
   Future<void> _loadMermaidAsset() async {
     final js = await MermaidRenderWidget.loadBundledMermaidJs();
     if (!mounted) return;
@@ -133,8 +162,10 @@ class _MermaidPreviewDialogContentState
           _hasError = true;
         });
       } else if (kIsWeb && !_hasError) {
-        debugPrint('[MermaidPreviewDialog] web navigation did not settle '
-            'within 3s');
+        debugPrint(
+          '[MermaidPreviewDialog] web navigation did not settle '
+          'within 3s',
+        );
         _timedOutSourceCleanup =
             _pendingWebSourceKey == null ? null : _cleanupPendingWebSource();
         setState(() {
@@ -143,8 +174,10 @@ class _MermaidPreviewDialogContentState
           _webNavigationTimedOut = true;
         });
       } else if (_isLoading) {
-        debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
-            '3s, force-ending the loading state');
+        debugPrint(
+          '[MermaidPreviewDialog] onLoadStop did not fire within '
+          '3s, force-ending the loading state',
+        );
         setState(() => _isLoading = false);
         unawaited(_checkZoomReadiness());
       }
@@ -164,8 +197,17 @@ class _MermaidPreviewDialogContentState
     }
     // Same shared template as the inline widget, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    final strings = AppLocalizations.of(context)!;
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      loadingMessage: strings.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: strings.mermaidLoadTimeout,
+      cdnLoadFailedMessage: strings.mermaidCdnLoadFailed,
+      renderErrorPrefix: strings.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix: strings.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: strings.mermaidResourceError,
+    );
   }
 
   /// Web-only: loads the bundled asset template (same origin) with the
@@ -401,7 +443,7 @@ class _MermaidPreviewDialogContentState
     });
   }
 
-  static const _emptyPlaceholderHtml = '''
+  String get _emptyPlaceholderHtml => '''
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -421,12 +463,20 @@ class _MermaidPreviewDialogContentState
   </style>
 </head>
 <body>
-<div>No Mermaid code to preview</div>
+<div>${_escapeHtml(AppLocalizations.of(context)!.mermaidEmptyPlaceholder)}</div>
 </body>
 </html>''';
 
+  String _escapeHtml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
   @override
   Widget build(BuildContext context) {
+    final currentWebViewKey = _webViewKey;
     final cs = Theme.of(context).colorScheme;
     final isEmptyCode = widget.mermaidCode.trim().isEmpty;
     final showControls =
@@ -455,6 +505,7 @@ class _MermaidPreviewDialogContentState
             // so the WebView can be created immediately.
             if (!_mermaidJsLoading || kIsWeb)
               InAppWebView(
+                key: currentWebViewKey,
                 initialSettings: InAppWebViewSettings(
                   javaScriptEnabled: true,
                   transparentBackground: true,
@@ -478,6 +529,7 @@ class _MermaidPreviewDialogContentState
                         encoding: 'utf8',
                       ),
                 onWebViewCreated: (ctrl) {
+                  if (currentWebViewKey != _webViewKey) return;
                   _readyFallbackTimer?.cancel();
                   final hadError = _hasError;
                   _webViewController = ctrl;
@@ -512,7 +564,7 @@ class _MermaidPreviewDialogContentState
                     ctrl.addJavaScriptHandler(
                       handlerName: 'onMermaidError',
                       callback: (args) {
-                        if (mounted) {
+                        if (mounted && currentWebViewKey == _webViewKey) {
                           setState(() {
                             _hasError = true;
                             _webNavigationTimedOut = false;
@@ -527,7 +579,9 @@ class _MermaidPreviewDialogContentState
                         // not track pan; zoom buttons anchor in JS). No
                         // setState: _zoomLevel is not read in build() and
                         // the WebView reflects the transform visually.
-                        if (mounted && args.isNotEmpty) {
+                        if (mounted &&
+                            currentWebViewKey == _webViewKey &&
+                            args.isNotEmpty) {
                           _zoomLevel =
                               double.tryParse(args[0].toString()) ?? 1.0;
                         }
@@ -535,10 +589,12 @@ class _MermaidPreviewDialogContentState
                     );
                   } catch (e) {
                     debugPrint(
-                        '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
+                      '[MermaidPreviewDialog] JS handler bridge unavailable: $e',
+                    );
                   }
                 },
                 onLoadStop: (ctrl, url) {
+                  if (currentWebViewKey != _webViewKey) return;
                   final sourceKey = Uri.tryParse(url?.toString() ?? '')
                       ?.queryParameters['sourceKey'];
                   if (sourceKey != null) {
@@ -573,6 +629,7 @@ class _MermaidPreviewDialogContentState
                   }
                 },
                 onReceivedError: (controller, request, error) {
+                  if (currentWebViewKey != _webViewKey) return;
                   if (request.isForMainFrame == false) return;
                   if (kIsWeb) {
                     final sourceKey = Uri.tryParse(request.url.toString())
@@ -632,18 +689,11 @@ class _MermaidPreviewDialogContentState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: cs.error,
-                        ),
+                        Icon(Icons.error_outline, size: 48, color: cs.error),
                         const SizedBox(height: 12),
                         Text(
                           AppLocalizations.of(context)!.chatPreviewLoadFailed,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: cs.onSurface,
-                          ),
+                          style: TextStyle(fontSize: 16, color: cs.onSurface),
                         ),
                       ],
                     ),
@@ -704,8 +754,9 @@ class _MermaidPreviewDialogContentState
                       padding: const EdgeInsets.only(left: 8),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest
-                              .withValues(alpha: 0.85),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.85,
+                          ),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -735,8 +786,9 @@ class _MermaidPreviewDialogContentState
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.85,
+                        ),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
@@ -754,8 +806,9 @@ class _MermaidPreviewDialogContentState
                       padding: const EdgeInsets.only(right: 8),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest
-                              .withValues(alpha: 0.85),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.85,
+                          ),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
@@ -788,12 +841,13 @@ class _MermaidPreviewDialogContentState
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Icon(
+            icon,
+            size: 20,
+            color: cs.onSurface,
+            semanticLabel: label,
           ),
-          child:
-              Icon(icon, size: 20, color: cs.onSurface, semanticLabel: label),
         ),
       ),
     );

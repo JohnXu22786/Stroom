@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+
 import '../utils/mhchem_syntax.dart';
 import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
@@ -134,10 +138,7 @@ class LatexSyntax extends m.InlineSyntax {
       r'(\\\()|'
       r'(\\\[)';
 
-  LatexSyntax()
-      : super(
-          latexPattern,
-        );
+  LatexSyntax() : super(latexPattern);
 
   @override
   bool tryMatch(m.InlineParser parser, [int? startMatchPos]) {
@@ -209,11 +210,7 @@ bool _hasEscapedBackslash(String input, int index) {
   return count.isOdd;
 }
 
-bool _isCrossPairedInlineDollar(
-  String input,
-  int index,
-  String matchValue,
-) {
+bool _isCrossPairedInlineDollar(String input, int index, String matchValue) {
   if (index == 0) return false;
   final previousDollar = input.lastIndexOf(r'$', index - 1);
   if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
@@ -231,10 +228,7 @@ String _prepareMathEnvironment(String content) {
   const equationEnd = r'\end{equation}';
   if (content.startsWith(equationStart) && content.endsWith(equationEnd)) {
     return content
-        .substring(
-          equationStart.length,
-          content.length - equationEnd.length,
-        )
+        .substring(equationStart.length, content.length - equationEnd.length)
         .trim();
   }
   const alignStart = r'\begin{align}';
@@ -308,22 +302,19 @@ class LatexNode extends SpanNode {
             onTap: () => showDialog<void>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: const Text('Math parse error'),
+                title: Text(AppLocalizations.of(dialogContext)!.mathParseError),
                 content: SingleChildScrollView(
                   child: SelectableText(error.messageWithType),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close'),
+                    child: Text(AppLocalizations.of(dialogContext)!.mathClose),
                   ),
                 ],
               ),
             ),
-            child: Text(
-              textContent,
-              style: style.copyWith(color: Colors.red),
-            ),
+            child: Text(textContent, style: style.copyWith(color: Colors.red)),
           ),
         );
       },
@@ -368,7 +359,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -379,7 +370,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '正在生成...',
+              AppLocalizations.of(context)!.markdownGenerating,
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -641,11 +632,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
         fenceInnerQuoteDepth,
       );
       if (fenceContainer.matches) {
-        if (_isClosingFenceLine(
-          fenceContainer.line,
-          fenceChar!,
-          fenceLength,
-        )) {
+        if (_isClosingFenceLine(fenceContainer.line, fenceChar!, fenceLength)) {
           clearFence();
         }
         paragraphOpen = false;
@@ -878,10 +865,7 @@ final _htmlRawTagStart = RegExp(
 final _htmlCommentStart = RegExp(r'^ {0,3}<!--');
 final _htmlProcessingInstructionStart = RegExp(r'^ {0,3}<\?');
 final _htmlDeclarationStart = RegExp(r'^ {0,3}<![a-z]', caseSensitive: false);
-final _htmlCdataStart = RegExp(
-  r'^ {0,3}<!\[CDATA\[',
-  caseSensitive: false,
-);
+final _htmlCdataStart = RegExp(r'^ {0,3}<!\[CDATA\[', caseSensitive: false);
 final _htmlBlockTagStart = RegExp(
   r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|'
   r'caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|'
@@ -945,10 +929,7 @@ final _standaloneHtmlTag = RegExp(
   return null;
 }
 
-bool _isParagraphBoundaryLine(
-  String line, {
-  required bool paragraphOpen,
-}) {
+bool _isParagraphBoundaryLine(String line, {required bool paragraphOpen}) {
   if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
   if (RegExp(r'^ {0,3}#{1,6}(?:[ \t\x0b\x0c]|$)').hasMatch(line) ||
       (!paragraphOpen && _isLinkReferenceDefinitionStart(line)) ||
@@ -1007,9 +988,14 @@ String _stripFenceContainerPrefix(
   }
   return text.split('\n').map((line) {
     final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
-    final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
-    final innerQuoteStripped =
-        _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+    final listStripped = _stripListItemIndent(
+      outerQuoteStripped,
+      listIndent,
+    );
+    final innerQuoteStripped = _stripBlockQuoteDepth(
+      listStripped,
+      innerQuoteDepth,
+    );
     return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
   }).join('\n');
 }
@@ -1087,8 +1073,10 @@ String _stripBlockQuoteDepth(String line, int depth) {
       !blankLineInList) {
     return (line: line, matches: false);
   }
-  final innerQuoteStripped =
-      _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+  final innerQuoteStripped = _stripBlockQuoteDepth(
+    listStripped,
+    innerQuoteDepth,
+  );
   if (innerQuoteDepth > 0 && innerQuoteStripped == listStripped) {
     return (line: line, matches: false);
   }
@@ -1226,10 +1214,7 @@ String _expandLeadingTabs(String line, int column) {
       sourceColumnOffset + consumedIndent,
     );
   }
-  return (
-    line: contentLine,
-    indent: consumedIndent,
-  );
+  return (line: contentLine, indent: consumedIndent);
 }
 
 String _stripListItemIndent(String line, int indent) {
@@ -1485,9 +1470,7 @@ String stripSearchIrrelevantMarkdown(String text) {
 /// The markdown parser's inline code pattern (see `CodeSyntax`): a run of
 /// backticks, non-greedy content ending in a non-backtick, then a
 /// same-length run of backticks.
-final RegExp _codeSpanPattern = RegExp(
-  r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)',
-);
+final RegExp _codeSpanPattern = RegExp(r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)');
 
 /// Display math (`$$...$$`) pattern used by the search stripper.
 final RegExp _displayMathPattern = RegExp(r'\$\$[\s\S]*?\$\$');
@@ -1697,25 +1680,25 @@ MarkdownConfig buildMarkdownConfig({
 }) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
-  return base.copy(configs: [
-    codeBlockPreConfig(
-      isDark: isDark,
-      isStreaming: isStreaming,
-      streamingText: streamingText,
-    ),
-    TableConfig(
-      wrapper: _wrapTableWithHorizontalScroll,
-    ),
-    if (isDark) ...[
-      NoDividerH1Config(style: H1Config.darkConfig.style),
-      NoDividerH2Config(style: H2Config.darkConfig.style),
-      NoDividerH3Config(style: H3Config.darkConfig.style),
-    ] else ...[
-      const NoDividerH1Config(),
-      const NoDividerH2Config(),
-      const NoDividerH3Config(),
+  return base.copy(
+    configs: [
+      codeBlockPreConfig(
+        isDark: isDark,
+        isStreaming: isStreaming,
+        streamingText: streamingText,
+      ),
+      TableConfig(wrapper: _wrapTableWithHorizontalScroll),
+      if (isDark) ...[
+        NoDividerH1Config(style: H1Config.darkConfig.style),
+        NoDividerH2Config(style: H2Config.darkConfig.style),
+        NoDividerH3Config(style: H3Config.darkConfig.style),
+      ] else ...[
+        const NoDividerH1Config(),
+        const NoDividerH2Config(),
+        const NoDividerH3Config(),
+      ],
     ],
-  ]);
+  );
 }
 
 /// Builds the [MarkdownConfig] used to render a single chat message.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,6 +42,30 @@ Widget createChatTestApp({String? activeConversationId}) {
 }
 
 void main() {
+  testWidgets('chat attachment panel uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showChatAttachmentPanel(
+            context: context,
+            onPickFromCamera: () {},
+            onPickFromGallery: () {},
+            onPickFromFilePicker: () {},
+            onPickFromAppFiles: () {},
+          ),
+          child: const Text('Open attachments'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open attachments'));
+    await tester.pumpAndSettle();
+    expect(find.text('Attach file'), findsOneWidget);
+    expect(find.text('Take photo'), findsOneWidget);
+  });
+
   // ═══════════════════════════════════════════════════════════
   // ChatComposer Settings Row Tests
   // ═══════════════════════════════════════════════════════════

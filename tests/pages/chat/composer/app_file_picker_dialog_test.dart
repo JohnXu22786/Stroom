@@ -5,6 +5,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/pages/chat/composer/file_picker_shared.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -88,6 +89,9 @@ void main() {
 
       List<MapEntry<String, Uint8List>>? pickerResult;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -183,6 +187,9 @@ void main() {
     testWidgets('preview bar is not shown when no files are selected',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () => showAppFilePickerDialog(context),
@@ -238,6 +245,9 @@ void main() {
     /// finish loading its records.
     Future<void> openPicker(WidgetTester tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () => showAppFilePickerDialog(context),
@@ -305,6 +315,9 @@ void main() {
         (tester) async {
       List<MapEntry<String, Uint8List>>? pickerResult;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {

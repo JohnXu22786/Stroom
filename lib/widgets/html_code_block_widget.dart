@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
+
 import 'code_block_source_widget.dart';
 
 /// Widget shown for ```html fenced code blocks inside a chat message.
@@ -45,10 +49,7 @@ class HtmlCodeBlockWidget extends StatefulWidget {
   /// document. It is **not** escaped — the user's HTML code should be
   /// rendered as-is by the WebView browser engine.
   static String buildHtmlDocument(String rawHtml) {
-    return _htmlTemplate.replaceFirst(
-      'HTML_CONTENT_PLACEHOLDER',
-      rawHtml,
-    );
+    return _htmlTemplate.replaceFirst('HTML_CONTENT_PLACEHOLDER', rawHtml);
   }
 
   /// Extracts the text of the document's `<title>` tag, trimmed, or ''
@@ -90,10 +91,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
   bool _showCode = false;
 
   void _openFullScreen(BuildContext context) {
-    showHtmlPreviewDialog(
-      context: context,
-      htmlCode: widget.htmlCode,
-    );
+    showHtmlPreviewDialog(context: context, htmlCode: widget.htmlCode);
   }
 
   @override
@@ -111,12 +109,12 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
           // other code blocks keep the plain fullscreen icon).
           _buildActionButton(
             icon: Icons.visibility,
-            label: '预览',
+            label: AppLocalizations.of(context)!.htmlPreview,
             onTap: () => _openFullScreen(context),
           ),
           _buildActionButton(
             icon: Icons.arrow_back,
-            label: '返回卡片',
+            label: AppLocalizations.of(context)!.htmlReturnToCard,
             onTap: () => setState(() => _showCode = false),
           ),
         ],
@@ -150,10 +148,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
               alignment: Alignment.centerLeft,
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 120),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(6),
@@ -210,7 +205,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
+                children: [
                   SizedBox(
                     width: 16,
                     height: 16,
@@ -218,7 +213,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    '正在生成中...',
+                    AppLocalizations.of(context)!.htmlGenerating,
                     style: TextStyle(fontSize: 12),
                   ),
                 ],
@@ -234,14 +229,14 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
               children: [
                 _buildCardButton(
                   icon: Icons.fullscreen,
-                  label: '全屏查看',
+                  label: AppLocalizations.of(context)!.htmlFullscreen,
                   onPressed: widget.isStreaming
                       ? null
                       : () => _openFullScreen(context),
                 ),
                 _buildCardButton(
                   icon: Icons.code,
-                  label: '查看代码',
+                  label: AppLocalizations.of(context)!.htmlViewCode,
                   onPressed: () => setState(() => _showCode = true),
                 ),
               ],
@@ -260,10 +255,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 12),
-      ),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         minimumSize: Size.zero,

@@ -26,14 +26,16 @@ class TaskFlowListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-          title: Text(strings.taskFlowPageTitle),
-          centerTitle: true,
-          actions: [
-            IconButton(
-                onPressed: () => _showTemplates(context),
-                tooltip: strings.taskFlowSampleTemplatesTooltip,
-                icon: const Icon(Icons.auto_awesome_outlined)),
-          ]),
+        title: Text(strings.taskFlowPageTitle),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () => _showTemplates(context),
+            tooltip: strings.taskFlowSampleTemplatesTooltip,
+            icon: const Icon(Icons.auto_awesome_outlined),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewFlow(context, ref),
         child: const Icon(Icons.add),
@@ -65,10 +67,12 @@ class TaskFlowListPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-              onPressed: () => _showTemplates(context),
-              icon: const Icon(Icons.auto_awesome_outlined),
-              label: Text(
-                  AppLocalizations.of(context)!.taskFlowStartFromTemplate)),
+            onPressed: () => _showTemplates(context),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: Text(
+              AppLocalizations.of(context)!.taskFlowStartFromTemplate,
+            ),
+          ),
         ],
       ),
     );
@@ -184,9 +188,10 @@ class TaskFlowListPage extends ConsumerWidget {
                     ),
                   ),
                   IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      tooltip: AppLocalizations.of(context)!.taskFlowActions,
-                      onPressed: () => _showContextMenu(context, ref, flow)),
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: AppLocalizations.of(context)!.taskFlowActions,
+                    onPressed: () => _showContextMenu(context, ref, flow),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -219,7 +224,10 @@ class TaskFlowListPage extends ConsumerWidget {
                         ),
                         const Spacer(),
                         Text(
-                          formatRelativeTime(flow.updatedAt),
+                          formatRelativeTime(
+                            flow.updatedAt,
+                            AppLocalizations.of(context)!,
+                          ),
                           style: TextStyle(
                             fontSize: 10,
                             color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -269,9 +277,10 @@ class TaskFlowListPage extends ConsumerWidget {
               width: 32,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -295,11 +304,11 @@ class TaskFlowListPage extends ConsumerWidget {
               onTap: () {
                 Navigator.pop(ctx);
                 ref.read(taskFlowListProvider.notifier).duplicateFlow(flow.id);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(
-                    content:
-                        Text(AppLocalizations.of(context)!.taskFlowCopied)));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(AppLocalizations.of(context)!.taskFlowCopied),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -308,22 +317,28 @@ class TaskFlowListPage extends ConsumerWidget {
                 size: 22,
                 color: Colors.red,
               ),
-              title: Text(AppLocalizations.of(context)!.taskFlowDelete,
-                  style: const TextStyle(color: Colors.red)),
+              title: Text(
+                AppLocalizations.of(context)!.taskFlowDelete,
+                style: const TextStyle(color: Colors.red),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 showDialog(
                   context: context,
                   builder: (dCtx) => AlertDialog(
                     title: Text(
-                        AppLocalizations.of(context)!.taskFlowConfirmDelete),
-                    content: Text(AppLocalizations.of(context)!
-                        .taskFlowConfirmDeleteBody(flow.name)),
+                      AppLocalizations.of(context)!.taskFlowConfirmDelete,
+                    ),
+                    content: Text(
+                      AppLocalizations.of(context)!
+                          .taskFlowConfirmDeleteBody(flow.name),
+                    ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx),
-                        child: Text(AppLocalizations.of(context)!
-                            .systemAssistantCancel),
+                        child: Text(
+                          AppLocalizations.of(context)!.systemAssistantCancel,
+                        ),
                       ),
                       TextButton(
                         onPressed: () {
@@ -463,8 +478,11 @@ class TaskFlowListPage extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded,
-                            size: 18, color: colors.onSurfaceVariant),
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 18,
+                          color: colors.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -547,8 +565,11 @@ class TaskFlowListPage extends ConsumerWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.tune_rounded,
-                      size: 16, color: colors.onSurfaceVariant),
+                  Icon(
+                    Icons.tune_rounded,
+                    size: 16,
+                    color: colors.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

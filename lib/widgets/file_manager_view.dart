@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../utils/batch_rename.dart';
 import '../utils/batch_rename_execution.dart';
 import '../utils/file_picker_utils.dart';
@@ -468,7 +470,7 @@ class _FileManagerViewState<T extends FileRecord>
                         key: const Key('fm_selection_copy_btn'),
                         onPressed: _copySelected,
                         icon: const Icon(Icons.copy, size: 20),
-                        label: '复制',
+                        label: AppLocalizations.of(context)!.fileManagerCopy,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -480,7 +482,7 @@ class _FileManagerViewState<T extends FileRecord>
                           Icons.drive_file_move_outline,
                           size: 20,
                         ),
-                        label: '移动',
+                        label: AppLocalizations.of(context)!.fileManagerMove,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -492,7 +494,7 @@ class _FileManagerViewState<T extends FileRecord>
                           Icons.drive_file_rename_outline,
                           size: 20,
                         ),
-                        label: '重命名',
+                        label: AppLocalizations.of(context)!.fileManagerRename,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -504,7 +506,7 @@ class _FileManagerViewState<T extends FileRecord>
                           Icons.file_download_outlined,
                           size: 20,
                         ),
-                        label: '导出',
+                        label: AppLocalizations.of(context)!.fileManagerExport,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -517,7 +519,7 @@ class _FileManagerViewState<T extends FileRecord>
                           color: Colors.red,
                           size: 20,
                         ),
-                        label: '删除',
+                        label: AppLocalizations.of(context)!.fileManagerDelete,
                       ),
                     ),
                   ],
@@ -575,7 +577,7 @@ class _FileManagerViewState<T extends FileRecord>
     final chain = _ancestorFolderChain();
     return PopupMenuButton<String>(
       key: const Key('fm_folder_breadcrumb_btn'),
-      tooltip: '祖先文件夹',
+      tooltip: AppLocalizations.of(context)!.fileManagerAncestorFolders,
       onSelected: (value) => _setCurrentFolder(value),
       itemBuilder: (context) => [
         for (final folderPath in chain)
@@ -598,7 +600,7 @@ class _FileManagerViewState<T extends FileRecord>
                 Expanded(
                   child: Text(
                     folderPath.isEmpty
-                        ? '根目录'
+                        ? AppLocalizations.of(context)!.fileManagerRoot
                         : widget.manifestBridge.getFolderBaseName(folderPath),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -630,6 +632,26 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
+    final strings = AppLocalizations.of(context)!;
+    final sortFieldLabel = switch (widget.sortConfig.field) {
+      SortField.createdAt => strings.fileManagerSortFieldCreated,
+      SortField.modifiedAt => strings.fileManagerSortFieldModified,
+      SortField.name => strings.fileManagerSortFieldName,
+      SortField.size => strings.fileManagerSortFieldSize,
+    };
+    final sortOrderLabel = switch (widget.sortConfig.field) {
+      SortField.createdAt ||
+      SortField.modifiedAt =>
+        widget.sortConfig.order == SortOrder.descending
+            ? strings.fileManagerSortDateNewest
+            : strings.fileManagerSortDateOldest,
+      SortField.name => widget.sortConfig.order == SortOrder.descending
+          ? strings.fileManagerSortNameDescending
+          : strings.fileManagerSortNameAscending,
+      SortField.size => widget.sortConfig.order == SortOrder.descending
+          ? strings.fileManagerSortSizeLargest
+          : strings.fileManagerSortSizeSmallest,
+    };
     return AppBar(
       primary: false,
       // 固定标题栏背景色并禁用 scrolled-under 抬升：Material 3 默认在内容
@@ -640,7 +662,10 @@ class _FileManagerViewState<T extends FileRecord>
       backgroundColor: Theme.of(context).colorScheme.surface,
       scrolledUnderElevation: 0,
       title: _selectionMode
-          ? Text('已选择 ${_selectedIds.length} 项')
+          ? Text(
+              AppLocalizations.of(context)!
+                  .fileManagerSelectedItems(_selectedIds.length),
+            )
           : _currentFolder.isNotEmpty
               ? _buildFolderBreadcrumbTitle()
               : Text(widget.config.title),
@@ -669,7 +694,7 @@ class _FileManagerViewState<T extends FileRecord>
           IconButton(
             key: const Key('fm_select_all_btn'),
             icon: const Icon(Icons.select_all),
-            tooltip: '全选',
+            tooltip: AppLocalizations.of(context)!.fileManagerSelectAll,
             onPressed: () {
               final allVisible = _allVisibleItemIds();
               // 以「当前可见项是否全部选中」为切换依据：
@@ -688,7 +713,7 @@ class _FileManagerViewState<T extends FileRecord>
           if (_lastBatchRename != null)
             IconButton(
               key: const Key('fm_batch_rename_history'),
-              tooltip: '上次批量重命名结果与撤销',
+              tooltip: AppLocalizations.of(context)!.fileManagerRenameUndo,
               icon: const Icon(Icons.history),
               onPressed:
                   _batchRenameActive ? null : () => _applyBatchRenamePlan(null),
@@ -700,13 +725,27 @@ class _FileManagerViewState<T extends FileRecord>
           PopupMenuButton<SortField>(
             key: const Key('fm_sort_btn'),
             icon: const Icon(Icons.sort),
-            tooltip: '排序（${widget.sortConfig.label}）',
+            tooltip: strings.fileManagerSortBy(
+              '$sortFieldLabel · $sortOrderLabel',
+            ),
             onSelected: widget.onToggleSort,
             itemBuilder: (_) => [
-              _buildSortMenuItem(SortField.createdAt, '按创建时间'),
-              _buildSortMenuItem(SortField.modifiedAt, '按修改时间'),
-              _buildSortMenuItem(SortField.name, '按文件名'),
-              _buildSortMenuItem(SortField.size, '按大小'),
+              _buildSortMenuItem(
+                SortField.createdAt,
+                AppLocalizations.of(context)!.fileManagerSortCreated,
+              ),
+              _buildSortMenuItem(
+                SortField.modifiedAt,
+                AppLocalizations.of(context)!.fileManagerSortModified,
+              ),
+              _buildSortMenuItem(
+                SortField.name,
+                AppLocalizations.of(context)!.fileManagerSortName,
+              ),
+              _buildSortMenuItem(
+                SortField.size,
+                AppLocalizations.of(context)!.fileManagerSortSize,
+              ),
             ],
           ),
           // Thumbnail toggle
@@ -714,7 +753,9 @@ class _FileManagerViewState<T extends FileRecord>
             IconButton(
               key: const Key('fm_grid_toggle_btn'),
               icon: Icon(_showGridView ? Icons.view_list : Icons.grid_view),
-              tooltip: _showGridView ? '列表视图' : '缩略图视图',
+              tooltip: _showGridView
+                  ? AppLocalizations.of(context)!.fileManagerListView
+                  : AppLocalizations.of(context)!.fileManagerThumbnailView,
               onPressed: () {
                 final newValue = !_showGridView;
                 setState(() => _showGridView = newValue);
@@ -725,14 +766,14 @@ class _FileManagerViewState<T extends FileRecord>
           IconButton(
             key: const Key('fm_create_folder_btn'),
             icon: const Icon(Icons.create_new_folder),
-            tooltip: '创建文件夹',
+            tooltip: AppLocalizations.of(context)!.fileManagerCreateFolder,
             onPressed: _createFolder,
           ),
           // Refresh
           IconButton(
             key: const Key('fm_refresh_btn'),
             icon: const Icon(Icons.refresh),
-            tooltip: '刷新列表',
+            tooltip: AppLocalizations.of(context)!.fileManagerRefresh,
             onPressed: _refreshFileList,
           ),
         ],
@@ -794,7 +835,9 @@ class _FileManagerViewState<T extends FileRecord>
             ),
             const SizedBox(height: 16),
             Text(
-              isInFolder ? '此文件夹为空' : '暂无文件',
+              isInFolder
+                  ? AppLocalizations.of(context)!.fileManagerEmptyFolder
+                  : AppLocalizations.of(context)!.fileManagerNoFiles,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
           ],
@@ -838,8 +881,10 @@ class _FileManagerViewState<T extends FileRecord>
               const SizedBox(width: 12),
               Text(
                 parentFolder.isEmpty
-                    ? '返回根目录'
-                    : '返回: ${widget.manifestBridge.getFolderBaseName(parentFolder)}',
+                    ? AppLocalizations.of(context)!.fileManagerBackRoot
+                    : AppLocalizations.of(context)!.fileManagerBackFolder(
+                        widget.manifestBridge.getFolderBaseName(parentFolder),
+                      ),
                 style: TextStyle(fontSize: 15, color: Colors.blue[700]),
               ),
               const SizedBox(width: 8),
@@ -892,7 +937,9 @@ class _FileManagerViewState<T extends FileRecord>
             ),
             const SizedBox(height: 16),
             Text(
-              isInFolder ? '此文件夹为空' : '暂无文件',
+              isInFolder
+                  ? AppLocalizations.of(context)!.fileManagerEmptyFolder
+                  : AppLocalizations.of(context)!.fileManagerNoFiles,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
           ],
@@ -1219,13 +1266,13 @@ class _FileManagerViewState<T extends FileRecord>
 
   /// 文件夹弹出菜单项（列表与网格视图共用）
   List<PopupMenuEntry<String>> _buildFolderPopupMenu() {
-    return const [
+    return [
       PopupMenuItem(
         value: 'multiSelect',
         child: ListTile(
           key: Key('fm_folder_menu_multi_select'),
           leading: Icon(Icons.checklist, size: 20),
-          title: Text('多选'),
+          title: Text(AppLocalizations.of(context)!.fileManagerMultiSelect),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1235,7 +1282,7 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_open'),
           leading: Icon(Icons.folder_open, size: 20),
-          title: Text('打开'),
+          title: Text(AppLocalizations.of(context)!.fileManagerOpen),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1245,7 +1292,7 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_rename'),
           leading: Icon(Icons.edit, size: 20),
-          title: Text('重命名'),
+          title: Text(AppLocalizations.of(context)!.fileManagerRename),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1255,7 +1302,7 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_move'),
           leading: Icon(Icons.drive_file_move, size: 20),
-          title: Text('移动'),
+          title: Text(AppLocalizations.of(context)!.fileManagerMove),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1265,7 +1312,7 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_copy'),
           leading: Icon(Icons.copy, size: 20),
-          title: Text('复制'),
+          title: Text(AppLocalizations.of(context)!.fileManagerCopy),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1275,7 +1322,7 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_export'),
           leading: Icon(Icons.file_download_outlined, size: 20),
-          title: Text('导出'),
+          title: Text(AppLocalizations.of(context)!.fileManagerExport),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1286,7 +1333,10 @@ class _FileManagerViewState<T extends FileRecord>
         child: ListTile(
           key: Key('fm_folder_menu_delete'),
           leading: Icon(Icons.delete, size: 20, color: Colors.red),
-          title: Text('删除', style: TextStyle(color: Colors.red)),
+          title: Text(
+            AppLocalizations.of(context)!.fileManagerDelete,
+            style: TextStyle(color: Colors.red),
+          ),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1324,13 +1374,15 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
     ).length;
     if (subFolderCount > 0 && fileCount > 0) {
-      return '$fileCount 个文件, $subFolderCount 个子文件夹';
+      return AppLocalizations.of(context)!
+          .fileManagerFolderAndFilesCount(fileCount, subFolderCount);
     } else if (subFolderCount > 0) {
-      return '$subFolderCount 个子文件夹';
+      return AppLocalizations.of(context)!
+          .fileManagerSubfoldersCount(subFolderCount);
     } else if (fileCount > 0) {
-      return '$fileCount 个文件';
+      return AppLocalizations.of(context)!.fileManagerFilesCount(fileCount);
     } else {
-      return '空文件夹';
+      return AppLocalizations.of(context)!.fileManagerEmptyFolderLabel;
     }
   }
 
@@ -1341,7 +1393,7 @@ class _FileManagerViewState<T extends FileRecord>
   Widget _buildFileItem(T file) {
     final isSelected = _selectedIds.contains(file.id);
     final fileSizeStr = formatFileSize(file.size);
-    final dateStr = formatDate(file.createdAt);
+    final dateStr = formatDate(file.createdAt, AppLocalizations.of(context)!);
     final hasThumbnailBuilder = widget.config.fileThumbnailBuilder != null;
 
     return Card(
@@ -1478,62 +1530,65 @@ class _FileManagerViewState<T extends FileRecord>
 
   List<PopupMenuEntry<String>> _buildFilePopupMenu(T file) {
     final items = <PopupMenuEntry<String>>[
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'multiSelect',
         child: ListTile(
           key: Key('fm_file_menu_multi_select'),
           leading: Icon(Icons.checklist, size: 20),
-          title: Text('多选'),
+          title: Text(AppLocalizations.of(context)!.fileManagerMultiSelect),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'preview',
         child: ListTile(
           key: Key('fm_file_menu_preview'),
           leading: Icon(Icons.visibility, size: 20),
-          title: Text('预览'),
+          title: Text(AppLocalizations.of(context)!.fileManagerPreview),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'rename',
         child: ListTile(
           key: Key('fm_file_menu_rename'),
           leading: Icon(Icons.edit, size: 20),
-          title: Text('重命名'),
+          title: Text(AppLocalizations.of(context)!.fileManagerRename),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'move',
         child: ListTile(
           key: Key('fm_file_menu_move'),
           leading: Icon(Icons.drive_file_move, size: 20),
-          title: Text('移动'),
+          title: Text(AppLocalizations.of(context)!.fileManagerMove),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'copy',
         child: ListTile(
           key: Key('fm_file_menu_copy'),
           leading: Icon(Icons.copy, size: 20),
-          title: Text('复制'),
+          title: Text(AppLocalizations.of(context)!.fileManagerCopy),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'delete',
         child: ListTile(
           key: Key('fm_file_menu_delete'),
           leading: Icon(Icons.delete, size: 20, color: Colors.red),
-          title: Text('删除', style: TextStyle(color: Colors.red)),
+          title: Text(
+            AppLocalizations.of(context)!.fileManagerDelete,
+            style: TextStyle(color: Colors.red),
+          ),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1656,7 +1711,10 @@ class _FileManagerViewState<T extends FileRecord>
     if (conflict) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('文件 "$newName.$newFormat" 已存在'),
+          content: Text(
+            AppLocalizations.of(context)!
+                .fileManagerFileExists(newFormat, newName),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -1673,7 +1731,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('重命名失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerRenameFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1685,7 +1746,7 @@ class _FileManagerViewState<T extends FileRecord>
   Future<void> _moveFile(String fileId) async {
     final (selectedFolder, _) = await _showFolderPickerDialog(
       widget.folders,
-      title: '选择目标文件夹',
+      title: AppLocalizations.of(context)!.fileManagerChooseTargetFolder,
     );
     if (selectedFolder != null) {
       if (!mounted) return;
@@ -1694,8 +1755,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (source.isNotEmpty && source.first.folder == selectedFolder) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('文件已在目标位置'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerAlreadyAtDestination,
+              ),
               duration: Duration(seconds: 2),
             ),
           );
@@ -1714,8 +1777,10 @@ class _FileManagerViewState<T extends FileRecord>
           )) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('目标文件夹已存在同名文件，移动已取消'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerMoveNameConflict,
+              ),
               duration: Duration(seconds: 2),
             ),
           );
@@ -1729,7 +1794,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('移动失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerMoveFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -1744,7 +1812,7 @@ class _FileManagerViewState<T extends FileRecord>
   Future<void> _copyFile(String fileId) async {
     final (selectedFolder, _) = await _showFolderPickerDialog(
       widget.folders,
-      title: '选择复制到的目标文件夹',
+      title: AppLocalizations.of(context)!.fileManagerChooseCopyDestination,
     );
     if (selectedFolder == null) {
       if (mounted) setState(() {});
@@ -1757,7 +1825,9 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('复制失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerCopyFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1773,18 +1843,25 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_file_dialog'),
-        title: const Text('确认删除'),
-        content: const Text('确定要删除此文件吗？此操作不可恢复。'),
+        title: Text(
+          AppLocalizations.of(context)!.fileManagerDeleteConfirmTitle,
+        ),
+        content: Text(
+          AppLocalizations.of(context)!.fileManagerDeleteFileConfirm,
+        ),
         actions: [
           TextButton(
             key: const Key('fm_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
           ),
           TextButton(
             key: const Key('fm_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -1798,7 +1875,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('删除失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerDeleteFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -1864,8 +1944,9 @@ class _FileManagerViewState<T extends FileRecord>
             SnackBar(
               content: Text(
                 newPath == name
-                    ? '文件夹已在目标位置，操作已取消'
-                    : '所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消',
+                    ? AppLocalizations.of(context)!
+                        .fileManagerFolderAlreadyThere
+                    : AppLocalizations.of(context)!.fileManagerFolderConflict,
               ),
               duration: const Duration(seconds: 3),
             ),
@@ -1883,18 +1964,24 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_selected_dialog'),
-        title: const Text('确认批量删除'),
-        content: Text('确定要删除选中的 ${_selectedIds.length} 项吗？此操作不可恢复。'),
+        title: Text(AppLocalizations.of(context)!.fileManagerBatchDeleteTitle),
+        content: Text(
+          AppLocalizations.of(context)!
+              .fileManagerDeleteSelectedConfirm(_selectedIds.length),
+        ),
         actions: [
           TextButton(
             key: const Key('fm_batch_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
           ),
           TextButton(
             key: const Key('fm_batch_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -1928,7 +2015,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('批量删除失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerBatchDeleteFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -1980,8 +2070,13 @@ class _FileManagerViewState<T extends FileRecord>
           folders: topLevelFolders,
         );
       } on StateError {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('所选文件与文件夹的导出路径冲突')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerExportConflict,
+            ),
+          ),
+        );
         return;
       }
     }
@@ -2052,7 +2147,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
-      title: '选择目标文件夹',
+      title: AppLocalizations.of(context)!.fileManagerChooseTargetFolder,
     );
 
     if (selectedFolder != null) {
@@ -2077,8 +2172,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (alreadyThere) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('所选文件已在目标位置，移动已取消'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerSelectedAlreadyThere,
+              ),
               duration: Duration(seconds: 2),
             ),
           );
@@ -2101,8 +2198,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (nameConflict) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('目标文件夹已存在同名文件，移动已取消'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerMoveNameConflict,
+              ),
               duration: Duration(seconds: 3),
             ),
           );
@@ -2122,7 +2221,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('批量移动失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerBatchMoveFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -2162,7 +2264,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
-      title: '选择目标文件夹',
+      title: AppLocalizations.of(context)!.fileManagerChooseTargetFolder,
     );
 
     if (selectedFolder == null) {
@@ -2191,8 +2293,10 @@ class _FileManagerViewState<T extends FileRecord>
     if (nameConflict) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('所选文件中存在同名文件，复制已取消（请逐个复制）'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerCopyConflict,
+            ),
             duration: Duration(seconds: 3),
           ),
         );
@@ -2212,7 +2316,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('批量复制失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerBatchCopyFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -2252,12 +2359,13 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<BatchRenameSnapshot> _renameSnapshot() async {
+    final closedError = AppLocalizations.of(context)!.fileManagerClosedError;
     // A folder callback can throw after persisting some moves but before
     // publishing provider state. Reload storage, then wait for the rebuilt view.
     widget.invalidateRenameCache?.call();
     await widget.onRefresh();
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) throw StateError('文件页面已关闭');
+    if (!mounted) throw StateError(closedError);
     return BatchRenameSnapshot([
       for (final r in widget.sortedRecords)
         BatchRenameItem(
@@ -2294,8 +2402,14 @@ class _FileManagerViewState<T extends FileRecord>
       _exitSelectionMode();
     } catch (e) {
       if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('批量重命名失败：$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerBatchRenameFailed(e.toString()),
+            ),
+          ),
+        );
     } finally {
       if (mounted) setState(() => _batchRenameActive = false);
     }
@@ -2323,12 +2437,12 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_create_folder_dialog'),
-        title: const Text('创建文件夹'),
+        title: Text(AppLocalizations.of(context)!.fileManagerCreateFolder),
         content: TextField(
           key: const Key('fm_create_folder_input'),
           controller: _folderNameController,
-          decoration: const InputDecoration(
-            hintText: '输入文件夹名称',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.fileManagerFolderNameHint,
             border: OutlineInputBorder(),
           ),
         ),
@@ -2336,7 +2450,7 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_create_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
           ),
           ElevatedButton(
             key: const Key('fm_create_folder_confirm_btn'),
@@ -2345,7 +2459,7 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _folderNameController.text.trim());
             },
-            child: const Text('创建'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCreate),
           ),
         ],
       ),
@@ -2374,8 +2488,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (widget.folders.contains(fullPath)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('文件夹已存在'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerFolderExists,
+              ),
               duration: Duration(seconds: 2),
             ),
           );
@@ -2388,7 +2504,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('创建文件夹失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerCreateFolderFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -2403,7 +2522,9 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('文件夹 "$result" 创建成功'),
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerFolderCreated(result),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -2420,12 +2541,12 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_rename_folder_dialog'),
-        title: const Text('重命名文件夹'),
+        title: Text(AppLocalizations.of(context)!.fileManagerRenameFolderTitle),
         content: TextField(
           key: const Key('fm_rename_folder_input'),
           controller: _renameController,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.fileManagerNewNameHint,
             border: OutlineInputBorder(),
           ),
           autofocus: true,
@@ -2434,7 +2555,7 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_rename_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
           ),
           ElevatedButton(
             key: const Key('fm_rename_folder_confirm_btn'),
@@ -2443,7 +2564,7 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _renameController.text.trim());
             },
-            child: const Text('重命名'),
+            child: Text(AppLocalizations.of(context)!.fileManagerRename),
           ),
         ],
       ),
@@ -2477,8 +2598,10 @@ class _FileManagerViewState<T extends FileRecord>
       )) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('目标位置已存在同名文件夹，操作已取消'),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.fileManagerTargetFolderConflict,
+              ),
               duration: Duration(seconds: 3),
             ),
           );
@@ -2492,7 +2615,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('重命名失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerRenameFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -2515,7 +2641,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
-      title: '移动文件夹到…',
+      title: AppLocalizations.of(context)!.fileManagerMoveFolderTitle,
     );
     if (selectedFolder == null) {
       if (mounted) setState(() {});
@@ -2527,8 +2653,10 @@ class _FileManagerViewState<T extends FileRecord>
         selectedFolder) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('文件夹已在目标位置'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerFolderAtDestination,
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -2547,8 +2675,10 @@ class _FileManagerViewState<T extends FileRecord>
         )) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('目标位置已存在同名文件夹或为文件夹自身，操作已取消'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerFolderSelfConflict,
+            ),
             duration: Duration(seconds: 3),
           ),
         );
@@ -2563,7 +2693,9 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('移动失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerMoveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -2587,7 +2719,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
-      title: '复制文件夹到…',
+      title: AppLocalizations.of(context)!.fileManagerCopyFolderTitle,
     );
     if (selectedFolder == null) {
       if (mounted) setState(() {});
@@ -2599,8 +2731,10 @@ class _FileManagerViewState<T extends FileRecord>
         selectedFolder) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('文件夹已在目标位置'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerFolderAtDestination,
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -2619,8 +2753,10 @@ class _FileManagerViewState<T extends FileRecord>
         )) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('目标位置已存在同名文件夹或为文件夹自身，操作已取消'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerFolderSelfConflict,
+            ),
             duration: Duration(seconds: 3),
           ),
         );
@@ -2635,7 +2771,9 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('复制失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.fileManagerCopyFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -2658,25 +2796,30 @@ class _FileManagerViewState<T extends FileRecord>
     }
     final fileCount = directCount + subFileCount;
     final message = fileCount > 0
-        ? '确定要删除文件夹 "$folderName" 吗？其中的 $fileCount 个文件也将被删除。'
-        : '确定要删除空文件夹 "$folderName" 吗？';
+        ? AppLocalizations.of(context)!
+            .fileManagerDeleteFolderConfirm(fileCount, folderName)
+        : AppLocalizations.of(context)!
+            .fileManagerDeleteEmptyFolderConfirm(folderName);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_folder_dialog'),
-        title: const Text('确认删除文件夹'),
+        title: Text(AppLocalizations.of(context)!.fileManagerDeleteFolderTitle),
         content: Text(message),
         actions: [
           TextButton(
             key: const Key('fm_delete_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
           ),
           TextButton(
             key: const Key('fm_delete_folder_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -2690,7 +2833,10 @@ class _FileManagerViewState<T extends FileRecord>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('删除失败: $e'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerDeleteFailed(e.toString()),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -2713,7 +2859,10 @@ class _FileManagerViewState<T extends FileRecord>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('刷新失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerRefreshFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -2723,8 +2872,8 @@ class _FileManagerViewState<T extends FileRecord>
     _invalidateThumbnailCache();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('文件列表已刷新'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.fileManagerRefreshed),
           duration: Duration(seconds: 2),
         ),
       );
@@ -2741,7 +2890,7 @@ class _FileManagerViewState<T extends FileRecord>
   /// [widget.folders] 是构建时冻结的集合。
   Future<(String?, Set<String>)> _showFolderPickerDialog(
     Set<String> folders, {
-    String title = '选择目标文件夹',
+    String? title,
   }) async {
     // 面板会话内新建的文件夹路径（用于返回实时集合做冲突校验）
     final createdFolders = <String>{};
@@ -2749,14 +2898,16 @@ class _FileManagerViewState<T extends FileRecord>
     final selectedFolder = await FolderPickerDialog.show(
       context,
       availableFolders: folders,
-      title: title,
+      title:
+          title ?? AppLocalizations.of(context)!.fileManagerChooseTargetFolder,
       onCreateFolder: (name) async {
         try {
           await widget.onCreateFolder(name);
           createdFolders.add(name);
           return null;
         } catch (e) {
-          return '创建文件夹失败: $e';
+          return AppLocalizations.of(context)!
+              .fileManagerCreateFolderFailed(e.toString());
         }
       },
       onRefreshFolders: () async => {...folders, ...createdFolders},
@@ -2810,7 +2961,7 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       key: const Key('fm_rename_file_dialog'),
-      title: const Text('重命名文件'),
+      title: Text(AppLocalizations.of(context)!.fileManagerRenameFileTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2818,8 +2969,8 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
             TextField(
               key: const Key('fm_rename_file_input'),
               controller: widget.controller,
-              decoration: const InputDecoration(
-                hintText: '输入新名称',
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context)!.fileManagerNewNameHint,
                 border: OutlineInputBorder(),
               ),
             ),
@@ -2830,8 +2981,8 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                 borderRadius: StroomMenuStyle.borderRadius,
                 key: const Key('fm_rename_file_format_dropdown'),
                 initialValue: _selectedFormat,
-                decoration: const InputDecoration(
-                  labelText: '格式',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.fileManagerFormat,
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: 12,
@@ -2855,7 +3006,7 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
         TextButton(
           key: const Key('fm_rename_cancel_btn'),
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.fileManagerCancel),
         ),
         ElevatedButton(
           key: const Key('fm_rename_confirm_btn'),
@@ -2867,7 +3018,7 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
               _selectedFormat,
             ));
           },
-          child: const Text('重命名'),
+          child: Text(AppLocalizations.of(context)!.fileManagerRename),
         ),
       ],
     );

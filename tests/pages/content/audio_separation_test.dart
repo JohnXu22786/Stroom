@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/audio_separation_page.dart';
 import 'package:stroom/pages/audio_separation_shared.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -17,11 +18,10 @@ import 'package:stroom/pages/unified_task_list_page.dart';
 Widget _buildTestApp() {
   return const ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AudioSeparationPage(),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -364,6 +364,9 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Builder(
               builder: _buildPageLauncher,
             ),
@@ -720,7 +723,11 @@ void main() {
               return n;
             }),
           ],
-          child: const MaterialApp(home: UnifiedTaskListPage()),
+          child: const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: UnifiedTaskListPage()),
         ),
       );
       await tester.pump();

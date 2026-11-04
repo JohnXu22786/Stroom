@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateNotifier;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tts_models.dart';
@@ -39,6 +40,9 @@ void main() {
       (tester) async {
     String? selected;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: CatCatchPolicyMenu(
           outputPolicy: true,
@@ -76,6 +80,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -126,20 +133,20 @@ void main() {
           .initialValue,
       'automatic',
     );
-    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 音频'), findsOneWidget);
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
     expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
     await tester.tap(find.text('视频').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 视频'), findsOneWidget);
 
     await tester.tap(policyButton);
     await tester.pumpAndSettle();
     await tester.tap(find.text('视频或音频（按下游筛选）').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频或音频（按下游筛选）'), findsOneWidget);
+    expect(find.text('输入: 文本 → 输出: 视频或音频（按下游筛选）'), findsOneWidget);
     final dialogList = find.byWidgetPredicate(
       (widget) =>
           widget is Scrollable && widget.axisDirection == AxisDirection.down,
@@ -162,6 +169,9 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: IOTypeIndicator(
             type: IOType.video,
@@ -576,6 +586,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Column(
               children: [
@@ -626,6 +639,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Column(
               children: [
@@ -671,6 +687,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: FlowBlockCard(
               block: TaskFlowBlock(
@@ -738,6 +757,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -800,6 +822,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -873,6 +898,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(

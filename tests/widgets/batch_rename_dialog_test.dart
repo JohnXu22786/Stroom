@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
@@ -77,11 +78,10 @@ Widget _buildTestApp(Widget body, {Size screenSize = const Size(800, 600)}) {
   return MediaQuery(
     data: MediaQueryData(size: screenSize),
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: body),
-      localizationsDelegates: const [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -344,7 +344,7 @@ void main() {
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('batch_rename_dialog')), findsOneWidget);
-    expect(find.text('批量重命名（2 项）'), findsOneWidget);
+    expect(find.text('重命名 2 项'), findsOneWidget);
 
     // 未启用任何操作时，应用按钮禁用
     final applyBtn = find.byKey(const Key('batch_rename_apply_btn'));
@@ -633,7 +633,7 @@ void main() {
     await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
     await tester.pumpAndSettle();
 
-    expect(find.text('重命名完成：成功 1 项，失败 1 项'), findsOneWidget);
+    expect(find.text('重命名：成功 1 项，失败 1 项，剩余 0 项'), findsOneWidget);
   });
 
   testWidgets('窄屏（320dp）下打开面板并启用编号不溢出', (tester) async {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_resource.dart';
+import '../../l10n/app_localizations.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../task_flow/services/task_flow_execution_service.dart';
@@ -13,6 +14,33 @@ import 'task_utils.dart';
 import 'file_opener.dart';
 import 'media_preview_sheet.dart';
 import '../../widgets/running_elapsed_label.dart';
+
+String _localizedCatCatchStatus(
+  catcatch.TaskStatus status,
+  AppLocalizations strings,
+) =>
+    switch (status) {
+      catcatch.TaskStatus.running => strings.catcatchStatusRunning,
+      catcatch.TaskStatus.completed => strings.catcatchStatusCompleted,
+      catcatch.TaskStatus.failed => strings.catcatchStatusFailed,
+      catcatch.TaskStatus.paused => strings.catcatchStatusPaused,
+      catcatch.TaskStatus.waiting => strings.catcatchStatusWaiting,
+    };
+
+String _localizedCatCatchStep(
+  catcatch.StepType type,
+  AppLocalizations strings,
+) =>
+    switch (type) {
+      catcatch.StepType.fetching => strings.catcatchStepFetching,
+      catcatch.StepType.analyzing => strings.catcatchStepAnalyzing,
+      catcatch.StepType.parsingPlaylist => strings.catcatchStepParsingPlaylist,
+      catcatch.StepType.filtering => strings.catcatchStepFiltering,
+      catcatch.StepType.userSelecting => strings.catcatchStepUserSelecting,
+      catcatch.StepType.downloading => strings.catcatchStepDownloading,
+      catcatch.StepType.converting => strings.catcatchStepConverting,
+      catcatch.StepType.saving => strings.catcatchStepSaving,
+    };
 
 // =============================================================================
 // CatCatch 任务卡片
@@ -60,15 +88,25 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     try {
       final started = await ref
           .read(taskFlowExecutionServiceProvider)
-          .performManualCatCatchAction(taskId, selecting, action,
-              selectedMediaUrl: selectedMediaUrl,
-              selectedMediaIdentity: selectedMediaIdentity,
-              selectedMediaHasByteRange: selectedMediaHasByteRange);
+          .performManualCatCatchAction(
+            taskId,
+            selecting,
+            action,
+            selectedMediaUrl: selectedMediaUrl,
+            selectedMediaIdentity: selectedMediaIdentity,
+            selectedMediaHasByteRange: selectedMediaHasByteRange,
+          );
       if (!started && mounted) {
-        _showFlowActionError('任务流操作未执行，请检查流程状态后重试');
+        _showFlowActionError(
+          AppLocalizations.of(context)!.catcatchFlowActionNotStarted,
+        );
       }
     } catch (error) {
-      if (mounted) _showFlowActionError('任务流操作失败：$error');
+      if (mounted)
+        _showFlowActionError(
+          AppLocalizations.of(context)!
+              .catcatchFlowActionFailed(error.toString()),
+        );
     } finally {
       _pendingFlowActions.remove(taskId);
       if (mounted) setState(() {});
@@ -206,7 +244,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${task.status.label} · ${task.progress}%',
+                          '${_localizedCatCatchStatus(task.status, AppLocalizations.of(context)!)} · ${task.progress}%',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -273,9 +311,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 child: Column(
                   children: [
                     if (_expandedSegments.contains(task.id) &&
-                        _getMediaSelectionData(task).selectableMedia.any(
-                              (media) => media.isPlaylistSegment,
-                            ))
+                        _getMediaSelectionData(task)
+                            .selectableMedia
+                            .any((media) => media.isPlaylistSegment))
                       _buildSegmentCollapseControl(task),
                     Expanded(
                       child: SingleChildScrollView(
@@ -323,7 +361,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Text(
-          '等待开始...',
+          AppLocalizations.of(context)!.unifiedTaskWaitingStart,
           style: TextStyle(color: colorScheme.onSurfaceVariant),
         ),
       );
@@ -387,7 +425,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           children: [
                             Expanded(
                               child: Text(
-                                step.type.label,
+                                _localizedCatCatchStep(
+                                  step.type,
+                                  AppLocalizations.of(context)!,
+                                ),
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -451,7 +492,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         if (step.skipped && step.detail == null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '已跳过（无需处理）',
+                            AppLocalizations.of(context)!.catcatchSkipped,
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.orange.shade400,
@@ -497,8 +538,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                     .retryStep(task.id, step.type);
                               },
                               icon: const Icon(Icons.refresh, size: 16),
-                              label: const Text(
-                                '重试此步骤',
+                              label: Text(
+                                AppLocalizations.of(context)!.catcatchRetryStep,
                                 style: TextStyle(fontSize: 12),
                               ),
                               style: TextButton.styleFrom(
@@ -542,13 +583,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         ? task.detectedMedia
         : task.detectedMedia
             .where(
-                (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
-                      candidates: allowedIdentities,
-                      identity: media.selectionIdentity,
-                      url: media.url,
-                      hasByteRange: media.hasByteRange,
-                      identityVersioned: identityVersioned,
-                    ))
+              (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                candidates: allowedIdentities,
+                identity: media.selectionIdentity,
+                url: media.url,
+                hasByteRange: media.hasByteRange,
+                identityVersioned: identityVersioned,
+              ),
+            )
             .toList();
 
     final splitGroups = <String, List<MediaResource>>{};
@@ -596,13 +638,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               _expandedSegments.add(task.id);
             }
           }),
-          icon: Icon(
-            segmentsExpanded ? Icons.expand_less : Icons.expand_more,
-          ),
+          icon: Icon(segmentsExpanded ? Icons.expand_less : Icons.expand_more),
           label: Text(
             segmentsExpanded
-                ? '收起 ${segments.length} 个分片'
-                : '显示 ${segments.length} 个分片',
+                ? AppLocalizations.of(context)!
+                    .catcatchCollapseSegments(segments.length)
+                : AppLocalizations.of(context)!
+                    .catcatchShowSegments(segments.length),
           ),
         ),
       ),
@@ -643,9 +685,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         children: [
           Text(
             selectedIdentities.isNotEmpty
-                ? '已选 ${selectedIdentities.length}/${mediaList.length} 个资源'
-                : '检测到 ${mediaList.length} 个媒体资源'
-                    '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
+                ? AppLocalizations.of(context)!.catcatchSelectedResources(
+                    selectedIdentities.length,
+                    mediaList.length,
+                  )
+                : AppLocalizations.of(context)!
+                        .catcatchDetectedMediaResources(mediaList.length) +
+                    (widget.isFlowManaged
+                        ? AppLocalizations.of(context)!
+                            .catcatchFlowSelectOrCombine
+                        : AppLocalizations.of(context)!.catcatchSelectMultiple),
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -701,17 +750,21 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         .CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
                   );
                   final selectedMediaList = task.detectedMedia
-                      .where((media) =>
-                          (allowedIdentities == null ||
-                              catcatch.CatCatchTask
-                                  .flowSelectionCandidateAllowed(
-                                candidates: allowedIdentities,
-                                identity: media.selectionIdentity,
-                                url: media.url,
-                                hasByteRange: media.hasByteRange,
-                                identityVersioned: identityVersioned,
-                              )) &&
-                          selectedIdentities.contains(media.selectionIdentity))
+                      .where(
+                        (media) =>
+                            (allowedIdentities == null ||
+                                catcatch.CatCatchTask
+                                    .flowSelectionCandidateAllowed(
+                                  candidates: allowedIdentities,
+                                  identity: media.selectionIdentity,
+                                  url: media.url,
+                                  hasByteRange: media.hasByteRange,
+                                  identityVersioned: identityVersioned,
+                                )) &&
+                            selectedIdentities.contains(
+                              media.selectionIdentity,
+                            ),
+                      )
                       .toList();
                   if (selectedMediaList.isEmpty) return;
                   final notifier = ref.read(catcatchTasksProvider.notifier);
@@ -747,10 +800,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           label: Text(
             _isFlowActionPending(task.id)
-                ? '正在等待任务流资源'
+                ? AppLocalizations.of(context)!.catcatchWaitingForResources
                 : selectedIdentities.isNotEmpty
-                    ? '下载选中的 ${selectedIdentities.length} 个资源'
-                    : '请选择要下载的资源',
+                    ? AppLocalizations.of(context)!
+                        .catcatchDownloadSelected(selectedIdentities.length)
+                    : AppLocalizations.of(context)!.catcatchSelectResources,
           ),
           style: FilledButton.styleFrom(
             shape: RoundedRectangleBorder(
@@ -792,7 +846,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '⚠ 疑似音视频分离',
+                  AppLocalizations.of(context)!.catcatchPossibleSplit,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: Colors.amber.shade900,
@@ -804,14 +858,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           const SizedBox(height: 4),
           Text(
-            '检测到此组资源可能是同一个视频的音频和视频分离的流，'
-            '您可以选择合并音视频，或仅下载其中一种。',
+            AppLocalizations.of(context)!.catcatchSplitExplanation,
             style: TextStyle(fontSize: 12, color: Colors.amber.shade800),
           ),
           const SizedBox(height: 12),
           if (audioResources.isNotEmpty) ...[
             Text(
-              '🎵 音频流',
+              AppLocalizations.of(context)!.catcatchAudioStream,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -832,7 +885,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           const SizedBox(height: 8),
           if (videoResources.isNotEmpty) ...[
             Text(
-              '🎬 视频流',
+              AppLocalizations.of(context)!.catcatchVideoStream,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -865,14 +918,18 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           if (widget.isFlowManaged) identities.clear();
                           identities.add(primaryVideo.selectionIdentity);
                           if (!widget.isFlowManaged) {
-                            identities
-                                .add(audioResources.first.selectionIdentity);
+                            identities.add(
+                              audioResources.first.selectionIdentity,
+                            );
                           }
                           _mergeAudioUrls[task.id] = audioResources.first.url;
                         });
                       },
                 icon: const Icon(Icons.merge, size: 18),
-                label: const Text('合并音视频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchMergeAudioVideo,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -901,7 +958,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         });
                       },
                 icon: const Icon(Icons.videocam, size: 18),
-                label: const Text('仅视频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchVideoOnly,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -930,7 +990,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         });
                       },
                 icon: const Icon(Icons.audiotrack, size: 18),
-                label: const Text('仅音频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchAudioOnly,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1001,7 +1064,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
               ),
               Text(
-                formatSize(media.size),
+                formatSize(media.size, AppLocalizations.of(context)!),
                 style: TextStyle(
                   fontSize: 11,
                   color: colorScheme.onSurfaceVariant,
@@ -1017,10 +1080,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       : Colors.grey.shade300,
                 ),
                 tooltip: media.isPlaylistSegment
-                    ? '分片需通过播放列表预览'
+                    ? AppLocalizations.of(context)!
+                        .catcatchSegmentsPlaylistPreview
                     : isAudio
-                        ? '预览音频'
-                        : '预览视频',
+                        ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                        : AppLocalizations.of(context)!.catcatchPreviewVideo,
                 onPressed: media.canPreview
                     ? () => showMediaPreview(
                           context,
@@ -1096,7 +1160,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
       if (showLabel) {
         lastDurationSec = currSec;
-        final durationLabel = formatDurationSimple(media.duration!);
+        final durationLabel = formatDurationSimple(
+          media.duration!,
+          AppLocalizations.of(context)!,
+        );
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -1109,7 +1176,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '时长: $durationLabel',
+                  AppLocalizations.of(context)!.catcatchDuration(durationLabel),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -1188,10 +1255,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       children: [
                         _ResourceKindBadge(
                           label: media.isPlaylistSegment
-                              ? '分片'
+                              ? AppLocalizations.of(context)!.catcatchSegment
                               : media.isPlaylist
-                                  ? '播放列表'
-                                  : '整片',
+                                  ? AppLocalizations.of(context)!
+                                      .catcatchPlaylist
+                                  : AppLocalizations.of(context)!
+                                      .catcatchFullVideo,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -1211,7 +1280,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     Row(
                       children: [
                         Text(
-                          '${formatSize(media.size)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
+                          '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -1226,7 +1295,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            '分轨',
+                            AppLocalizations.of(context)!
+                                .catcatchSeparateTracks,
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.amber.shade600,
@@ -1244,7 +1314,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     Icons.play_circle_filled,
                     color: colorScheme.primary,
                   ),
-                  tooltip: isAudioType ? '预览音频' : '预览视频',
+                  tooltip: isAudioType
+                      ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                      : AppLocalizations.of(context)!.catcatchPreviewVideo,
                   onPressed: () {
                     showMediaPreview(
                       context,
@@ -1259,7 +1331,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    media.isPlaylistSegment ? '请通过播放列表预览' : '不支持预览',
+                    media.isPlaylistSegment
+                        ? AppLocalizations.of(context)!
+                            .catcatchPreviewPlaylistOnly
+                        : AppLocalizations.of(context)!
+                            .catcatchPreviewUnsupported,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ),
@@ -1274,7 +1350,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final format = task.metadata['pendingConfirmFormat'] ?? '未知格式';
+    final format = task.metadata['pendingConfirmFormat'] ??
+        AppLocalizations.of(context)!.catcatchUnknownFormat;
     final isPlaylist = task.selectedMedia?.isPlaylist ?? false;
     final pending = _isFlowActionPending(task.id);
     final flowPaused =
@@ -1303,7 +1380,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isPlaylist ? '需要处理播放列表' : '检测到特殊格式',
+                    isPlaylist
+                        ? AppLocalizations.of(context)!
+                            .catcatchNeedPlaylistProcessing
+                        : AppLocalizations.of(context)!
+                            .catcatchSpecialFormatDetected,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Colors.blue.shade800,
@@ -1315,8 +1396,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             const SizedBox(height: 8),
             Text(
               isPlaylist
-                  ? '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。'
-                  : '下载的文件格式为 $format，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。',
+                  ? AppLocalizations.of(context)!.catcatchPlaylistInfo(format)
+                  : AppLocalizations.of(context)!.catcatchFormatInfo(format),
               style: TextStyle(
                 fontSize: 13,
                 color: colorScheme.onSurfaceVariant,
@@ -1324,8 +1405,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               ),
             ),
             const SizedBox(height: 12),
-            if (flowPaused) const Text('请先继续流程，再确认格式处理'),
-            if (pending) const Text('正在等待任务流资源'),
+            if (flowPaused)
+              Text(AppLocalizations.of(context)!.catcatchContinueBeforeConfirm),
+            if (pending)
+              Text(AppLocalizations.of(context)!.catcatchWaitingForResources),
             Row(
               children: [
                 Expanded(
@@ -1347,7 +1430,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.auto_fix_high, size: 18),
-                    label: const Text('自动处理', style: TextStyle(fontSize: 13)),
+                    label: Text(
+                      AppLocalizations.of(context)!.catcatchAutoProcess,
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1369,7 +1455,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.save_alt, size: 18),
-                    label: const Text('保留原始格式', style: TextStyle(fontSize: 13)),
+                    label: Text(
+                      AppLocalizations.of(context)!.catcatchKeepOriginalFormat,
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
                 ),
               ],
@@ -1409,7 +1498,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    resumeSupported ? '支持断点续传' : '该站点不支持断点续传',
+                    resumeSupported
+                        ? AppLocalizations.of(context)!.catcatchResumeSupported
+                        : AppLocalizations.of(context)!
+                            .catcatchResumeUnsupported,
                     style: TextStyle(
                       fontSize: 11,
                       color: resumeSupported ? Colors.green : Colors.grey,
@@ -1426,7 +1518,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.running) ...[
                 _actionButton(
                   icon: Icons.pause,
-                  label: '暂停下载',
+                  label: AppLocalizations.of(context)!.catcatchPauseDownload,
                   color: Colors.orange,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1434,7 +1526,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1445,7 +1537,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.paused) ...[
                 _actionButton(
                   icon: Icons.play_arrow,
-                  label: resumeSupported ? '继续下载' : '重新下载',
+                  label: resumeSupported
+                      ? AppLocalizations.of(context)!.catcatchResumeDownload
+                      : AppLocalizations.of(context)!.catcatchRestartDownload,
                   color: Colors.blue,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1453,7 +1547,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1464,7 +1558,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 if (task.downloadedFilePath != null)
                   _actionButton(
                     icon: Icons.folder_open,
-                    label: '打开文件',
+                    label: AppLocalizations.of(context)!.unifiedTaskOpenFile,
                     color: Colors.green,
                     onPressed: () =>
                         openFile(task.downloadedFilePath!, context),
@@ -1472,7 +1566,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 if (!widget.isFlowManaged)
                   _actionButton(
                     icon: Icons.delete_outline,
-                    label: '删除',
+                    label: AppLocalizations.of(context)!.unifiedTaskDelete,
                     color: Colors.red,
                     onPressed: () => ref
                         .read(catcatchTasksProvider.notifier)
@@ -1483,7 +1577,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.failed) ...[
                 _actionButton(
                   icon: Icons.refresh,
-                  label: '重试',
+                  label: AppLocalizations.of(context)!.unifiedTaskRetry,
                   color: Colors.blue,
                   onPressed: () => Navigator.push(
                     context,
@@ -1497,7 +1591,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1555,7 +1649,9 @@ class _ResourceKindBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = label == '分片' ? Colors.orange : Colors.teal;
+    final color = label == AppLocalizations.of(context)!.catcatchSegment
+        ? Colors.orange
+        : Colors.teal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(

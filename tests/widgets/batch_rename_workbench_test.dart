@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/utils/batch_rename.dart';
+import 'package:stroom/utils/batch_rename_execution.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/batch_rename_dialog.dart';
+import 'package:stroom/widgets/batch_rename_run_dialog.dart';
 import '../utils/batch_rename_test.dart' show bridge, file;
 
 Future<void> open(WidgetTester tester,
@@ -10,6 +13,9 @@ Future<void> open(WidgetTester tester,
     bool settle = true}) async {
   final items = [file('a', 'alpha'), file('b', 'beta')];
   await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
           body: Builder(
               builder: (context) => TextButton(
@@ -33,6 +39,35 @@ Future<void> open(WidgetTester tester,
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('batch rename run dialog uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showBatchRenameRunDialog(
+            context: context,
+            history: BatchRenameExecution(
+              completed: const [],
+              after: BatchRenameSnapshot(const [], const {}),
+              total: 0,
+            ),
+            bridge: bridge,
+            readSnapshot: () async => BatchRenameSnapshot(const [], const {}),
+            renameFile: (_, _) async {},
+            renameFolder: (_, _) async {},
+          ),
+          child: const Text('Open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Batch rename results'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+  });
 
   testWidgets('后台预览完成前禁用执行，切换普通替换后不被旧结果覆盖', (tester) async {
     await open(tester,

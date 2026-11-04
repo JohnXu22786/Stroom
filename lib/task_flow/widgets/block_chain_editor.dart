@@ -6,8 +6,10 @@ import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_chain_editor.dart';
 import '../models/flow_temporary_output.dart';
+import '../utils/task_flow_localization.dart';
 import 'flow_block_card.dart';
 import 'io_type_indicator.dart';
+import '../../l10n/app_localizations.dart';
 
 class BlockChainEditor extends StatelessWidget {
   final List<TaskFlowBlock> blocks;
@@ -48,6 +50,7 @@ class BlockChainEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
     final issues = TaskFlowChainEditor.validateConnections(blocks, inputType);
     final temporaryOutputIndices = [
       for (var index = 0; index < blocks.length; index++)
@@ -90,10 +93,19 @@ class BlockChainEditor extends StatelessWidget {
                                   onTemporaryOutputChanged?.call(index, enabled)
                               : null,
                       selected: selectedBlockId == block.id,
-                      validationMessage: issues
-                          .where((issue) => issue.blockId == block.id)
-                          .firstOrNull
-                          ?.message,
+                      validationMessage: (() {
+                        final issue = issues
+                            .where((issue) => issue.blockId == block.id)
+                            .firstOrNull;
+                        return issue == null
+                            ? null
+                            : localizedChainIssueMessage(
+                                issue,
+                                blocks,
+                                inputType,
+                                strings,
+                              );
+                      })(),
                       onTap: () => onEditBlock(index),
                       onSettings: () => onEditBlock(index),
                       onReplace: () => _showReplaceBlockSheet(context, index),
@@ -135,7 +147,7 @@ class BlockChainEditor extends StatelessWidget {
 
   Widget _buildTemporaryOutputControl(BuildContext context, bool? value) {
     return Tooltip(
-      message: '下一个步骤成功保存结果后清理；最终步骤始终保留',
+      message: AppLocalizations.of(context)!.taskFlowUiTemporaryCleanupTooltip,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -149,7 +161,10 @@ class BlockChainEditor extends StatelessWidget {
                 : (_) =>
                     onTemporaryOutputsChanged!(value == true ? false : true),
           ),
-          const Text('临时中间文件', style: TextStyle(fontSize: 11)),
+          Text(
+            AppLocalizations.of(context)!.taskFlowUiTemporaryFiles,
+            style: TextStyle(fontSize: 11),
+          ),
         ],
       ),
     );
@@ -157,6 +172,7 @@ class BlockChainEditor extends StatelessWidget {
 
   Widget _buildInitialInputCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -193,7 +209,7 @@ class BlockChainEditor extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        '0. 初始输入',
+                        AppLocalizations.of(context)!.taskFlowUiInitialInput,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -237,7 +253,7 @@ class BlockChainEditor extends StatelessWidget {
                           items: _inputTypeOptions.map((type) {
                             return DropdownMenuItem(
                               value: type,
-                              child: Text(type.label),
+                              child: Text(localizedIoTypeLabel(type, strings)),
                             );
                           }).toList(),
                         ),
@@ -260,7 +276,7 @@ class BlockChainEditor extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    '用户运行任务流时输入',
+                    AppLocalizations.of(context)!.taskFlowUiUserFlowInput,
                     style: TextStyle(
                       fontSize: 9,
                       color: cs.tertiary.withValues(alpha: 0.6),
@@ -308,7 +324,10 @@ class BlockChainEditor extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => _showAddBlockSheet(context),
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加功能块', style: TextStyle(fontSize: 14)),
+                  label: Text(
+                    AppLocalizations.of(context)!.taskFlowUiAddBlock,
+                    style: TextStyle(fontSize: 14),
+                  ),
                   style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -326,15 +345,18 @@ class BlockChainEditor extends StatelessWidget {
   Widget _buildInsertControl(BuildContext context, int index) {
     final compatible = _insertionCandidates(index).isNotEmpty;
     return Tooltip(
-      message:
-          compatible ? '在步骤 ${index + 1} 前插入功能块' : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
+      message: compatible
+          ? AppLocalizations.of(context)!.taskFlowUiInsertBlockBefore(index + 1)
+          : AppLocalizations.of(context)!.taskFlowUiIncompatibleAdjacentBlocks,
       child: TextButton.icon(
         key: ValueKey('insert-block-$index'),
         onPressed: compatible
             ? () => _showAddBlockSheet(context, insertIndex: index)
             : null,
         icon: const Icon(Icons.add, size: 16),
-        label: Text('在步骤 ${index + 1} 前插入'),
+        label: Text(
+          AppLocalizations.of(context)!.taskFlowUiInsertBeforeStep(index + 1),
+        ),
       ),
     );
   }
@@ -357,14 +379,18 @@ class BlockChainEditor extends StatelessWidget {
 
   void _showAddBlockSheet(BuildContext context, {int? insertIndex}) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     final insertionIndex = insertIndex ?? blocks.length;
     final availableTypes = _insertionCandidates(insertionIndex);
     final previousBlock =
         insertionIndex == 0 ? null : blocks[insertionIndex - 1];
     final previousLabel = insertionIndex == 0
-        ? inputType.label
-        : previousBlock?.outputTypeLabel ?? '未知';
+        ? localizedIoTypeLabel(inputType, strings)
+        : localizedIoTypeDisplayLabel(
+            previousBlock?.outputTypeLabel ?? strings.taskFlowUiUnknown,
+            strings,
+          );
     final next = insertionIndex == blocks.length
         ? null
         : blocks[insertionIndex].getDefinition()?.inputType;
@@ -398,7 +424,9 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                insertIndex == null ? '选择功能块' : '插入功能块',
+                insertIndex == null
+                    ? AppLocalizations.of(context)!.taskFlowUiChooseBlock
+                    : AppLocalizations.of(context)!.taskFlowUiInsertBlock,
                 style: Theme.of(scrollCtx)
                     .textTheme
                     .titleMedium
@@ -406,8 +434,8 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: $previousLabel'
-                '${next == null ? '' : '，下一步需要: ${next.label}'}',
+                '${insertionIndex == 0 ? strings.taskFlowUiInitialInput : strings.taskFlowUiPreviousOutput}: $previousLabel'
+                '${next == null ? '' : strings.taskFlowUiNextStepNeeds(localizedIoTypeLabel(next, strings))}',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
@@ -415,7 +443,7 @@ class BlockChainEditor extends StatelessWidget {
                 Expanded(
                   child: Center(
                     child: Text(
-                      '没有与当前类型兼容的功能块',
+                      AppLocalizations.of(context)!.taskFlowUiNoCompatibleBlock,
                       style: TextStyle(
                         fontSize: 14,
                         color: cs.onSurfaceVariant,
@@ -498,7 +526,7 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                '替换功能块',
+                AppLocalizations.of(context)!.taskFlowUiReplaceBlock,
                 style: Theme.of(scrollCtx)
                     .textTheme
                     .titleMedium
@@ -506,7 +534,7 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '只能替换为输入输出兼容的功能块（同类输入输出）',
+                AppLocalizations.of(context)!.taskFlowUiBlockCompatibility,
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
@@ -514,7 +542,7 @@ class BlockChainEditor extends StatelessWidget {
                 Expanded(
                   child: Center(
                     child: Text(
-                      '没有与当前类型兼容的功能块',
+                      AppLocalizations.of(context)!.taskFlowUiNoCompatibleBlock,
                       style: TextStyle(
                         fontSize: 14,
                         color: cs.onSurfaceVariant,
@@ -587,7 +615,7 @@ class BlockChainEditor extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      type.label,
+                      localizedBlockTypeLabel(type, AppLocalizations.of(ctx)!),
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -596,7 +624,7 @@ class BlockChainEditor extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${type.inputType.label} → ${type.possibleOutputTypes.map((output) => output.label).join('或')}',
+                      '${localizedIoTypeLabel(type.inputType, AppLocalizations.of(ctx)!)} → ${type.possibleOutputTypes.map((output) => localizedIoTypeLabel(output, AppLocalizations.of(ctx)!)).join(', ')}',
                       style: TextStyle(
                         fontSize: 11,
                         color: cs.onSurfaceVariant,

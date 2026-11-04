@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../pages/unified_task_list/task_flow_card.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../../l10n/app_localizations.dart';
 
 /// A direct entry to the records created by one launch.
 class TaskFlowRunPage extends ConsumerWidget {
@@ -25,11 +26,13 @@ class TaskFlowRunPage extends ConsumerWidget {
         .whereType<String>()
         .firstOrNull;
     return Scaffold(
-      appBar: AppBar(title: const Text('本次运行'), actions: [
-        if (restoreStatus == FlowExecutionRestoreStatus.ready &&
-            batchId != null &&
-            finished < executions.length)
-          TextButton(
+      appBar: AppBar(
+        title: Text(AppLocalizations.of(context)!.taskFlowUiRunTitle),
+        actions: [
+          if (restoreStatus == FlowExecutionRestoreStatus.ready &&
+              batchId != null &&
+              finished < executions.length)
+            TextButton(
               onPressed: () async {
                 try {
                   await ref
@@ -37,32 +40,55 @@ class TaskFlowRunPage extends ConsumerWidget {
                       .cancelBatch(batchId);
                 } catch (error) {
                   if (context.mounted)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(error.toString())));
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.toString())));
                 }
               },
-              child: const Text('取消整个批次')),
-      ]),
+              child: Text(AppLocalizations.of(context)!.taskFlowUiCancelBatch),
+            ),
+        ],
+      ),
       body: restoreStatus != FlowExecutionRestoreStatus.ready
           ? Center(
-              child: Text(restoreStatus == FlowExecutionRestoreStatus.restoring
-                  ? '正在恢复任务流记录…'
-                  : '任务流记录读取失败，任务操作已暂停'))
+              child: Text(
+                restoreStatus == FlowExecutionRestoreStatus.restoring
+                    ? AppLocalizations.of(context)!.taskFlowUiRestoringRecords
+                    : AppLocalizations.of(context)!.taskFlowUiRecordsPaused,
+              ),
+            )
           : executions.isEmpty
-              ? const Center(child: Text('本次运行记录已清除'))
+              ? Center(
+                  child: Text(
+                    AppLocalizations.of(context)!.taskFlowUiRecordsCleared,
+                  ),
+                )
               : LayoutBuilder(
-                  builder: (context, constraints) => ListView(children: [
-                    Padding(
+                  builder: (context, constraints) => ListView(
+                    children: [
+                      Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Text('$finished/${executionIds.length} 个运行已结束'
-                            '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
-                    for (final execution in executions)
-                      TaskFlowCard(
-                        key: ValueKey(execution.id),
-                        execution: execution,
-                        taskListViewportHeight: constraints.maxHeight,
+                        child: Text(
+                          AppLocalizations.of(context)!.taskFlowUiRunSummary(
+                                finished,
+                                executionIds.length,
+                              ) +
+                              (executions.length < executionIds.length
+                                  ? AppLocalizations.of(context)!
+                                      .taskFlowUiClearedRecordCount(
+                                      executionIds.length - executions.length,
+                                    )
+                                  : ''),
+                        ),
                       ),
-                  ]),
+                      for (final execution in executions)
+                        TaskFlowCard(
+                          key: ValueKey(execution.id),
+                          execution: execution,
+                          taskListViewportHeight: constraints.maxHeight,
+                        ),
+                    ],
+                  ),
                 ),
     );
   }

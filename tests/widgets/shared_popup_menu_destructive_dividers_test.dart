@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/anki/database/col_dao.dart';
 import 'package:stroom/anki/models/deck.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
@@ -44,7 +45,11 @@ void main() {
             (ref, deckId) async => DeckStats(deckName: 'Study deck'),
           ),
         ],
-        child: const MaterialApp(home: AnkiDroidPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: AnkiDroidPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -73,6 +78,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: SynthesisTaskCard(task: task)),
         ),
       ),
@@ -89,6 +97,9 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: BatchRenameRuleEditor(
             rule: const BatchNumberOp(),
@@ -112,6 +123,9 @@ void main() {
   testWidgets('topic menu separates delete from topic actions', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: TopicItem(
             topic: Conversation(title: 'Topic', assistantId: 'assistant'),
