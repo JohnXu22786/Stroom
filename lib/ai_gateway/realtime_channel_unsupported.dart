@@ -16,6 +16,7 @@ Future<RealtimeChannelConnection> connectRealtimeChannel(
   Uri uri,
   Map<String, String> headers,
   Duration connectTimeout,
-) => throw UnsupportedError(
-  'Realtime API-key WebSocket authentication is unavailable on this platform.',
-);
+) =>
+    throw UnsupportedError(
+      'Realtime API-key WebSocket authentication is unavailable on this platform.',
+    );

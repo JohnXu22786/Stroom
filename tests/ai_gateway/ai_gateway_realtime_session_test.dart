@@ -142,23 +142,24 @@ void main() {
       expect(
         AiGatewayRealtimeProtocol.buildConversationEvents([
           {'role': 'user', 'content': 'hello'},
-        ], providerId: 'xai').last,
+        ], providerId: 'xai')
+            .last,
         {'type': 'response.create'},
       );
       final mixedContentEvents =
           AiGatewayRealtimeProtocol.buildConversationEvents([
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'before audio'},
             {
-              'role': 'user',
-              'content': [
-                {'type': 'text', 'text': 'before audio'},
-                {
-                  'type': 'input_audio',
-                  'input_audio': {'data': 'AQID', 'format': 'pcm16'},
-                },
-                {'type': 'text', 'text': 'after audio'},
-              ],
+              'type': 'input_audio',
+              'input_audio': {'data': 'AQID', 'format': 'pcm16'},
             },
-          ]);
+            {'type': 'text', 'text': 'after audio'},
+          ],
+        },
+      ]);
       expect(
         mixedContentEvents.map((event) {
           if (event['type'] == 'conversation.item.create') {
@@ -178,18 +179,18 @@ void main() {
       );
       final continuedConversation =
           AiGatewayRealtimeProtocol.buildConversationEvents([
+        {
+          'role': 'assistant',
+          'content': [
+            {'type': 'text', 'text': 'spoken answer'},
             {
-              'role': 'assistant',
-              'content': [
-                {'type': 'text', 'text': 'spoken answer'},
-                {
-                  'type': 'input_audio',
-                  'input_audio': {'data': 'UklGRg==', 'format': 'wav'},
-                },
-              ],
+              'type': 'input_audio',
+              'input_audio': {'data': 'UklGRg==', 'format': 'wav'},
             },
-            {'role': 'user', 'content': 'next question'},
-          ]);
+          ],
+        },
+        {'role': 'user', 'content': 'next question'},
+      ]);
       expect(
         continuedConversation.where(
           (event) => event['type'] == 'input_audio_buffer.append',
@@ -200,33 +201,31 @@ void main() {
         continuedConversation
             .where((event) => event['type'] == 'conversation.item.create')
             .map(
-              (event) =>
-                  (((event['item'] as Map)['content'] as List).single
-                      as Map)['text'],
+              (event) => (((event['item'] as Map)['content'] as List).single
+                  as Map)['text'],
             ),
         ['spoken answer', 'next question'],
       );
       final wavInput = _pcm16Wav(sampleRate: 16000, samples: [1000, 2000]);
       final convertedWavInput =
           AiGatewayRealtimeProtocol.buildConversationEvents([
+        {
+          'role': 'user',
+          'content': [
             {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'input_audio',
-                  'input_audio': {
-                    'data': base64Encode(wavInput),
-                    'format': 'wav',
-                  },
-                },
-              ],
+              'type': 'input_audio',
+              'input_audio': {
+                'data': base64Encode(wavInput),
+                'format': 'wav',
+              },
             },
-          ]);
+          ],
+        },
+      ]);
       final convertedPcm = base64Decode(
         convertedWavInput.singleWhere(
-              (event) => event['type'] == 'input_audio_buffer.append',
-            )['audio']
-            as String,
+          (event) => event['type'] == 'input_audio_buffer.append',
+        )['audio'] as String,
       );
       expect(convertedPcm.length, 6);
       expect(String.fromCharCodes(convertedPcm.take(4)), isNot('RIFF'));

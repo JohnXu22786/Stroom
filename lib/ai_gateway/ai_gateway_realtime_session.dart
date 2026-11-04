@@ -10,8 +10,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'ai_gateway_contracts.dart';
 import 'realtime_channel_unsupported.dart'
-    if (dart.library.io) 'realtime_channel_io.dart'
-    as realtime_channel;
+    if (dart.library.io) 'realtime_channel_io.dart' as realtime_channel;
 import '../utils/audio_chunker.dart';
 
 class AiGatewayRealtimeConnectionOptions {
@@ -221,11 +220,11 @@ abstract final class AiGatewayRealtimeProtocol {
           final audioData = format == 'wav'
               ? _wavAudioToRealtimePcm(data)
               : format == 'pcm16' || format == 'audio/pcm'
-              ? data
-              : throw UnsupportedError(
-                  'Realtime input audio supports 24 kHz PCM16 or PCM16 WAV; '
-                  'convert compressed audio before sending.',
-                );
+                  ? data
+                  : throw UnsupportedError(
+                      'Realtime input audio supports 24 kHz PCM16 or PCM16 WAV; '
+                      'convert compressed audio before sending.',
+                    );
           if (text.isNotEmpty) {
             events.add(_textItem(role, text.toString()));
             text.clear();
@@ -257,15 +256,15 @@ abstract final class AiGatewayRealtimeProtocol {
   }
 
   static Map<String, dynamic> _textItem(String role, String text) => {
-    'type': 'conversation.item.create',
-    'item': {
-      'type': 'message',
-      'role': role,
-      'content': [
-        {'type': role == 'user' ? 'input_text' : 'text', 'text': text},
-      ],
-    },
-  };
+        'type': 'conversation.item.create',
+        'item': {
+          'type': 'message',
+          'role': role,
+          'content': [
+            {'type': role == 'user' ? 'input_text' : 'text', 'text': text},
+          ],
+        },
+      };
 
   static String _wavAudioToRealtimePcm(String base64Wav) {
     try {
@@ -341,16 +340,17 @@ abstract final class AiGatewayRealtimeProtocol {
   }) {
     return switch (providerId) {
       'openai' ||
-      'openai-api' => AiGatewayOpenAiRealtimeAdapter.prepareConnection(
-        authType: authType,
-        apiKey: apiKey,
-        modelId: modelId,
-      ),
+      'openai-api' =>
+        AiGatewayOpenAiRealtimeAdapter.prepareConnection(
+          authType: authType,
+          apiKey: apiKey,
+          modelId: modelId,
+        ),
       'xai' => AiGatewayXaiVoiceRealtimeAdapter.prepareConnection(
-        authType: authType,
-        apiKey: apiKey,
-        modelId: modelId,
-      ),
+          authType: authType,
+          apiKey: apiKey,
+          modelId: modelId,
+        ),
       _ => throw ArgumentError.value(providerId, 'providerId'),
     };
   }
@@ -393,8 +393,8 @@ abstract final class AiGatewayRealtimeProtocol {
         text: event['delta'] is String
             ? event['delta'] as String
             : event['transcript'] is String
-            ? event['transcript'] as String
-            : '',
+                ? event['transcript'] as String
+                : '',
         raw: Map.unmodifiable(event),
       );
     }
@@ -512,35 +512,36 @@ class AiGatewayRealtimeConnectionCancelled implements Exception {
 /// OpenAI's public Realtime API-key contract.
 abstract final class AiGatewayOpenAiRealtimeAdapter {
   static Map<String, dynamic> buildClientSecretRequest(String modelId) => {
-    'expires_after': {'anchor': 'created_at', 'seconds': 600},
-    'session': {
-      'type': 'realtime',
-      'model': modelId,
-      'output_modalities': ['audio'],
-      'audio': {
-        'input': {
-          'format': {'type': 'audio/pcm', 'rate': 24000},
-          'turn_detection': null,
+        'expires_after': {'anchor': 'created_at', 'seconds': 600},
+        'session': {
+          'type': 'realtime',
+          'model': modelId,
+          'output_modalities': ['audio'],
+          'audio': {
+            'input': {
+              'format': {'type': 'audio/pcm', 'rate': 24000},
+              'turn_detection': null,
+            },
+            'output': {
+              'format': {'type': 'audio/pcm', 'rate': 24000},
+              'voice': 'marin',
+            },
+          },
         },
-        'output': {
-          'format': {'type': 'audio/pcm', 'rate': 24000},
-          'voice': 'marin',
-        },
-      },
-    },
-  };
+      };
 
   static AiGatewayRealtimeConnectionOptions prepareConnection({
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => _prepareRealtimeConnection(
-    providerId: 'openai',
-    host: 'api.openai.com',
-    authType: authType,
-    apiKey: apiKey,
-    modelId: modelId,
-  );
+  }) =>
+      _prepareRealtimeConnection(
+        providerId: 'openai',
+        host: 'api.openai.com',
+        authType: authType,
+        apiKey: apiKey,
+        modelId: modelId,
+      );
 
   static AiGatewayRealtimeEvent mapEvent(Map<String, dynamic> event) =>
       AiGatewayRealtimeProtocol.mapEvent('openai', event);
@@ -549,9 +550,10 @@ abstract final class AiGatewayOpenAiRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => AiGatewayRealtimeProtocol.connect(
-    prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
-  );
+  }) =>
+      AiGatewayRealtimeProtocol.connect(
+        prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
+      );
 }
 
 /// xAI Voice Realtime's independent API-key contract. OAuth credentials used
@@ -561,13 +563,14 @@ abstract final class AiGatewayXaiVoiceRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => _prepareRealtimeConnection(
-    providerId: 'xai',
-    host: 'api.x.ai',
-    authType: authType,
-    apiKey: apiKey,
-    modelId: modelId,
-  );
+  }) =>
+      _prepareRealtimeConnection(
+        providerId: 'xai',
+        host: 'api.x.ai',
+        authType: authType,
+        apiKey: apiKey,
+        modelId: modelId,
+      );
 
   static AiGatewayRealtimeEvent mapEvent(Map<String, dynamic> event) =>
       AiGatewayRealtimeProtocol.mapEvent('xai', event);
@@ -576,9 +579,10 @@ abstract final class AiGatewayXaiVoiceRealtimeAdapter {
     required String authType,
     required String apiKey,
     required String modelId,
-  }) => AiGatewayRealtimeProtocol.connect(
-    prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
-  );
+  }) =>
+      AiGatewayRealtimeProtocol.connect(
+        prepareConnection(authType: authType, apiKey: apiKey, modelId: modelId),
+      );
 }
 
 AiGatewayRealtimeConnectionOptions _prepareRealtimeConnection({
@@ -616,15 +620,15 @@ class AiGatewayRealtimeSession {
   }) : _channel = channel;
 
   Stream<AiGatewayRealtimeEvent> get events => _channel.stream.map((frame) {
-    final decoded = jsonDecode(frame as String);
-    if (decoded is! Map) {
-      throw const FormatException('Realtime event must be a JSON object.');
-    }
-    return AiGatewayRealtimeProtocol.mapEvent(
-      providerId,
-      Map<String, dynamic>.from(decoded),
-    );
-  });
+        final decoded = jsonDecode(frame as String);
+        if (decoded is! Map) {
+          throw const FormatException('Realtime event must be a JSON object.');
+        }
+        return AiGatewayRealtimeProtocol.mapEvent(
+          providerId,
+          Map<String, dynamic>.from(decoded),
+        );
+      });
 
   void sendEvent(Map<String, dynamic> event) {
     if (_closed) throw StateError('Realtime session is closed.');

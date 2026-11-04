@@ -90,55 +90,55 @@ extension ChatServiceStreamingExt on ChatService {
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
-              apiMessages,
-              model: _modelConfig!.modelId,
-              reasoning: reasoning,
-              reasoningEffort: reasoningEffort,
-              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-              temperature: _effectiveTemperature, // null when toggle is OFF
-              system: req.system,
-              extraParams: extraParams,
-              cancelToken: _cancelToken,
-            )
+          apiMessages,
+          model: _modelConfig!.modelId,
+          reasoning: reasoning,
+          reasoningEffort: reasoningEffort,
+          maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+          temperature: _effectiveTemperature, // null when toggle is OFF
+          system: req.system,
+          extraParams: extraParams,
+          cancelToken: _cancelToken,
+        )
             .listen(
-              (event) {
-                if (event.inputTranscript?.isNotEmpty == true) {
-                  _recordInputTranscript(history, event.inputTranscript!);
-                }
-                if (event.mediaAttachments?.isNotEmpty == true) {
-                  _captureMediaAttachments(event.mediaAttachments!);
-                }
-                if (event.isReasoning) {
-                  _reasoningBuffer += event.text;
-                } else if (event.usage != null) {
-                  // usage 计量事件（provider 流末尾产出，per-request 隔离）
-                  // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-                  onUsageEvent?.call(event.usage!, recordInput: true);
-                } else if (event.inputTranscript == null &&
-                    event.text.isNotEmpty &&
-                    !_controller!.isClosed) {
-                  _controller!.add(event.text);
-                }
-              },
-              onDone: () {
-                _streamSubscription = null;
-                if (_controller != null && !_controller!.isClosed) {
-                  _controller!.close();
-                }
-                _lastResponseData = _provider?.lastResponseData;
-                _cleanUp();
-              },
-              onError: (Object error) {
-                _streamSubscription = null;
-                debugPrint('ChatService stream error: $error');
-                _lastResponseData = _provider?.lastResponseData;
-                if (_controller != null && !_controller!.isClosed) {
-                  _controller!.addError(error);
-                  _controller!.close();
-                }
-                _cleanUp();
-              },
-            );
+          (event) {
+            if (event.inputTranscript?.isNotEmpty == true) {
+              _recordInputTranscript(history, event.inputTranscript!);
+            }
+            if (event.mediaAttachments?.isNotEmpty == true) {
+              _captureMediaAttachments(event.mediaAttachments!);
+            }
+            if (event.isReasoning) {
+              _reasoningBuffer += event.text;
+            } else if (event.usage != null) {
+              // usage 计量事件（provider 流末尾产出，per-request 隔离）
+              // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+              onUsageEvent?.call(event.usage!, recordInput: true);
+            } else if (event.inputTranscript == null &&
+                event.text.isNotEmpty &&
+                !_controller!.isClosed) {
+              _controller!.add(event.text);
+            }
+          },
+          onDone: () {
+            _streamSubscription = null;
+            if (_controller != null && !_controller!.isClosed) {
+              _controller!.close();
+            }
+            _lastResponseData = _provider?.lastResponseData;
+            _cleanUp();
+          },
+          onError: (Object error) {
+            _streamSubscription = null;
+            debugPrint('ChatService stream error: $error');
+            _lastResponseData = _provider?.lastResponseData;
+            if (_controller != null && !_controller!.isClosed) {
+              _controller!.addError(error);
+              _controller!.close();
+            }
+            _cleanUp();
+          },
+        );
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
         if (!_controller!.isClosed) {
@@ -261,83 +261,83 @@ extension ChatServiceStreamingExt on ChatService {
           // 所有 step 均携带 tools，达限即停，无额外"收尾轮"）。
           _streamSubscription = _provider!
               .chatStream(
-                messages,
-                model: _modelConfig!.modelId,
-                reasoning: reasoning,
-                reasoningEffort: reasoningEffort,
-                maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-                temperature: _effectiveTemperature, // null when toggle is OFF
-                tools: toolDefs.isEmpty ? null : toolDefs,
-                system: req.system,
-                extraParams: extraParams,
-                cancelToken: _cancelToken,
-              )
+            messages,
+            model: _modelConfig!.modelId,
+            reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
+            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+            temperature: _effectiveTemperature, // null when toggle is OFF
+            tools: toolDefs.isEmpty ? null : toolDefs,
+            system: req.system,
+            extraParams: extraParams,
+            cancelToken: _cancelToken,
+          )
               .listen(
-                (event) {
-                  // usage 计量是 API 计费事实（per-request 隔离），必须
-                  // 先于取消守卫处理：用户停止后仍要把已计量请求的
-                  // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
-                  if (event.usage != null) {
-                    // usage 计量事件（provider 流末尾产出，per-request 隔离）
-                    // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-                    onUsageEvent?.call(event.usage!, recordInput: true);
-                  }
-                  if (_isCancelledByUser) return;
-                  // Anthropic extended thinking 签名（协议续接用，静默透传）
-                  if (event.thinkingSignature != null &&
-                      event.thinkingSignature!.isNotEmpty) {
-                    _thinkingSignature = event.thinkingSignature!;
-                  }
-                  if (event.inputTranscript?.isNotEmpty == true) {
-                    controller.add(
-                      InputTranscriptEvent(event.inputTranscript!),
-                    );
-                  } else if (event.mediaAttachments?.isNotEmpty == true) {
-                    _captureMediaAttachments(event.mediaAttachments!);
-                    controller.add(
-                      MediaAttachmentsEvent(
-                        event.mediaAttachments!,
-                        contentOrder: event.contentOrder,
-                      ),
-                    );
-                  } else if (event.isReasoning) {
-                    _reasoningBuffer += event.text;
-                    // Emit reasoning text as ReasoningEvent so the UI
-                    // can stream it in real-time to the reasoning panel.
-                    controller.add(ReasoningEvent(event.text));
-                  } else if (event.isToolCallEvent) {
-                    toolCallRefs.addAll(event.toolCalls!);
-                  } else if (event.text.isNotEmpty) {
-                    // Accumulate visible content for tool call chain
-                    // preservation per DeepSeek spec.
-                    _contentBuffer += event.text;
-                    controller.add(
-                      TextEvent(event.text, contentOrder: event.contentOrder),
-                    );
-                  }
-                },
-                onDone: () {
-                  _streamSubscription = null;
-                  // Capture the provider's final response snapshot on the
-                  // success path too. The provider instance is shared across
-                  // concurrent conversations (per-conversation services), so
-                  // without this snapshot the shared slot may later be
-                  // overwritten by another conversation's chunk — mixing up
-                  // the raw diagnostics shown for THIS request.
-                  _lastResponseData = _provider?.lastResponseData;
-                  if (!completer.isCompleted) completer.complete();
-                },
-                onError: (Object error) {
-                  _streamSubscription = null;
-                  roundStreamError = error;
-                  debugPrint('ChatService stream error: $error');
-                  _lastResponseData = _provider?.lastResponseData;
-                  if (!controller.isClosed) {
-                    controller.addError(error);
-                  }
-                  if (!completer.isCompleted) completer.complete();
-                },
-              );
+            (event) {
+              // usage 计量是 API 计费事实（per-request 隔离），必须
+              // 先于取消守卫处理：用户停止后仍要把已计量请求的
+              // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
+              if (event.usage != null) {
+                // usage 计量事件（provider 流末尾产出，per-request 隔离）
+                // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+                onUsageEvent?.call(event.usage!, recordInput: true);
+              }
+              if (_isCancelledByUser) return;
+              // Anthropic extended thinking 签名（协议续接用，静默透传）
+              if (event.thinkingSignature != null &&
+                  event.thinkingSignature!.isNotEmpty) {
+                _thinkingSignature = event.thinkingSignature!;
+              }
+              if (event.inputTranscript?.isNotEmpty == true) {
+                controller.add(
+                  InputTranscriptEvent(event.inputTranscript!),
+                );
+              } else if (event.mediaAttachments?.isNotEmpty == true) {
+                _captureMediaAttachments(event.mediaAttachments!);
+                controller.add(
+                  MediaAttachmentsEvent(
+                    event.mediaAttachments!,
+                    contentOrder: event.contentOrder,
+                  ),
+                );
+              } else if (event.isReasoning) {
+                _reasoningBuffer += event.text;
+                // Emit reasoning text as ReasoningEvent so the UI
+                // can stream it in real-time to the reasoning panel.
+                controller.add(ReasoningEvent(event.text));
+              } else if (event.isToolCallEvent) {
+                toolCallRefs.addAll(event.toolCalls!);
+              } else if (event.text.isNotEmpty) {
+                // Accumulate visible content for tool call chain
+                // preservation per DeepSeek spec.
+                _contentBuffer += event.text;
+                controller.add(
+                  TextEvent(event.text, contentOrder: event.contentOrder),
+                );
+              }
+            },
+            onDone: () {
+              _streamSubscription = null;
+              // Capture the provider's final response snapshot on the
+              // success path too. The provider instance is shared across
+              // concurrent conversations (per-conversation services), so
+              // without this snapshot the shared slot may later be
+              // overwritten by another conversation's chunk — mixing up
+              // the raw diagnostics shown for THIS request.
+              _lastResponseData = _provider?.lastResponseData;
+              if (!completer.isCompleted) completer.complete();
+            },
+            onError: (Object error) {
+              _streamSubscription = null;
+              roundStreamError = error;
+              debugPrint('ChatService stream error: $error');
+              _lastResponseData = _provider?.lastResponseData;
+              if (!controller.isClosed) {
+                controller.addError(error);
+              }
+              if (!completer.isCompleted) completer.complete();
+            },
+          );
 
           await completer.future;
           _roundCompleter = null;

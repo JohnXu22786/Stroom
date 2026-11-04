@@ -68,8 +68,8 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           final contentOrder = attachmentOrder is int
               ? attachmentOrder + state.contentOrderOffset
               : e.contentOrder == null
-              ? state.nextContentOrder
-              : e.contentOrder! + state.contentOrderOffset + index;
+                  ? state.nextContentOrder
+                  : e.contentOrder! + state.contentOrderOffset + index;
           if (contentOrder >= state.nextContentOrder) {
             state.nextContentOrder = contentOrder + 1;
           }

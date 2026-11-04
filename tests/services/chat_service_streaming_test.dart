@@ -44,10 +44,10 @@ class CapturingChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'model': 'test-model',
-    'max_tokens': 4096,
-    'temperature': 0.7,
-  };
+        'model': 'test-model',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
 
   @override
   Future<String> chat(
@@ -116,10 +116,10 @@ class _MessageCaptureProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'model': 'test',
-    'max_tokens': 4096,
-    'temperature': 0.7,
-  };
+        'model': 'test',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
 
   @override
   Future<String> chat(
@@ -177,10 +177,10 @@ class _StallingChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'model': 'test-model',
-    'max_tokens': 4096,
-    'temperature': 0.7,
-  };
+        'model': 'test-model',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
 
   @override
   Future<String> chat(

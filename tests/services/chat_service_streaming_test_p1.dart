@@ -37,8 +37,7 @@ void chatServiceStreamingGroup1() {
         );
 
         final events = await service
-            .sendStreamWithTools('Generate audio', history: [])
-            .toList();
+            .sendStreamWithTools('Generate audio', history: []).toList();
 
         final mediaEvent = events.whereType<MediaAttachmentsEvent>().single;
         expect(
@@ -93,9 +92,8 @@ void chatServiceStreamingGroup1() {
           modelConfig: modelConfig,
         );
 
-        final chunks = await service
-            .sendStream('Ask this', history: history)
-            .toList();
+        final chunks =
+            await service.sendStream('Ask this', history: history).toList();
 
         expect(chunks, isEmpty);
         expect(history.single.content, 'Ask this\nspoken words');

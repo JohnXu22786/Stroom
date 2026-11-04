@@ -51,8 +51,8 @@ part 'chat_service_params.dart';
 ///
 /// [recordInput] 为 false 时只应累计 cost，不应写入 input/output tokens
 /// （内部任务请求如压缩/标题：其输入不代表"当前上下文大小"）。
-typedef UsageEventCallback =
-    void Function(Map<String, dynamic> usage, {required bool recordInput});
+typedef UsageEventCallback = void Function(Map<String, dynamic> usage,
+    {required bool recordInput});
 
 class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
@@ -211,10 +211,10 @@ class ChatService {
     ProviderConfigItem? providerConfig,
     String endpointType = 'openai',
     ChatProtocol? protocol,
-  }) : _provider = provider,
-       _modelConfig = modelConfig,
-       _providerConfig = providerConfig,
-       _protocol = protocol ?? createChatProtocol(endpointType);
+  })  : _provider = provider,
+        _modelConfig = modelConfig,
+        _providerConfig = providerConfig,
+        _protocol = protocol ?? createChatProtocol(endpointType);
 
   /// The protocol used by this service instance (for test use only).
   @visibleForTesting
@@ -448,12 +448,14 @@ class ChatService {
     required String paramName,
     required String type,
     required String defaultValue,
-  }) => _coerceCustomParam(paramName, type, defaultValue);
+  }) =>
+      _coerceCustomParam(paramName, type, defaultValue);
 
   /// @visibleForTesting
   static Map<String, dynamic> stripOmittedForTest(
     Map<String, dynamic> params,
-  ) => _stripOmitted(params);
+  ) =>
+      _stripOmitted(params);
 
   /// @visibleForTesting — type marker for the omitted sentinel (for `isA`).
   static Type get omittedSentinelTypeForTest => _OmittedSentinel;
