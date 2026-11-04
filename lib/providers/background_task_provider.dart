@@ -4133,8 +4133,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? taskId,
   }) {
     final id = taskId ?? _uuid.v4();
-    if (state.any((task) => task.id == id)) {
+    final existingTasks = state.where((task) => task.id == id).toList();
+    final removalOwnsId = _activeBatchRemovalAddedGenerations.any(
+      (removal) => removal.containsKey(id),
+    );
+    if (existingTasks.isNotEmpty && !removalOwnsId) {
       throw ArgumentError.value(id, 'taskId', 'already belongs to a live task');
+    }
+    for (final existingTask in existingTasks) {
+      _queueTaskCleanupAfterRemoval(id, existingTask);
     }
     _pendingRestoreTaskRemovals.remove(id);
     _pendingTaskRemovalReconciliations.remove(id);
@@ -4153,7 +4160,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     for (final activeRemoval in _activeBatchRemovalAddedGenerations) {
       activeRemoval[id]?.add(generation);
     }
-    state = [task, ...state];
+    state = [
+      task,
+      ...state.where((existingTask) => existingTask.id != id),
+    ];
     _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
     return id;
