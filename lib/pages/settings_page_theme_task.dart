@@ -9,8 +9,8 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
     return _buildSettingsCard([
       _buildListTile(
         leading: const Icon(Icons.palette_outlined, color: Colors.deepPurple),
-        title: '主题与显示',
-        subtitle: '深色模式、显示语言',
+        title: AppLocalizations.of(context)!.settingsThemeDisplay,
+        subtitle: AppLocalizations.of(context)!.settingsThemeDisplayDescription,
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.push(
@@ -31,8 +31,9 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
   Widget _buildNotificationSettings() {
     return _buildListTile(
       leading: Icon(Icons.notifications_active, color: Colors.blue),
-      title: '任务完成通知',
-      subtitle: '检测通知权限与系统设置，查看通知指南',
+      title: AppLocalizations.of(context)!.settingsTaskNotifications,
+      subtitle:
+          AppLocalizations.of(context)!.settingsTaskNotificationsDescription,
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         Navigator.push(
@@ -46,8 +47,9 @@ extension _SettingsPageThemeTaskExt on _SettingsPageState {
   Widget _buildBackgroundOptimizationSettings() {
     return _buildListTile(
       leading: const Icon(Icons.speed, color: Colors.teal),
-      title: '后台运行优化',
-      subtitle: '检测系统环境与后台服务状态，查看优化教程',
+      title: AppLocalizations.of(context)!.settingsBackgroundOptimization,
+      subtitle: AppLocalizations.of(context)!
+          .settingsBackgroundOptimizationDescription,
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         Navigator.push(

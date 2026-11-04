@@ -15,6 +15,7 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';

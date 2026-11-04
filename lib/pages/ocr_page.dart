@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/ocr_batch_execution.dart';
 import '../models/ocr_output_template.dart';
 import '../providers/provider_config.dart';
@@ -102,10 +103,10 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
 /// a legacy per-model instruction.
 @visibleForTesting
 String? selectedOcrInstructionContent(
-  List<OcrInstruction> instructions,
-  int selectionValue,
-) {
-  final template = ocrOutputTemplateForSelection(selectionValue);
+    List<OcrInstruction> instructions, int selectionValue,
+    {AppLocalizations? strings}) {
+  final template =
+      ocrOutputTemplateForSelection(selectionValue, strings: strings);
   if (template != null) return template.content;
   if (selectionValue >= 0 && selectionValue < instructions.length) {
     return instructions[selectionValue].content;
@@ -115,17 +116,19 @@ String? selectedOcrInstructionContent(
 
 @visibleForTesting
 Map<String, dynamic> applySelectedOcrInstruction(
-  Map<String, dynamic> typeConfig,
-  List<OcrInstruction> instructions,
-  int selectionValue,
-) {
+    Map<String, dynamic> typeConfig,
+    List<OcrInstruction> instructions,
+    int selectionValue,
+    {AppLocalizations? strings}) {
   final selectedContent = selectedOcrInstructionContent(
     instructions,
     selectionValue,
+    strings: strings,
   );
-  final content = ocrOutputTemplateForSelection(selectionValue) == null
-      ? selectedContent?.trim()
-      : selectedContent;
+  final content =
+      ocrOutputTemplateForSelection(selectionValue, strings: strings) == null
+          ? selectedContent?.trim()
+          : selectedContent;
   if (content != null && content.isNotEmpty) {
     typeConfig['userInstruction'] = content;
   } else {
@@ -201,11 +204,12 @@ class OcrPage extends ConsumerStatefulWidget {
 }
 
 class _OcrPageState extends ConsumerState<OcrPage> {
-  static const _retryImagesUnavailableMessage =
-      '原始 OCR 图片缓存不可用，请清空并重新选择全部图片后重试';
-  static const _retryImageCountUnknownMessage =
-      '原始 OCR 图片缓存不可用，且无法确认图片数量。请重置后重新选择本次全部图片';
-  static const _retryImageResetMessage = '已重置原重试输入，请重新选择本次 OCR 的全部图片';
+  String get _retryImagesUnavailableMessage =>
+      AppLocalizations.of(context)!.ocrRetryImagesUnavailable;
+  String get _retryImageCountUnknownMessage =>
+      AppLocalizations.of(context)!.ocrRetryImageCountUnknown;
+  String get _retryImageResetMessage =>
+      AppLocalizations.of(context)!.ocrRetryImageReset;
 
   String get _retryUnavailableMessage => _retryImageCountUnknown
       ? _retryImageCountUnknownMessage
@@ -243,9 +247,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _useOriginalImageQuality = false;
   String? _errorMessageValue;
   String? _lastImageImportErrorMessage;
-  String? get _errorMessage => _errorMessageValue;
+  bool _isRetryImageResetWarning = false;
+  int? _retryImageResetWarningRequiredCount;
+  String? get _errorMessage {
+    if (!_isRetryImageResetWarning) return _errorMessageValue;
+    final requiredCount = _retryImageResetWarningRequiredCount;
+    return requiredCount == null
+        ? _retryImageResetMessage
+        : _retryReselectAllMessage(requiredCount);
+  }
+
   set _errorMessage(String? message) {
     _errorMessageValue = message;
+    _isRetryImageResetWarning = false;
+    _retryImageResetWarningRequiredCount = null;
     _lastImageImportErrorMessage = null;
   }
 
@@ -295,6 +310,30 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<OcrImagePayload> _prepareImagePayload(Uint8List bytes) =>
       widget.testImagePayloadPreparer?.call(bytes) ??
       prepareOcrImagePayload(bytes);
+
+  String _localizedImagePreparationError(FormatException error) {
+    final strings = AppLocalizations.of(context)!;
+    switch (error.message) {
+      case '图片为空，请重新选择。':
+        return strings.ocrImageEmpty;
+      case '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageUnsupportedFormat;
+      case '暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageUnsupportedSpecialFormat;
+      case '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。':
+        return strings.ocrImageDecodeFailed;
+      case '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。':
+        return strings.ocrImageDimensionsTooLarge;
+      case '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。':
+        return strings.ocrImageOrientationPngTooLarge;
+      case '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。':
+        return strings.ocrImageOrientationFailed;
+      case '无法处理图片，请重新选择后重试。':
+        return strings.ocrImagePreparationFailed;
+      default:
+        return error.message;
+    }
+  }
 
   void _beginImageImport() {
     if (!mounted) return;
@@ -347,9 +386,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (widget.retryTaskId != null && widget.retryData == null) {
       _retryImageCountUnknown = true;
       _retryImagesUnavailable = true;
-      _errorMessage = _retryImageCountUnknownMessage;
     }
     unawaited(_applyRetryData());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.retryTaskId != null &&
+        widget.retryData == null &&
+        _retryImageCountUnknown &&
+        !_isRetryImageResetWarning) {
+      _errorMessage = _retryImageCountUnknownMessage;
+    }
   }
 
   @override
@@ -413,7 +462,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         }
         _errorMessage = _retryImageCountUnknown
             ? _retryImageCountUnknownMessage
-            : '原始 OCR 图片缓存无法读取，请清空并重新选择全部图片后重试';
+            : AppLocalizations.of(context)!.ocrRetryImagesUnreadable;
       });
       debugPrint('[OCR] Retry image restore failed: $error');
       return;
@@ -445,7 +494,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (_retryImagesUnavailable) {
         _errorMessage = _retryImageCountUnknown
             ? _retryImageCountUnknownMessage
-            : '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试';
+            : AppLocalizations.of(context)!.ocrRetryImagesMissing;
       }
     });
 
@@ -520,12 +569,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('文字识别'),
+        title: Text(AppLocalizations.of(context)!.ocrPageTitle),
         centerTitle: true,
         actions: [
           PopupMenuButton<bool>(
             key: const Key('ocr_page_settings'),
-            tooltip: '图片画质设置',
+            tooltip: AppLocalizations.of(context)!.ocrImageQualitySettings,
             enabled: !_isProcessing,
             onSelected: (useOriginal) =>
                 setState(() => _useOriginalImageQuality = useOriginal),
@@ -533,24 +582,30 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               CheckedPopupMenuItem<bool>(
                 value: false,
                 checked: !_useOriginalImageQuality,
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('标准画质'),
-                    Text('压缩尺寸，适合多数情况', style: TextStyle(fontSize: 12)),
+                    Text(AppLocalizations.of(context)!.ocrImageQualityStandard),
+                    Text(
+                        AppLocalizations.of(context)!
+                            .ocrImageQualityStandardHint,
+                        style: TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
               CheckedPopupMenuItem<bool>(
                 value: true,
                 checked: _useOriginalImageQuality,
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('原图 / 高细节'),
-                    Text('保留更多细节，图片和请求更大', style: TextStyle(fontSize: 12)),
+                    Text(AppLocalizations.of(context)!.ocrImageQualityOriginal),
+                    Text(
+                        AppLocalizations.of(context)!
+                            .ocrImageQualityOriginalHint,
+                        style: TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -575,7 +630,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 _reorderMode ? Icons.check : Icons.swap_vert,
                 size: 18,
               ),
-              label: Text(_reorderMode ? '完成' : '排序'),
+              label: Text(_reorderMode
+                  ? AppLocalizations.of(context)!.ocrReorderDone
+                  : AppLocalizations.of(context)!.ocrReorderAction),
             ),
           if ((_selectedImages.isNotEmpty || _retryImagesUnavailable) &&
               !_isProcessing &&
@@ -584,7 +641,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               !_reorderMode)
             IconButton(
               key: const Key('ocr_clear_button'),
-              tooltip: '清空',
+              tooltip: AppLocalizations.of(context)!.ocrClearAction,
               onPressed: _ocrStarting ? null : _clearAll,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -674,17 +731,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   String? _modelSelectionMessage(int? selectedIndex) {
     if (_retryModelIdHint != null && _modelSelectionNeedsReselection) {
-      return '旧任务使用模型 $_retryModelIdHint，请重新选择供应商和模型';
+      return AppLocalizations.of(context)!
+          .ocrLegacyModelHint(_retryModelIdHint!);
     }
     if (_legacyModelConfirmationPending) {
       return selectedIndex == null
-          ? '旧重试记录中的模型位置无效，请重新选择'
-          : '旧重试记录只保存了模型位置，请确认当前模型后继续。';
+          ? AppLocalizations.of(context)!.ocrLegacyModelPositionInvalid
+          : AppLocalizations.of(context)!.ocrLegacyModelPositionConfirm;
     }
     if (_modelSelectionNeedsReselection ||
         (_selectedConfigId != null && selectedIndex == null) ||
         (_selectedModelRecordId != null && selectedIndex == null)) {
-      return '原 OCR 供应商或模型已不存在，请重新选择';
+      return AppLocalizations.of(context)!.ocrModelUnavailable;
     }
     return null;
   }
@@ -732,7 +790,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '模型',
+                  AppLocalizations.of(context)!.ocrModelLabel,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -764,7 +822,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text('去配置', style: TextStyle(fontSize: 12)),
+                child: Text(
+                  AppLocalizations.of(context)!.ocrConfigure,
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -803,7 +864,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              '模型',
+              AppLocalizations.of(context)!.ocrModelLabel,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -828,7 +889,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
                     hint: selectedIndex == null
-                        ? Text(_modelSelectionMessage(selectedIndex) ?? '请选择模型')
+                        ? Text(_modelSelectionMessage(selectedIndex) ??
+                            AppLocalizations.of(context)!.ocrSelectModel)
                         : null,
                     isDense: true,
                     isExpanded: true,
@@ -951,7 +1013,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              '指令',
+              AppLocalizations.of(context)!.ocrInstructionLabel,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -1004,22 +1066,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             });
                           },
                     items: [
-                      const DropdownMenuItem<int>(
+                      DropdownMenuItem<int>(
                         value: -1,
                         child: Text(
-                          '默认（仅发送图片）',
+                          AppLocalizations.of(context)!.ocrDefaultImagesOnly,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (_retryInstructionSnapshot != null)
-                        const DropdownMenuItem<int>(
+                        DropdownMenuItem<int>(
                           value: -2,
                           child: Text(
-                            '已保存的指令快照',
+                            AppLocalizations.of(context)!
+                                .ocrSavedInstructionSnapshot,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ...ocrOutputTemplates.map((template) {
+                      ...localizedOcrOutputTemplates(
+                        AppLocalizations.of(context)!,
+                      ).map((template) {
                         return DropdownMenuItem<int>(
                           value: template.selectionValue,
                           child: Text(
@@ -1054,7 +1119,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   size: 18,
                   color: cs.onSurfaceVariant,
                 ),
-                tooltip: '管理识别指令',
+                tooltip: AppLocalizations.of(context)!.ocrManageInstructions,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(
                   minWidth: 40,
@@ -1129,7 +1194,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             Row(
               children: [
                 Text(
-                  '批量方式',
+                  AppLocalizations.of(context)!.ocrBatchMode,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -1141,14 +1206,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   child: SegmentedButton<OcrBatchMode>(
                     key: const Key('ocr_batch_mode'),
                     showSelectedIcon: false,
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: OcrBatchMode.joint,
-                        label: Text('合并识别'),
+                        label: Text(
+                            AppLocalizations.of(context)!.ocrMergeRecognition),
                       ),
                       ButtonSegment(
                         value: OcrBatchMode.perImage,
-                        label: Text('逐张识别'),
+                        label: Text(AppLocalizations.of(context)!
+                            .ocrRecognizeEachImage),
                       ),
                     ],
                     selected: {_batchMode},
@@ -1168,16 +1235,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   PopupMenuButton<int>(
                     key: const Key('ocr_per_image_concurrency'),
                     enabled: !_ocrStarting && !_isProcessing,
-                    tooltip: '最多 2 张同时请求',
+                    tooltip: AppLocalizations.of(context)!.ocrMaxConcurrency,
                     onSelected: (concurrency) =>
                         setState(() => _perImageConcurrency = concurrency),
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 1, child: Text('1 张同时请求')),
-                      PopupMenuItem(value: 2, child: Text('2 张同时请求')),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                          value: 1,
+                          child: Text(AppLocalizations.of(context)!
+                              .ocrConcurrencyOption(1))),
+                      PopupMenuItem(
+                          value: 2,
+                          child: Text(AppLocalizations.of(context)!
+                              .ocrConcurrencyOption(2))),
                     ],
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('并发 $_perImageConcurrency'),
+                      child: Text(AppLocalizations.of(context)!
+                          .ocrConcurrencyStatus(_perImageConcurrency)),
                     ),
                   ),
               ],
@@ -1185,7 +1259,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             if (_hasReusablePageResults) ...[
               const SizedBox(height: 6),
               Text(
-                '已完成的页面会保留，重试时只会提交未完成的页面。',
+                AppLocalizations.of(context)!.ocrRetryCompletedHint,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
             ],
@@ -1214,9 +1288,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ),
                     ),
                     icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                    label: const Text(
-                      '拍照识别',
-                      style: TextStyle(
+                    label: Text(
+                      AppLocalizations.of(context)!.ocrTakePhoto,
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1237,9 +1311,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ),
                     ),
                     icon: const Icon(Icons.photo_library_outlined, size: 20),
-                    label: const Text(
-                      '相册选择',
-                      style: TextStyle(
+                    label: Text(
+                      AppLocalizations.of(context)!.ocrChooseFromAlbum,
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1266,7 +1340,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无选中图片',
+            AppLocalizations.of(context)!.ocrNoImagesSelected,
             style: TextStyle(
               fontSize: 16,
               color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -1274,7 +1348,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持拍照或从相册批量选择图片进行识别',
+            AppLocalizations.of(context)!.ocrSelectImagesHint,
             style: TextStyle(
               fontSize: 13,
               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -1522,7 +1596,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   String _retryReselectAllMessage(int requiredCount) =>
-      '请重新选择全部 $requiredCount 张图片后重试';
+      AppLocalizations.of(context)!.ocrRechooseRequiredImages(requiredCount);
 
   void _updateRetryImageReselectionState() {
     final requiredCount = _requiredRetryImageCount;
@@ -1535,6 +1609,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       } else {
         _retryImagesUnavailable = true;
         _errorMessage = _retryReselectAllMessage(requiredCount);
+        _isRetryImageResetWarning = true;
+        _retryImageResetWarningRequiredCount = requiredCount;
       }
     } else if (!_retryImagesUnavailable) {
       _errorMessage = _retryImageCountMismatch
@@ -1622,7 +1698,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '图片 ${index + 1}',
+                      AppLocalizations.of(context)!.ocrImageLabel(index + 1),
                       style: TextStyle(
                         fontSize: 14,
                         color: cs.onSurface,
@@ -1676,9 +1752,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: const Text(
-                        '查看详细错误',
-                        style: TextStyle(fontSize: 12),
+                      label: Text(
+                        AppLocalizations.of(context)!.ocrViewErrorDetails,
+                        style: const TextStyle(fontSize: 12),
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
                       style: TextButton.styleFrom(
@@ -1731,7 +1807,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        '旧重试记录只保存了模型位置，请确认当前模型后继续。',
+                        AppLocalizations.of(context)!
+                            .ocrLegacyModelPositionConfirm,
                         style: TextStyle(fontSize: 12, color: cs.error),
                       ),
                     ),
@@ -1746,7 +1823,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           _errorMessage = null;
                         });
                       },
-                      child: const Text('确认此模型'),
+                      child:
+                          Text(AppLocalizations.of(context)!.ocrConfirmModel),
                     ),
                   ],
                 ),
@@ -1756,7 +1834,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  '已选 ${_selectedImages.length} 张图片',
+                  AppLocalizations.of(context)!
+                      .ocrSelectedImagesCount(_selectedImages.length),
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ),
@@ -1786,16 +1865,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
                   _ocrStarting
-                      ? '准备图片中...'
+                      ? AppLocalizations.of(context)!.ocrPreparingImages
                       : _isProcessing
                           ? _isPreparingRetryData
-                              ? '保存重试图片...'
-                              : '识别中...'
+                              ? AppLocalizations.of(context)!
+                                  .ocrSavingRetryImages
+                              : AppLocalizations.of(context)!.ocrRecognizing
                           : _isRetryImagesLoading
-                              ? '读取重试图片...'
+                              ? AppLocalizations.of(context)!
+                                  .ocrReadingRetryImages
                               : _isImageImportPending
-                                  ? '正在导入图片...'
-                                  : '开始识别',
+                                  ? AppLocalizations.of(context)!
+                                      .ocrImportingImages
+                                  : AppLocalizations.of(context)!
+                                      .ocrStartRecognition,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1830,12 +1913,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               Icon(Icons.folder_outlined, size: 16, color: cs.primary),
               const SizedBox(width: 8),
               Text(
-                '保存至',
+                AppLocalizations.of(context)!.ocrSaveTo,
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
-                _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                _saveFolder.isEmpty
+                    ? AppLocalizations.of(context)!.ocrRootDirectory
+                    : _saveFolder,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.primary,
@@ -1859,7 +1944,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       context,
       currentFolder: _saveFolder,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: AppLocalizations.of(context)!.ocrChooseSaveFolder,
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -1904,7 +1989,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                '选择图片来源',
+                AppLocalizations.of(context)!.ocrChooseImageSource,
                 style: Theme.of(context)
                     .textTheme
                     .titleLarge
@@ -1915,8 +2000,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 children: [
                   ChoiceCard(
                     icon: Icons.collections_bookmark,
-                    title: '从应用相册选择',
-                    subtitle: '从应用内已保存的图片中选择',
+                    title: AppLocalizations.of(context)!.ocrChooseAppAlbum,
+                    subtitle:
+                        AppLocalizations.of(context)!.ocrAppAlbumDescription,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1926,8 +2012,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.photo_library,
-                    title: '从系统相册选择',
-                    subtitle: '浏览并选择设备中的图片',
+                    title: AppLocalizations.of(context)!.ocrChooseSystemAlbum,
+                    subtitle:
+                        AppLocalizations.of(context)!.ocrSystemAlbumDescription,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1990,7 +2077,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _retryImageResetMessage ||
+        if (_isRetryImageResetWarning ||
             _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -2002,7 +2089,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         setState(_clearOcrErrorDetails);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e is FormatException ? e.message : '拍照失败: $e'),
+            content: Text(e is FormatException
+                ? _localizedImagePreparationError(e)
+                : AppLocalizations.of(context)!.ocrTakePhotoFailed(e)),
           ),
         );
       }
@@ -2072,7 +2161,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             SelectedImage.fromPayload(payload: payload, sourceName: file.name),
           );
         } on FormatException catch (error) {
-          firstError ??= error.message;
+          firstError ??= _localizedImagePreparationError(error);
         } catch (error) {
           firstFileFailure ??= error;
         }
@@ -2099,14 +2188,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             .showSnackBar(SnackBar(content: Text(firstError)));
       }
       if (firstFileFailure != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('选择图片失败: $firstFileFailure')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .ocrChooseImageFailed(firstFileFailure))));
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
         setState(_clearOcrErrorDetails);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .ocrChooseImageFailed(e.toString()))));
       }
     } finally {
       if (!galleryCommit.isCompleted) {
@@ -2154,15 +2245,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           loadedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已加载 $loadedCount 张图片'),
+            content: Text(
+                AppLocalizations.of(context)!.ocrImagesLoaded(loadedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .ocrChooseImageFailed(e.toString()))));
       }
     } finally {
       final commit = importCommit;
@@ -2191,7 +2284,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _retryImageResetMessage ||
+        if (_isRetryImageResetWarning ||
             _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -2201,7 +2294,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return true;
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
-        final message = e is FormatException ? e.message : '处理图片失败: $e';
+        final message = e is FormatException
+            ? _localizedImagePreparationError(e)
+            : AppLocalizations.of(context)!.ocrProcessImageFailed(e.toString());
         setState(() {
           _clearOcrErrorDetails();
           _errorMessage = message;
@@ -2262,7 +2357,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         MaterialPageRoute(
           builder: (_) => ExtendedImageEditorPage(
             imageBytes: currentImage.bytes,
-            fileName: '图片_${editedIndex + 1}.${currentImage.format}',
+            fileName: AppLocalizations.of(context)!
+                .ocrImageFileName(currentImage.format, editedIndex + 1),
           ),
         ),
       );
@@ -2315,8 +2411,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     } on FormatException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_localizedImagePreparationError(error))),
+        );
       }
     }
   }
@@ -2346,22 +2443,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         key: const Key('ocr_clear_confirmation_dialog'),
-        title: Text(imageCountUnknown ? '无法确认原图片数量' : '确认清空'),
+        title: Text(imageCountUnknown
+            ? AppLocalizations.of(context)!.ocrUnknownSourceImageCount
+            : AppLocalizations.of(context)!.ocrConfirmClear),
         content: Text(
           imageCountUnknown
-              ? '原始 OCR 图片缓存不可用，且图片数量无法恢复。确认后会清空旧重试状态，请重新选择本次 OCR 的全部图片。'
-              : '确定清空已选择的 OCR 图片吗？',
+              ? AppLocalizations.of(context)!.ocrRetryUnavailableConfirmClear
+              : AppLocalizations.of(context)!.ocrConfirmClearSelected,
         ),
         actions: [
           TextButton(
             key: const Key('ocr_cancel_clear'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.ocrCancel),
           ),
           FilledButton(
             key: const Key('ocr_confirm_clear'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(imageCountUnknown ? '确认重置并重新选择' : '确认清空'),
+            child: Text(imageCountUnknown
+                ? AppLocalizations.of(context)!.ocrConfirmResetAndReselect
+                : AppLocalizations.of(context)!.ocrConfirmClear),
           ),
         ],
       ),
@@ -2388,6 +2489,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           : _requiredRetryImageCount == null
               ? null
               : _retryReselectAllMessage(_requiredRetryImageCount!);
+      _isRetryImageResetWarning = true;
+      _retryImageResetWarningRequiredCount =
+          imageCountUnknown ? null : _requiredRetryImageCount;
     });
   }
 
@@ -2427,7 +2531,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       } catch (error) {
         if (mounted) {
-          setState(() => _errorMessage = '无法检查 OCR 请求，请检查模型参数');
+          setState(() => _errorMessage =
+              AppLocalizations.of(context)!.ocrRequestCheckFailed);
         }
         debugPrint(
           '[OCR] Request size check failed: ' + error.runtimeType.toString(),
@@ -2447,7 +2552,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
       if (!mounted) return null;
       if (switchToPerImage != true) {
-        setState(() => _errorMessage = '本次识别已取消；请调整供应商/模型请求大小或图片画质后重试。');
+        setState(() => _errorMessage =
+            AppLocalizations.of(context)!.ocrCancelledAdjustAndRetry);
         return null;
       }
       setState(() {
@@ -2493,21 +2599,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('OCR 请求大小超过配置值'),
+        title: Text(AppLocalizations.of(context)!.ocrRequestSizeExceededTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '当前 JSON 请求约为 '
-              '${ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes)} MiB，'
-              '超过 ${ocrRequestSizeBudgetMib(budgetBytes)} MiB 配置值。',
-            ),
+            Text(AppLocalizations.of(context)!.ocrRequestSizeExceededBody(
+              ocrRequestSizeBudgetMib(budgetBytes),
+              ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes),
+            )),
             const SizedBox(height: 12),
-            const Text(
-              '可在供应商默认设置或模型覆盖值中调整请求大小，也可以切换图片画质。'
-              '更改画质后，请清空并重新导入图片。',
-            ),
+            Text(AppLocalizations.of(context)!.ocrRequestSizeHelp),
           ],
         ),
         actions: [
@@ -2517,11 +2619,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-              child: const Text('改用逐张识别'),
+              child: Text(AppLocalizations.of(context)!.ocrUsePerImageMode),
             ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('知道了'),
+            child: Text(AppLocalizations.of(context)!.ocrGotIt),
           ),
         ],
       ),
@@ -2531,11 +2633,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _startOcr() async {
     if (_ocrStarting || _isProcessing) return;
     if (_isImageImportPending) {
-      setState(() => _errorMessage = '请等待图片导入完成后再开始识别');
+      setState(
+          () => _errorMessage = AppLocalizations.of(context)!.ocrWaitForImport);
       return;
     }
     if (_isRetryImagesLoading) {
-      setState(() => _errorMessage = '正在读取重试图片，请稍候');
+      setState(() =>
+          _errorMessage = AppLocalizations.of(context)!.ocrWaitForRetryImages);
       return;
     }
     if (_retryImageCountMismatch) {
@@ -2553,21 +2657,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final modelOptions = _getOcrModelOptions(ref);
     if (modelOptions.isEmpty) {
       setState(() {
-        _errorMessage = '请先在设置中配置 OCR 供应商和模型';
+        _errorMessage = AppLocalizations.of(context)!.ocrConfigureProviderModel;
       });
       return;
     }
     final modelIndex = _selectedModelOptionIndex(modelOptions);
     if (modelIndex == null) {
       setState(() {
-        _errorMessage =
-            _modelSelectionMessage(modelIndex) ?? '请重新选择 OCR 供应商和模型';
+        _errorMessage = _modelSelectionMessage(modelIndex) ??
+            AppLocalizations.of(context)!.ocrReselectProviderModel;
       });
       return;
     }
     if (_legacyModelConfirmationPending) {
       setState(() {
-        _errorMessage = '请先确认旧重试记录中的 OCR 模型';
+        _errorMessage = AppLocalizations.of(context)!.ocrConfirmLegacyModel;
       });
       return;
     }
@@ -2608,7 +2712,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (widget.retryData == null && widget.retryTaskId == null) {
           setState(() {
             _ocrStarting = false;
-            _errorMessage = error.message;
+            _errorMessage = _localizedImagePreparationError(error);
             _captureImagePreparationErrorDetails(
               option: modelOptions[modelIndex],
               images: sourceImages,
@@ -2625,7 +2729,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             _isRetryImageReselectionPending = false;
             _errorMessage = retryImageCount == 0
                 ? _retryImageCountUnknownMessage
-                : '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试';
+                : AppLocalizations.of(context)!.ocrRetryImagesMissing;
             _captureImagePreparationErrorDetails(
               option: modelOptions[modelIndex],
               images: sourceImages,
@@ -2639,7 +2743,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (mounted) {
         setState(() {
           _ocrStarting = false;
-          _errorMessage = '处理 OCR 图片失败，请重试';
+          _errorMessage = AppLocalizations.of(context)!.ocrProcessingOcrFailed;
           _captureImagePreparationErrorDetails(
             option: modelOptions[modelIndex],
             images: sourceImages,
@@ -2663,7 +2767,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (selectionChanged) {
       setState(() {
         _ocrStarting = false;
-        _errorMessage = '图片列表已变化，请重新开始识别。';
+        _errorMessage = AppLocalizations.of(context)!.ocrImageListChanged;
       });
       return;
     }
@@ -2674,8 +2778,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         setState(() {
           _ocrStarting = false;
           _errorMessage = requestModelOptions.isEmpty
-              ? '请先在设置中配置 OCR 供应商和模型'
-              : _modelSelectionMessage(requestModelIndex) ?? '请重新选择 OCR 供应商和模型';
+              ? AppLocalizations.of(context)!.ocrConfigureProviderModel
+              : _modelSelectionMessage(requestModelIndex) ??
+                  AppLocalizations.of(context)!.ocrReselectProviderModel;
         });
       }
       return;
@@ -2724,7 +2829,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             _ocrStarting = false;
             _isProcessing = false;
             _isPreparingRetryData = false;
-            _errorMessage = '读取识别指令失败，请重试';
+            _errorMessage =
+                AppLocalizations.of(context)!.ocrReadInstructionFailed;
           });
         }
         debugPrint('[OCR] Failed to restore retry instruction: $error');
@@ -2741,8 +2847,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final instructions = ref.read(ocrInstructionsProvider);
     final selectedInstructionIndex = _instructionSelectionValue(instructions);
     final retryInstructionSnapshot = _retryInstructionSnapshot;
+    final strings = AppLocalizations.of(context)!;
     final instructionContent = retryInstructionSnapshot ??
-        selectedOcrInstructionContent(instructions, selectedInstructionIndex);
+        selectedOcrInstructionContent(
+          instructions,
+          selectedInstructionIndex,
+          strings: strings,
+        );
     if (retryInstructionSnapshot != null) {
       final content = retryInstructionSnapshot.trim();
       if (content.isEmpty) {
@@ -2755,6 +2866,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         effectiveConfig.typeConfig,
         instructions,
         selectedInstructionIndex,
+        strings: strings,
       );
     }
 
@@ -2965,7 +3077,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
                     const SizedBox(width: 8),
                     Text(
-                      '错误详情',
+                      AppLocalizations.of(context)!.ocrErrorDetails,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -2989,7 +3101,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         children: [
                           if (_lastRawRequest != null) ...[
                             _buildJsonBlock(
-                              '请求 (Request)',
+                              AppLocalizations.of(context)!.ocrRequestHeading,
                               _lastRawRequest,
                               isDark,
                             ),
@@ -2997,17 +3109,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           ],
                           if (_lastRawResponse != null)
                             _buildJsonBlock(
-                              '响应 (Response)',
+                              AppLocalizations.of(context)!.ocrResponseHeading,
                               _lastRawResponse,
                               isDark,
                             ),
                         ],
                       )
-                    : const Padding(
+                    : Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(
                           child: Text(
-                            '无详细数据',
+                            AppLocalizations.of(context)!.ocrNoDetails,
                             style: TextStyle(
                               color: Colors.grey,
                               fontStyle: FontStyle.italic,
@@ -3126,7 +3238,10 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
             },
             itemBuilder: (context, index) {
               if (index < 0 || index >= widget.images.length) {
-                return const Center(child: Text('Invalid index'));
+                return Center(
+                  child: Text(
+                      AppLocalizations.of(context)!.ocrPreviewInvalidIndex),
+                );
               }
               final image = widget.images[index];
               return GestureDetector(
@@ -3148,7 +3263,7 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                     ),
                     loadStateChanged: (state) {
                       if (state.extendedImageLoadState == LoadState.failed) {
-                        return const Center(
+                        return Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -3159,7 +3274,8 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                               ),
                               SizedBox(height: 8),
                               Text(
-                                '无法加载图片',
+                                AppLocalizations.of(context)!
+                                    .ocrImageLoadFailed,
                                 style: TextStyle(color: Colors.white54),
                               ),
                             ],
@@ -3204,7 +3320,7 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.crop, color: Colors.white, size: 24),
-                    tooltip: '裁剪',
+                    tooltip: AppLocalizations.of(context)!.ocrCrop,
                     onPressed: () => _popWithAction('crop'),
                   ),
                 ),
@@ -3216,7 +3332,7 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.edit, color: Colors.white, size: 24),
-                    tooltip: '编辑',
+                    tooltip: AppLocalizations.of(context)!.ocrEdit,
                     onPressed: () => _popWithAction('edit'),
                   ),
                 ),

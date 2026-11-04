@@ -1,3 +1,4 @@
+import '../../l10n/app_localizations.dart';
 import 'block_type_definition.dart';
 import 'io_type.dart';
 import 'task_flow_definition.dart';
@@ -49,3 +50,39 @@ const taskFlowTemplates = [
     blockTypes: [BlockType.ocr, BlockType.tts],
   ),
 ];
+
+/// Returns the bundled templates in the selected app language.
+List<TaskFlowTemplate> localizedTaskFlowTemplates(AppLocalizations strings) => [
+      _localizedTemplate(
+        taskFlowTemplates[0],
+        strings.taskFlowTemplateRecordingName,
+        strings.taskFlowTemplateRecordingDescription,
+        strings.taskFlowTemplateRecordingRequirements,
+      ),
+      _localizedTemplate(
+        taskFlowTemplates[1],
+        strings.taskFlowTemplateImageTextName,
+        strings.taskFlowTemplateImageTextDescription,
+        strings.taskFlowTemplateImageTextRequirements,
+      ),
+      _localizedTemplate(
+        taskFlowTemplates[2],
+        strings.taskFlowTemplateReadImageName,
+        strings.taskFlowTemplateReadImageDescription,
+        strings.taskFlowTemplateReadImageRequirements,
+      ),
+    ];
+
+TaskFlowTemplate _localizedTemplate(
+  TaskFlowTemplate original,
+  String name,
+  String description,
+  String requirements,
+) =>
+    TaskFlowTemplate(
+      name: name,
+      description: description,
+      requirements: requirements,
+      inputType: original.inputType,
+      blockTypes: original.blockTypes,
+    );

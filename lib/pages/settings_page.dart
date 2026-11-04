@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/built_in_assistants.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
@@ -47,6 +48,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
@@ -69,29 +71,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               scrolledUnderElevation: 0,
             );
           },
-          child: const Text('设置'),
+          child: Text(strings.settingsPageTitle),
         ),
       ),
       body: ListView(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('常规设置'),
+          _buildSectionHeader(strings.settingsSectionGeneral),
           _buildGeneralSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('供应商设置'),
+          _buildSectionHeader(strings.settingsSectionProviders),
           _buildProviderSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('系统助手'),
+          _buildSectionHeader(strings.settingsSectionSystemAssistant),
           _buildSystemAssistantSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('上下文管理'),
+          _buildSectionHeader(strings.settingsSectionContextManagement),
           _buildContextManagementSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('管理'),
+          _buildSectionHeader(strings.settingsSectionManagement),
           _buildManagementSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('关于'),
+          _buildSectionHeader(strings.settingsSectionAbout),
           _buildAboutSection(),
           const SizedBox(height: 40),
         ],

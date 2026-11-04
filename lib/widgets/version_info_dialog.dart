@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/app_version.dart';
 
 /// 版本信息面板：点击设置页「关于」区域的版本卡片后弹出。
@@ -24,6 +25,7 @@ class VersionInfoDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     final notes = releaseNotes ?? appReleaseNotes;
     final time = releaseTime ?? appReleaseTimeFormatted;
 
@@ -32,7 +34,7 @@ class VersionInfoDialog extends StatelessWidget {
         children: [
           Icon(Icons.auto_awesome, color: cs.primary),
           const SizedBox(width: 8),
-          const Text('版本信息'),
+          Text(strings.versionInfoTitle),
         ],
       ),
       content: SingleChildScrollView(
@@ -40,18 +42,20 @@ class VersionInfoDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildInfoRow(cs, '版本号', version ?? appVersion),
+            _buildInfoRow(
+                cs, strings.versionNumberLabel, version ?? appVersion),
             const SizedBox(height: 12),
             _buildInfoRow(
               cs,
-              '发布时间',
+              strings.versionReleaseTimeLabel,
               // CD 构建写入的时间一律是 UTC（ISO 8601 `Z`），展示时标注
               // UTC，避免用户误以为是本地时间；本地构建无时间，显示回退文案。
-              time.isEmpty ? '本地构建' : '$time UTC',
+              time.isEmpty ? strings.versionLocalBuild : '$time UTC',
             ),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('更新内容', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(strings.versionReleaseNotesLabel,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(notes),
             ],
@@ -61,7 +65,7 @@ class VersionInfoDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          child: Text(strings.versionClose),
         ),
       ],
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
@@ -31,10 +32,25 @@ Widget createTestApp({
           return notifier;
         }),
     ],
-    child: const MaterialApp(
+    child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AssistantSelectionPage(),
     ),
   );
+}
+
+Widget _localizedAssistantSelectionApp() => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const AssistantSelectionPage(),
+    );
+
+BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
+  final context = tester.element(find.byType(AssistantSelectionPage));
+  return localizedBuiltInPrompts(AppLocalizations.of(context)!).first;
 }
 
 void main() {
@@ -529,7 +545,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show the first built-in prompt's name
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
@@ -569,7 +585,7 @@ void main() {
 
       // The prompt code must NOT be visible on the card; only the
       // description is shown by default
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       expect(find.text(firstPrompt.prompt), findsNothing);
       expect(find.text(firstPrompt.description), findsOneWidget);
 
@@ -605,7 +621,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the first card — this must NOT import directly
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -648,7 +664,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open the detail panel of the first prompt
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -677,7 +693,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the 添加 button on the first card (not the card itself)
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.widgetWithText(FilledButton, '添加').first);
       await tester.pumpAndSettle();
 
@@ -702,7 +718,7 @@ void main() {
       // Open the market dialog and the detail panel of the first prompt
       await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -1174,7 +1190,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1216,7 +1232,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1285,7 +1301,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1339,7 +1355,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1393,7 +1409,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1473,7 +1489,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1513,7 +1529,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();

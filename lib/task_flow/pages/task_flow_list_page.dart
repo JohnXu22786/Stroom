@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../pages/unified_task_list/task_utils.dart';
+import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_templates.dart';
@@ -20,14 +22,18 @@ class TaskFlowListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final flows = ref.watch(taskFlowListProvider);
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('任务流'), centerTitle: true, actions: [
-        IconButton(
-            onPressed: () => _showTemplates(context),
-            tooltip: '示例模板',
-            icon: const Icon(Icons.auto_awesome_outlined)),
-      ]),
+      appBar: AppBar(
+          title: Text(strings.taskFlowPageTitle),
+          centerTitle: true,
+          actions: [
+            IconButton(
+                onPressed: () => _showTemplates(context),
+                tooltip: strings.taskFlowSampleTemplatesTooltip,
+                icon: const Icon(Icons.auto_awesome_outlined)),
+          ]),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewFlow(context, ref),
         child: const Icon(Icons.add),
@@ -50,7 +56,7 @@ class TaskFlowListPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无流程，点击 + 创建',
+            AppLocalizations.of(context)!.taskFlowEmptyState,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -61,7 +67,8 @@ class TaskFlowListPage extends ConsumerWidget {
           FilledButton.icon(
               onPressed: () => _showTemplates(context),
               icon: const Icon(Icons.auto_awesome_outlined),
-              label: const Text('从示例模板开始')),
+              label: Text(
+                  AppLocalizations.of(context)!.taskFlowStartFromTemplate)),
         ],
       ),
     );
@@ -94,9 +101,20 @@ class TaskFlowListPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) {
-    final defs = flow.blocks
-        .map((b) => b.getDefinition()?.label ?? b.typeKey.name)
-        .join(' → ');
+    final strings = AppLocalizations.of(context)!;
+    final defs = flow.blocks.map((block) {
+      final definition = block.getDefinition();
+      if (definition == null) return block.typeKey.name;
+      return switch (block.typeKey) {
+        BlockType.ocr => strings.taskFlowBlockOcr,
+        BlockType.asr => strings.taskFlowBlockAsr,
+        BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
+        BlockType.catcatch => strings.taskFlowBlockCatCatch,
+        BlockType.tts => strings.taskFlowBlockTts,
+        BlockType.chat => strings.taskFlowBlockChat,
+        BlockType.custom => definition.label,
+      };
+    }).join(' → ');
 
     return Card(
       elevation: 0,
@@ -167,7 +185,7 @@ class TaskFlowListPage extends ConsumerWidget {
                   ),
                   IconButton(
                       icon: const Icon(Icons.more_vert),
-                      tooltip: '流程操作',
+                      tooltip: AppLocalizations.of(context)!.taskFlowActions,
                       onPressed: () => _showContextMenu(context, ref, flow)),
                 ],
               ),
@@ -192,7 +210,8 @@ class TaskFlowListPage extends ConsumerWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${flow.blocks.length} 个功能块',
+                          AppLocalizations.of(context)!
+                              .taskFlowBlockCount(flow.blocks.length),
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
@@ -259,7 +278,7 @@ class TaskFlowListPage extends ConsumerWidget {
             const SizedBox(height: 20),
             ListTile(
               leading: const Icon(Icons.edit, size: 22),
-              title: const Text('编辑'),
+              title: Text(AppLocalizations.of(context)!.taskFlowEdit),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.push(
@@ -272,13 +291,15 @@ class TaskFlowListPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.content_copy, size: 22),
-              title: const Text('复制'),
+              title: Text(AppLocalizations.of(context)!.taskFlowCopy),
               onTap: () {
                 Navigator.pop(ctx);
                 ref.read(taskFlowListProvider.notifier).duplicateFlow(flow.id);
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(const SnackBar(content: Text('已复制')));
+                ).showSnackBar(SnackBar(
+                    content:
+                        Text(AppLocalizations.of(context)!.taskFlowCopied)));
               },
             ),
             ListTile(
@@ -287,18 +308,22 @@ class TaskFlowListPage extends ConsumerWidget {
                 size: 22,
                 color: Colors.red,
               ),
-              title: const Text('删除', style: TextStyle(color: Colors.red)),
+              title: Text(AppLocalizations.of(context)!.taskFlowDelete,
+                  style: const TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 showDialog(
                   context: context,
                   builder: (dCtx) => AlertDialog(
-                    title: const Text('确认删除'),
-                    content: Text('确定要删除任务流「${flow.name}」吗？'),
+                    title: Text(
+                        AppLocalizations.of(context)!.taskFlowConfirmDelete),
+                    content: Text(AppLocalizations.of(context)!
+                        .taskFlowConfirmDeleteBody(flow.name)),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx),
-                        child: const Text('取消'),
+                        child: Text(AppLocalizations.of(context)!
+                            .systemAssistantCancel),
                       ),
                       TextButton(
                         onPressed: () {
@@ -307,8 +332,8 @@ class TaskFlowListPage extends ConsumerWidget {
                               .read(taskFlowListProvider.notifier)
                               .removeFlow(flow.id);
                         },
-                        child: const Text(
-                          '删除',
+                        child: Text(
+                          AppLocalizations.of(context)!.taskFlowDelete,
                           style: TextStyle(color: Colors.red),
                         ),
                       ),
@@ -343,6 +368,8 @@ class TaskFlowListPage extends ConsumerWidget {
       builder: (sheetContext) {
         final colors = Theme.of(sheetContext).colorScheme;
         final height = MediaQuery.sizeOf(sheetContext).height;
+        final strings = AppLocalizations.of(sheetContext)!;
+        final templates = localizedTaskFlowTemplates(strings);
 
         return SafeArea(
           child: SizedBox(
@@ -370,7 +397,7 @@ class TaskFlowListPage extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '选择示例模板',
+                              strings.taskFlowChooseTemplate,
                               style: Theme.of(sheetContext)
                                   .textTheme
                                   .titleLarge
@@ -378,7 +405,7 @@ class TaskFlowListPage extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '选择一个接近需求的流程，后续还可以继续调整。',
+                              strings.taskFlowTemplateIntroduction,
                               style: Theme.of(sheetContext)
                                   .textTheme
                                   .bodySmall
@@ -389,14 +416,14 @@ class TaskFlowListPage extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${taskFlowTemplates.length} 个模板',
+                        strings.taskFlowTemplateCount(templates.length),
                         style: Theme.of(sheetContext)
                             .textTheme
                             .labelMedium
                             ?.copyWith(color: colors.onSurfaceVariant),
                       ),
                       IconButton(
-                        tooltip: '关闭',
+                        tooltip: strings.builtInPromptClose,
                         onPressed: () => Navigator.of(sheetContext).pop(),
                         icon: const Icon(Icons.close),
                       ),
@@ -406,10 +433,10 @@ class TaskFlowListPage extends ConsumerWidget {
                   Expanded(
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: taskFlowTemplates.length,
+                      itemCount: templates.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (_, index) {
-                        final template = taskFlowTemplates[index];
+                        final template = templates[index];
                         return _buildTemplateCard(
                           sheetContext,
                           template,
@@ -441,7 +468,7 @@ class TaskFlowListPage extends ConsumerWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '模板会以待配置的草稿打开；选择模型和助手后再保存。',
+                            strings.taskFlowTemplateDraftHint,
                             style: Theme.of(sheetContext)
                                 .textTheme
                                 .bodySmall
@@ -539,7 +566,7 @@ class TaskFlowListPage extends ConsumerWidget {
         ),
         trailing: FilledButton.tonal(
           onPressed: onPressed,
-          child: const Text('使用'),
+          child: Text(AppLocalizations.of(context)!.taskFlowUseTemplate),
         ),
       ),
     );

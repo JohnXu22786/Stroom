@@ -9,9 +9,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -20,7 +22,10 @@ import 'package:stroom/providers/update_provider.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
-Widget _buildSettingsTestApp() {
+Widget _buildSettingsTestApp({
+  Locale locale = const Locale('zh', 'CN'),
+  UpdateNotifier? updateNotifier,
+}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
@@ -30,10 +35,34 @@ Widget _buildSettingsTestApp() {
         notifier.load();
         return notifier;
       }),
-      updateProvider.overrideWith((ref) => UpdateNotifier()),
+      updateProvider.overrideWith((ref) => updateNotifier ?? UpdateNotifier()),
     ],
-    child: const MaterialApp(home: SettingsPage()),
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const SettingsPage(),
+    ),
   );
+}
+
+Future<void> _scrollSettingsToEnd(WidgetTester tester) async {
+  await tester.drag(find.byType(ListView).first, const Offset(0, -10000));
+  await tester.pumpAndSettle();
+}
+
+class _FixedErrorUpdateNotifier extends UpdateNotifier {
+  _FixedErrorUpdateNotifier(String error) {
+    state = UpdateState(error: error);
+  }
+
+  @override
+  Future<void> checkForUpdate({bool silent = false}) async {}
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -111,6 +140,72 @@ String _llmEntryWithModels() {
 }
 
 void main() {
+  testWidgets('settings page headings follow the selected locale',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('en', 'US')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
+    await tester.ensureVisible(find.text('About'));
+    expect(find.text('About'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('zh', 'CN')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('常规设置'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
+    await tester.ensureVisible(find.text('关于'));
+    expect(find.text('关于'), findsOneWidget);
+  });
+
+  testWidgets('update check errors follow the selected locale', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    Future<void> verifyError(Locale locale, String expectedText) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(
+          locale: locale,
+          updateNotifier: _FixedErrorUpdateNotifier('网络错误: connection failed'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
+      final checkForUpdates = find.text(
+        locale.languageCode == 'en' ? 'Check for Updates' : '检查更新',
+      );
+      await tester.ensureVisible(checkForUpdates);
+      await tester.tap(checkForUpdates);
+      await tester.pumpAndSettle();
+      expect(find.text(expectedText), findsOneWidget);
+    }
+
+    await verifyError(
+      const Locale('en', 'US'),
+      'Network error: connection failed',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await verifyError(const Locale('zh', 'CN'), '网络错误：connection failed');
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // From settings_page_asr_test.dart
   // ─────────────────────────────────────────────────────────────────────
@@ -452,6 +547,7 @@ void main() {
       // The whole about header card is tappable — tapping the app name
       // text (not just the logo icon) must open the dialog.
       // Scroll the last section of the long ListView into view first.
+      await _scrollSettingsToEnd(tester);
       await tester.ensureVisible(find.text('Stroom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stroom'));
@@ -468,6 +564,36 @@ void main() {
       // The card keeps its compact #635 shape: the "点击查看版本信息"
       // hint row from #582 must NOT be re-added (no size regression).
       expect(find.text('点击查看版本信息'), findsNothing);
+    });
+
+    testWidgets('version info dialog labels follow the selected locale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(locale: const Locale('en', 'US')),
+      );
+      await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
+      await tester.ensureVisible(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stroom'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Version information'), findsOneWidget);
+      expect(find.text('Version'), findsOneWidget);
+      expect(find.text('Release time'), findsOneWidget);
+      expect(find.text('Local build'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('version info dialog closes via 关闭 button', (tester) async {

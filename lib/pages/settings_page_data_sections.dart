@@ -16,8 +16,8 @@ extension _SettingsPageDataSectionsExt on _SettingsPageState {
   Widget _buildBackupSection() {
     return _buildListTile(
       leading: const Icon(Icons.backup, color: Colors.teal),
-      title: '数据备份与恢复',
-      subtitle: '导出或导入应用数据',
+      title: AppLocalizations.of(context)!.settingsBackupRestore,
+      subtitle: AppLocalizations.of(context)!.settingsBackupRestoreDescription,
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         Navigator.push(
@@ -31,8 +31,8 @@ extension _SettingsPageDataSectionsExt on _SettingsPageState {
   Widget _buildBrowserDataSection() {
     return _buildListTile(
       leading: const Icon(Icons.cookie, color: Colors.orange),
-      title: 'Cookies与浏览器数据',
-      subtitle: '管理持久化的Cookies和浏览器存储数据',
+      title: AppLocalizations.of(context)!.settingsCookies,
+      subtitle: AppLocalizations.of(context)!.settingsCookiesDescription,
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         Navigator.push(
@@ -46,8 +46,8 @@ extension _SettingsPageDataSectionsExt on _SettingsPageState {
   Widget _buildLogSection() {
     return _buildListTile(
       leading: const Icon(Icons.article, color: Colors.blueGrey),
-      title: '应用日志',
-      subtitle: '查看应用运行日志',
+      title: AppLocalizations.of(context)!.settingsAppLogs,
+      subtitle: AppLocalizations.of(context)!.settingsAppLogsDescription,
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         Navigator.push(
