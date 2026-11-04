@@ -16964,6 +16964,55 @@ void main() {
     );
 
     test(
+      'legacy OCR migration preserves a receipt context instruction around echoed keys',
+      () {
+        const apiKey = 'opaque-user-secret-87';
+        const instruction =
+            'This is a receipt. Please identify the vendor using $apiKey';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-receipt-context-instruction-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'This is a receipt. Please identify the vendor using [redacted]',
+        );
+        expect(
+          persisted,
+          contains(
+            'This is a receipt. Please identify the vendor using [redacted]',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves polite review instructions around echoed keys',
       () {
         const apiKey = 'opaque-user-secret-87';

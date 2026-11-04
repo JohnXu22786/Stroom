@@ -2177,6 +2177,11 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeReceiptContextAction = RegExp(
+    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
   final safeKeepLead = RegExp(
     r'^\s*(?:please\s+)?keep\b.*\[redacted\]',
     caseSensitive: false,
@@ -2192,6 +2197,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeImageContext ||
+      safeReceiptContextAction ||
       safeKeepLead;
 }
 
