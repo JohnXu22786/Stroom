@@ -17911,6 +17911,132 @@ void main() {
     });
 
     test(
+      'batch removal of a running OCR task does not send a failure notification',
+      () async {
+        const taskId = 'running-ocr-batch-removal-no-notification';
+        SharedPreferences.setMockInitialValues({
+          'notifications_enabled': true,
+        });
+        final notificationService = NotificationService();
+        var failureNotifications = 0;
+        notificationService.onInAppNotification = (payload) {
+          if (payload.taskId == taskId &&
+              payload.type == NotificationType.taskFailed) {
+            failureNotifications++;
+          }
+        };
+        final notifier = BackgroundTaskNotifier();
+        final writeStarted = Completer<void>();
+        final resumeWrite = Completer<void>();
+        var writeCount = 0;
+        Future<bool>? removal;
+
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Running OCR task',
+            taskId: taskId,
+          );
+          await notifier.pendingPersistence;
+          var cancellationCalls = 0;
+          notifier.registerCancellation(taskId, () => cancellationCalls++);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            if (writeCount++ == 0) {
+              writeStarted.complete();
+              await resumeWrite.future;
+            }
+          };
+
+          removal = notifier.removeTasksPersisted([taskId]);
+          await writeStarted.future;
+          notifier.failTask(taskId, error: 'Canceled by removal');
+          expect(failureNotifications, 0);
+
+          resumeWrite.complete();
+          expect(await removal, isTrue);
+          await notifier.pendingPersistence;
+          await Future<void>.delayed(Duration.zero);
+
+          expect(cancellationCalls, 1);
+          expect(notifier.taskById(taskId), isNull);
+          expect(failureNotifications, 0);
+        } finally {
+          if (!resumeWrite.isCompleted) resumeWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (removal != null) await removal;
+          notificationService.onInAppNotification = null;
+          SharedPreferences.setMockInitialValues({});
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'overlapping batch removals retain notification suppression until both settle',
+      () async {
+        const taskId = 'overlapping-running-ocr-batch-removal';
+        SharedPreferences.setMockInitialValues({
+          'notifications_enabled': true,
+        });
+        final notificationService = NotificationService();
+        var failureNotifications = 0;
+        notificationService.onInAppNotification = (payload) {
+          if (payload.taskId == taskId &&
+              payload.type == NotificationType.taskFailed) {
+            failureNotifications++;
+          }
+        };
+        final notifier = BackgroundTaskNotifier();
+        final secondWriteStarted = Completer<void>();
+        final resumeSecondWrite = Completer<void>();
+        var writeCount = 0;
+        Future<bool>? firstRemoval;
+        Future<bool>? secondRemoval;
+
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Running OCR task',
+            taskId: taskId,
+          );
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            if (writeCount++ == 0) {
+              throw StateError('simulated first batch removal write failure');
+            }
+            if (writeCount == 2) {
+              secondWriteStarted.complete();
+              await resumeSecondWrite.future;
+            }
+          };
+
+          firstRemoval = notifier.removeTasksPersisted([taskId]);
+          secondRemoval = notifier.removeTasksPersisted([taskId]);
+          await secondWriteStarted.future;
+          notifier.failTask(taskId, error: 'Canceled by removal');
+          expect(failureNotifications, 0);
+
+          resumeSecondWrite.complete();
+          expect(await firstRemoval, isFalse);
+          expect(await secondRemoval, isTrue);
+          await notifier.pendingPersistence;
+          expect(notifier.taskById(taskId), isNull);
+          expect(failureNotifications, 0);
+        } finally {
+          if (!resumeSecondWrite.isCompleted) resumeSecondWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (firstRemoval != null) await firstRemoval;
+          if (secondRemoval != null) await secondRemoval;
+          notificationService.onInAppNotification = null;
+          SharedPreferences.setMockInitialValues({});
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'legacy OCR task and step errors hide unclassified provider echoes',
       () {
         const providerEcho = 'HTTP 400: invoice for Jane Doe';

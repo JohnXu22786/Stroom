@@ -4453,7 +4453,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       for (final id in removedIds) id: <Object>{},
     };
     _activeBatchRemovalAddedGenerations.add(addedTaskGenerations);
+    final suppressedNotificationGenerations = <Object>[];
     try {
+      for (final id in removedIds) {
+        final task = taskById(id);
+        if (task == null) continue;
+        final generation = BackgroundTask._generationTokenFor(task);
+        suppressedNotificationGenerations.add(generation);
+        _taskNotificationSuppressionGenerationCounts.update(
+          generation,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
       for (final id in removedIds) {
         cancelTask(id);
       }
@@ -4533,6 +4545,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
     } finally {
       _activeBatchRemovalAddedGenerations.remove(addedTaskGenerations);
+      for (final generation in suppressedNotificationGenerations) {
+        final count = _taskNotificationSuppressionGenerationCounts[generation];
+        if (count == 1) {
+          _taskNotificationSuppressionGenerationCounts.remove(generation);
+        } else if (count != null) {
+          _taskNotificationSuppressionGenerationCounts[generation] = count - 1;
+        }
+      }
     }
   }
 
@@ -4822,7 +4842,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
-        updatedTask != null) {
+        updatedTask != null &&
+        !_taskNotificationSuppressionGenerationCounts.containsKey(
+          BackgroundTask._generationTokenFor(updatedTask!),
+        )) {
       final notificationError = updatedTask!.type == BackgroundTaskType.ocr
           ? updatedTask!.error
           : error;
@@ -4941,6 +4964,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final Map<String, List<BackgroundTask>> _pendingTaskRemovalCleanupTasks =
       <String, List<BackgroundTask>>{};
   final List<Map<String, Set<Object>>> _activeBatchRemovalAddedGenerations = [];
+  final Map<Object, int> _taskNotificationSuppressionGenerationCounts =
+      <Object, int>{};
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
