@@ -349,7 +349,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // conversation's data and overwriting it would corrupt the display.
     final pageOwnedStream = _streamingMsgId == aiMsgId &&
         ref.read(activeConversationIdProvider) == effectiveConvId;
-    if (pageOwnedStream) {
+    // Stop clears the page-owned id immediately so an aborted manager result
+    // cannot overwrite the live partial response with an incomplete result.
+    // Once the real manager returns its persisted cancellation message, apply
+    // that result too; otherwise edit/regenerate leaves _history stale after
+    // the stop and subsequent actions cannot find the newly saved message.
+    final finalizedStoppedStream = _streamingMsgId == null &&
+        result.assistantMessage?.isError == true &&
+        ref.read(activeConversationIdProvider) == effectiveConvId;
+    final shouldApplyStreamResult = pageOwnedStream || finalizedStoppedStream;
+    if (shouldApplyStreamResult) {
       _history.clear();
       _history.addAll(result.history);
       await _removeOrphanMessagesFromController();
@@ -360,7 +369,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // (_handleStreamCompletion, guard: `if (!_isStreamingActive) return;`)
     // sees false and skips — avoiding a wasteful DB reload + visual flicker
     // in the normal (non-re-entry) completion path.
-    if (pageOwnedStream) {
+    if (shouldApplyStreamResult) {
       _streamingMsgId = null;
       _isStreamingActive = false;
     }
@@ -407,7 +416,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     } catch (_) {}
 
     // Update the controller: replace streaming placeholder with final message
-    if (pageOwnedStream &&
+    if (shouldApplyStreamResult &&
         mounted &&
         ref.read(activeConversationIdProvider) == effectiveConvId) {
       final finalMsg = result.assistantMessage;
@@ -500,12 +509,13 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final stoppedMsgId = _streamingMsgId;
     final convId = ref.read(activeConversationIdProvider);
     _isStreamingActive = false;
+    _streamingMsgId = null;
     try {
       ref.read(chatStreamManagerProvider).cancel(convId);
-      // Keep the stream id until _startStreaming receives the manager's
-      // finalized result. That path replaces the placeholder with the
-      // partial message and its interruption ErrorBlock, and synchronizes
-      // the complete persisted history back into the page.
+      // Render the partial response and interruption error immediately. The
+      // manager finalizes persistence independently; clearing the page-owned
+      // id leaves the normal history reload to read that saved result instead
+      // of replacing this live message with an incomplete result object.
       if (stoppedMsgId != null && convId != null && _controller != null) {
         final partial =
             ref.read(chatStreamManagerProvider).fullReplyFor(convId);
