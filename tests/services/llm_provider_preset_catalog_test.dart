@@ -86,6 +86,17 @@ void main() {
       'helyxai',
       'heroku',
       'hyperbolic',
+      'inception',
+      'inference-net',
+      'kenari',
+      'kilo-gateway',
+      'lambda-ai',
+      'liquid',
+      'literouter',
+      'llamagate',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -173,6 +184,17 @@ void main() {
         'helyxai': 'https://helyxai.space/v1/chat/completions',
         'heroku': 'https://us.inference.heroku.com/v1/chat/completions',
         'hyperbolic': 'https://api.hyperbolic.xyz/v1/chat/completions',
+        'inception': 'https://api.inceptionlabs.ai/v1/chat/completions',
+        'inference-net': 'https://api.inference.net/v1/chat/completions',
+        'kenari': 'https://kenari.id/v1/chat/completions',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/chat/completions',
+        'lambda-ai': 'https://api.lambda.ai/v1/chat/completions',
+        'liquid': 'https://inference.liquid.ai/v1/chat/completions',
+        'literouter': 'https://api.literouter.com/v1/chat/completions',
+        'llamagate': 'https://llamagate.ai/v1/chat/completions',
+        'llm-kiwi': 'https://api.llm.kiwi/v1/chat/completions',
+        'llm7': 'https://api.llm7.io/v1/chat/completions',
+        'llmgateway': 'https://api.llmgateway.io/v1/chat/completions',
       },
     );
     expect(
@@ -186,6 +208,56 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset('byteplus')?.modelsUrl,
       'https://ark.ap-southeast.bytepluses.com/api/v3/models',
+    );
+    expect(
+      {
+        for (final id in [
+          'kenari',
+          'kilo-gateway',
+          'liquid',
+          'literouter',
+          'llm-kiwi',
+          'llm7',
+          'llmgateway',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'kenari': 'https://kenari.id/v1/models',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/models',
+        'liquid': 'https://inference.liquid.ai/v1/models',
+        'literouter': 'https://api.literouter.com/v1/models',
+        'llm-kiwi': 'https://api.llm.kiwi/v1/models',
+        'llm7': 'https://api.llm7.io/v1/models',
+        'llmgateway': 'https://api.llmgateway.io/v1/models',
+      },
+    );
+    expect(
+      {
+        for (final id in ['inception', 'inference-net', 'lambda-ai', 'llamagate'])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'inception': null,
+        'inference-net': null,
+        'lambda-ai': null,
+        'llamagate': null,
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('inception')!.fallbackModels.map(
+            (model) => [model.id, model.capabilities],
+          ),
+      [
+        [
+          'mercury-2',
+          {'contextLength': 128000, 'maxOutputTokens': 50000},
+        ],
+        [
+          'mercury-2.5',
+          {'contextLength': 260000, 'maxOutputTokens': 65536},
+        ],
+      ],
     );
     expect(
       {
@@ -599,6 +671,111 @@ void main() {
       'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning',
     );
   });
+
+  test(
+    'M41 candidates match pinned registry endpoints, models, and deferrals',
+    () {
+      const expectedModelsUrls = {
+        'inception': null,
+        'inference-net': null,
+        'kenari': 'https://kenari.id/v1/models',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/models',
+        'lambda-ai': null,
+        'liquid': 'https://inference.liquid.ai/v1/models',
+        'literouter': 'https://api.literouter.com/v1/models',
+        'llamagate': null,
+        'llm-kiwi': 'https://api.llm.kiwi/v1/models',
+        'llm7': 'https://api.llm7.io/v1/models',
+        'llmgateway': 'https://api.llmgateway.io/v1/models',
+      };
+      for (final entry in expectedModelsUrls.entries) {
+        final preset = findLlmOpenAiProviderPreset(entry.key)!;
+        expect(preset.modelsUrl, entry.value, reason: entry.key);
+        expect(preset.authType, 'api_key', reason: entry.key);
+        expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+        expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+        expect(
+          preset.defaultApiProtocol,
+          'openai.chat_completions',
+          reason: entry.key,
+        );
+      }
+      expect(
+        {
+          for (final id in [
+            'inception',
+            'inference-net',
+            'kenari',
+            'kilo-gateway',
+            'lambda-ai',
+            'liquid',
+            'literouter',
+            'llamagate',
+            'llm-kiwi',
+            'llm7',
+            'llmgateway',
+          ])
+            id: findLlmOpenAiProviderPreset(id)!.fallbackModels
+                .map((model) => model.id)
+                .toList(),
+        },
+        {
+          'inception': ['mercury-2', 'mercury-2.5'],
+          'inference-net': [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'deepseek-ai/DeepSeek-R1',
+            'Qwen/Qwen2.5-72B-Instruct',
+          ],
+          'kenari': <String>[],
+          'kilo-gateway': [
+            'kilo-auto/frontier',
+            'kilo-auto/balanced',
+            'kilo-auto/free',
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'minimax/minimax-m2.5:free',
+            'arcee-ai/trinity-large-preview:free',
+          ],
+          'lambda-ai': [
+            'deepseek-r1-671b',
+            'llama3.3-70b-instruct-fp8',
+            'qwen25-coder-32b-instruct',
+          ],
+          'liquid': ['liquid-lfm-40b'],
+          'literouter': <String>[],
+          'llamagate': [
+            'qwen2.5-coder-7b',
+            'deepseek-coder-6.7b',
+            'qwen3-vl-8b',
+          ],
+          'llm-kiwi': ['auto', 'hrLLM'],
+          'llm7': [
+            'gpt-4o-mini-2024-07-18',
+            'gpt-4.1-nano-2025-04-14',
+            'deepseek-r1-0528',
+            'qwen2.5-coder-32b-instruct',
+          ],
+          'llmgateway': <String>[],
+        },
+      );
+      expect(
+        findLlmOpenAiProviderPreset('inception')!.fallbackModels
+            .map((model) => model.capabilities),
+        [
+          {'contextLength': 128000, 'maxOutputTokens': 50000},
+          {'contextLength': 260000, 'maxOutputTokens': 65536},
+        ],
+      );
+      // Deferred: open-sse/config/providers/registry/kimi/index.ts:4-15 uses
+      // executor "moonshot" and forces streaming, outside the shared default
+      // OpenAI Chat Completions preset path.
+      // Deferred: open-sse/config/providers/registry/kimi/coding-apikey/index.ts:4-9
+      // inherits the Claude format, Anthropic endpoint, and x-api-key header.
+      // The separate Kimi Code OAuth/session mode still needs its later approved
+      // auth/provider unit; this API-key deferral does not cover that work.
+      expect(findLlmOpenAiProviderPreset('kimi'), isNull);
+      expect(findLlmOpenAiProviderPreset('kimi-coding-apikey'), isNull);
+    },
+  );
 
   test('M40 presets match pinned runtime endpoints, discovery, and models', () {
     const expectedModelsUrls = {
@@ -1051,9 +1228,10 @@ void main() {
     expect(findLlmOpenAiProviderPreset('bai'), isNull);
     // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
     expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
-    // The eligible M38 registry entries use distinct chat URLs, so no aliases
-    // in this cohort need to collapse to a single user-facing choice.
-  });
+      // The eligible M38 registry entries use distinct chat URLs, so no aliases
+      // in this cohort need to collapse to a single user-facing choice.
+    },
+  );
 
   test('each M37 eligible preset saves and reloads source defaults', () async {
     final preferences = _MemoryLlmAccountPreferences();
@@ -1384,6 +1562,69 @@ void main() {
         models.single.upstreamModelId, 'accounts/fireworks/models/test-model');
   });
 
+  test('M41 discoverable presets refresh from their pinned URL with key auth',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        final providerId = [
+          'kenari',
+          'kilo-gateway',
+          'liquid',
+          'literouter',
+          'llm-kiwi',
+          'llm7',
+          'llmgateway',
+        ][requests.length - 1];
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': '$providerId-model'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json']
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = [
+      'kenari',
+      'kilo-gateway',
+      'liquid',
+      'literouter',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm41-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(models.single.upstreamModelId, '$presetId-model');
+    }
+    expect(requests, hasLength(presetIds.length));
+  });
+
   test(
     'model protocol override remains independent of preset supplier default',
     () {
@@ -1559,6 +1800,84 @@ void main() {
       expect(restored.models.single.capabilities, model.capabilities);
       final group = LlmModelGroup(
         id: 'm40-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+    }
+  });
+
+  test('each M41 preset persists and routes through Chat and Task Flow',
+      () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const presetIds = [
+      'inception',
+      'inference-net',
+      'kenari',
+      'kilo-gateway',
+      'lambda-ai',
+      'liquid',
+      'literouter',
+      'llamagate',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallbackModel = preset.fallbackModels.firstOrNull;
+      final model = LlmUpstreamModel(
+        id: 'm41-$presetId:${fallbackModel?.id ?? 'user-model'}',
+        upstreamModelId: fallbackModel?.id ?? 'user-model',
+        displayName: fallbackModel?.displayName ?? 'User model',
+        capabilities: fallbackModel?.capabilities ?? const {},
+        config: const {'apiProtocolOverride': 'anthropic.messages'},
+      );
+      final account = LlmAccount(
+        id: 'm41-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig({
+          'accountOwnedConfig': 'preserved',
+        }),
+        models: [model],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility', reason: presetId);
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+      expect(
+        restored.models.single.config['apiProtocolOverride'],
+        'anthropic.messages',
+      );
+
+      final group = LlmModelGroup(
+        id: 'm41-$presetId-group',
         displayName: preset.displayName,
         members: [
           LlmModelGroupMember(

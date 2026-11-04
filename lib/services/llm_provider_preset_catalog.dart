@@ -1803,6 +1803,147 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           displayName: 'Hermes 3 70B'),
     ],
   ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/inception/index.ts:4-22 uses the default OpenAI executor.
+  LlmProviderPreset(
+    id: 'inception',
+    displayName: 'Inception',
+    baseUrl: 'https://api.inceptionlabs.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'mercury-2',
+        displayName: 'Mercury 2',
+        capabilities: {'contextLength': 128000, 'maxOutputTokens': 50000},
+      ),
+      LlmProviderPresetModel(
+        'mercury-2.5',
+        displayName: 'Mercury 2.5',
+        capabilities: {'contextLength': 260000, 'maxOutputTokens': 65536},
+      ),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/inference-net/index.ts:5-12 uses the default OpenAI executor.
+  LlmProviderPreset(
+    id: 'inference-net',
+    displayName: 'Inference.net',
+    baseUrl: 'https://api.inference.net/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('meta-llama/Llama-3.3-70B-Instruct'),
+      LlmProviderPresetModel('deepseek-ai/DeepSeek-R1'),
+      LlmProviderPresetModel('Qwen/Qwen2.5-72B-Instruct'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/kenari/index.ts:4-13 declares direct /models discovery.
+  LlmProviderPreset(
+    id: 'kenari',
+    displayName: 'Kenari',
+    baseUrl: 'https://kenari.id/v1/chat/completions',
+    modelsUrl: 'https://kenari.id/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/kilo-gateway/index.ts:9-25 uses bearer auth and direct discovery.
+  LlmProviderPreset(
+    id: 'kilo-gateway',
+    displayName: 'Kilo Gateway',
+    baseUrl: 'https://api.kilo.ai/api/gateway/chat/completions',
+    modelsUrl: 'https://api.kilo.ai/api/gateway/models',
+    fallbackModels: [
+      LlmProviderPresetModel('kilo-auto/frontier',
+          displayName: 'Kilo Auto Frontier'),
+      LlmProviderPresetModel('kilo-auto/balanced',
+          displayName: 'Kilo Auto Balanced'),
+      LlmProviderPresetModel('kilo-auto/free', displayName: 'Kilo Auto Free'),
+      LlmProviderPresetModel('nvidia/nemotron-3-super-120b-a12b:free',
+          displayName: 'Nemotron 3 Super 120B (Free)'),
+      LlmProviderPresetModel('minimax/minimax-m2.5:free',
+          displayName: 'MiniMax M2.5 (Free)'),
+      LlmProviderPresetModel('arcee-ai/trinity-large-preview:free',
+          displayName: 'Trinity Large Preview (Free)'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/lambda-ai/index.ts:5-12 uses the default OpenAI executor.
+  LlmProviderPreset(
+    id: 'lambda-ai',
+    displayName: 'Lambda AI',
+    baseUrl: 'https://api.lambda.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('deepseek-r1-671b'),
+      LlmProviderPresetModel('llama3.3-70b-instruct-fp8'),
+      LlmProviderPresetModel('qwen25-coder-32b-instruct'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/liquid/index.ts:13-21 declares the current inference host.
+  LlmProviderPreset(
+    id: 'liquid',
+    displayName: 'Liquid AI',
+    baseUrl: 'https://inference.liquid.ai/v1/chat/completions',
+    modelsUrl: 'https://inference.liquid.ai/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('liquid-lfm-40b', displayName: 'Liquid LFM 40B'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/literouter/index.ts:5-10 uses the shared OpenAI-compatible builder.
+  LlmProviderPreset(
+    id: 'literouter',
+    displayName: 'LiteRouter',
+    baseUrl: 'https://api.literouter.com/v1/chat/completions',
+    modelsUrl: 'https://api.literouter.com/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/llamagate/index.ts:5-12 uses the default OpenAI executor.
+  LlmProviderPreset(
+    id: 'llamagate',
+    displayName: 'LlamaGate',
+    baseUrl: 'https://llamagate.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('qwen2.5-coder-7b'),
+      LlmProviderPresetModel('deepseek-coder-6.7b'),
+      LlmProviderPresetModel('qwen3-vl-8b'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/llm-kiwi/index.ts:5-13 exposes discovery and a small fallback.
+  LlmProviderPreset(
+    id: 'llm-kiwi',
+    displayName: 'LLM.Kiwi',
+    baseUrl: 'https://api.llm.kiwi/v1/chat/completions',
+    modelsUrl: 'https://api.llm.kiwi/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('auto', displayName: 'Auto'),
+      LlmProviderPresetModel('hrLLM'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/llm7/index.ts:4-21 uses the default OpenAI executor and discovery.
+  LlmProviderPreset(
+    id: 'llm7',
+    displayName: 'LLM7.io',
+    baseUrl: 'https://api.llm7.io/v1/chat/completions',
+    modelsUrl: 'https://api.llm7.io/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('gpt-4o-mini-2024-07-18',
+          displayName: 'GPT-4o mini (LLM7)'),
+      LlmProviderPresetModel('gpt-4.1-nano-2025-04-14',
+          displayName: 'GPT-4.1 nano (LLM7)'),
+      LlmProviderPresetModel('deepseek-r1-0528',
+          displayName: 'DeepSeek R1 (LLM7)'),
+      LlmProviderPresetModel('qwen2.5-coder-32b-instruct',
+          displayName: 'Qwen2.5 Coder 32B (LLM7)'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: open-sse/config/providers/
+  // registry/llmgateway/index.ts:5-10 uses the shared OpenAI-compatible builder.
+  LlmProviderPreset(
+    id: 'llmgateway',
+    displayName: 'LLM Gateway',
+    baseUrl: 'https://api.llmgateway.io/v1/chat/completions',
+    modelsUrl: 'https://api.llmgateway.io/v1/models',
+  ),
 ];
 
 const _stepfunFallbackModels = <LlmProviderPresetModel>[
