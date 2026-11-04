@@ -4802,6 +4802,8 @@ void main() {
                   'data': [
                     {'id': modelId},
                     if (connectorType == 'openai-api')
+                      {'id': 'gpt-realtime-2.1'},
+                    if (connectorType == 'openai-api')
                       {
                         'id': 'catalog-no-tools',
                         'capabilities': {'tools': false},
@@ -4831,6 +4833,12 @@ void main() {
 
           expect(models.first.capabilities['tools'], isTrue, reason: modelId);
           if (connectorType == 'openai-api') {
+            final realtimeModel = models.singleWhere(
+              (model) => model.upstreamModelId == 'gpt-realtime-2.1',
+            );
+            expect(realtimeModel.capabilities['audio'], isTrue);
+            expect(realtimeModel.capabilities['tools'], isTrue);
+            expect(models.first.capabilities.containsKey('audio'), isFalse);
             expect(models.last.capabilities['tools'], isFalse);
           }
         }

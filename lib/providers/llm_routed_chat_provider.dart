@@ -428,6 +428,25 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       this.selectedAccountId = null;
       try {
         final runtime = await _runtime;
+        final realtimeConnectorTypes = await _realtimeConnectorTypesForRequest(
+          runtime,
+        );
+        final realtimeProviderId = realtimeConnectorTypes == null
+            ? null
+            : realtimeConnectorTypes.contains('openai-api')
+                ? 'openai'
+                : 'xai';
+        if (realtimeProviderId != null) {
+          AiGatewayRealtimeProtocol.buildConversationEvents(
+            [
+              if (system != null && system.isNotEmpty)
+                {'role': 'system', 'content': system},
+              ...messages,
+            ],
+            providerId: realtimeProviderId,
+            tools: _effectiveTools(tools, extraParams),
+          );
+        }
         await runtime.executeForGroupId<void>(
           groupId: groupId,
           localModelId: localModelId,
@@ -435,13 +454,38 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             ..._requiredCapabilities(messages, tools, extraParams: extraParams),
             'chat',
             'streaming',
+            if (realtimeConnectorTypes != null) 'audio',
           },
-          supportedConnectorTypes: _supportedConnectorTypes,
+          supportedConnectorTypes:
+              realtimeConnectorTypes ?? _supportedConnectorTypes,
           conversationId: conversationId,
           selectedAccountId: selectedAccountId,
           request: (candidate, progress) async {
             if (requestCancelToken.isCancelled) {
               throw requestCancelToken.cancelError!;
+            }
+            final realtimeProviderId =
+                AiGatewayRealtimeProtocol.providerForModel(
+              candidate.account.connectorType,
+              candidate.upstreamModelId,
+            );
+            if (realtimeProviderId != null) {
+              await _streamRealtimeConversation(
+                runtime: runtime,
+                account: candidate.account,
+                providerId: realtimeProviderId,
+                modelId: candidate.upstreamModelId,
+                system: system,
+                messages: messages,
+                tools: tools,
+                extraParams: extraParams,
+                cancelToken: requestCancelToken,
+                markRequestSent: progress.markRequestSent,
+                emit: (event) {
+                  if (!controller.isClosed) controller.add(event);
+                },
+              );
+              return;
             }
             final protocolId = _protocolFor(
               candidate.account,
@@ -559,8 +603,216 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return controller.stream;
   }
 
+  Future<void> _streamRealtimeConversation({
+    required AiGatewayFacade runtime,
+    required AiGatewayAccount account,
+    required String providerId,
+    required String modelId,
+    required String? system,
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>>? tools,
+    required Map<String, dynamic>? extraParams,
+    required CancelToken cancelToken,
+    required Future<void> Function() markRequestSent,
+    required void Function(AIStreamEvent event) emit,
+  }) async {
+    final requestTools = _effectiveTools(tools, extraParams);
+    final conversationMessages = [
+      if (system != null && system.isNotEmpty)
+        {'role': 'system', 'content': system},
+      ...messages,
+    ];
+    final events = AiGatewayRealtimeProtocol.buildConversationEvents(
+      conversationMessages,
+      providerId: providerId,
+      tools: requestTools,
+    );
+    final executor = runtime.executor;
+    if (executor is! AiGatewayRealtimeExecutor) {
+      throw StateError('Realtime transport is unavailable.');
+    }
+    final session =
+        await (executor as AiGatewayRealtimeExecutor).connectRealtime(
+      account: account,
+      modelId: modelId,
+      cancelToken: cancelToken,
+    );
+    final returnedEvents = <Map<String, dynamic>>[];
+    final audio = BytesBuilder(copy: false);
+    final functionCallsByItemId = <String, (String callId, String name)>{};
+    var sawTextDelta = false;
+    var completed = false;
+    var sessionClosed = false;
+    try {
+      cancelToken.whenCancel.then((_) {
+        if (sessionClosed) return;
+        try {
+          session.cancelResponse();
+        } catch (_) {
+          // A socket can close while the cancel token is being delivered.
+        }
+        sessionClosed = true;
+        unawaited(session.close());
+      });
+      for (final event in events) {
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        session.sendEvent(event);
+      }
+      await markRequestSent();
+      await for (final event in session.events.timeout(
+        const Duration(seconds: 60),
+        onTimeout: (sink) => sink.addError(
+          TimeoutException(
+            'Realtime response timed out.',
+            const Duration(seconds: 60),
+          ),
+        ),
+      )) {
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        returnedEvents.add(Map<String, dynamic>.from(event.raw));
+        if (event.type == 'response.output_item.added' ||
+            event.type == 'response.output_item.done') {
+          final item = event.raw['item'];
+          if (item is Map &&
+              item['type'] == 'function_call' &&
+              item['id'] is String &&
+              item['call_id'] is String &&
+              item['name'] is String) {
+            functionCallsByItemId[item['id'] as String] = (
+              item['call_id'] as String,
+              item['name'] as String,
+            );
+          }
+        }
+        if (event.kind == AiGatewayRealtimeEventKind.error) {
+          _lastResponseData = {
+            'events': returnedEvents,
+            'error': Map<String, dynamic>.from(event.raw),
+          };
+          final error = _realtimeProviderError(event.raw);
+          final code = error?['code'] ?? error?['type'];
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
+            code: code is String ? code : null,
+          );
+        }
+        if (event.kind == AiGatewayRealtimeEventKind.inputTranscript &&
+            event.type.endsWith('.completed') &&
+            event.text?.isNotEmpty == true) {
+          emit(AIStreamEvent('', inputTranscript: event.text));
+        } else if (event.kind == AiGatewayRealtimeEventKind.textDelta &&
+            event.text?.isNotEmpty == true) {
+          sawTextDelta = true;
+          emit(AIStreamEvent(event.text!));
+        } else if (event.kind == AiGatewayRealtimeEventKind.reasoningDelta &&
+            event.text?.isNotEmpty == true) {
+          emit(AIStreamEvent(event.text!, isReasoning: true));
+        } else if (event.kind == AiGatewayRealtimeEventKind.audioDelta &&
+            event.audioBase64?.isNotEmpty == true) {
+          audio.add(base64Decode(event.audioBase64!));
+        } else if (event.kind == AiGatewayRealtimeEventKind.toolCall) {
+          final itemId = event.raw['item_id'];
+          final itemDetails =
+              itemId is String ? functionCallsByItemId[itemId] : null;
+          final callId = event.raw['call_id'] ?? itemDetails?.$1;
+          final name = event.raw['name'] ?? itemDetails?.$2;
+          final arguments = event.raw['arguments'];
+          if (callId is! String || name is! String || arguments is! String) {
+            throw const FormatException(
+              'Realtime function call event is incomplete.',
+            );
+          }
+          emit(
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': callId,
+                  if (event.raw['item_id'] is String)
+                    'item_id': event.raw['item_id'],
+                  'type': 'function',
+                  'function': {'name': name, 'arguments': arguments},
+                },
+              ],
+            ),
+          );
+        } else if (event.kind == AiGatewayRealtimeEventKind.textComplete &&
+            !sawTextDelta &&
+            event.text?.isNotEmpty == true &&
+            !event.type.contains('transcription')) {
+          emit(AIStreamEvent(event.text!));
+        }
+        if (event.type == 'response.done') {
+          completed = true;
+          break;
+        }
+      }
+      if (!completed && !cancelToken.isCancelled) {
+        throw StateError('Realtime socket closed before response.done.');
+      }
+      _lastResponseData = {
+        'events': returnedEvents,
+        'inputTranscripts': [
+          for (final event in returnedEvents)
+            if (event['type'] ==
+                    'conversation.item.input_audio_transcription.completed' &&
+                event['transcript'] is String)
+              event['transcript'],
+        ],
+      };
+      if (audio.length > 0) {
+        final attachment = await _saveMediaAttachment(
+          'audio',
+          'audio/wav',
+          _pcm16Mono24KhzWave(audio.takeBytes()),
+          '$providerId.realtime',
+          {
+            'provider': providerId,
+            'model': modelId,
+            'eventIds': [
+              for (final event in returnedEvents)
+                if (event['event_id'] is String) event['event_id'],
+            ],
+          },
+        );
+        emit(AIStreamEvent('', mediaAttachments: [attachment]));
+      }
+    } finally {
+      sessionClosed = true;
+      await session.close();
+    }
+  }
+
   Set<String> get _supportedConnectorTypes =>
       llmRoutedChatSupportedConnectorTypesForModelOverride(apiProtocolOverride);
+
+  Future<Set<String>?> _realtimeConnectorTypesForRequest(
+    AiGatewayFacade runtime,
+  ) async {
+    final modelIds = <String>{localModelId};
+    try {
+      final groups = await runtime.accountManagement.listModelGroups();
+      for (final group in groups.where((group) => group.id == groupId)) {
+        for (final member in group.members) {
+          if (member.localModelId == localModelId ||
+              (member.localModelId == null && group.id == localModelId)) {
+            modelIds.add(member.upstreamModelId);
+          }
+        }
+      }
+    } catch (_) {
+      // The account router remains authoritative if group metadata is
+      // temporarily unavailable; direct model IDs still support detection.
+    }
+    final connectorTypes = <String>{};
+    for (final modelId in modelIds) {
+      connectorTypes.addAll(
+        AiGatewayRealtimeProtocol.supportedConnectorTypesForModel(modelId) ??
+            const <String>{},
+      );
+    }
+    return connectorTypes.isEmpty ? null : connectorTypes;
+  }
 
   static String _executorReplayScopeId(AiGatewayExecutor executor) {
     final existing = _executorReplayScopeIds[executor];
@@ -1750,6 +2002,30 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         _ => 'audio/octet-stream',
       };
 
+  static Uint8List _pcm16Mono24KhzWave(Uint8List pcm) {
+    final header = ByteData(44);
+    void writeAscii(int offset, String value) {
+      for (var index = 0; index < value.length; index++) {
+        header.setUint8(offset + index, value.codeUnitAt(index));
+      }
+    }
+
+    writeAscii(0, 'RIFF');
+    header.setUint32(4, 36 + pcm.length, Endian.little);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little);
+    header.setUint16(22, 1, Endian.little);
+    header.setUint32(24, 24000, Endian.little);
+    header.setUint32(28, 48000, Endian.little);
+    header.setUint16(32, 2, Endian.little);
+    header.setUint16(34, 16, Endian.little);
+    writeAscii(36, 'data');
+    header.setUint32(40, pcm.length, Endian.little);
+    return Uint8List.fromList([...header.buffer.asUint8List(), ...pcm]);
+  }
+
   static String _mediaFileName(String type, String mimeType) {
     final extension = switch (mimeType) {
       'image/jpeg' => 'jpg',
@@ -2054,11 +2330,33 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static Object _safeError(Object error) {
+    if (error is UnsupportedError) {
+      return AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.request,
+        code: 'unsupported_capability',
+      );
+    }
     if (error is AiGatewayRoutingException ||
         error is AiGatewayExecutionException) {
       return error;
     }
     return AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+  }
+
+  static Map<String, dynamic>? _realtimeProviderError(
+    Map<String, dynamic> event,
+  ) {
+    final directError = event['error'];
+    if (directError is Map) return Map<String, dynamic>.from(directError);
+    final response = event['response'];
+    if (response is! Map) return null;
+    final responseError = response['error'];
+    if (responseError is Map) return Map<String, dynamic>.from(responseError);
+    final statusDetails = response['status_details'];
+    if (statusDetails is Map && statusDetails['error'] is Map) {
+      return Map<String, dynamic>.from(statusDetails['error'] as Map);
+    }
+    return null;
   }
 
   static AiGatewayExecutionException _streamRequestError(Object? apiError) {

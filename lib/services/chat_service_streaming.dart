@@ -3,6 +3,26 @@ part of 'chat_service.dart';
 extension ChatServiceStreamingExt on ChatService {
   // ── Instance methods ────────────────────────────────────────────
 
+  void _recordInputTranscript(List<ChatMessage> history, String rawTranscript) {
+    final transcript = rawTranscript.trim();
+    if (transcript.isEmpty) return;
+    _lastInputTranscript = transcript;
+    final userIndex = history.lastIndexWhere(
+      (message) => message.role == 'user',
+    );
+    if (userIndex < 0) return;
+    final userMessage = history[userIndex];
+    final content = userMessage.content.trim();
+    if (content == transcript || content.endsWith(transcript)) return;
+    try {
+      history[userIndex] = userMessage.copyWith(
+        content: content.isEmpty ? transcript : '$content\n$transcript',
+      );
+    } on UnsupportedError {
+      // Immutable history callers can still read [lastInputTranscript].
+    }
+  }
+
   /// Stream a message — converts [history] (which already contains the latest
   /// user message with attachments) into API‑format messages and streams the
   /// reply.
@@ -21,11 +41,14 @@ extension ChatServiceStreamingExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
   }) {
     AppLogService.info(
-        'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
+      'ChatService',
+      'sendStream 开始: ${userMessage.length} 字符',
+    );
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
     _lastMediaAttachments = const [];
+    _lastInputTranscript = null;
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -51,8 +74,9 @@ extension ChatServiceStreamingExt on ChatService {
           history: history,
           assistantPrompt: _assistantPrompt,
           contextSummary: _contextSummary,
-          toolOutputMaxChars:
-              ChatService.getEffectiveToolOutputMaxChars(_assistantSettings),
+          toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
+            _assistantSettings,
+          ),
         );
         final apiMessages = req.messages;
         _lastRequestBody = {
@@ -78,6 +102,9 @@ extension ChatServiceStreamingExt on ChatService {
         )
             .listen(
           (event) {
+            if (event.inputTranscript?.isNotEmpty == true) {
+              _recordInputTranscript(history, event.inputTranscript!);
+            }
             if (event.mediaAttachments?.isNotEmpty == true) {
               _captureMediaAttachments(event.mediaAttachments!);
             }
@@ -87,7 +114,9 @@ extension ChatServiceStreamingExt on ChatService {
               // usage 计量事件（provider 流末尾产出，per-request 隔离）
               // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
               onUsageEvent?.call(event.usage!, recordInput: true);
-            } else if (!_controller!.isClosed) {
+            } else if (event.inputTranscript == null &&
+                event.text.isNotEmpty &&
+                !_controller!.isClosed) {
               _controller!.add(event.text);
             }
           },
@@ -137,7 +166,9 @@ extension ChatServiceStreamingExt on ChatService {
     List<ToolDefinition> tools = const [],
   }) {
     AppLogService.info(
-        'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
+      'ChatService',
+      'sendStreamWithTools 开始: ${userMessage.length} 字符',
+    );
     _isCancelledByUser = false;
     _reasoningBuffer = '';
     _contentBuffer = '';
@@ -166,8 +197,9 @@ extension ChatServiceStreamingExt on ChatService {
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        final toolOutputMaxChars =
-            ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
+        final toolOutputMaxChars = ChatService.getEffectiveToolOutputMaxChars(
+          _assistantSettings,
+        );
         final req = await _protocol.buildRequest(
           history: history,
           assistantPrompt: _assistantPrompt,
@@ -197,8 +229,9 @@ extension ChatServiceStreamingExt on ChatService {
         // getEffectiveMaxToolRounds 统一回退默认值（此前 <= 0 会让
         // while 恒假——不发任何请求、空流无错误、消息不落库，用户
         // 完全无反馈）。
-        final effectiveMaxRounds =
-            ChatService.getEffectiveMaxToolRounds(_assistantSettings);
+        final effectiveMaxRounds = ChatService.getEffectiveMaxToolRounds(
+          _assistantSettings,
+        );
         final maxRounds =
             effectiveMaxRounds ?? ChatService.kMaxToolRoundsHardLimit;
 
@@ -255,7 +288,11 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
-              if (event.mediaAttachments?.isNotEmpty == true) {
+              if (event.inputTranscript?.isNotEmpty == true) {
+                controller.add(
+                  InputTranscriptEvent(event.inputTranscript!),
+                );
+              } else if (event.mediaAttachments?.isNotEmpty == true) {
                 _captureMediaAttachments(event.mediaAttachments!);
                 controller.add(
                   MediaAttachmentsEvent(
@@ -357,7 +394,9 @@ extension ChatServiceStreamingExt on ChatService {
               parsedArgs = Map<String, dynamic>.from(jsonDecode(rawArgs));
             } catch (e) {
               AppLogService.warning(
-                  'ChatService', '解析工具调用参数失败: $name, 参数: $rawArgs: $e');
+                'ChatService',
+                '解析工具调用参数失败: $name, 参数: $rawArgs: $e',
+              );
             }
 
             final toolCallData = ToolCallData(
@@ -381,10 +420,15 @@ extension ChatServiceStreamingExt on ChatService {
             final executed = await Future.wait(pendingResults);
             for (var i = 0; i < neutralCalls.length; i++) {
               if (_isCancelledByUser || controller.isClosed) break;
-              controller
-                  .add(ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
-              results.add(ToolCallResult(
-                  toolCallId: neutralCalls[i].id, result: executed[i]));
+              controller.add(
+                ToolCallCompleteEvent(neutralCalls[i].id, executed[i]),
+              );
+              results.add(
+                ToolCallResult(
+                  toolCallId: neutralCalls[i].id,
+                  result: executed[i],
+                ),
+              );
             }
           }
 
@@ -403,14 +447,20 @@ extension ChatServiceStreamingExt on ChatService {
           // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
           // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
           // user(tool_result 块)。历史保持中立，格式切换安全。
-          messages.addAll(_protocol.buildAssistantChainMessage(
-            content: _contentBuffer,
-            toolCalls: neutralCalls,
-            roundReasoning: roundReasoning,
-            thinkingSignature: _thinkingSignature,
-          ));
-          messages.addAll(_protocol.buildToolResultMessages(results,
-              toolOutputMaxChars: toolOutputMaxChars));
+          messages.addAll(
+            _protocol.buildAssistantChainMessage(
+              content: _contentBuffer,
+              toolCalls: neutralCalls,
+              roundReasoning: roundReasoning,
+              thinkingSignature: _thinkingSignature,
+            ),
+          );
+          messages.addAll(
+            _protocol.buildToolResultMessages(
+              results,
+              toolOutputMaxChars: toolOutputMaxChars,
+            ),
+          );
 
           // Reset per-round buffers for the next iteration
           _contentBuffer = '';

@@ -193,6 +193,7 @@ class ChatService {
   UsageEventCallback? onUsageEvent;
 
   Map<String, dynamic>? _lastResponseData;
+  String? _lastInputTranscript;
   Map<String, String>? _lastRequestHeaders;
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
@@ -249,6 +250,7 @@ class ChatService {
       _lastRequestBody ?? _provider?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
+  String? get lastInputTranscript => _lastInputTranscript;
   Map<String, String>? get lastRequestHeaders =>
       _lastRequestHeaders ?? _provider?.lastRequestHeaders;
   String? get lastRequestUrl => _lastRequestUrl ?? _provider?.lastRequestUrl;
@@ -262,7 +264,7 @@ class ChatService {
 
   void _captureMediaAttachments(List<Attachment> attachments) {
     final byId = {
-      for (final attachment in _lastMediaAttachments) attachment.id: attachment
+      for (final attachment in _lastMediaAttachments) attachment.id: attachment,
     };
     for (final attachment in attachments) {
       byId[attachment.id] = attachment;
@@ -451,7 +453,8 @@ class ChatService {
 
   /// @visibleForTesting
   static Map<String, dynamic> stripOmittedForTest(
-          Map<String, dynamic> params) =>
+    Map<String, dynamic> params,
+  ) =>
       _stripOmitted(params);
 
   /// @visibleForTesting — type marker for the omitted sentinel (for `isA`).
@@ -534,11 +537,7 @@ class ChatService {
     String source = 'model',
   }) {
     try {
-      setNestedParam(
-        result,
-        rp.paramName,
-        parseReasoningValue(value, rp.type),
-      );
+      setNestedParam(result, rp.paramName, parseReasoningValue(value, rp.type));
     } on FormatException catch (e) {
       debugPrint(
         '[ChatService] Skipping $source reasoning param "${rp.paramName}" '

@@ -4,7 +4,10 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
   /// Dispatches a single stream [event] into [state], updating the
   /// per-conversation accumulators and pushing throttled provider updates.
   void _handleStreamEvent(
-      ChatEvent event, _ConversationStreamState state, String convId) {
+    ChatEvent event,
+    _ConversationStreamState state,
+    String convId,
+  ) {
     switch (event) {
       case TextEvent e:
         if (!state.hasReceivedFirstToken) {
@@ -32,9 +35,29 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           // Set textSections first (no listener) so that when
           // fullReply fires its listener and reads streamingTextSectionsProvider
           // inside _rebuildLiveSegments, it sees the already-updated value.
-          _pushToProvider(convId, streamingTextSectionsProvider,
-              List<String>.from(state.textChunks));
+          _pushToProvider(
+            convId,
+            streamingTextSectionsProvider,
+            List<String>.from(state.textChunks),
+          );
           _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
+        }
+
+      case InputTranscriptEvent e:
+        final transcript = e.text.trim();
+        if (transcript.isNotEmpty) {
+          final userIndex = state.history.lastIndexWhere(
+            (message) => message.role == 'user',
+          );
+          if (userIndex >= 0) {
+            final userMessage = state.history[userIndex];
+            final content = userMessage.content.trim();
+            if (content != transcript && !content.endsWith(transcript)) {
+              state.history[userIndex] = userMessage.copyWith(
+                content: content.isEmpty ? transcript : '$content\n$transcript',
+              );
+            }
+          }
         }
 
       case MediaAttachmentsEvent e:
@@ -72,7 +95,10 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
             ChatStreamManager._reasoningThrottle) {
           state.lastReasoningUpdate = now;
           _pushToProvider(
-              convId, streamingReasoningProvider, state.reasoningBuffer);
+            convId,
+            streamingReasoningProvider,
+            state.reasoningBuffer,
+          );
           _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
         }
 
@@ -132,12 +158,21 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // triggered by the toolCalls push reads the stale round boundary and
         // renders the new round's reasoning at the bottom until the first
         // complete event of the round.
-        _pushToProvider(convId, streamingTextSectionsProvider,
-            List<String>.from(state.textChunks));
-        _pushToProvider(convId, streamingToolCallRoundStartsProvider,
-            List<int>.from(state.toolCallRoundStarts));
-        _pushToProvider(convId, streamingToolCallsProvider,
-            List<ToolCallData>.from(state.toolCalls));
+        _pushToProvider(
+          convId,
+          streamingTextSectionsProvider,
+          List<String>.from(state.textChunks),
+        );
+        _pushToProvider(
+          convId,
+          streamingToolCallRoundStartsProvider,
+          List<int>.from(state.toolCallRoundStarts),
+        );
+        _pushToProvider(
+          convId,
+          streamingToolCallsProvider,
+          List<ToolCallData>.from(state.toolCalls),
+        );
 
       case ToolCallCompleteEvent e:
         for (var i = 0; i < state.toolCalls.length; i++) {
@@ -151,16 +186,16 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
         for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
           if (state.accumulatedToolCalls[i].id == e.toolCallId) {
-            state.accumulatedToolCalls[i] =
-                state.accumulatedToolCalls[i].copyWith(
-              status: ToolCallStatus.completed,
-              result: e.result,
-            );
+            state.accumulatedToolCalls[i] = state.accumulatedToolCalls[i]
+                .copyWith(status: ToolCallStatus.completed, result: e.result);
             break;
           }
         }
-        _pushToProvider(convId, streamingToolCallsProvider,
-            List<ToolCallData>.from(state.toolCalls));
+        _pushToProvider(
+          convId,
+          streamingToolCallsProvider,
+          List<ToolCallData>.from(state.toolCalls),
+        );
     }
   }
 }

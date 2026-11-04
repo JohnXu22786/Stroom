@@ -1503,6 +1503,7 @@ class LlmRoutingService {
           account.connectorType,
           model.capabilities,
           capability,
+          modelId: model.upstreamModelId,
         ),
       )) {
         decisions.add(
@@ -2631,10 +2632,23 @@ class LlmRoutingService {
 bool _supportsModelCapability(
   String connectorType,
   Map<String, dynamic> capabilities,
-  String capability,
-) {
+  String capability, {
+  String? modelId,
+}) {
   if (capabilities.containsKey(capability)) {
     return capabilities[capability] == true;
+  }
+  final normalizedModelId = modelId?.trim().toLowerCase();
+  if (capability == 'audio' && normalizedModelId != null) {
+    if (connectorType == 'openai-api' &&
+        normalizedModelId.startsWith('gpt-realtime')) {
+      return true;
+    }
+    if (connectorType == 'xai' &&
+        (normalizedModelId == 'grok-voice' ||
+            normalizedModelId.startsWith('grok-voice-'))) {
+      return true;
+    }
   }
   final methods = capabilities['supportedGenerationMethods'];
   if (capability == 'chat' &&

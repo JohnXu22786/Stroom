@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/ai_gateway/ai_gateway_realtime_session.dart';
+import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/chat_adapter.dart';
@@ -18,6 +21,320 @@ import 'package:stroom/services/llm_routing_service.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  test(
+    'streams a Realtime model through the shared routed chat provider',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final received = <Map<String, dynamic>>[];
+      final savedMedia = Completer<Uint8List>();
+      var responseCount = 0;
+      final serverSubscription = server.listen((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        socket.listen((frame) {
+          final event = Map<String, dynamic>.from(
+            jsonDecode(frame as String) as Map,
+          );
+          received.add(event);
+          if (event['type'] == 'response.create') {
+            responseCount++;
+            if (responseCount == 2) {
+              socket.add(
+                jsonEncode({
+                  'type': 'response.failed',
+                  'event_id': 'evt-error',
+                  'response': {
+                    'status_details': {
+                      'type': 'failed',
+                      'error': {
+                        'code': 'server_error',
+                        'message': 'model is unavailable',
+                      },
+                    },
+                  },
+                }),
+              );
+              return;
+            }
+            socket.add(
+              jsonEncode({
+                'type': 'conversation.item.input_audio_transcription.delta',
+                'event_id': 'evt-input-transcript-delta',
+                'delta': 'hello ',
+              }),
+            );
+            socket.add(
+              jsonEncode({
+                'type': 'conversation.item.input_audio_transcription.completed',
+                'event_id': 'evt-input-transcript-done',
+                'transcript': 'hello by voice',
+              }),
+            );
+            socket.add(
+              jsonEncode({
+                'type': 'response.output_text.delta',
+                'event_id': 'evt-text',
+                'delta': 'voice reply',
+              }),
+            );
+            socket.add(
+              jsonEncode({
+                'type': 'response.audio.delta',
+                'event_id': 'evt-audio',
+                'delta': 'AQIDBA==',
+              }),
+            );
+            socket.add(
+              jsonEncode({
+                'type': 'response.output_item.added',
+                'event_id': 'evt-tool-item',
+                'item': {
+                  'id': 'item-tool',
+                  'type': 'function_call',
+                  'call_id': 'call-lookup',
+                  'name': 'lookup',
+                  'arguments': '',
+                },
+              }),
+            );
+            socket.add(
+              jsonEncode({
+                'type': 'response.function_call_arguments.done',
+                'event_id': 'evt-tool-done',
+                'item_id': 'item-tool',
+                'arguments': '{"q":"x"}',
+              }),
+            );
+            socket.add(
+              jsonEncode({'type': 'response.done', 'event_id': 'evt-done'}),
+            );
+          }
+        });
+      });
+      addTearDown(() async {
+        await serverSubscription.cancel();
+        await server.close(force: true);
+      });
+
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'openai-realtime',
+          connectorType: 'openai-api',
+          authType: 'api_key',
+          displayName: 'OpenAI Realtime',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'gpt-realtime-2.1',
+              upstreamModelId: 'gpt-realtime-2.1',
+              displayName: 'GPT Realtime 2.1',
+              capabilities: {'chat': true, 'streaming': true, 'tools': true},
+            ),
+          ],
+        ),
+        secret: 'openai-key',
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'openai-realtime-group',
+          displayName: 'OpenAI Realtime',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'openai-realtime',
+              localModelId: 'openai-realtime:remote:0',
+              upstreamModelId: 'gpt-realtime-2.1',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        realtimeUri: Uri.parse(
+          'ws://${server.address.address}:${server.port}/v1/realtime?model=gpt-realtime-2.1',
+        ),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'openai-realtime-group',
+        localModelId: 'openai-realtime:remote:0',
+        endpointType: 'anthropic.messages',
+        apiProtocolOverride: 'anthropic.messages',
+        conversationId: 'realtime-conversation',
+        saveMediaFile: (fileName, bytes, {stableId}) async {
+          if (!savedMedia.isCompleted) savedMedia.complete(bytes);
+          return '/test/$fileName';
+        },
+      );
+
+      final events = await provider
+          .chatStream(
+            const [
+              {'role': 'system', 'content': 'Use plain words.'},
+              {'role': 'user', 'content': 'Hello by voice'},
+            ],
+            system: 'Keep the answer concise.',
+            tools: const [
+              {
+                'type': 'function',
+                'function': {
+                  'name': 'lookup',
+                  'description': 'Look up a value',
+                  'parameters': {'type': 'object'},
+                },
+              },
+            ],
+          )
+          .toList();
+
+      expect(connector.requestedAccountIds, isEmpty);
+      expect(events.whereType<AIStreamEvent>().map((event) => event.text), [
+        '',
+        'voice reply',
+        '',
+        '',
+      ]);
+      expect(
+        events
+            .whereType<AIStreamEvent>()
+            .map((event) => event.inputTranscript)
+            .whereType<String>(),
+        ['hello by voice'],
+      );
+      final toolCall = events
+          .whereType<AIStreamEvent>()
+          .singleWhere((event) => event.toolCalls?.isNotEmpty == true)
+          .toolCalls!
+          .single;
+      expect(toolCall['id'], 'call-lookup');
+      expect((toolCall['function'] as Map)['name'], 'lookup');
+      expect((toolCall['function'] as Map)['arguments'], '{"q":"x"}');
+      final audioEvent = events.singleWhere(
+        (event) => event.mediaAttachments?.isNotEmpty == true,
+      );
+      expect(audioEvent.mediaAttachments!.single.fileType, 'audio');
+      final savedAudio = await savedMedia.future;
+      expect(utf8.decode(savedAudio.sublist(0, 4)), 'RIFF');
+      expect(utf8.decode(savedAudio.sublist(8, 12)), 'WAVE');
+      expect(
+        ByteData.sublistView(savedAudio).getUint32(24, Endian.little),
+        24000,
+      );
+      expect(savedAudio.sublist(44), [1, 2, 3, 4]);
+      expect(audioEvent.mediaAttachments!.single.mimeType, 'audio/wav');
+      expect(audioEvent.mediaAttachments!.single.fileName, 'audio.wav');
+      expect(received.map((event) => event['type']), [
+        'session.update',
+        'session.update',
+        'session.update',
+        'conversation.item.create',
+        'response.create',
+      ]);
+      expect((received[1]['session'] as Map)['tool_choice'], 'auto');
+      expect(
+        (received[2]['session'] as Map)['instructions'],
+        'Keep the answer concise.\n\nUse plain words.',
+      );
+      expect((received.last['response'] as Map)['output_modalities'], [
+        'audio',
+      ]);
+      expect(provider.lastResponseData?['events'], [
+        {
+          'type': 'conversation.item.input_audio_transcription.delta',
+          'event_id': 'evt-input-transcript-delta',
+          'delta': 'hello ',
+        },
+        {
+          'type': 'conversation.item.input_audio_transcription.completed',
+          'event_id': 'evt-input-transcript-done',
+          'transcript': 'hello by voice',
+        },
+        {
+          'type': 'response.output_text.delta',
+          'event_id': 'evt-text',
+          'delta': 'voice reply',
+        },
+        {
+          'type': 'response.audio.delta',
+          'event_id': 'evt-audio',
+          'delta': 'AQIDBA==',
+        },
+        {
+          'type': 'response.output_item.added',
+          'event_id': 'evt-tool-item',
+          'item': {
+            'id': 'item-tool',
+            'type': 'function_call',
+            'call_id': 'call-lookup',
+            'name': 'lookup',
+            'arguments': '',
+          },
+        },
+        {
+          'type': 'response.function_call_arguments.done',
+          'event_id': 'evt-tool-done',
+          'item_id': 'item-tool',
+          'arguments': '{"q":"x"}',
+        },
+        {'type': 'response.done', 'event_id': 'evt-done'},
+      ]);
+      expect(provider.lastResponseData?['inputTranscripts'], [
+        'hello by voice',
+      ]);
+
+      await expectLater(
+        provider.chatStream(const [
+          {'role': 'user', 'content': 'Use another turn'},
+        ]),
+        emitsError(
+          isA<AiGatewayExecutionException>().having(
+            (error) => error.code,
+            'provider error code',
+            'server_error',
+          ),
+        ),
+      );
+      expect(
+        (((provider.lastResponseData?['error'] as Map)['response']
+            as Map)['status_details'] as Map)['error'],
+        {'code': 'server_error', 'message': 'model is unavailable'},
+      );
+      await expectLater(
+        provider.chatStream(const [
+          {
+            'role': 'user',
+            'content': [
+              {
+                'type': 'image_url',
+                'image_url': {'url': 'https://example.test/image.png'},
+              },
+            ],
+          },
+        ]),
+        emitsError(
+          isA<AiGatewayExecutionException>().having(
+            (error) => error.code,
+            'unsupported capability code',
+            'unsupported_capability',
+          ),
+        ),
+      );
+    },
+  );
+
   test('Qoder Chat route accepts only the source-supported chat protocol', () {
     final account = AiGatewayAccount(
       id: 'qoder-account',
@@ -206,92 +523,94 @@ void main() {
     );
   });
 
-  test('routes tool-capable Zed Hosted models when tools are requested',
-      () async {
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    await accounts.saveAccount(
-      LlmAccount(
-        id: 'zed-tool-account',
-        connectorType: 'zed-hosted',
-        authType: 'oauth',
-        displayName: 'Zed Hosted Models',
-        status: LlmAccountStatus.ready,
-        models: [
-          LlmUpstreamModel(
-            id: 'zed-tool-model',
-            upstreamModelId: 'claude-tool-model',
-            displayName: 'Claude Tool Model',
-            capabilities: const {
-              'chat': true,
-              'streaming': true,
-              'toolCalls': true,
-              'tools': true,
-              'streamingTools': true,
-              'supportedApiProtocols': ['anthropic.messages'],
-            },
-            config: const {
-              'upstreamProvider': 'anthropic',
-              'apiProtocolOverride': 'anthropic.messages',
-            },
-          ),
-        ],
-      ),
-      secret: jsonEncode({'oauth_contract': 'zed-hosted-native-rsa-v1'}),
-    );
-    await accounts.saveModelGroup(
-      LlmModelGroup(
-        id: 'zed-tool-group',
-        displayName: 'Zed Tool Group',
-        members: const [
-          LlmModelGroupMember(
-            accountId: 'zed-tool-account',
-            localModelId: 'zed-tool-model',
-            upstreamModelId: 'claude-tool-model',
-          ),
-        ],
-      ),
-    );
-    final connector = _FakeConnectorClient(
-      accounts,
-      streamBody: Stream<List<int>>.value(utf8.encode('data: [DONE]\n\n')),
-    );
-    final provider = LlmRoutedChatProvider(
-      runtime: Future.value(
-        LlmChatRoutingRuntime(
-          accountService: accounts,
-          routingService: LlmRoutingService(
-            accountService: accounts,
-            stateStore: LlmRoutingStateStore(preferences: preferences),
-            concurrency: LlmConcurrencyReservations(),
-          ),
-          connectorClient: connector,
+  test(
+    'routes tool-capable Zed Hosted models when tools are requested',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'zed-tool-account',
+          connectorType: 'zed-hosted',
+          authType: 'oauth',
+          displayName: 'Zed Hosted Models',
+          status: LlmAccountStatus.ready,
+          models: [
+            LlmUpstreamModel(
+              id: 'zed-tool-model',
+              upstreamModelId: 'claude-tool-model',
+              displayName: 'Claude Tool Model',
+              capabilities: const {
+                'chat': true,
+                'streaming': true,
+                'toolCalls': true,
+                'tools': true,
+                'streamingTools': true,
+                'supportedApiProtocols': ['anthropic.messages'],
+              },
+              config: const {
+                'upstreamProvider': 'anthropic',
+                'apiProtocolOverride': 'anthropic.messages',
+              },
+            ),
+          ],
         ),
-      ),
-      groupId: 'zed-tool-group',
-      localModelId: 'zed-tool-model',
-      endpointType: 'openai',
-    );
+        secret: jsonEncode({'oauth_contract': 'zed-hosted-native-rsa-v1'}),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'zed-tool-group',
+          displayName: 'Zed Tool Group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'zed-tool-account',
+              localModelId: 'zed-tool-model',
+              upstreamModelId: 'claude-tool-model',
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        streamBody: Stream<List<int>>.value(utf8.encode('data: [DONE]\n\n')),
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'zed-tool-group',
+        localModelId: 'zed-tool-model',
+        endpointType: 'openai',
+      );
 
-    await for (final _ in provider.chatStream(
-      const [
-        {'role': 'user', 'content': 'look this up'},
-      ],
-      tools: const [
-        {
-          'name': 'lookup',
-          'description': 'Look up a value.',
-          'input_schema': {'type': 'object'},
-        },
-      ],
-    )) {}
-    expect(connector.requestedAccountIds, ['zed-tool-account']);
-    expect(connector.lastNativeFormat, 'anthropic');
-    expect(connector.requestBody?['tools'], isA<List>());
-  });
+      await for (final _ in provider.chatStream(
+        const [
+          {'role': 'user', 'content': 'look this up'},
+        ],
+        tools: const [
+          {
+            'name': 'lookup',
+            'description': 'Look up a value.',
+            'input_schema': {'type': 'object'},
+          },
+        ],
+      )) {}
+      expect(connector.requestedAccountIds, ['zed-tool-account']);
+      expect(connector.lastNativeFormat, 'anthropic');
+      expect(connector.requestBody?['tools'], isA<List>());
+    },
+  );
 
   test('routes Devin accounts only through Devin Connect-RPC', () {
     expect(llmRoutedChatSupportedConnectorTypes('devin.connect_rpc'), {
@@ -5347,6 +5666,7 @@ void main() {
 class _FakeConnectorClient extends LlmConnectorHttpClient {
   _FakeConnectorClient(
     LlmAccountConnectorService accountService, {
+    this.realtimeUri,
     this.responseBody,
     this.responseBodies,
     this.responseHeaders = const {},
@@ -5359,6 +5679,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   })  : observation = observation ?? LlmConnectorObservation(),
         super(accountService: accountService);
 
+  final Uri? realtimeUri;
   final Object? responseBody;
   final List<Object?>? responseBodies;
   final Map<String, List<String>> responseHeaders;
@@ -5375,6 +5696,29 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   CancelToken? lastCancelToken;
   String? lastNativeFormat;
   String? lastConversationId;
+
+  @override
+  Future<AiGatewayRealtimeSession> connectRealtime({
+    required AiGatewayAccount account,
+    required String modelId,
+    CancelToken? cancelToken,
+  }) {
+    final uri = realtimeUri;
+    if (uri == null) throw StateError('No Realtime test endpoint configured.');
+    final providerId = AiGatewayRealtimeProtocol.providerForModel(
+      account.connectorType,
+      modelId,
+    );
+    if (providerId == null)
+      throw StateError('Unsupported test Realtime model.');
+    return AiGatewayRealtimeProtocol.connect(
+      AiGatewayRealtimeConnectionOptions(
+        providerId: providerId,
+        uri: uri,
+        headers: const {},
+      ),
+    );
+  }
 
   @override
   Future<LlmConnectorResponse> request({

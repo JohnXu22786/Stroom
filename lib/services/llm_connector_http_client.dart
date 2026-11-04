@@ -18,6 +18,8 @@ import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
+import '../ai_gateway/ai_gateway_contracts.dart';
+import '../ai_gateway/ai_gateway_realtime_session.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -59,6 +61,85 @@ class LlmConnectorHttpClient {
               ),
             ),
         _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+
+  /// Opens a source-defined Realtime session for a catalogued API-key model.
+  /// The account credential remains inside the connector service and the
+  /// provider adapter pins the socket to its public API host.
+  Future<AiGatewayRealtimeSession> connectRealtime({
+    required AiGatewayAccount account,
+    required String modelId,
+    CancelToken? cancelToken,
+  }) async {
+    if (cancelToken?.isCancelled == true) {
+      throw const LlmConnectorRequestCancelled();
+    }
+    final storedAccount = await accountService.getAccount(account.id);
+    if (storedAccount == null ||
+        storedAccount.connectorType != account.connectorType ||
+        storedAccount.authType != 'api_key' ||
+        !storedAccount.models.any(
+          (model) => model.upstreamModelId == modelId,
+        )) {
+      throw const LlmConnectorAuthenticationRequired();
+    }
+    final providerId = AiGatewayRealtimeProtocol.providerForModel(
+      storedAccount.connectorType,
+      modelId,
+    );
+    if (providerId == null) {
+      throw const LlmConnectorHttpException();
+    }
+    final credential = await accountService.readCredential(storedAccount.id);
+    if (credential == null || credential.trim().isEmpty) {
+      throw const LlmConnectorAuthenticationRequired();
+    }
+    if (cancelToken?.isCancelled == true) {
+      throw const LlmConnectorRequestCancelled();
+    }
+    var sessionCredential = credential;
+    if (providerId == 'openai') {
+      try {
+        final response = await _dio.post<Object?>(
+          'https://api.openai.com/v1/realtime/client_secrets',
+          data: AiGatewayOpenAiRealtimeAdapter.buildClientSecretRequest(
+            modelId,
+          ),
+          options: Options(
+            headers: {'Authorization': 'Bearer $credential'},
+            followRedirects: false,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 300,
+          ),
+          cancelToken: cancelToken,
+        );
+        if (response.data is! Map ||
+            (response.data as Map)['value'] is! String ||
+            ((response.data as Map)['value'] as String).trim().isEmpty) {
+          throw const LlmConnectorHttpException();
+        }
+        sessionCredential = ((response.data as Map)['value'] as String).trim();
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) {
+          throw const LlmConnectorRequestCancelled();
+        }
+        if (error.response?.statusCode == 401 ||
+            error.response?.statusCode == 403) {
+          throw const LlmConnectorAuthenticationRequired();
+        }
+        throw LlmConnectorHttpException(statusCode: error.response?.statusCode);
+      }
+    }
+    if (cancelToken?.isCancelled == true) {
+      throw const LlmConnectorRequestCancelled();
+    }
+    final options = AiGatewayRealtimeProtocol.prepareConnection(
+      providerId: providerId,
+      authType: storedAccount.authType,
+      apiKey: sessionCredential,
+      modelId: modelId,
+    );
+    return AiGatewayRealtimeProtocol.connect(options, cancelToken: cancelToken);
+  }
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,

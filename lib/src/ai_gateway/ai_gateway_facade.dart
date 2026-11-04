@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../ai_gateway/ai_gateway_contracts.dart';
+import '../../ai_gateway/ai_gateway_realtime_session.dart';
 import '../../models/llm_account.dart';
 import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
@@ -693,9 +694,9 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
         };
         ZedHostedIdentity? identity;
         try {
-          identity = await ZedHostedApiClient(dio: _dio).fetchIdentity(
-            rawCredentials,
-          );
+          identity = await ZedHostedApiClient(
+            dio: _dio,
+          ).fetchIdentity(rawCredentials);
         } catch (_) {
           // Identity metadata is optional; the authenticated model catalog
           // resolves the account's organization when it is next refreshed.
@@ -2480,12 +2481,54 @@ bool _hasRequiredModelCapabilities(
   return true;
 }
 
-class _LlmGatewayExecutor implements AiGatewayExecutor {
+class _LlmGatewayExecutor
+    implements AiGatewayExecutor, AiGatewayRealtimeExecutor {
   final LlmConnectorHttpClient _client;
   final DevinCliAcpService _devinCliAcp;
   final QoderCliService _qoderCli;
 
   const _LlmGatewayExecutor(this._client, this._devinCliAcp, this._qoderCli);
+
+  @override
+  Future<AiGatewayRealtimeSession> connectRealtime({
+    required AiGatewayAccount account,
+    required String modelId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      return await _client.connectRealtime(
+        account: account,
+        modelId: modelId,
+        cancelToken: cancelToken,
+      );
+    } on LlmConnectorHttpException catch (error) {
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.request,
+        statusCode: error.statusCode,
+        code: error.code,
+        headers: error.headers,
+      );
+    } on LlmConnectorRequestCancelled {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.cancelled);
+    } on AiGatewayRealtimeConnectionCancelled {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.cancelled);
+    } on AiGatewayRealtimeHandshakeFailure catch (error) {
+      throw AiGatewayExecutionException(
+        kind: error.statusCode == 401 || error.statusCode == 403
+            ? AiGatewayFailureKind.authenticationRequired
+            : AiGatewayFailureKind.request,
+        statusCode: error.statusCode,
+      );
+    } on LlmConnectorAuthenticationRequired {
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.authenticationRequired,
+      );
+    } catch (_) {
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.transportUnavailable,
+      );
+    }
+  }
 
   @override
   Future<AiGatewayResponse> request({

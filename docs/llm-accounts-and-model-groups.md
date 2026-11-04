@@ -40,7 +40,7 @@ The table separates account/authentication support from availability in the curr
 | Google Vertex AI | Service-account JSON or Vertex API key | Vertex Gemini models that support `generateContent` can be selected in Chat and Task Flow model groups. Service-account credentials use refreshed Google access tokens; API keys use Vertex key authentication. The project and location must match the model and credential. Vertex OAuth is not supported. |
 | Legacy/first-party subscription labels (Claude Code, Antigravity, Devin) | No supported Chat/Task Flow OAuth account in this release | Legacy records may remain visible for migration or deletion, but Stroom does not reuse CLI/private session credentials. |
 
-OpenAI Realtime and xAI Voice Realtime have separate API-key WebSocket adapters in the Gateway library. They are not model-group Chat/Task Flow connectors and do not create a Stroom external gateway or local listener.
+Catalogued OpenAI Realtime and xAI Voice Realtime API-key models use the internal routed ChatService session path shared by Chat and Task Flow. Their provider-specific WebSocket transport does not change the supplier/model protocol configured for regular HTTP chat models. OAuth subscription accounts are not used for these Realtime APIs, and Stroom does not expose an external gateway or local listener.
 
 ### Google Vertex AI setup
 
