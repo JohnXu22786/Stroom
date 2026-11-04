@@ -78,6 +78,10 @@ class LlmOAuthProviderPolicy {
       supported: true,
     ),
     'github': LlmOAuthProviderPolicy._(providerId: 'github', supported: true),
+    'zed-hosted': LlmOAuthProviderPolicy._(
+      providerId: 'zed-hosted',
+      supported: true,
+    ),
     'ghe-copilot': LlmOAuthProviderPolicy._(
       providerId: 'ghe-copilot',
       supported: true,

@@ -27,6 +27,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen-cloud',
           'qwen-cloud-token-plan',
           'command-code',
+          'zed-hosted',
         },
       'openai.responses' => const {
           'openai-compatibility',
@@ -41,11 +42,13 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen-cloud',
           'qwen-cloud-token-plan',
           'command-code',
+          'zed-hosted',
         },
       'google.gemini.generate_content' => const {
           'gemini',
           'aistudio',
           'vertex',
+          'zed-hosted',
         },
       'google.gemini.interactions' => const {'gemini-interactions'},
       'devin.connect_rpc' => const {'devin'},
@@ -69,6 +72,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen-cloud',
           'qwen-cloud-token-plan',
           'command-code',
+          'zed-hosted',
         },
     };
 

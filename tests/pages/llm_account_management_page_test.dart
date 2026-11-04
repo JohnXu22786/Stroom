@@ -4244,6 +4244,11 @@ class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
   Future<AiGatewayAccount> authorize(
     AiGatewayAccount account, {
     Map<String, String> configuration = const {},
+    Future<bool> Function(
+      Uri authorizationUri,
+      Uri callbackUri,
+      Future<void> cancelSignal,
+    )? openInAppAuthorization,
   }) async {
     configurations.add(configuration);
     authorizedAccounts.add(account);
