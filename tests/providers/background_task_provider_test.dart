@@ -453,6 +453,64 @@ void main() {
     );
 
     test(
+      'removeTask keeps an OCR task without retry data visible when both removal writes fail',
+      () async {
+        const taskId = 'ocr-null-retry-data-removal-write-failure';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR task without retry data',
+          retryData: null,
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final restarted = BackgroundTaskNotifier();
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.taskById(taskId)?.retryData, isNull);
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeAttempts++;
+            throw StateError('simulated OCR task removal write failure');
+          };
+          notifier.removeTask(taskId);
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 4);
+          expect(
+            notifier.taskById(taskId),
+            isNotNull,
+            reason:
+                'a failed removal must not hide an OCR task that remains on disk',
+          );
+          final persistedRows =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          expect(await restarted.restoreFromPersistence(), isTrue);
+          expect(restarted.taskById(taskId)?.retryData, isNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          restarted.dispose();
+          await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'failed OCR removal restores a canceled running task as retryable',
       () async {
         const taskId = 'ocr-running-removal-write-failure';
