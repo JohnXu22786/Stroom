@@ -63,6 +63,8 @@ class _LiveStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -127,6 +129,8 @@ class _ImmediateStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -153,7 +157,7 @@ class _ImmediateStreamManager extends ChatStreamManager {
       ],
       toolCallRoundStarts: const [0],
     );
-    final newHistory = [...history, assistantMsg];
+    final newHistory = [...(historyOnSuccess ?? history), assistantMsg];
     await ref!
         .read(conversationsProvider.notifier)
         .updateMessages(convId, newHistory);

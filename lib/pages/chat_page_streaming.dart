@@ -214,6 +214,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     String text, {
     String? capturedConvId,
     List<ChatMessage>? historyOverride,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
   }) async {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
@@ -277,10 +279,6 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (mounted && ref.read(activeConversationIdProvider) != effectiveConvId) {
       return;
     }
-    ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
-    _isStreamingActive = true;
-    if (mounted) setState(() {});
-
     final aiMsgId = 'a${DateTime.now().microsecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
@@ -320,10 +318,18 @@ extension _ChatPageStreamingExt on _ChatPageState {
       ref.read(isStreamingProvider(effectiveConvId).notifier).state = false;
       return;
     }
+    // Advertise a stoppable stream immediately before manager registration.
+    // startStreaming registers its state synchronously before its first await,
+    // so Stop can never race ahead of the state that cancel() needs to mark.
+    ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
+    _isStreamingActive = true;
+    if (mounted) setState(() {});
     final StreamResult result = await manager.startStreaming(
       text: text,
       convId: effectiveConvId,
       history: histBefore,
+      requestHistoryOverride: requestHistoryOverride,
+      historyOnSuccess: historyOnSuccess,
       tools: filteredTools,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
@@ -346,6 +352,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (pageOwnedStream) {
       _history.clear();
       _history.addAll(result.history);
+      await _removeOrphanMessagesFromController();
     }
 
     // Clear the local streaming flag IMMEDIATELY (before any await below)
@@ -493,42 +500,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final stoppedMsgId = _streamingMsgId;
     final convId = ref.read(activeConversationIdProvider);
     _isStreamingActive = false;
-    _streamingMsgId = null;
     try {
       ref.read(chatStreamManagerProvider).cancel(convId);
-      // 立即用已收到的部分回复替换流式占位符（恢复旧行为）：
-      // 置空 _streamingMsgId 后，post-stream 的 pageOwnedStream 门控
-      // 为 false，占位符的更新/移除分支不会执行——不在这里处理，
-      // spinner 会永久残留（取消且无内容时尤其明显）。
-      if (stoppedMsgId != null && convId != null && _controller != null) {
-        final partial =
-            ref.read(chatStreamManagerProvider).fullReplyFor(convId);
-        if (partial.isNotEmpty) {
-          _controller?.updateMessage(
-            Message.textStream(
-                id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
-            Message.text(
-              id: stoppedMsgId,
-              authorId: _aiUser.id,
-              text: partial,
-            ),
-          );
-        } else {
-          _controller?.removeMessage(Message.textStream(
-              id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId));
-          _chatSegments.remove(stoppedMsgId);
-          _reasoningContents.remove(stoppedMsgId);
-          _isReasoningCompletedForMsg.remove(stoppedMsgId);
-        }
-      }
-      // Immediately remove this conversation from the streaming set so
-      // the send/stop button reflects the stopped state without waiting
-      // for the manager's async cleanup loop to finish.
-      if (convId != null) {
-        final activeSet = <String>{...ref.read(streamingConversationsProvider)}
-          ..remove(convId);
-        ref.read(streamingConversationsProvider.notifier).state = activeSet;
-      }
+      // Keep the stream id until _startStreaming receives the manager's
+      // finalized result. That path replaces the placeholder with the
+      // partial message and its interruption ErrorBlock, and synchronizes
+      // the complete persisted history back into the page.
+      if (stoppedMsgId != null && mounted) setState(() {});
+      // Keep the manager's streaming set entry until its cancelled result is
+      // persisted. The send guard uses this set and prevents a fast resend
+      // from replacing the cancelled state before its partial/error is saved.
     } catch (e) {
       debugPrint('[ChatPage] _stopStreaming cancel error: $e');
     }

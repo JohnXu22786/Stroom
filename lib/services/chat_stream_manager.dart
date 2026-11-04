@@ -231,6 +231,8 @@ class ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -269,6 +271,9 @@ class ChatStreamManager {
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
     state.history = List.from(history);
+    state.historyOnSuccess = historyOnSuccess == null
+        ? null
+        : List<ChatMessage>.from(historyOnSuccess);
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
@@ -370,7 +375,9 @@ class ChatStreamManager {
     final tailStartId = conv?.compactionTailStartId;
     final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
     List<ChatMessage> requestHistory;
-    if (hasSummary && tailStartId != null) {
+    if (requestHistoryOverride != null) {
+      requestHistory = List<ChatMessage>.from(requestHistoryOverride);
+    } else if (hasSummary && tailStartId != null) {
       final idx = state.history.indexWhere((m) => m.id == tailStartId);
       requestHistory = idx >= 0 ? state.history.sublist(idx) : state.history;
     } else {
@@ -386,7 +393,7 @@ class ChatStreamManager {
       );
       // 压缩成功：tail 快照已更新，重新计算发送历史
       // （从新尾部起点起，头部被摘要替代）
-      if (compacted) {
+      if (compacted && requestHistoryOverride == null) {
         final newConv = _ref
             ?.read(conversationsProvider)
             .where((c) => c.id == convId)
