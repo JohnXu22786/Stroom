@@ -14,20 +14,32 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
-  test('the 12 presets retain their pinned endpoint and auth metadata', () {
+  test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
       'ai21',
       'aimlapi',
+      'alibaba',
+      'alibaba-cn',
       'arcee-ai',
+      'baichuan',
       'baseten',
+      'bigmodel',
+      'byteplus',
       'cerebras',
+      'chutes',
+      'deepinfra',
+      'doubao',
       'fireworks',
       'groq',
       'huggingface',
+      'iflytek',
+      'internlm',
       'mistral',
       'novita',
       'nvidia',
+      'siliconflow',
       'together',
+      'yi',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -44,17 +56,44 @@ void main() {
       {
         'ai21': 'https://api.ai21.com/studio/v1/chat/completions',
         'aimlapi': 'https://api.aimlapi.com/v1/chat/completions',
+        'alibaba':
+            'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+        'alibaba-cn':
+            'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
         'arcee-ai': 'https://api.arcee.ai/api/v1/chat/completions',
         'baseten': 'https://inference.baseten.co/v1/chat/completions',
+        'baichuan': 'https://api.baichuan-ai.com/v1/chat/completions',
+        'bigmodel': 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+        'byteplus':
+            'https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions',
         'cerebras': 'https://api.cerebras.ai/v1/chat/completions',
+        'chutes': 'https://llm.chutes.ai/v1/chat/completions',
+        'deepinfra': 'https://api.deepinfra.com/v1/openai/chat/completions',
+        'doubao': 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
         'fireworks': 'https://api.fireworks.ai/inference/v1/chat/completions',
         'groq': 'https://api.groq.com/openai/v1/chat/completions',
         'huggingface': 'https://router.huggingface.co/v1/chat/completions',
+        'iflytek': 'https://spark-api-open.xf-yun.com/v1/chat/completions',
+        'internlm': 'https://chat.intern-ai.org.cn/api/v1/chat/completions',
         'mistral': 'https://api.mistral.ai/v1/chat/completions',
         'novita': 'https://api.novita.ai/openai/v1/chat/completions',
         'nvidia': 'https://integrate.api.nvidia.com/v1/chat/completions',
+        'siliconflow': 'https://api.siliconflow.com/v1/chat/completions',
         'together': 'https://api.together.xyz/v1/chat/completions',
+        'yi': 'https://api.lingyiwanwu.com/v1/chat/completions',
       },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('alibaba')?.modelsUrl,
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('alibaba-cn')?.modelsUrl,
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/models',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('byteplus')?.modelsUrl,
+      'https://ark.ap-southeast.bytepluses.com/api/v3/models',
     );
     expect(
       findLlmOpenAiProviderPreset('fireworks')?.modelsUrl,
@@ -77,6 +116,36 @@ void main() {
           .fallbackModels
           .map((model) => model.id),
       containsAll(['jamba-large-1.7', 'jamba-mini-2']),
+    );
+    expect(
+      findLlmOpenAiProviderPreset('bigmodel')!.fallbackModels.first.id,
+      'glm-5.3',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('byteplus')!
+          .fallbackModels
+          .first
+          .capabilities,
+      {'contextLength': 128000},
+    );
+    expect(
+      findLlmOpenAiProviderPreset('iflytek')!.fallbackModels.first.id,
+      '4.0Ultra',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('siliconflow')!.fallbackModels.first.id,
+      'deepseek-ai/DeepSeek-V3.2',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('siliconflow')!
+          .fallbackModels
+          .first
+          .displayName,
+      'DeepSeek V3.2',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('deepinfra')!.fallbackModels[7].id,
+      'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning',
     );
   });
 
@@ -126,6 +195,61 @@ void main() {
       );
     },
   );
+
+  test('each M35 preset saves and reloads its own endpoint and model',
+      () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const m35PresetIds = [
+      'alibaba',
+      'alibaba-cn',
+      'baichuan',
+      'bigmodel',
+      'byteplus',
+      'chutes',
+      'deepinfra',
+      'doubao',
+      'iflytek',
+      'internlm',
+      'siliconflow',
+      'yi',
+    ];
+
+    for (final presetId in m35PresetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final model = preset.fallbackModels.first;
+      final account = LlmAccount(
+        id: 'm35-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {}),
+        models: [
+          LlmUpstreamModel(
+            id: 'm35-$presetId-model',
+            upstreamModelId: '${preset.modelIdPrefix}${model.id}',
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+          ),
+        ],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.models.single.upstreamModelId, model.id);
+      expect(restored.models.single.displayName, model.displayName);
+      expect(restored.models.single.capabilities, model.capabilities);
+      expect(await service.readCredential(account.id), 'key-$presetId');
+    }
+  });
 
   test('preset model discovery uses its source URL and bearer API key',
       () async {

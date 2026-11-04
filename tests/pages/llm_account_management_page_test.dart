@@ -50,16 +50,28 @@ void main() {
       containsAll([
         'ai21',
         'aimlapi',
+        'alibaba',
+        'alibaba-cn',
         'arcee-ai',
+        'baichuan',
         'baseten',
+        'bigmodel',
+        'byteplus',
         'cerebras',
+        'chutes',
+        'deepinfra',
+        'doubao',
         'fireworks',
         'groq',
         'huggingface',
+        'iflytek',
+        'internlm',
         'mistral',
         'novita',
         'nvidia',
+        'siliconflow',
         'together',
+        'yi',
       ]),
     );
     tester.widget<DropdownButton<String>>(presetButton).onChanged!('fireworks');
@@ -129,7 +141,7 @@ void main() {
             widget is TextField && widget.decoration?.labelText == '上游模型与能力',
       ),
     );
-    modelsField.controller!.text += '\nopenai/gpt-oss-120b,chat';
+    modelsField.controller!.text += '\nQwen2.5-72B-Instruct,chat';
 
     final preset = tester.widget<DropdownButtonFormField<String>>(
       find.byWidgetPredicate(
@@ -138,7 +150,7 @@ void main() {
             widget.decoration.labelText == '服务商预设',
       ),
     );
-    preset.onChanged!('groq');
+    preset.onChanged!('chutes');
     await tester.pumpAndSettle();
     final modelLines = tester
         .widget<TextField>(
@@ -150,12 +162,12 @@ void main() {
         )
         .controller!
         .text;
-    expect(modelLines, contains('groq/compound,reasoning=false'));
+    expect(modelLines, contains('Qwen2.5-72B-Instruct'));
     expect(modelLines, isNot(contains('accounts/fireworks/models/')));
     expect(
       modelLines
           .split('\n')
-          .where((line) => line.startsWith('openai/gpt-oss-120b')),
+          .where((line) => line.startsWith('Qwen2.5-72B-Instruct')),
       hasLength(1),
     );
     await tester.ensureVisible(find.text('保存').last);
@@ -175,19 +187,28 @@ void main() {
       find.byWidgetPredicate(
         (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
       ),
-      'new-groq-key',
+      'new-chutes-key',
     );
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
     final saved = (await service.listAccounts()).single;
-    expect(saved.endpointConfig['providerPresetId'], 'groq');
-    expect(await service.readCredential('preset-key-change'), 'new-groq-key');
+    expect(saved.endpointConfig['providerPresetId'], 'chutes');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://llm.chutes.ai/v1/chat/completions',
+    );
+    expect(
+      await service.readCredential('preset-key-change'),
+      'new-chutes-key',
+    );
     expect(
       saved.models
-          .singleWhere((model) => model.upstreamModelId == 'groq/compound')
+          .singleWhere(
+            (model) => model.upstreamModelId == 'Qwen2.5-72B-Instruct',
+          )
           .displayName,
-      'Groq Compound',
+      'Qwen2.5 72B',
     );
   });
 
