@@ -958,6 +958,35 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_table_fidelity_rejects_compact_trailing_labeled_text_row(self):
+        expected = "Name | Status\nFirst | Active\nSecond | Ready"
+        for output_format in ("plain_text", "markdown", "table"):
+            with self.subTest(output_format=output_format):
+                prediction_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-compact-trailing-label",
+                            "text": f"{expected}\nStatus: Current|Done",
+                        }
+                    ]
+                )
+                prediction_data["run"]["output_format"] = output_format
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "table-with-compact-trailing-label",
+                                "gold_text": expected,
+                                "table_text": expected,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    prediction_data,
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
     def test_table_fidelity_accepts_annotated_trailing_labeled_row(self):
         expected = "Name | Status\nFirst | Active\nStatus: Current | Done"
         report = evaluate_predictions(
