@@ -435,7 +435,6 @@ extension _HomePageHomeContentExt on _HomePageState {
                 ),
                 const SizedBox(height: 6),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 8,
@@ -446,11 +445,17 @@ extension _HomePageHomeContentExt on _HomePageState {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ],

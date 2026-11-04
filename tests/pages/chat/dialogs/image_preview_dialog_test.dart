@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/image_preview_dialog.dart';
 
 /// Create a small valid PNG (1x1 white pixel) for use in widget tests.
@@ -86,6 +88,14 @@ void main() {
         'shows loading indicator then image when using dataLoader '
         '(no blocking disk read before the dialog opens)', (tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
@@ -118,6 +128,14 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
@@ -144,6 +162,14 @@ void main() {
         'synchronously-throwing dataLoader degrades to error state '
         'instead of crashing the dialog', (tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
@@ -170,6 +196,14 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
@@ -194,6 +228,14 @@ void main() {
 
     testWidgets('shows error state for empty data', (tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {

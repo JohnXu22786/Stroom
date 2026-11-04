@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/dialogs/audio_preview_dialog.dart';
@@ -116,6 +117,13 @@ void main() {
 
   testWidgets('HTML preview dialog shows localized title and close tooltip',
       (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    InAppWebViewPlatform.instance = _NeverCreatedWebViewPlatform();
+    addTearDown(() {
+      InAppWebViewPlatform.instance =
+          previousPlatform ?? _NeverCreatedWebViewPlatform();
+    });
+
     await tester.pumpWidget(localizedApp(Builder(
       builder: (context) => TextButton(
         onPressed: () => showHtmlPreviewDialog(
@@ -132,4 +140,26 @@ void main() {
     expect(find.text('HTML 预览'), findsOneWidget);
     expect(find.byTooltip('关闭预览'), findsOneWidget);
   });
+}
+
+class _NeverCreatedWebViewPlatform extends InAppWebViewPlatform {
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+    PlatformInAppWebViewWidgetCreationParams params,
+  ) =>
+      _NeverCreatedWebView(params);
+}
+
+class _NeverCreatedWebView extends PlatformInAppWebViewWidget {
+  _NeverCreatedWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
 }
