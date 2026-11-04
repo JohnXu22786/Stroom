@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -13,6 +14,8 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/llm_model_group_provider.dart'
+    show buildLlmModelGroupProviderConfigs;
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_exception.dart';
@@ -31,6 +34,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
   final Future<StreamResult> Function() onStart;
   void Function()? onCancel;
   List<ChatMessage>? captureHistory;
+  ProviderEntriesState? captureProviders;
 
   @override
   Future<StreamResult> startStreaming({
@@ -47,6 +51,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
     ProviderEntriesState? entriesStateOverride,
   }) {
     captureHistory = history;
+    captureProviders = entriesStateOverride;
     return onStart();
   }
 
@@ -365,6 +370,85 @@ void main() {
       expect(bgNotifier.state[0].title, '助手回复_上一步传递的内容');
       expect(bgNotifier.state[0].status, TaskStatus.completed);
       expect(bgNotifier.state[0].downloadedFilePath, isNull);
+    });
+
+    test('dispatches anonymous AI Horde config to the chat stream manager',
+        () async {
+      const modelId = 'aphrodite/TheDrummer/Cydonia-24B-v4.3';
+      final account = LlmAccount(
+        id: 'aihorde-anonymous',
+        connectorType: 'aihorde',
+        authType: 'none',
+        displayName: 'AI Horde anonymous',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'aihorde-cydonia',
+            upstreamModelId: modelId,
+            displayName: 'Cydonia 24B (AI Horde)',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'toolCalling': false,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'aihorde-task-flow-group',
+        displayName: 'AI Horde group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'aihorde-anonymous',
+            localModelId: 'aihorde-cydonia',
+            upstreamModelId: modelId,
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+        ],
+      );
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: [
+            ChatMessage(role: 'user', content: 'Summarize this paragraph.'),
+            ChatMessage(role: 'assistant', content: 'A short summary.'),
+          ],
+          assistantMessage: ChatMessage(
+            role: 'assistant',
+            content: 'A short summary.',
+          ),
+          fullReply: 'A short summary.',
+        ),
+      );
+
+      await executeChatBlock(
+        block: TaskFlowBlock(typeKey: BlockType.chat),
+        def: BlockTypeDefinition.chat,
+        input: 'Summarize this paragraph.',
+        providerEntries: providers,
+        endpointType: 'openai.chat_completions',
+        execId: execId,
+        execNotifier: execNotifier,
+        flowSubTask: flowSubTask,
+        bgNotifier: bgNotifier,
+        chatManager: fakeManager,
+        conversationsNotifier: conversationsNotifier(),
+      );
+
+      expect(fakeManager.captureProviders, same(providers));
+      expect(fakeManager.captureHistory?.single.content,
+          'Summarize this paragraph.');
+      expect(config.key, isEmpty);
+      expect(config.apiProtocol, 'openai.chat_completions');
+      expect(config.models, hasLength(1));
     });
 
     test('a configured block assistant is bound to the saved conversation',

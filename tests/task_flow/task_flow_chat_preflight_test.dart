@@ -1143,4 +1143,67 @@ void main() {
       fallbackChatEndpointType: 'anthropic',
     );
   });
+
+  test('AI Horde anonymous text model passes Task Flow chat preflight',
+      () async {
+    const modelId = 'aphrodite/TheDrummer/Cydonia-24B-v4.3';
+    final account = LlmAccount(
+      id: 'aihorde-anonymous',
+      connectorType: 'aihorde',
+      authType: 'none',
+      displayName: 'AI Horde anonymous',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'aihorde-cydonia',
+          upstreamModelId: modelId,
+          displayName: 'Cydonia 24B (AI Horde)',
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'toolCalling': false,
+            'supportedApiProtocols': ['openai.chat_completions'],
+          },
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'aihorde-task-flow-group',
+      displayName: 'AI Horde group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'aihorde-anonymous',
+          localModelId: 'aihorde-cydonia',
+          upstreamModelId: modelId,
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'AI Horde assistant',
+      prompt: 'Answer with plain text.',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(
+      flowChatEndpointType(assistant, providers),
+      'openai.chat_completions',
+    );
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'Summarize this paragraph.')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
 }
