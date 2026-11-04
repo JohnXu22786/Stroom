@@ -315,10 +315,13 @@ void chatAgentSemanticsGroup2() {
       await _waitFor(() => provider.captures.length >= 4); // 主请求 + 标题
       // 压缩助手 prompt 只应出现 1 次（首次发送）：
       // 第二次发送基于发送量（摘要 + 快照 tail）不再触发压缩
+      final compactionName =
+          appLocalizationsForLocale(const Locale('en', 'US'))
+              .builtInSystemCompactionName;
       final compactionCalls = provider.captures
           .where((c) => ((c['messages'] as List).first as Map)['content']
               .toString()
-              .contains('Context Compaction Assistant'))
+              .contains(compactionName))
           .length;
       expect(compactionCalls, 1, reason: '压缩只发生一次——第二次发送不重复压缩');
       // 主请求（含摘要 system）至少 2 次

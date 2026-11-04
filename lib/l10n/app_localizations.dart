@@ -139,7 +139,7 @@ abstract class AppLocalizations {
   /// No description provided for @builtInPromptGeneralPrompt.
   ///
   /// In en, this message translates to:
-  /// **'You are a helpful AI assistant. Answer the user in Chinese. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.'**
+  /// **'You are a helpful AI assistant. Answer the user in the language they use. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.'**
   String get builtInPromptGeneralPrompt;
 
   /// No description provided for @builtInPromptCodeExpertName.

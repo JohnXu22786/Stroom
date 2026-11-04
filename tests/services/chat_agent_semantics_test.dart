@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/models/ai_stream_event.dart';

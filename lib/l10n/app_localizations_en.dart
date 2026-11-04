@@ -30,7 +30,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get builtInPromptGeneralPrompt =>
-      'You are a helpful AI assistant. Answer the user in Chinese. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.';
+      'You are a helpful AI assistant. Answer the user in the language they use. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.';
 
   @override
   String get builtInPromptCodeExpertName => 'Code Expert';
@@ -1156,7 +1156,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get builtInPromptGeneralPrompt =>
-      'You are a helpful AI assistant. Answer the user in Chinese. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.';
+      'You are a helpful AI assistant. Answer the user in the language they use. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.';
 
   @override
   String get builtInPromptCodeExpertName => 'Code Expert';

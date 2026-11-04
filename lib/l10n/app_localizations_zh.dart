@@ -29,7 +29,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get builtInPromptGeneralPrompt =>
-      '你是一个有帮助的AI助手。请用中文回答用户的问题。回答简洁明了，逻辑清晰。如果遇到不确定的信息，请坦诚说明。';
+      '你是一个有帮助的AI助手。请使用用户所用的语言回答问题。回答简洁明了，逻辑清晰。如果遇到不确定的信息，请坦诚说明。';
 
   @override
   String get builtInPromptCodeExpertName => '代码专家';
@@ -1038,7 +1038,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get builtInPromptGeneralPrompt =>
-      '你是一个有帮助的AI助手。请用中文回答用户的问题。回答简洁明了，逻辑清晰。如果遇到不确定的信息，请坦诚说明。';
+      '你是一个有帮助的AI助手。请使用用户所用的语言回答问题。回答简洁明了，逻辑清晰。如果遇到不确定的信息，请坦诚说明。';
 
   @override
   String get builtInPromptCodeExpertName => '代码专家';
