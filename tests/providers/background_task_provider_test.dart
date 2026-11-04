@@ -909,6 +909,38 @@ void main() {
       await notifier.pendingPersistence;
     });
 
+    test('addTask rejects an ID that already belongs to a live task', () async {
+      const taskId = 'duplicate-live-task-id';
+      final notifier = BackgroundTaskNotifier();
+      notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'Original task',
+        taskId: taskId,
+      );
+      await notifier.pendingPersistence;
+
+      expect(
+        () => notifier.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Duplicate task',
+          taskId: taskId,
+        ),
+        throwsArgumentError,
+      );
+
+      expect(notifier.state, hasLength(1));
+      expect(notifier.taskById(taskId)?.title, 'Original task');
+      expect(notifier.taskById(taskId)?.status, TaskStatus.running);
+      await notifier.pendingPersistence;
+      final persisted =
+          jsonDecode(await _tasksFileIn(testDir.path).readAsString()) as List;
+      expect(persisted.whereType<Map>(), hasLength(1));
+      expect(persisted.whereType<Map>().single['title'], 'Original task');
+
+      notifier.dispose();
+      await notifier.pendingPersistence;
+    });
+
     test('addTask returns unique IDs for each task', () {
       final notifier = BackgroundTaskNotifier();
 

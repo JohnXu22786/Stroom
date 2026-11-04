@@ -4119,6 +4119,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Add a new background task and return its ID.
+  /// Caller-supplied [taskId] values must not belong to a live task.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
   /// so the retry flow can pre-populate the form.
@@ -4132,6 +4133,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? taskId,
   }) {
     final id = taskId ?? _uuid.v4();
+    if (state.any((task) => task.id == id)) {
+      throw ArgumentError.value(id, 'taskId', 'already belongs to a live task');
+    }
     _pendingRestoreTaskRemovals.remove(id);
     _pendingTaskRemovalReconciliations.remove(id);
     final steps = type.stepLabels
