@@ -52,10 +52,21 @@ void main() {
         'aimlapi',
         'alibaba',
         'alibaba-cn',
+        'agnes-cn',
         'arcee-ai',
+        'ainative',
+        'ainetcafe',
+        'aion',
+        'ant-ling',
+        'anyapi',
+        'apmix',
+        'auriko',
         'baichuan',
+        'baidu',
         'baseten',
         'bigmodel',
+        'bazaarlink',
+        'beatapi',
         'byteplus',
         'cerebras',
         'chutes',
@@ -212,6 +223,122 @@ void main() {
           .displayName,
       'Qwen2.5 72B',
     );
+  });
+
+  testWidgets('switching to an M37 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm37-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Baidu account',
+        endpointConfig: const {
+          'baseUrl': 'https://qianfan.baidubce.com/v2/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'baidu',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm37-preset-switch:ernie-5.1',
+            upstreamModelId: 'ernie-5.1',
+            displayName: 'ERNIE 5.1',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm37-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'old-baidu-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('agnes-cn');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.agnes-ai.cn/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('agnes-2.0-flash'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(modelsField.controller!.text, isNot(contains('ernie-5.1')));
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(await service.readCredential('m37-preset-switch'), 'old-baidu-key');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'new-agnes-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig['providerPresetId'], 'agnes-cn');
+    expect(saved.endpointConfig['baseUrl'],
+        'https://api.agnes-ai.cn/v1/chat/completions');
+    expect(
+        saved.endpointConfig['modelsUrl'], 'https://api.agnes-ai.cn/v1/models');
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-agnes-key');
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('custom-model'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('agnes-2.0-flash'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        isNot(contains('ernie-5.1')));
+    final agnes = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'agnes-2.0-flash',
+    );
+    expect(agnes.capabilities['contextLength'], 262144);
+    expect(agnes.capabilities['maxOutputTokens'], 65536);
+    expect(agnes.capabilities['reasoning'], isTrue);
+    expect(agnes.capabilities['supportedThinkingEfforts'], [
+      'none',
+      'low',
+      'medium',
+      'high',
+      'max',
+    ]);
+    expect(agnes.capabilities['vision'], isTrue);
+    expect(agnes.capabilities['toolCalling'], isTrue);
   });
 
   testWidgets('Trae offers token import and in-app SOLO sign-in', (
