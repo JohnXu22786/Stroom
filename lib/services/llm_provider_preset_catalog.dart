@@ -589,7 +589,12 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           displayName: 'Gemini 3 Flash'),
       LlmProviderPresetModel('gemini-3.1-flash-lite-preview',
           displayName: 'Gemini 3.1 Flash Lite'),
-      LlmProviderPresetModel('gemma-4-31b-it', displayName: 'Gemma 4 31B'),
+      LlmProviderPresetModel('gemma-4-31b-it',
+          displayName: 'Gemma 4 31B',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
       LlmProviderPresetModel('gemma-4-26b-a4b-it',
           displayName: 'Gemma 4 26B A4B'),
       LlmProviderPresetModel('deepseek-v3.2', displayName: 'DeepSeek V3.2'),
@@ -774,6 +779,217 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     fallbackModels: [
       LlmProviderPresetModel('claude-3-7-sonnet-20250514',
           displayName: 'Claude 3.7 Sonnet'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'crof',
+    displayName: 'CrofAI',
+    baseUrl: 'https://crof.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('deepseek-v4-pro',
+          displayName: 'DeepSeek V4 Pro',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('deepseek-v4-flash',
+          displayName: 'DeepSeek V4 Flash',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('deepseek-v4-flash-0731',
+          displayName: 'DeepSeek V4 Flash 0731',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('deepseek-v3.2', displayName: 'DeepSeek V3.2'),
+      LlmProviderPresetModel('kimi-k2.6',
+          displayName: 'Kimi K2.6',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('kimi-k2.7-code',
+          displayName: 'Kimi K2.7 Code',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('kimi-k3', displayName: 'Kimi K3', capabilities: {
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+      }),
+      LlmProviderPresetModel('kimi-k3-eco',
+          displayName: 'Kimi K3 Eco',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('glm-5.1', displayName: 'GLM 5.1', capabilities: {
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+      }),
+      LlmProviderPresetModel('glm-5.2', displayName: 'GLM 5.2', capabilities: {
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+      }),
+      LlmProviderPresetModel('mimo-v2.5-pro',
+          displayName: 'Mimo 2.5 Pro',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('gemma-4-31b-it',
+          displayName: 'Gemma 4 31B',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('qwen3.6-27b',
+          displayName: 'Qwen3.6 27B',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('qwen3.5-397b-a17b',
+          displayName: 'Qwen3.5 397B A17B',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+      LlmProviderPresetModel('qwen3.5-9b',
+          displayName: 'Qwen3.5 9B',
+          capabilities: {
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+          }),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'daoxe',
+    displayName: 'DaoXE',
+    baseUrl: 'https://api.daoxe.com/v1/chat/completions',
+    modelsUrl: 'https://api.daoxe.com/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('claude-sonnet-4-6',
+          displayName: 'Claude Sonnet 4.6'),
+      LlmProviderPresetModel('claude-opus-4-8', displayName: 'Claude Opus 4.8'),
+      LlmProviderPresetModel('claude-haiku-4-5-20251001',
+          displayName: 'Claude Haiku 4.5'),
+      LlmProviderPresetModel('gpt-5.5', displayName: 'GPT-5.5'),
+      LlmProviderPresetModel('gpt-5.4', displayName: 'GPT-5.4'),
+      LlmProviderPresetModel('gemini-3.1-pro-preview',
+          displayName: 'Gemini 3.1 Pro Preview'),
+      LlmProviderPresetModel('grok-4.5', displayName: 'Grok 4.5'),
+      LlmProviderPresetModel('grok-4.3', displayName: 'Grok 4.3'),
+      LlmProviderPresetModel('kimi-k2.5', displayName: 'Kimi K2.5'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'demonroute',
+    displayName: 'Demon Route',
+    baseUrl: 'https://api.demonroute.com/v1/chat/completions',
+    modelsUrl: 'https://api.demonroute.com/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('dphn/Dolphin3.0-Llama3.1-8B',
+          displayName: 'Dolphin 3.0 Llama 3.1 8B'),
+      LlmProviderPresetModel('dphn/Dolphin-Mistral-24B-Venice-Edition',
+          displayName: 'Dolphin Mistral 24B Venice'),
+      LlmProviderPresetModel('TheDrummer/Artemis-31B-v1.2',
+          displayName: 'Artemis 31B v1.2'),
+      LlmProviderPresetModel('TheDrummer/Cydonia-24B-v4.3',
+          displayName: 'Cydonia 24B v4.3'),
+      LlmProviderPresetModel('huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated',
+          displayName: 'Huihui Qwen 3.6 35B A3B Abliterated'),
+      LlmProviderPresetModel('huihui-ai/Huihui-gemma-4-31B-it-abliterated-v2',
+          displayName: 'Huihui Gemma 4 31B Abliterated v2'),
+      LlmProviderPresetModel('dphn/dolphin-2.9.3-mistral-nemo-12b',
+          displayName: 'Dolphin 2.9.3 Mistral Nemo 12B'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'dgrid',
+    displayName: 'DGrid',
+    baseUrl: 'https://api.dgrid.ai/v1/chat/completions',
+    modelsUrl: 'https://api.dgrid.ai/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('dgridai/free',
+          displayName: 'DGrid Free Models Router',
+          capabilities: {'contextLength': 128000}),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'digitalocean',
+    displayName: 'DigitalOcean',
+    baseUrl: 'https://inference.do-ai.run/v1/chat/completions',
+    modelsUrl: 'https://inference.do-ai.run/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'dit',
+    displayName: 'DIT.ai',
+    baseUrl: 'https://api.dit.ai/v1/chat/completions',
+    modelsUrl: 'https://api.dit.ai/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('gpt-5.4',
+          displayName: 'GPT-5.4 (DIT.ai)',
+          capabilities: {
+            'contextLength': 400000,
+            'toolCalling': true,
+            'reasoning': true,
+            'vision': true
+          }),
+      LlmProviderPresetModel('claude-sonnet-4-6',
+          displayName: 'Claude Sonnet 4.6 (DIT.ai)',
+          capabilities: {
+            'contextLength': 200000,
+            'toolCalling': true,
+            'reasoning': true,
+            'vision': true,
+            'supportedThinkingEfforts': ['low', 'medium', 'high', 'max']
+          }),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'dxnt',
+    displayName: 'DXNT / DX Token',
+    baseUrl: 'https://www.dxnt.com/v1/chat/completions',
+    modelsUrl: 'https://www.dxnt.com/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'electronhub',
+    displayName: 'Electron Hub',
+    baseUrl: 'https://api.electronhub.ai/v1/chat/completions',
+    modelsUrl: 'https://api.electronhub.ai/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'eurouter',
+    displayName: 'EURouter',
+    baseUrl: 'https://api.eurouter.ai/v1/chat/completions',
+    modelsUrl: 'https://api.eurouter.ai/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'factory',
+    displayName: 'Factory',
+    baseUrl: 'https://api.factory.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('auto', displayName: 'Factory Auto (best model)'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'fastrouter',
+    displayName: 'FastRouter',
+    baseUrl: 'https://api.fastrouter.ai/api/v1/chat/completions',
+    modelsUrl: 'https://api.fastrouter.ai/api/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'featherless-ai',
+    displayName: 'Featherless AI',
+    baseUrl: 'https://api.featherless.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('featherless-ai/Qwerky-72B'),
+      LlmProviderPresetModel('featherless-ai/Qwerky-QwQ-32B'),
     ],
   ),
   LlmProviderPreset(

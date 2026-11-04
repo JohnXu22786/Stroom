@@ -47,6 +47,18 @@ void main() {
       'codestral',
       'cohere',
       'coze',
+      'crof',
+      'daoxe',
+      'demonroute',
+      'dgrid',
+      'digitalocean',
+      'dit',
+      'dxnt',
+      'electronhub',
+      'eurouter',
+      'factory',
+      'fastrouter',
+      'featherless-ai',
       'deepinfra',
       'doubao',
       'fireworks',
@@ -108,6 +120,18 @@ void main() {
         'codestral': 'https://codestral.mistral.ai/v1/chat/completions',
         'cohere': 'https://api.cohere.com/compatibility/v1/chat/completions',
         'coze': 'https://api.coze.com/v1/chat/completions',
+        'crof': 'https://crof.ai/v1/chat/completions',
+        'daoxe': 'https://api.daoxe.com/v1/chat/completions',
+        'demonroute': 'https://api.demonroute.com/v1/chat/completions',
+        'dgrid': 'https://api.dgrid.ai/v1/chat/completions',
+        'digitalocean': 'https://inference.do-ai.run/v1/chat/completions',
+        'dit': 'https://api.dit.ai/v1/chat/completions',
+        'dxnt': 'https://www.dxnt.com/v1/chat/completions',
+        'electronhub': 'https://api.electronhub.ai/v1/chat/completions',
+        'eurouter': 'https://api.eurouter.ai/v1/chat/completions',
+        'factory': 'https://api.factory.ai/v1/chat/completions',
+        'fastrouter': 'https://api.fastrouter.ai/api/v1/chat/completions',
+        'featherless-ai': 'https://api.featherless.ai/v1/chat/completions',
         'cerebras': 'https://api.cerebras.ai/v1/chat/completions',
         'chutes': 'https://llm.chutes.ai/v1/chat/completions',
         'deepinfra': 'https://api.deepinfra.com/v1/openai/chat/completions',
@@ -145,6 +169,256 @@ void main() {
           id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
       },
       {'bytez': null, 'codestral': null, 'coze': null},
+    );
+    expect(
+      {
+        for (final id in [
+          'crof',
+          'daoxe',
+          'demonroute',
+          'dgrid',
+          'digitalocean',
+          'dit',
+          'dxnt',
+          'electronhub',
+          'eurouter',
+          'factory',
+          'fastrouter',
+          'featherless-ai',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'crof': null,
+        'daoxe': 'https://api.daoxe.com/v1/models',
+        'demonroute': 'https://api.demonroute.com/v1/models',
+        'dgrid': 'https://api.dgrid.ai/v1/models',
+        'digitalocean': 'https://inference.do-ai.run/v1/models',
+        'dit': 'https://api.dit.ai/v1/models',
+        'dxnt': 'https://www.dxnt.com/v1/models',
+        'electronhub': 'https://api.electronhub.ai/v1/models',
+        'eurouter': 'https://api.eurouter.ai/v1/models',
+        'factory': null,
+        'fastrouter': 'https://api.fastrouter.ai/api/v1/models',
+        'featherless-ai': null,
+      },
+    );
+    expect(
+      {
+        for (final id in [
+          'crof',
+          'daoxe',
+          'demonroute',
+          'dgrid',
+          'digitalocean',
+          'dit',
+          'dxnt',
+          'electronhub',
+          'eurouter',
+          'factory',
+          'fastrouter',
+          'featherless-ai',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!
+              .fallbackModels
+              .map((model) => model.id)
+              .toList(),
+      },
+      {
+        'crof': [
+          'deepseek-v4-pro',
+          'deepseek-v4-flash',
+          'deepseek-v4-flash-0731',
+          'deepseek-v3.2',
+          'kimi-k2.6',
+          'kimi-k2.7-code',
+          'kimi-k3',
+          'kimi-k3-eco',
+          'glm-5.1',
+          'glm-5.2',
+          'mimo-v2.5-pro',
+          'gemma-4-31b-it',
+          'qwen3.6-27b',
+          'qwen3.5-397b-a17b',
+          'qwen3.5-9b',
+        ],
+        'daoxe': [
+          'claude-sonnet-4-6',
+          'claude-opus-4-8',
+          'claude-haiku-4-5-20251001',
+          'gpt-5.5',
+          'gpt-5.4',
+          'gemini-3.1-pro-preview',
+          'grok-4.5',
+          'grok-4.3',
+          'kimi-k2.5',
+        ],
+        'demonroute': [
+          'dphn/Dolphin3.0-Llama3.1-8B',
+          'dphn/Dolphin-Mistral-24B-Venice-Edition',
+          'TheDrummer/Artemis-31B-v1.2',
+          'TheDrummer/Cydonia-24B-v4.3',
+          'huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated',
+          'huihui-ai/Huihui-gemma-4-31B-it-abliterated-v2',
+          'dphn/dolphin-2.9.3-mistral-nemo-12b',
+        ],
+        'dgrid': ['dgridai/free'],
+        'digitalocean': <String>[],
+        'dit': ['gpt-5.4', 'claude-sonnet-4-6'],
+        'dxnt': <String>[],
+        'electronhub': <String>[],
+        'eurouter': <String>[],
+        'factory': ['auto'],
+        'fastrouter': <String>[],
+        'featherless-ai': [
+          'featherless-ai/Qwerky-72B',
+          'featherless-ai/Qwerky-QwQ-32B'
+        ],
+      },
+    );
+    final crofModels = findLlmOpenAiProviderPreset('crof')!.fallbackModels;
+    final crofReasoningModelIds = {
+      'deepseek-v4-pro',
+      'deepseek-v4-flash',
+      'deepseek-v4-flash-0731',
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+      'kimi-k3',
+      'kimi-k3-eco',
+      'glm-5.1',
+      'glm-5.2',
+      'mimo-v2.5-pro',
+      'gemma-4-31b-it',
+      'qwen3.6-27b',
+      'qwen3.5-397b-a17b',
+      'qwen3.5-9b',
+    };
+    expect(
+      crofModels
+          .where((model) => model.capabilities['reasoning'] == true)
+          .map((model) => model.id)
+          .toSet(),
+      crofReasoningModelIds,
+    );
+    for (final model in crofModels.where(
+      (model) => crofReasoningModelIds.contains(model.id),
+    )) {
+      expect(model.capabilities, {
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max'],
+      });
+    }
+    expect(
+      {
+        for (final id in [
+          'crof',
+          'daoxe',
+          'demonroute',
+          'dgrid',
+          'digitalocean',
+          'dit',
+          'dxnt',
+          'electronhub',
+          'eurouter',
+          'factory',
+          'fastrouter',
+          'featherless-ai',
+        ])
+          id: {
+            for (final model in findLlmOpenAiProviderPreset(id)!.fallbackModels)
+              model.id: model.displayName,
+          },
+      },
+      {
+        'crof': {
+          'deepseek-v4-pro': 'DeepSeek V4 Pro',
+          'deepseek-v4-flash': 'DeepSeek V4 Flash',
+          'deepseek-v4-flash-0731': 'DeepSeek V4 Flash 0731',
+          'deepseek-v3.2': 'DeepSeek V3.2',
+          'kimi-k2.6': 'Kimi K2.6',
+          'kimi-k2.7-code': 'Kimi K2.7 Code',
+          'kimi-k3': 'Kimi K3',
+          'kimi-k3-eco': 'Kimi K3 Eco',
+          'glm-5.1': 'GLM 5.1',
+          'glm-5.2': 'GLM 5.2',
+          'mimo-v2.5-pro': 'Mimo 2.5 Pro',
+          'gemma-4-31b-it': 'Gemma 4 31B',
+          'qwen3.6-27b': 'Qwen3.6 27B',
+          'qwen3.5-397b-a17b': 'Qwen3.5 397B A17B',
+          'qwen3.5-9b': 'Qwen3.5 9B',
+        },
+        'daoxe': {
+          'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+          'claude-opus-4-8': 'Claude Opus 4.8',
+          'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
+          'gpt-5.5': 'GPT-5.5',
+          'gpt-5.4': 'GPT-5.4',
+          'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
+          'grok-4.5': 'Grok 4.5',
+          'grok-4.3': 'Grok 4.3',
+          'kimi-k2.5': 'Kimi K2.5',
+        },
+        'demonroute': {
+          'dphn/Dolphin3.0-Llama3.1-8B': 'Dolphin 3.0 Llama 3.1 8B',
+          'dphn/Dolphin-Mistral-24B-Venice-Edition':
+              'Dolphin Mistral 24B Venice',
+          'TheDrummer/Artemis-31B-v1.2': 'Artemis 31B v1.2',
+          'TheDrummer/Cydonia-24B-v4.3': 'Cydonia 24B v4.3',
+          'huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated':
+              'Huihui Qwen 3.6 35B A3B Abliterated',
+          'huihui-ai/Huihui-gemma-4-31B-it-abliterated-v2':
+              'Huihui Gemma 4 31B Abliterated v2',
+          'dphn/dolphin-2.9.3-mistral-nemo-12b':
+              'Dolphin 2.9.3 Mistral Nemo 12B',
+        },
+        'dgrid': {'dgridai/free': 'DGrid Free Models Router'},
+        'digitalocean': <String, String>{},
+        'dit': {
+          'gpt-5.4': 'GPT-5.4 (DIT.ai)',
+          'claude-sonnet-4-6': 'Claude Sonnet 4.6 (DIT.ai)',
+        },
+        'dxnt': <String, String>{},
+        'electronhub': <String, String>{},
+        'eurouter': <String, String>{},
+        'factory': {'auto': 'Factory Auto (best model)'},
+        'fastrouter': <String, String>{},
+        'featherless-ai': {
+          'featherless-ai/Qwerky-72B': 'featherless-ai/Qwerky-72B',
+          'featherless-ai/Qwerky-QwQ-32B': 'featherless-ai/Qwerky-QwQ-32B',
+        },
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('crof')!.fallbackModels.first.capabilities,
+      {
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max']
+      },
+    );
+    expect(
+        findLlmOpenAiProviderPreset('dgrid')!
+            .fallbackModels
+            .single
+            .capabilities,
+        {'contextLength': 128000});
+    expect(
+      findLlmOpenAiProviderPreset('dit')!.fallbackModels.first.capabilities,
+      {
+        'contextLength': 400000,
+        'toolCalling': true,
+        'reasoning': true,
+        'vision': true
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('dit')!.fallbackModels[1].capabilities,
+      {
+        'contextLength': 200000,
+        'toolCalling': true,
+        'reasoning': true,
+        'vision': true,
+        'supportedThinkingEfforts': ['low', 'medium', 'high', 'max'],
+      },
     );
     expect(
       findLlmOpenAiProviderPreset('fireworks')?.modelsUrl,
@@ -1034,6 +1308,53 @@ void main() {
       llmRoutedChatSupportedConnectorTypesForModelOverride(
         'openai.chat_completions',
       ),
+      contains('openai-compatibility'),
+    );
+    expect(
+      AiGateway.defaultProviderCatalog.findProvider('openai-compatibility'),
+      isNotNull,
+    );
+  });
+
+  test('M39 presets use the shared Chat and Task Flow route', () {
+    final preset = findLlmOpenAiProviderPreset('daoxe')!;
+    final account = LlmAccount(
+      id: 'daoxe-account',
+      connectorType: 'openai-compatibility',
+      authType: preset.authType,
+      displayName: preset.displayName,
+      endpointConfig: preset.applyToEndpointConfig(const {}),
+      models: [
+        for (final model in preset.fallbackModels)
+          LlmUpstreamModel(
+            id: 'daoxe-account:${model.id}',
+            upstreamModelId: model.id,
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+          ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'daoxe-group',
+      displayName: 'DaoXE',
+      members: [
+        LlmModelGroupMember(
+          accountId: account.id,
+          upstreamModelId: account.models.first.upstreamModelId,
+        ),
+      ],
+    );
+
+    final configs = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    );
+
+    expect(configs, hasLength(1));
+    expect(configs.single.apiProtocol, 'openai.chat_completions');
+    expect(configs.single.models, hasLength(1));
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
       contains('openai-compatibility'),
     );
     expect(
