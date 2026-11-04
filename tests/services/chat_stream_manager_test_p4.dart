@@ -1,162 +1,198 @@
 part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup4() {
+  test('persists realtime input transcription on the user message', () async {
+    SharedPreferences.setMockInitialValues({});
+    final manager = ChatStreamManager();
+    final provider = _MockProvider([
+      [
+        const AIStreamEvent('', inputTranscript: 'recognized user speech'),
+        AIStreamEvent('assistant reply'),
+      ],
+    ]);
+    manager.adapter.forceService(_makeChatService(provider));
+
+    final result = await manager.startStreaming(
+      text: '',
+      convId: 'conv-input-transcript',
+      history: [_userMsg('', 'u-input-audio')],
+    );
+
+    expect(result.history.first.role, 'user');
+    expect(result.history.first.content, 'recognized user speech');
+    expect(result.fullReply, 'assistant reply');
+    manager.dispose();
+  });
+
   group('ChatStreamManager - reasoning buffer non-duplication', () {
     test(
-        'each reasoning section contains only its own content (not previous sections)',
-        () async {
-      SharedPreferences.setMockInitialValues({});
-      final manager = ChatStreamManager();
+      'each reasoning section contains only its own content (not previous sections)',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final manager = ChatStreamManager();
 
-      // Two rounds of reasoning separated by tool calls:
-      // Section 0: "Think about A"
-      // Section 1: "Think about B" (must NOT include "Think about A")
-      // Section 2: "Final thought"
-      final provider = _MockProvider([
-        // Round 1: reasoning + tool call
-        [
-          AIStreamEvent('Think about A', isReasoning: true),
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'tc1',
-              'type': 'function',
-              'function': {
-                'name': 'search',
-                'arguments': '{"q":"A"}',
-              },
-            },
-          ]),
-        ],
-        // Round 2: second reasoning + tool call
-        [
-          AIStreamEvent('Think about B', isReasoning: true),
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'tc2',
-              'type': 'function',
-              'function': {
-                'name': 'search',
-                'arguments': '{"q":"B"}',
-              },
-            },
-          ]),
-        ],
-        // Round 3: final reasoning + answer
-        [
-          AIStreamEvent('Final thought', isReasoning: true),
-          AIStreamEvent('Final answer'),
-        ],
-      ]);
-      manager.adapter.forceService(_makeChatService(provider));
+        // Two rounds of reasoning separated by tool calls:
+        // Section 0: "Think about A"
+        // Section 1: "Think about B" (must NOT include "Think about A")
+        // Section 2: "Final thought"
+        final provider = _MockProvider([
+          // Round 1: reasoning + tool call
+          [
+            AIStreamEvent('Think about A', isReasoning: true),
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': 'tc1',
+                  'type': 'function',
+                  'function': {'name': 'search', 'arguments': '{"q":"A"}'},
+                },
+              ],
+            ),
+          ],
+          // Round 2: second reasoning + tool call
+          [
+            AIStreamEvent('Think about B', isReasoning: true),
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': 'tc2',
+                  'type': 'function',
+                  'function': {'name': 'search', 'arguments': '{"q":"B"}'},
+                },
+              ],
+            ),
+          ],
+          // Round 3: final reasoning + answer
+          [
+            AIStreamEvent('Final thought', isReasoning: true),
+            AIStreamEvent('Final answer'),
+          ],
+        ]);
+        manager.adapter.forceService(_makeChatService(provider));
 
-      final result = await manager.startStreaming(
-        text: 'Query',
-        convId: 'conv-dedup',
-        history: [
-          _userMsg('Query', 'u1'),
-        ],
-      );
+        final result = await manager.startStreaming(
+          text: 'Query',
+          convId: 'conv-dedup',
+          history: [_userMsg('Query', 'u1')],
+        );
 
-      // Should have at least 3 reasoning sections
-      expect(result.reasoningSections.length, greaterThanOrEqualTo(3),
+        // Should have at least 3 reasoning sections
+        expect(
+          result.reasoningSections.length,
+          greaterThanOrEqualTo(3),
           reason:
-              'Expected >=3 sections, got ${result.reasoningSections.length}');
+              'Expected >=3 sections, got ${result.reasoningSections.length}',
+        );
 
-      // Section 0: only "Think about A"
-      expect(result.reasoningSections[0], contains('Think about A'));
-      expect(result.reasoningSections[0], isNot(contains('Think about B')));
-      expect(result.reasoningSections[0], isNot(contains('Final thought')));
+        // Section 0: only "Think about A"
+        expect(result.reasoningSections[0], contains('Think about A'));
+        expect(result.reasoningSections[0], isNot(contains('Think about B')));
+        expect(result.reasoningSections[0], isNot(contains('Final thought')));
 
-      // Section 1: only "Think about B", NOT "Think about A"
-      final s1 = result.reasoningSections[1];
-      expect(s1, contains('Think about B'));
-      expect(s1, isNot(contains('Think about A')),
-          reason: 'Section 1 must not contain Section 0 content: "$s1"');
+        // Section 1: only "Think about B", NOT "Think about A"
+        final s1 = result.reasoningSections[1];
+        expect(s1, contains('Think about B'));
+        expect(
+          s1,
+          isNot(contains('Think about A')),
+          reason: 'Section 1 must not contain Section 0 content: "$s1"',
+        );
 
-      // Section 2: only "Final thought", not previous content
-      final s2 = result.reasoningSections[2];
-      expect(s2, contains('Final thought'));
-      expect(s2, isNot(contains('Think about A')));
-      expect(s2, isNot(contains('Think about B')));
+        // Section 2: only "Final thought", not previous content
+        final s2 = result.reasoningSections[2];
+        expect(s2, contains('Final thought'));
+        expect(s2, isNot(contains('Think about A')));
+        expect(s2, isNot(contains('Think about B')));
 
-      manager.dispose();
-    });
+        manager.dispose();
+      },
+    );
 
-    test('textSections correctly partitioned at tool call boundaries',
-        () async {
-      SharedPreferences.setMockInitialValues({});
-      final manager = ChatStreamManager();
+    test(
+      'textSections correctly partitioned at tool call boundaries',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final manager = ChatStreamManager();
 
-      final provider = _MockProvider([
-        // Round 1: reasoning + text + tool call
-        [
-          AIStreamEvent('Think about A', isReasoning: true),
-          AIStreamEvent('Intermediate text 1'),
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'tc1',
-              'type': 'function',
-              'function': {
-                'name': 'search',
-                'arguments': '{"q":"A"}',
-              },
-            },
-          ]),
-        ],
-        // Round 2: second reasoning + more text + second tool call
-        [
-          AIStreamEvent('Think about B', isReasoning: true),
-          AIStreamEvent('Intermediate text 2'),
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'tc2',
-              'type': 'function',
-              'function': {
-                'name': 'web_fetch',
-                'arguments': '{"url":"b.com"}',
-              },
-            },
-          ]),
-        ],
-        // Round 3: final reasoning + final answer
-        [
-          AIStreamEvent('Final thought', isReasoning: true),
-          AIStreamEvent('Final answer text'),
-        ],
-      ]);
-      manager.adapter.forceService(_makeChatService(provider));
+        final provider = _MockProvider([
+          // Round 1: reasoning + text + tool call
+          [
+            AIStreamEvent('Think about A', isReasoning: true),
+            AIStreamEvent('Intermediate text 1'),
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': 'tc1',
+                  'type': 'function',
+                  'function': {'name': 'search', 'arguments': '{"q":"A"}'},
+                },
+              ],
+            ),
+          ],
+          // Round 2: second reasoning + more text + second tool call
+          [
+            AIStreamEvent('Think about B', isReasoning: true),
+            AIStreamEvent('Intermediate text 2'),
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': 'tc2',
+                  'type': 'function',
+                  'function': {
+                    'name': 'web_fetch',
+                    'arguments': '{"url":"b.com"}',
+                  },
+                },
+              ],
+            ),
+          ],
+          // Round 3: final reasoning + final answer
+          [
+            AIStreamEvent('Final thought', isReasoning: true),
+            AIStreamEvent('Final answer text'),
+          ],
+        ]);
+        manager.adapter.forceService(_makeChatService(provider));
 
-      final result = await manager.startStreaming(
-        text: 'Query',
-        convId: 'conv-text-section',
-        history: [_userMsg('Query', 'u1')],
-      );
+        final result = await manager.startStreaming(
+          text: 'Query',
+          convId: 'conv-text-section',
+          history: [_userMsg('Query', 'u1')],
+        );
 
-      // Check textSections is present and correctly partitioned
-      final ts = result.textSections;
-      expect(ts, isNotNull);
-      expect(ts.length, 3,
-          reason: 'Expected 3 text sections (one per round), got ${ts.length}');
-      expect(ts[0], contains('Intermediate text 1'));
-      expect(ts[1], contains('Intermediate text 2'));
-      expect(ts[2], contains('Final answer text'));
+        // Check textSections is present and correctly partitioned
+        final ts = result.textSections;
+        expect(ts, isNotNull);
+        expect(
+          ts.length,
+          3,
+          reason: 'Expected 3 text sections (one per round), got ${ts.length}',
+        );
+        expect(ts[0], contains('Intermediate text 1'));
+        expect(ts[1], contains('Intermediate text 2'));
+        expect(ts[2], contains('Final answer text'));
 
-      // Each text section should contain ONLY its round's text
-      expect(ts[0], isNot(contains('Intermediate text 2')));
-      expect(ts[1], isNot(contains('Intermediate text 1')));
-      expect(ts[2], isNot(contains('Intermediate text 1')));
+        // Each text section should contain ONLY its round's text
+        expect(ts[0], isNot(contains('Intermediate text 2')));
+        expect(ts[1], isNot(contains('Intermediate text 1')));
+        expect(ts[2], isNot(contains('Intermediate text 1')));
 
-      // Verify ChatMessage.textSessions matches
-      final msg = result.assistantMessage;
-      expect(msg, isNotNull);
-      expect(msg!.textSections, isNotNull);
-      expect(msg.textSections!.length, 3);
-      expect(msg.textSections![0], contains('Intermediate text 1'));
-      expect(msg.textSections![1], contains('Intermediate text 2'));
-      expect(msg.textSections![2], contains('Final answer text'));
+        // Verify ChatMessage.textSessions matches
+        final msg = result.assistantMessage;
+        expect(msg, isNotNull);
+        expect(msg!.textSections, isNotNull);
+        expect(msg.textSections!.length, 3);
+        expect(msg.textSections![0], contains('Intermediate text 1'));
+        expect(msg.textSections![1], contains('Intermediate text 2'));
+        expect(msg.textSections![2], contains('Final answer text'));
 
-      manager.dispose();
-    });
+        manager.dispose();
+      },
+    );
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -177,12 +213,9 @@ void chatStreamManagerGroup4() {
 
         // Block convA so convB can start while A is still running
         final blockA = Completer<void>();
-        final providerA = _MockProvider(
-          [
-            [AIStreamEvent('A response')],
-          ],
-          waitForYield: blockA,
-        );
+        final providerA = _MockProvider([
+          [AIStreamEvent('A response')],
+        ], waitForYield: blockA);
         manager.adapter.forceService(_makeChatService(providerA));
         final futureA = manager.startStreaming(
           text: 'Q A',
@@ -225,12 +258,9 @@ void chatStreamManagerGroup4() {
 
         // Use a WAITING mock to keep convA alive while we start convB.
         final blockA = Completer<void>();
-        final providerA = _MockProvider(
-          [
-            [AIStreamEvent('A response')],
-          ],
-          waitForYield: blockA,
-        );
+        final providerA = _MockProvider([
+          [AIStreamEvent('A response')],
+        ], waitForYield: blockA);
         manager.adapter.forceService(_makeChatService(providerA));
         final futureA = manager.startStreaming(
           text: 'Q A',

@@ -3,6 +3,10 @@ import 'chat_message.dart';
 class AIStreamEvent {
   final String text;
   final bool isReasoning;
+
+  /// Provider transcription of user-supplied audio, kept separate from the
+  /// assistant's generated text so callers can retain the user's transcript.
+  final String? inputTranscript;
   final List<Map<String, dynamic>>? toolCalls;
 
   /// Anthropic extended thinking 的签名（signature_delta 累计结果）。
@@ -25,6 +29,7 @@ class AIStreamEvent {
   const AIStreamEvent(
     this.text, {
     this.isReasoning = false,
+    this.inputTranscript,
     this.toolCalls,
     this.thinkingSignature,
     this.usage,

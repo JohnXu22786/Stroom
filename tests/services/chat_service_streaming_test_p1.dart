@@ -14,72 +14,117 @@ void chatServiceStreamingGroup1() {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test Model',
-        typeConfig: {
-          'context': 4096,
-          'temperature': 0.7,
-        },
+        typeConfig: {'context': 4096, 'temperature': 0.7},
       );
     });
 
-    test('sendStreamWithTools emits stored provider media attachments',
-        () async {
-      final attachment = Attachment(
-        id: 'generated-audio',
-        fileName: 'audio.mp3',
-        mimeType: 'audio/mpeg',
-        fileType: 'audio',
-        hash: 'audio-hash',
-        storagePath: 'attachments/audio.mp3',
-        fileSize: 4,
-      );
-      provider.mediaAttachments = [attachment];
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
+    test(
+      'sendStreamWithTools emits stored provider media attachments',
+      () async {
+        final attachment = Attachment(
+          id: 'generated-audio',
+          fileName: 'audio.mp3',
+          mimeType: 'audio/mpeg',
+          fileType: 'audio',
+          hash: 'audio-hash',
+          storagePath: 'attachments/audio.mp3',
+          fileSize: 4,
+        );
+        provider.mediaAttachments = [attachment];
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
 
-      final events = await service
-          .sendStreamWithTools('Generate audio', history: []).toList();
+        final events = await service
+            .sendStreamWithTools('Generate audio', history: [])
+            .toList();
 
-      final mediaEvent = events.whereType<MediaAttachmentsEvent>().single;
-      expect(mediaEvent.attachments.single.storagePath, attachment.storagePath);
-    });
+        final mediaEvent = events.whereType<MediaAttachmentsEvent>().single;
+        expect(
+          mediaEvent.attachments.single.storagePath,
+          attachment.storagePath,
+        );
+      },
+    );
 
-    test('non-streaming send exposes streamed provider media attachments',
-        () async {
-      final attachment = Attachment(
-        id: 'generated-image',
-        fileName: 'image.png',
-        mimeType: 'image/png',
-        fileType: 'image',
-        hash: 'image-hash',
-        storagePath: 'attachments/image.png',
-        fileSize: 3,
-      );
-      provider.mediaAttachments = [attachment];
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
+    test(
+      'non-streaming send exposes streamed provider media attachments',
+      () async {
+        final attachment = Attachment(
+          id: 'generated-image',
+          fileName: 'image.png',
+          mimeType: 'image/png',
+          fileType: 'image',
+          hash: 'image-hash',
+          storagePath: 'attachments/image.png',
+          fileSize: 3,
+        );
+        provider.mediaAttachments = [attachment];
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
 
-      final text = await service.send('Generate an image', history: []);
+        final text = await service.send('Generate an image', history: []);
 
-      expect(text, isEmpty);
-      expect(service.lastMediaAttachments.single.storagePath,
-          attachment.storagePath);
-    });
+        expect(text, isEmpty);
+        expect(
+          service.lastMediaAttachments.single.storagePath,
+          attachment.storagePath,
+        );
+      },
+    );
 
-    test('sendStream passes reasoning=true and default reasoningEffort',
-        () async {
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
+    test(
+      'plain sendStream records the Realtime transcript in user history',
+      () async {
+        provider.inputTranscript = 'spoken words';
+        final history = [
+          ChatMessage(
+            id: 'user-message',
+            role: 'user',
+            content: 'Ask this',
+            createdAt: DateTime.utc(2025),
+          ),
+        ];
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
 
-      final events = <dynamic>[];
-      await for (final event in service.sendStream(
-        'Hello',
-        history: [],
-        reasoning: true,
-      )) {
-        events.add(event);
-      }
+        final chunks = await service
+            .sendStream('Ask this', history: history)
+            .toList();
 
-      expect(provider.capturedBody, isNotNull);
-      expect(provider.capturedBody!['reasoning'], isTrue);
-      expect(provider.capturedBody!['reasoningEffort'], 'medium');
-    });
+        expect(chunks, isEmpty);
+        expect(history.single.content, 'Ask this\nspoken words');
+        expect(service.lastInputTranscript, 'spoken words');
+      },
+    );
+
+    test(
+      'sendStream passes reasoning=true and default reasoningEffort',
+      () async {
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
+
+        final events = <dynamic>[];
+        await for (final event in service.sendStream(
+          'Hello',
+          history: [],
+          reasoning: true,
+        )) {
+          events.add(event);
+        }
+
+        expect(provider.capturedBody, isNotNull);
+        expect(provider.capturedBody!['reasoning'], isTrue);
+        expect(provider.capturedBody!['reasoningEffort'], 'medium');
+      },
+    );
 
     test('sendStream passes reasoning=false to provider', () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
@@ -117,42 +162,51 @@ void chatServiceStreamingGroup1() {
     });
 
     test(
-        'ChatService.sendStreamWithTools chains reasoning and effort correctly',
-        () async {
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
+      'ChatService.sendStreamWithTools chains reasoning and effort correctly',
+      () async {
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
 
-      final events = <dynamic>[];
-      await for (final event in service.sendStreamWithTools(
-        'Hello',
-        history: [],
-        reasoning: true,
-        reasoningEffort: 'low',
-      )) {
-        events.add(event);
-      }
+        final events = <dynamic>[];
+        await for (final event in service.sendStreamWithTools(
+          'Hello',
+          history: [],
+          reasoning: true,
+          reasoningEffort: 'low',
+        )) {
+          events.add(event);
+        }
 
-      expect(provider.capturedBody, isNotNull);
-      expect(provider.capturedBody!['reasoning'], isTrue);
-      expect(provider.capturedBody!['reasoningEffort'], 'low');
-    });
+        expect(provider.capturedBody, isNotNull);
+        expect(provider.capturedBody!['reasoning'], isTrue);
+        expect(provider.capturedBody!['reasoningEffort'], 'low');
+      },
+    );
 
-    test('ChatService.sendStreamWithTools passes default reasoningEffort',
-        () async {
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
+    test(
+      'ChatService.sendStreamWithTools passes default reasoningEffort',
+      () async {
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+        );
 
-      final events = <dynamic>[];
-      await for (final event in service.sendStreamWithTools(
-        'Hello',
-        history: [],
-        reasoning: true,
-      )) {
-        events.add(event);
-      }
+        final events = <dynamic>[];
+        await for (final event in service.sendStreamWithTools(
+          'Hello',
+          history: [],
+          reasoning: true,
+        )) {
+          events.add(event);
+        }
 
-      expect(provider.capturedBody, isNotNull);
-      expect(provider.capturedBody!['reasoning'], isTrue);
-      expect(provider.capturedBody!['reasoningEffort'], 'medium');
-    });
+        expect(provider.capturedBody, isNotNull);
+        expect(provider.capturedBody!['reasoning'], isTrue);
+        expect(provider.capturedBody!['reasoningEffort'], 'medium');
+      },
+    );
   });
 
   // ====================================================================
@@ -183,34 +237,43 @@ void chatServiceStreamingGroup1() {
       expect(ChatService.parseJsonValue('false'), isFalse);
     });
 
-    test('throws FormatException for invalid JSON (no raw string fallback)',
-        () {
-      // Regression: the previous behavior returned the raw string and let it
-      // get re-serialized as a quoted string in the API request body. Now we
-      // throw so the param can be cleanly omitted and the user can see the
-      // underlying error.
-      expect(
-        () => ChatService.parseJsonValue('not-json'),
-        throwsA(isA<FormatException>()),
-      );
-    });
+    test(
+      'throws FormatException for invalid JSON (no raw string fallback)',
+      () {
+        // Regression: the previous behavior returned the raw string and let it
+        // get re-serialized as a quoted string in the API request body. Now we
+        // throw so the param can be cleanly omitted and the user can see the
+        // underlying error.
+        expect(
+          () => ChatService.parseJsonValue('not-json'),
+          throwsA(isA<FormatException>()),
+        );
+      },
+    );
 
     test('returns null for empty string (treated as no-op)', () {
       final result = ChatService.parseJsonValue('');
-      expect(result, isNull,
-          reason: 'Empty JSON values should be treated as a no-op.');
+      expect(
+        result,
+        isNull,
+        reason: 'Empty JSON values should be treated as a no-op.',
+      );
     });
   });
 
   group('ChatService.parseReasoningValue', () {
     test('string type returns the value as-is', () {
       expect(
-          ChatService.parseReasoningValue('hello', 'string'), equals('hello'));
+        ChatService.parseReasoningValue('hello', 'string'),
+        equals('hello'),
+      );
     });
 
     test('number type parses decimal string to double', () {
-      expect(ChatService.parseReasoningValue('3.14', 'number'),
-          closeTo(3.14, 0.001));
+      expect(
+        ChatService.parseReasoningValue('3.14', 'number'),
+        closeTo(3.14, 0.001),
+      );
     });
 
     test('number type parses integer string to double', () {
@@ -256,8 +319,10 @@ void chatServiceStreamingGroup1() {
     });
 
     test('default type (string) returns value as-is', () {
-      expect(ChatService.parseReasoningValue('anything', 'unknown_type'),
-          equals('anything'));
+      expect(
+        ChatService.parseReasoningValue('anything', 'unknown_type'),
+        equals('anything'),
+      );
     });
   });
 

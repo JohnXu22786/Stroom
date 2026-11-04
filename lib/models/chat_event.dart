@@ -11,6 +11,12 @@ class TextEvent extends ChatEvent {
   TextEvent(this.text, {this.contentOrder});
 }
 
+/// Provider transcription of the audio on the current user turn.
+class InputTranscriptEvent extends ChatEvent {
+  final String text;
+  const InputTranscriptEvent(this.text);
+}
+
 class MediaAttachmentsEvent extends ChatEvent {
   final List<Attachment> attachments;
   final int? contentOrder;

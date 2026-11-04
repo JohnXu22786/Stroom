@@ -95,13 +95,13 @@ void main() {
                     1 =>
               {'__type': 'ExpiredClientException'},
             '/client/register' => {
-                'clientId': 'replacement-client',
-                'clientSecret': 'replacement-secret',
-              },
+              'clientId': 'replacement-client',
+              'clientSecret': 'replacement-secret',
+            },
             '/token' => {
-                'accessToken': 'recovered-access',
-                'refreshToken': 'recovered-refresh',
-              },
+              'accessToken': 'recovered-access',
+              'refreshToken': 'recovered-refresh',
+            },
             _ => throw StateError('Unexpected Amazon Q refresh path.'),
           };
           final status = payload.containsKey('__type') ? 400 : 200;
@@ -439,7 +439,8 @@ void main() {
       },
     );
 
-    const expectedPrompt = 'System instruction: Follow the user carefully. \n'
+    const expectedPrompt =
+        'System instruction: Follow the user carefully. \n'
         'User:  What does this function do? \n'
         'Developer instruction: Keep the answer concise.\n'
         'Assistant: It sorts a list.\n'
@@ -673,20 +674,21 @@ void main() {
             },
           );
         });
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-sonnet-4-6',
-        body: const {
-          'model': 'claude-sonnet-4-6',
-          'messages': [
-            {'role': 'user', 'content': 'Hello'},
-          ],
-        },
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-sonnet-4-6',
+            body: const {
+              'model': 'claude-sonnet-4-6',
+              'messages': [
+                {'role': 'user', 'content': 'Hello'},
+              ],
+            },
+            stream: true,
+          );
 
       expect(
         request!.uri.toString(),
@@ -1080,15 +1082,16 @@ void main() {
           );
         });
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-6-astra',
-        body: const {'messages': [], 'stream': false},
-        stream: false,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-6-astra',
+            body: const {'messages': [], 'stream': false},
+            stream: false,
+          );
 
       expect(request?.headers['Accept'], 'text/event-stream');
       expect(
@@ -1149,10 +1152,7 @@ void main() {
         ..httpClientAdapter = _FunctionalAdapter((_) async {
           return ResponseBody.fromString(
             'event: response.completed\n'
-            'data: ${jsonEncode({
-                  'type': 'response.completed',
-                  'response': completedResponse
-                })}\n\n'
+            'data: ${jsonEncode({'type': 'response.completed', 'response': completedResponse})}\n\n'
             'data: [DONE]\n\n',
             200,
             headers: const {
@@ -1161,15 +1161,16 @@ void main() {
           );
         });
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-6-astra',
-        body: const {'input': []},
-        nativeFormat: 'responses',
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-6-astra',
+            body: const {'input': []},
+            nativeFormat: 'responses',
+          );
 
       expect(response.body, completedResponse);
     },
@@ -2761,7 +2762,8 @@ void main() {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           observed.add(options);
-          final accountId = options.headers['Authorization'] ==
+          final accountId =
+              options.headers['Authorization'] ==
                   'Bearer private-first-command-key'
               ? 'command-code-first'
               : 'command-code-second';
@@ -3167,8 +3169,7 @@ void main() {
         expect(
           (await service.discoverModels(
             account,
-          ))
-              .map((model) => model.upstreamModelId),
+          )).map((model) => model.upstreamModelId),
           contains('claude-sonnet-4-6'),
         );
       },
@@ -3191,9 +3192,13 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved = (jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map)['items'] as List;
+        final saved =
+            (jsonDecode(
+                      preferences.values[LlmAccountMigrationService
+                          .accountsPreferenceKey]!,
+                    )
+                    as Map)['items']
+                as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -3383,26 +3388,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            {
-              'id': 'legacy-anthropic',
-              'connectorType': 'anthropic',
-              'authType': 'api_key',
-              'displayName': 'Legacy Anthropic',
-              'credentialRef': sharedRef,
-              'endpointConfig': {'host': 'https://claude.example.test'},
-            },
-            {
-              'id': 'legacy-openai',
-              'connectorType': 'openai',
-              'authType': 'api_key',
-              'displayName': 'Legacy OpenAI',
-              'credentialRef': 'legacy-openai-credential',
-              'endpointConfig': {'host': 'https://openai.example.test/v1'},
-            },
-          ],
-        });
+              'version': 1,
+              'items': [
+                {
+                  'id': 'legacy-anthropic',
+                  'connectorType': 'anthropic',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy Anthropic',
+                  'credentialRef': sharedRef,
+                  'endpointConfig': {'host': 'https://claude.example.test'},
+                },
+                {
+                  'id': 'legacy-openai',
+                  'connectorType': 'openai',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy OpenAI',
+                  'credentialRef': 'legacy-openai-credential',
+                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
+                },
+              ],
+            });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -3459,19 +3464,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -3512,19 +3517,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -3927,8 +3932,9 @@ void main() {
                 jsonEncode({
                   'data': [
                     {
-                      'id':
-                          connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6',
+                      'id': connectorType == 'grok-cli'
+                          ? 'grok-4.7'
+                          : 'grok-4.6',
                     },
                     {'id': 'grok-4-image'},
                   ],
@@ -4437,9 +4443,12 @@ void main() {
           ),
           secret: 'vertex-api-key',
         );
-        final accountsEnvelope = jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map<String, dynamic>;
+        final accountsEnvelope =
+            jsonDecode(
+                  preferences.values[LlmAccountMigrationService
+                      .accountsPreferenceKey]!,
+                )
+                as Map<String, dynamic>;
         final accountRecord = Map<String, dynamic>.from(
           (accountsEnvelope['items'] as List).single as Map,
         )..['authType'] = 'oauth';
@@ -4521,18 +4530,16 @@ void main() {
         expect(requests, hasLength(2), reason: connector);
         expect(requests.first.uri.path, '/v1/models', reason: connector);
         expect(
-          requests[1].uri.queryParameters[
-              connector == 'openai-api' ? 'after' : 'after_id'],
+          requests[1].uri.queryParameters[connector == 'openai-api'
+              ? 'after'
+              : 'after_id'],
           'model-first',
           reason: connector,
         );
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'model-first',
-              'model-second',
-            ],
-            reason: connector);
+        expect(models.map((model) => model.upstreamModelId), [
+          'model-first',
+          'model-second',
+        ], reason: connector);
       }
     });
 
@@ -4550,6 +4557,8 @@ void main() {
                 jsonEncode({
                   'data': [
                     {'id': modelId},
+                    if (connectorType == 'openai-api')
+                      {'id': 'gpt-realtime-2.1'},
                     if (connectorType == 'openai-api')
                       {
                         'id': 'catalog-no-tools',
@@ -4580,6 +4589,12 @@ void main() {
 
           expect(models.first.capabilities['tools'], isTrue, reason: modelId);
           if (connectorType == 'openai-api') {
+            final realtimeModel = models.singleWhere(
+              (model) => model.upstreamModelId == 'gpt-realtime-2.1',
+            );
+            expect(realtimeModel.capabilities['audio'], isTrue);
+            expect(realtimeModel.capabilities['tools'], isTrue);
+            expect(models.first.capabilities.containsKey('audio'), isFalse);
             expect(models.last.capabilities['tools'], isFalse);
           }
         }
@@ -4757,12 +4772,9 @@ void main() {
         );
 
         expect(requestedUris.last.toString(), expectedUrl);
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'qwen3.7-plus',
-            ],
-            reason: connectorType);
+        expect(models.map((model) => model.upstreamModelId), [
+          'qwen3.7-plus',
+        ], reason: connectorType);
         expect(
           models.single.capabilities,
           {'chat': true, 'streaming': true},
@@ -4772,8 +4784,7 @@ void main() {
       }
     });
 
-    test('rejects nested Qwen Cloud hosts before sending the API key',
-        () async {
+    test('rejects nested Qwen Cloud hosts before sending the API key', () async {
       var requestSent = false;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -4811,8 +4822,9 @@ void main() {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           requestedUris.add(options.uri);
-          final modelId =
-              options.uri.host == 'api.minimaxi.com' ? 'minimax-m2' : 'glm-5';
+          final modelId = options.uri.host == 'api.minimaxi.com'
+              ? 'minimax-m2'
+              : 'glm-5';
           return ResponseBody.fromString(
             jsonEncode({
               'data': [
@@ -5327,18 +5339,19 @@ void main() {
         expect(models.single.capabilities['chat'], isTrue);
         expect(models.single.capabilities['streaming'], isTrue);
 
-        final response = await LlmConnectorHttpClient(
-          accountService: service,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: models.single.upstreamModelId,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: service,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: models.single.upstreamModelId,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+              },
+            );
 
         expect(requests, hasLength(2));
         expect(
@@ -6347,8 +6360,9 @@ void main() {
         );
 
         for (final connectorType in ['grok-cli', 'xai-oauth']) {
-          final expectedModeScope =
-              connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
           responseScope =
               'openid profile email offline_access $expectedModeScope';
           final account = await accountService.saveAccount(
@@ -6384,10 +6398,12 @@ void main() {
         }
 
         for (final connectorType in ['grok-cli', 'xai-oauth']) {
-          final expectedModeScope =
-              connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
-          final oppositeModeScope =
-              connectorType == 'grok-cli' ? 'api:access' : 'grok-cli:access';
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
+          final oppositeModeScope = connectorType == 'grok-cli'
+              ? 'api:access'
+              : 'grok-cli:access';
           responseScope =
               'openid profile email offline_access $oppositeModeScope';
           final account = await accountService.saveAccount(
@@ -7233,8 +7249,8 @@ void main() {
                 ),
               ]
             : connector == 'grok-cli'
-                ? [_upstreamModel('model-1')]
-                : const <LlmUpstreamModel>[];
+            ? [_upstreamModel('model-1')]
+            : const <LlmUpstreamModel>[];
         final credential = connector == 'muse-code'
             ? jsonEncode({
                 'access_token': 'muse-minted-key',
@@ -7836,8 +7852,7 @@ void main() {
       );
     });
 
-    test('prepares API-key AI Studio requests for Generative Language HTTP',
-        () {
+    test('prepares API-key AI Studio requests for Generative Language HTTP', () {
       const content = {
         'contents': [
           {
@@ -8262,8 +8277,7 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
-    test('buffers Cline streaming output for completed-response callers',
-        () async {
+    test('buffers Cline streaming output for completed-response callers', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -8287,19 +8301,20 @@ void main() {
         secret: jsonEncode({'access_token': 'cline-private-token'}),
       );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'provider/model',
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'hello'},
-          ],
-          'stream': false,
-        },
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'provider/model',
+            body: const {
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+              'stream': false,
+            },
+          );
 
       expect(
         captured?.uri.toString(),
@@ -8346,19 +8361,20 @@ void main() {
           secret: 'codebuddy-api-key',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'glm-5.2',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-            'stream': false,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'glm-5.2',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+                'stream': false,
+              },
+            );
 
         expect(captured?.data['stream'], isTrue);
         expect(response.body, isA<Map>());
@@ -8564,19 +8580,20 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'devin/swe-2',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'devin/swe-2',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+              },
+              stream: true,
+            );
         final sse = utf8.decode(
           (await (response.body as Stream<List<int>>).toList())
               .expand((part) => part)
@@ -8821,20 +8838,21 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-            'max_tokens': 100,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+                'max_tokens': 100,
+              },
+            );
 
         final preferencesJson = preferences.values.values.join();
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
@@ -8904,18 +8922,19 @@ void main() {
           secret: 'bedrock-api-key-secret',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'amazon.titan-text-express-v1',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'amazon.titan-text-express-v1',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+              },
+            );
 
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
         expect(captured?.uri.path, endsWith('/converse'));
@@ -8983,19 +9002,20 @@ void main() {
           secret: 'bedrock-api-key-secret',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'amazon.titan-text-express-v1',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'amazon.titan-text-express-v1',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+              },
+            );
         final chunks = await (response.body as Stream<List<int>>).toList();
         final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
 
@@ -9220,8 +9240,7 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route',
-        () async {
+    test('executes each pinned HTTP connector through its native route', () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -9708,11 +9727,13 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims = jsonDecode(
-          utf8.decode(
-            base64Url.decode(base64Url.normalize(assertionParts[1])),
-          ),
-        ) as Map;
+        final claims =
+            jsonDecode(
+                  utf8.decode(
+                    base64Url.decode(base64Url.normalize(assertionParts[1])),
+                  ),
+                )
+                as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -9881,14 +9902,15 @@ void main() {
         _account('aistudio-http', 'aistudio'),
         secret: 'aistudio-test-api-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -9899,8 +9921,7 @@ void main() {
       expect(response.body, {'candidates': []});
     });
 
-    test('executes AI Studio OAuth requests with project attribution',
-        () async {
+    test('executes AI Studio OAuth requests with project attribution', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -9932,14 +9953,15 @@ void main() {
           'client_secret': 'aistudio-test-client-secret',
         }),
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -9961,16 +9983,16 @@ void main() {
         final preferences = _MemoryPreferences()
           ..values[LlmAccountMigrationService.accountsPreferenceKey] =
               jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': 'legacy-aistudio-relay',
-                'connectorType': 'aistudio',
-                'authType': 'relay',
-                'displayName': 'Legacy AI Studio session',
-              },
-            ],
-          });
+                'version': 1,
+                'items': [
+                  {
+                    'id': 'legacy-aistudio-relay',
+                    'connectorType': 'aistudio',
+                    'authType': 'relay',
+                    'displayName': 'Legacy AI Studio session',
+                  },
+                ],
+              });
         final accounts = LlmAccountConnectorService(
           preferences: preferences,
           credentialStore: _MemoryCredentials(),
@@ -10013,15 +10035,16 @@ void main() {
         _account('aistudio-stream', 'aistudio'),
         secret: 'aistudio-test-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+            stream: true,
+          );
       final event = utf8.encode('data: {"candidates":[]}\n\n');
       source.add(Uint8List.fromList(event));
       await source.close();
@@ -10143,15 +10166,16 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -10222,15 +10246,16 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -10240,8 +10265,9 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end =
-              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
+          final end = offset + 32768 < bytes.length
+              ? offset + 32768
+              : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -10280,15 +10306,16 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -10330,15 +10357,16 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -10382,15 +10410,16 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -10631,11 +10660,11 @@ void main() {
         final cancelToken = CancelToken();
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          cancelToken: cancelToken,
-        );
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              cancelToken: cancelToken,
+            );
 
         await refreshStarted.future;
         cancelToken.cancel('caller cancelled');
@@ -10726,11 +10755,11 @@ void main() {
         );
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'private-model',
-          body: const {'model': 'private-model', 'messages': []},
-          stream: true,
-        );
+              account: account,
+              modelId: 'private-model',
+              body: const {'model': 'private-model', 'messages': []},
+              stream: true,
+            );
 
         try {
           await expectLater(
@@ -10755,22 +10784,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-        'version': 1,
-        'items': [
-          {
-            'id': 'legacy-anthropic-quota',
-            'connectorType': 'anthropic',
-            'authType': 'api_key',
-            'displayName': 'Legacy Anthropic',
-          },
-          {
-            'id': 'legacy-openai-quota',
-            'connectorType': 'openai',
-            'authType': 'api_key',
-            'displayName': 'Legacy OpenAI',
-          },
-        ],
-      });
+            'version': 1,
+            'items': [
+              {
+                'id': 'legacy-anthropic-quota',
+                'connectorType': 'anthropic',
+                'authType': 'api_key',
+                'displayName': 'Legacy Anthropic',
+              },
+              {
+                'id': 'legacy-openai-quota',
+                'connectorType': 'openai',
+                'authType': 'api_key',
+                'displayName': 'Legacy OpenAI',
+              },
+            ],
+          });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -11122,15 +11151,9 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation(
-          'gemini',
-          {
-            'usageMetadata': {
-              'promptTokenCount': 12,
-              'candidatesTokenCount': 8
-            },
-          },
-          observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation('gemini', {
+        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
+      }, observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -11216,22 +11239,22 @@ void main() {
 }
 
 Uint8List _bedrockTestStream() => Uint8List.fromList([
-      ..._bedrockEvent('messageStart', {
-        'messageStart': {'role': 'assistant'},
-      }),
-      ..._bedrockEvent('contentBlockDelta', {
-        'contentBlockIndex': 0,
-        'delta': {'text': 'Bedrock answer'},
-      }),
-      ..._bedrockEvent('messageStop', {
-        'messageStop': {'stopReason': 'end_turn'},
-      }),
-      ..._bedrockEvent('metadata', {
-        'metadata': {
-          'usage': {'inputTokens': 7, 'outputTokens': 3},
-        },
-      }),
-    ]);
+  ..._bedrockEvent('messageStart', {
+    'messageStart': {'role': 'assistant'},
+  }),
+  ..._bedrockEvent('contentBlockDelta', {
+    'contentBlockIndex': 0,
+    'delta': {'text': 'Bedrock answer'},
+  }),
+  ..._bedrockEvent('messageStop', {
+    'messageStop': {'stopReason': 'end_turn'},
+  }),
+  ..._bedrockEvent('metadata', {
+    'metadata': {
+      'usage': {'inputTokens': 7, 'outputTokens': 3},
+    },
+  }),
+]);
 
 Uint8List _bedrockEvent(String name, Map<String, dynamic> payload) {
   final encodedName = utf8.encode(':event-type');
@@ -11393,16 +11416,17 @@ void _registerZedHostedHttpRetryTest() {
         }),
       );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-model',
-        body: const {'messages': [], 'stream': true},
-        nativeFormat: 'anthropic.messages',
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-model',
+            body: const {'messages': [], 'stream': true},
+            nativeFormat: 'anthropic.messages',
+            stream: true,
+          );
       final chunks = (response.body as Stream<List<int>>).toList();
       expect(await chunks, isNotEmpty);
       expect(tokenRequests, 2);
@@ -11487,21 +11511,20 @@ LlmAccount _account(
   String authType = 'api_key',
   Map<String, dynamic> endpointConfig = const {},
   List<LlmUpstreamModel> models = const [],
-}) =>
-    LlmAccount(
-      id: id,
-      connectorType: connector,
-      authType: authType,
-      displayName: connector,
-      endpointConfig: endpointConfig,
-      models: models,
-    );
+}) => LlmAccount(
+  id: id,
+  connectorType: connector,
+  authType: authType,
+  displayName: connector,
+  endpointConfig: endpointConfig,
+  models: models,
+);
 
 LlmUpstreamModel _upstreamModel(String modelId) => LlmUpstreamModel(
-      id: 'model-$modelId',
-      upstreamModelId: modelId,
-      displayName: modelId,
-    );
+  id: 'model-$modelId',
+  upstreamModelId: modelId,
+  displayName: modelId,
+);
 
 Map<String, String> _requestForm(Object? body) {
   if (body is Map) return body.map((key, value) => MapEntry('$key', '$value'));
@@ -11565,8 +11588,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}

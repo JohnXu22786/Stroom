@@ -51,8 +51,8 @@ part 'chat_service_params.dart';
 ///
 /// [recordInput] 为 false 时只应累计 cost，不应写入 input/output tokens
 /// （内部任务请求如压缩/标题：其输入不代表"当前上下文大小"）。
-typedef UsageEventCallback = void Function(Map<String, dynamic> usage,
-    {required bool recordInput});
+typedef UsageEventCallback =
+    void Function(Map<String, dynamic> usage, {required bool recordInput});
 
 class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
@@ -193,6 +193,7 @@ class ChatService {
   UsageEventCallback? onUsageEvent;
 
   Map<String, dynamic>? _lastResponseData;
+  String? _lastInputTranscript;
   Map<String, String>? _lastRequestHeaders;
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
@@ -210,10 +211,10 @@ class ChatService {
     ProviderConfigItem? providerConfig,
     String endpointType = 'openai',
     ChatProtocol? protocol,
-  })  : _provider = provider,
-        _modelConfig = modelConfig,
-        _providerConfig = providerConfig,
-        _protocol = protocol ?? createChatProtocol(endpointType);
+  }) : _provider = provider,
+       _modelConfig = modelConfig,
+       _providerConfig = providerConfig,
+       _protocol = protocol ?? createChatProtocol(endpointType);
 
   /// The protocol used by this service instance (for test use only).
   @visibleForTesting
@@ -249,6 +250,7 @@ class ChatService {
       _lastRequestBody ?? _provider?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
+  String? get lastInputTranscript => _lastInputTranscript;
   Map<String, String>? get lastRequestHeaders =>
       _lastRequestHeaders ?? _provider?.lastRequestHeaders;
   String? get lastRequestUrl => _lastRequestUrl ?? _provider?.lastRequestUrl;
@@ -262,7 +264,7 @@ class ChatService {
 
   void _captureMediaAttachments(List<Attachment> attachments) {
     final byId = {
-      for (final attachment in _lastMediaAttachments) attachment.id: attachment
+      for (final attachment in _lastMediaAttachments) attachment.id: attachment,
     };
     for (final attachment in attachments) {
       byId[attachment.id] = attachment;
@@ -446,13 +448,12 @@ class ChatService {
     required String paramName,
     required String type,
     required String defaultValue,
-  }) =>
-      _coerceCustomParam(paramName, type, defaultValue);
+  }) => _coerceCustomParam(paramName, type, defaultValue);
 
   /// @visibleForTesting
   static Map<String, dynamic> stripOmittedForTest(
-          Map<String, dynamic> params) =>
-      _stripOmitted(params);
+    Map<String, dynamic> params,
+  ) => _stripOmitted(params);
 
   /// @visibleForTesting — type marker for the omitted sentinel (for `isA`).
   static Type get omittedSentinelTypeForTest => _OmittedSentinel;
@@ -534,11 +535,7 @@ class ChatService {
     String source = 'model',
   }) {
     try {
-      setNestedParam(
-        result,
-        rp.paramName,
-        parseReasoningValue(value, rp.type),
-      );
+      setNestedParam(result, rp.paramName, parseReasoningValue(value, rp.type));
     } on FormatException catch (e) {
       debugPrint(
         '[ChatService] Skipping $source reasoning param "${rp.paramName}" '

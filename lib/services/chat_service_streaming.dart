@@ -3,6 +3,26 @@ part of 'chat_service.dart';
 extension ChatServiceStreamingExt on ChatService {
   // ── Instance methods ────────────────────────────────────────────
 
+  void _recordInputTranscript(List<ChatMessage> history, String rawTranscript) {
+    final transcript = rawTranscript.trim();
+    if (transcript.isEmpty) return;
+    _lastInputTranscript = transcript;
+    final userIndex = history.lastIndexWhere(
+      (message) => message.role == 'user',
+    );
+    if (userIndex < 0) return;
+    final userMessage = history[userIndex];
+    final content = userMessage.content.trim();
+    if (content == transcript || content.endsWith(transcript)) return;
+    try {
+      history[userIndex] = userMessage.copyWith(
+        content: content.isEmpty ? transcript : '$content\n$transcript',
+      );
+    } on UnsupportedError {
+      // Immutable history callers can still read [lastInputTranscript].
+    }
+  }
+
   /// Stream a message — converts [history] (which already contains the latest
   /// user message with attachments) into API‑format messages and streams the
   /// reply.
@@ -21,11 +41,14 @@ extension ChatServiceStreamingExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
   }) {
     AppLogService.info(
-        'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
+      'ChatService',
+      'sendStream 开始: ${userMessage.length} 字符',
+    );
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
     _lastMediaAttachments = const [];
+    _lastInputTranscript = null;
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -51,8 +74,9 @@ extension ChatServiceStreamingExt on ChatService {
           history: history,
           assistantPrompt: _assistantPrompt,
           contextSummary: _contextSummary,
-          toolOutputMaxChars:
-              ChatService.getEffectiveToolOutputMaxChars(_assistantSettings),
+          toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
+            _assistantSettings,
+          ),
         );
         final apiMessages = req.messages;
         _lastRequestBody = {
@@ -66,50 +90,55 @@ extension ChatServiceStreamingExt on ChatService {
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
-          apiMessages,
-          model: _modelConfig!.modelId,
-          reasoning: reasoning,
-          reasoningEffort: reasoningEffort,
-          maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-          temperature: _effectiveTemperature, // null when toggle is OFF
-          system: req.system,
-          extraParams: extraParams,
-          cancelToken: _cancelToken,
-        )
+              apiMessages,
+              model: _modelConfig!.modelId,
+              reasoning: reasoning,
+              reasoningEffort: reasoningEffort,
+              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+              temperature: _effectiveTemperature, // null when toggle is OFF
+              system: req.system,
+              extraParams: extraParams,
+              cancelToken: _cancelToken,
+            )
             .listen(
-          (event) {
-            if (event.mediaAttachments?.isNotEmpty == true) {
-              _captureMediaAttachments(event.mediaAttachments!);
-            }
-            if (event.isReasoning) {
-              _reasoningBuffer += event.text;
-            } else if (event.usage != null) {
-              // usage 计量事件（provider 流末尾产出，per-request 隔离）
-              // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-              onUsageEvent?.call(event.usage!, recordInput: true);
-            } else if (!_controller!.isClosed) {
-              _controller!.add(event.text);
-            }
-          },
-          onDone: () {
-            _streamSubscription = null;
-            if (_controller != null && !_controller!.isClosed) {
-              _controller!.close();
-            }
-            _lastResponseData = _provider?.lastResponseData;
-            _cleanUp();
-          },
-          onError: (Object error) {
-            _streamSubscription = null;
-            debugPrint('ChatService stream error: $error');
-            _lastResponseData = _provider?.lastResponseData;
-            if (_controller != null && !_controller!.isClosed) {
-              _controller!.addError(error);
-              _controller!.close();
-            }
-            _cleanUp();
-          },
-        );
+              (event) {
+                if (event.inputTranscript?.isNotEmpty == true) {
+                  _recordInputTranscript(history, event.inputTranscript!);
+                }
+                if (event.mediaAttachments?.isNotEmpty == true) {
+                  _captureMediaAttachments(event.mediaAttachments!);
+                }
+                if (event.isReasoning) {
+                  _reasoningBuffer += event.text;
+                } else if (event.usage != null) {
+                  // usage 计量事件（provider 流末尾产出，per-request 隔离）
+                  // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+                  onUsageEvent?.call(event.usage!, recordInput: true);
+                } else if (event.inputTranscript == null &&
+                    event.text.isNotEmpty &&
+                    !_controller!.isClosed) {
+                  _controller!.add(event.text);
+                }
+              },
+              onDone: () {
+                _streamSubscription = null;
+                if (_controller != null && !_controller!.isClosed) {
+                  _controller!.close();
+                }
+                _lastResponseData = _provider?.lastResponseData;
+                _cleanUp();
+              },
+              onError: (Object error) {
+                _streamSubscription = null;
+                debugPrint('ChatService stream error: $error');
+                _lastResponseData = _provider?.lastResponseData;
+                if (_controller != null && !_controller!.isClosed) {
+                  _controller!.addError(error);
+                  _controller!.close();
+                }
+                _cleanUp();
+              },
+            );
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
         if (!_controller!.isClosed) {
@@ -137,7 +166,9 @@ extension ChatServiceStreamingExt on ChatService {
     List<ToolDefinition> tools = const [],
   }) {
     AppLogService.info(
-        'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
+      'ChatService',
+      'sendStreamWithTools 开始: ${userMessage.length} 字符',
+    );
     _isCancelledByUser = false;
     _reasoningBuffer = '';
     _contentBuffer = '';
@@ -166,8 +197,9 @@ extension ChatServiceStreamingExt on ChatService {
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        final toolOutputMaxChars =
-            ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
+        final toolOutputMaxChars = ChatService.getEffectiveToolOutputMaxChars(
+          _assistantSettings,
+        );
         final req = await _protocol.buildRequest(
           history: history,
           assistantPrompt: _assistantPrompt,
@@ -197,8 +229,9 @@ extension ChatServiceStreamingExt on ChatService {
         // getEffectiveMaxToolRounds 统一回退默认值（此前 <= 0 会让
         // while 恒假——不发任何请求、空流无错误、消息不落库，用户
         // 完全无反馈）。
-        final effectiveMaxRounds =
-            ChatService.getEffectiveMaxToolRounds(_assistantSettings);
+        final effectiveMaxRounds = ChatService.getEffectiveMaxToolRounds(
+          _assistantSettings,
+        );
         final maxRounds =
             effectiveMaxRounds ?? ChatService.kMaxToolRoundsHardLimit;
 
@@ -228,79 +261,83 @@ extension ChatServiceStreamingExt on ChatService {
           // 所有 step 均携带 tools，达限即停，无额外"收尾轮"）。
           _streamSubscription = _provider!
               .chatStream(
-            messages,
-            model: _modelConfig!.modelId,
-            reasoning: reasoning,
-            reasoningEffort: reasoningEffort,
-            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-            temperature: _effectiveTemperature, // null when toggle is OFF
-            tools: toolDefs.isEmpty ? null : toolDefs,
-            system: req.system,
-            extraParams: extraParams,
-            cancelToken: _cancelToken,
-          )
+                messages,
+                model: _modelConfig!.modelId,
+                reasoning: reasoning,
+                reasoningEffort: reasoningEffort,
+                maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+                temperature: _effectiveTemperature, // null when toggle is OFF
+                tools: toolDefs.isEmpty ? null : toolDefs,
+                system: req.system,
+                extraParams: extraParams,
+                cancelToken: _cancelToken,
+              )
               .listen(
-            (event) {
-              // usage 计量是 API 计费事实（per-request 隔离），必须
-              // 先于取消守卫处理：用户停止后仍要把已计量请求的
-              // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
-              if (event.usage != null) {
-                // usage 计量事件（provider 流末尾产出，per-request 隔离）
-                // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-                onUsageEvent?.call(event.usage!, recordInput: true);
-              }
-              if (_isCancelledByUser) return;
-              // Anthropic extended thinking 签名（协议续接用，静默透传）
-              if (event.thinkingSignature != null &&
-                  event.thinkingSignature!.isNotEmpty) {
-                _thinkingSignature = event.thinkingSignature!;
-              }
-              if (event.mediaAttachments?.isNotEmpty == true) {
-                _captureMediaAttachments(event.mediaAttachments!);
-                controller.add(
-                  MediaAttachmentsEvent(
-                    event.mediaAttachments!,
-                    contentOrder: event.contentOrder,
-                  ),
-                );
-              } else if (event.isReasoning) {
-                _reasoningBuffer += event.text;
-                // Emit reasoning text as ReasoningEvent so the UI
-                // can stream it in real-time to the reasoning panel.
-                controller.add(ReasoningEvent(event.text));
-              } else if (event.isToolCallEvent) {
-                toolCallRefs.addAll(event.toolCalls!);
-              } else if (event.text.isNotEmpty) {
-                // Accumulate visible content for tool call chain
-                // preservation per DeepSeek spec.
-                _contentBuffer += event.text;
-                controller.add(
-                  TextEvent(event.text, contentOrder: event.contentOrder),
-                );
-              }
-            },
-            onDone: () {
-              _streamSubscription = null;
-              // Capture the provider's final response snapshot on the
-              // success path too. The provider instance is shared across
-              // concurrent conversations (per-conversation services), so
-              // without this snapshot the shared slot may later be
-              // overwritten by another conversation's chunk — mixing up
-              // the raw diagnostics shown for THIS request.
-              _lastResponseData = _provider?.lastResponseData;
-              if (!completer.isCompleted) completer.complete();
-            },
-            onError: (Object error) {
-              _streamSubscription = null;
-              roundStreamError = error;
-              debugPrint('ChatService stream error: $error');
-              _lastResponseData = _provider?.lastResponseData;
-              if (!controller.isClosed) {
-                controller.addError(error);
-              }
-              if (!completer.isCompleted) completer.complete();
-            },
-          );
+                (event) {
+                  // usage 计量是 API 计费事实（per-request 隔离），必须
+                  // 先于取消守卫处理：用户停止后仍要把已计量请求的
+                  // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
+                  if (event.usage != null) {
+                    // usage 计量事件（provider 流末尾产出，per-request 隔离）
+                    // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+                    onUsageEvent?.call(event.usage!, recordInput: true);
+                  }
+                  if (_isCancelledByUser) return;
+                  // Anthropic extended thinking 签名（协议续接用，静默透传）
+                  if (event.thinkingSignature != null &&
+                      event.thinkingSignature!.isNotEmpty) {
+                    _thinkingSignature = event.thinkingSignature!;
+                  }
+                  if (event.inputTranscript?.isNotEmpty == true) {
+                    controller.add(
+                      InputTranscriptEvent(event.inputTranscript!),
+                    );
+                  } else if (event.mediaAttachments?.isNotEmpty == true) {
+                    _captureMediaAttachments(event.mediaAttachments!);
+                    controller.add(
+                      MediaAttachmentsEvent(
+                        event.mediaAttachments!,
+                        contentOrder: event.contentOrder,
+                      ),
+                    );
+                  } else if (event.isReasoning) {
+                    _reasoningBuffer += event.text;
+                    // Emit reasoning text as ReasoningEvent so the UI
+                    // can stream it in real-time to the reasoning panel.
+                    controller.add(ReasoningEvent(event.text));
+                  } else if (event.isToolCallEvent) {
+                    toolCallRefs.addAll(event.toolCalls!);
+                  } else if (event.text.isNotEmpty) {
+                    // Accumulate visible content for tool call chain
+                    // preservation per DeepSeek spec.
+                    _contentBuffer += event.text;
+                    controller.add(
+                      TextEvent(event.text, contentOrder: event.contentOrder),
+                    );
+                  }
+                },
+                onDone: () {
+                  _streamSubscription = null;
+                  // Capture the provider's final response snapshot on the
+                  // success path too. The provider instance is shared across
+                  // concurrent conversations (per-conversation services), so
+                  // without this snapshot the shared slot may later be
+                  // overwritten by another conversation's chunk — mixing up
+                  // the raw diagnostics shown for THIS request.
+                  _lastResponseData = _provider?.lastResponseData;
+                  if (!completer.isCompleted) completer.complete();
+                },
+                onError: (Object error) {
+                  _streamSubscription = null;
+                  roundStreamError = error;
+                  debugPrint('ChatService stream error: $error');
+                  _lastResponseData = _provider?.lastResponseData;
+                  if (!controller.isClosed) {
+                    controller.addError(error);
+                  }
+                  if (!completer.isCompleted) completer.complete();
+                },
+              );
 
           await completer.future;
           _roundCompleter = null;
@@ -357,7 +394,9 @@ extension ChatServiceStreamingExt on ChatService {
               parsedArgs = Map<String, dynamic>.from(jsonDecode(rawArgs));
             } catch (e) {
               AppLogService.warning(
-                  'ChatService', '解析工具调用参数失败: $name, 参数: $rawArgs: $e');
+                'ChatService',
+                '解析工具调用参数失败: $name, 参数: $rawArgs: $e',
+              );
             }
 
             final toolCallData = ToolCallData(
@@ -381,10 +420,15 @@ extension ChatServiceStreamingExt on ChatService {
             final executed = await Future.wait(pendingResults);
             for (var i = 0; i < neutralCalls.length; i++) {
               if (_isCancelledByUser || controller.isClosed) break;
-              controller
-                  .add(ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
-              results.add(ToolCallResult(
-                  toolCallId: neutralCalls[i].id, result: executed[i]));
+              controller.add(
+                ToolCallCompleteEvent(neutralCalls[i].id, executed[i]),
+              );
+              results.add(
+                ToolCallResult(
+                  toolCallId: neutralCalls[i].id,
+                  result: executed[i],
+                ),
+              );
             }
           }
 
@@ -403,14 +447,20 @@ extension ChatServiceStreamingExt on ChatService {
           // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
           // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
           // user(tool_result 块)。历史保持中立，格式切换安全。
-          messages.addAll(_protocol.buildAssistantChainMessage(
-            content: _contentBuffer,
-            toolCalls: neutralCalls,
-            roundReasoning: roundReasoning,
-            thinkingSignature: _thinkingSignature,
-          ));
-          messages.addAll(_protocol.buildToolResultMessages(results,
-              toolOutputMaxChars: toolOutputMaxChars));
+          messages.addAll(
+            _protocol.buildAssistantChainMessage(
+              content: _contentBuffer,
+              toolCalls: neutralCalls,
+              roundReasoning: roundReasoning,
+              thinkingSignature: _thinkingSignature,
+            ),
+          );
+          messages.addAll(
+            _protocol.buildToolResultMessages(
+              results,
+              toolOutputMaxChars: toolOutputMaxChars,
+            ),
+          );
 
           // Reset per-round buffers for the next iteration
           _contentBuffer = '';

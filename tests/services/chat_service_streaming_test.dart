@@ -33,6 +33,7 @@ part 'chat_service_streaming_test_p4.dart';
 class CapturingChatProvider extends BaseChatProvider {
   Map<String, dynamic>? capturedBody;
   List<Attachment>? mediaAttachments;
+  String? inputTranscript;
   bool throwError = false;
 
   @override
@@ -43,10 +44,10 @@ class CapturingChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-        'model': 'test-model',
-        'max_tokens': 4096,
-        'temperature': 0.7,
-      };
+    'model': 'test-model',
+    'max_tokens': 4096,
+    'temperature': 0.7,
+  };
 
   @override
   Future<String> chat(
@@ -90,7 +91,11 @@ class CapturingChatProvider extends BaseChatProvider {
       'extraParams': extraParams,
     };
     // Yield a minimal event so the stream doesn't hang
-    yield AIStreamEvent('', mediaAttachments: mediaAttachments);
+    yield AIStreamEvent(
+      '',
+      inputTranscript: inputTranscript,
+      mediaAttachments: mediaAttachments,
+    );
   }
 }
 
@@ -111,10 +116,10 @@ class _MessageCaptureProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-        'model': 'test',
-        'max_tokens': 4096,
-        'temperature': 0.7,
-      };
+    'model': 'test',
+    'max_tokens': 4096,
+    'temperature': 0.7,
+  };
 
   @override
   Future<String> chat(
@@ -172,10 +177,10 @@ class _StallingChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-        'model': 'test-model',
-        'max_tokens': 4096,
-        'temperature': 0.7,
-      };
+    'model': 'test-model',
+    'max_tokens': 4096,
+    'temperature': 0.7,
+  };
 
   @override
   Future<String> chat(
