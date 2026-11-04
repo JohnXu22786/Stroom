@@ -59,6 +59,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'openai-compatibility',
           'openai-api',
           'aihorde',
+          'uncloseai',
           'bedrock',
           'kimi',
           'kimi-ai',
@@ -142,6 +143,10 @@ String llmRoutedChatProtocolForAccountModel({
   if (account.connectorType == 'qoder' &&
       protocol != 'openai.chat_completions') {
     throw StateError('Qoder supports only Chat Completions chat requests.');
+  }
+  if (account.connectorType == 'uncloseai' &&
+      protocol != 'openai.chat_completions') {
+    throw StateError('UncloseAI supports only Chat Completions requests.');
   }
   return protocol;
 }

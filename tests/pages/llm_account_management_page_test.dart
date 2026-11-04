@@ -149,6 +149,55 @@ void main() {
   });
 
   testWidgets(
+    'UncloseAI defaults to no auth and exposes its optional key mode',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final connector = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).at(0),
+      );
+      connector.onChanged!('uncloseai');
+      await tester.pumpAndSettle();
+
+      final auth = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).at(1),
+      );
+      expect(auth.initialValue, 'none');
+      final authButton = find.descendant(
+        of: find.byType(DropdownButtonFormField<String>).at(1),
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(authButton)
+            .items!
+            .map((item) => item.value),
+        containsAll(['none', 'api_key']),
+      );
+      final endpoint =
+          tester.widgetList<TextField>(find.byType(TextField)).firstWhere(
+                (field) =>
+                    field.decoration?.labelText ==
+                    'UncloseAI 使用固定 OpenAI Chat Completions 端点',
+              );
+      expect(endpoint.enabled, isFalse);
+      expect(endpoint.controller?.text, 'https://hermes.ai.unturf.com/v1');
+      expect(find.text('无需 API key；可选 key 仅用于身份标识。'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'Openference OAuth and API-key accounts are distinct in the editor',
     (tester) async {
       final service = LlmAccountConnectorService(
@@ -236,8 +285,9 @@ void main() {
     },
   );
 
-  testWidgets('GitLab Duo offers PAT and configured OAuth with prerequisites',
-      (tester) async {
+  testWidgets('GitLab Duo offers PAT and configured OAuth with prerequisites', (
+    tester,
+  ) async {
     final service = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentialStore(),
@@ -276,7 +326,9 @@ void main() {
     expect(find.textContaining('GitLab 用户设置'), findsOneWidget);
     expect(find.textContaining('ai_features read_user'), findsOneWidget);
     expect(
-        find.textContaining('http://localhost:20128/callback'), findsOneWidget);
+      find.textContaining('http://localhost:20128/callback'),
+      findsOneWidget,
+    );
     expect(find.text('GitLab Duo OAuth client ID'), findsOneWidget);
     final clientSecret = tester.widget<TextField>(
       find.byWidgetPredicate(

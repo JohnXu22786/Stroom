@@ -16,6 +16,7 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/aws_sigv4.dart';
 import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
@@ -1635,6 +1636,256 @@ void main() {
     },
   );
   group('LlmConnectorRegistry', () {
+    test('registers UncloseAI as an optional-key OpenAI chat connector', () {
+      final connector = LlmConnectorRegistry.find('uncloseai');
+
+      expect(connector, isNotNull);
+      expect(connector!.displayName, 'UncloseAI');
+      expect(connector.authTypes, {'none', 'api_key'});
+      expect(connector.protocol, LlmNativeProtocol.openAIChatCompletions);
+      expect(connector.modelCatalog, ['turboderp/Qwen3.8-27B-exl3']);
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('uncloseai'),
+        'openai',
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'uncloseai',
+          'none',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'uncloseai',
+          'api_key',
+        ),
+        isTrue,
+      );
+      expect(
+        LlmChatRoutingRuntime.defaultProviderCatalog
+            .findProvider('uncloseai')
+            ?.displayName,
+        'UncloseAI',
+      );
+    });
+
+    test('prepares UncloseAI chat requests with optional bearer auth', () {
+      final builder = LlmNativeRequestBuilder();
+      final anonymous = builder.build(
+        account: _account('uncloseai-anonymous', 'uncloseai', authType: 'none'),
+        credential: null,
+        modelId: 'turboderp/Qwen3.8-27B-exl3',
+        body: const {'model': 'turboderp/Qwen3.8-27B-exl3', 'messages': []},
+        stream: true,
+      );
+      final keyed = builder.build(
+        account: _account('uncloseai-key', 'uncloseai'),
+        credential: 'identifier-only-key',
+        modelId: 'turboderp/Qwen3.8-27B-exl3',
+        body: const {'model': 'turboderp/Qwen3.8-27B-exl3', 'messages': []},
+      );
+
+      expect(
+        anonymous.uri.toString(),
+        'https://hermes.ai.unturf.com/v1/chat/completions',
+      );
+      expect(anonymous.headers['Authorization'], isNull);
+      expect((anonymous.body as Map)['model'], 'turboderp/Qwen3.8-27B-exl3');
+      expect(
+        keyed.uri.toString(),
+        'https://hermes.ai.unturf.com/v1/chat/completions',
+      );
+      expect(keyed.headers['Authorization'], 'Bearer identifier-only-key');
+      expect((keyed.body as Map)['model'], 'turboderp/Qwen3.8-27B-exl3');
+      expect(
+        () => builder.build(
+          account: _account('uncloseai-responses', 'uncloseai'),
+          credential: 'identifier-only-key',
+          modelId: 'turboderp/Qwen3.8-27B-exl3',
+          body: const {'model': 'turboderp/Qwen3.8-27B-exl3'},
+          nativeFormat: 'responses',
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
+    test(
+      'discovers the rotating UncloseAI roster and model contexts',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'turboderp/Qwen3.8-27B-exl3', 'max_model_len': 98304},
+                  {'id': 'future/rotated-chat', 'max_model_len': 49152},
+                  {'id': 'future/default-window'},
+                  {'id': 'text-embedding-v4'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'uncloseai-discovery',
+            'uncloseai',
+            authType: 'none',
+            models: [
+              LlmUpstreamModel(
+                id: 'saved-current-model',
+                upstreamModelId: 'turboderp/Qwen3.8-27B-exl3',
+                displayName: 'Saved model label',
+                capabilities: const {'contextLength': 65536},
+              ),
+              _upstreamModel('old/retired-model'),
+            ],
+          ),
+        );
+
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+
+        expect(
+          captured?.uri.toString(),
+          'https://hermes.ai.unturf.com/v1/models',
+        );
+        expect(captured?.headers['Authorization'], isNull);
+        expect(models.map((model) => model.upstreamModelId), [
+          'turboderp/Qwen3.8-27B-exl3',
+          'future/rotated-chat',
+          'future/default-window',
+        ]);
+        expect(models.first.capabilities['contextLength'], 98304);
+        expect(models[1].capabilities['contextLength'], 49152);
+        expect(models[2].capabilities['contextLength'], 65536);
+        expect(models.first.id, 'saved-current-model');
+        expect(models.first.displayName, 'Saved model label');
+        for (final model in models) {
+          expect(model.capabilities['supportedApiProtocols'], [
+            'openai.chat_completions',
+          ]);
+        }
+      },
+    );
+
+    test('uses the pinned UncloseAI seed until refresh is requested', () async {
+      var requested = false;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requested = true;
+          throw StateError('Unexpected model discovery request.');
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account('uncloseai-seed', 'uncloseai', authType: 'none'),
+      );
+
+      final models = await service.discoverModels(account);
+
+      expect(requested, isFalse);
+      expect(models.single.upstreamModelId, 'turboderp/Qwen3.8-27B-exl3');
+      expect(models.single.capabilities['contextLength'], 65536);
+      expect(models.single.capabilities['supportedApiProtocols'], [
+        'openai.chat_completions',
+      ]);
+    });
+
+    test(
+      'stores and uses an optional UncloseAI key only in secure storage',
+      () async {
+        RequestOptions? captured;
+        final preferences = _MemoryPreferences();
+        final credentials = _MemoryCredentials();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'future/rotated-chat'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final service = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account('uncloseai-keyed-discovery', 'uncloseai'),
+          secret: 'identifier-only-key',
+        );
+
+        await service.discoverModels(account, refreshRemote: true);
+
+        expect(
+          captured?.uri.toString(),
+          'https://hermes.ai.unturf.com/v1/models',
+        );
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer identifier-only-key',
+        );
+        expect(await service.readCredential(account.id), 'identifier-only-key');
+        expect(
+          preferences.values.values.join(),
+          isNot(contains('identifier-only-key')),
+        );
+      },
+    );
+
+    test(
+      'reports UncloseAI discovery errors rather than stale models',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter(
+            (options) async =>
+                ResponseBody.fromString('{"error":"unavailable"}', 503),
+          );
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'uncloseai-error',
+            'uncloseai',
+            authType: 'none',
+            models: [_upstreamModel('stale/model')],
+          ),
+        );
+
+        await expectLater(
+          service.discoverModels(account, refreshRemote: true),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
+
     test('covers the pinned core auth and executor provider identifiers', () {
       final ids = LlmConnectorRegistry.all.map((item) => item.id).toSet();
 
