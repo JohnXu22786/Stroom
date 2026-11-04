@@ -95,15 +95,11 @@ Widget _buildEditParamsTab({
         const SizedBox(height: 12),
         // Override rule explanation
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .tertiaryContainer
+              color: Theme.of(context).colorScheme.tertiaryContainer
                   .withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -113,19 +109,15 @@ Widget _buildEditParamsTab({
                 Icon(
                   Icons.info_outline,
                   size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.tertiary,
+                  color: Theme.of(context).colorScheme.tertiary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
+                    AppLocalizations.of(context)!.assistantParamOverrideHelp,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onTertiaryContainer,
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
                     ),
                   ),
                 ),
@@ -137,16 +129,14 @@ Widget _buildEditParamsTab({
 
         // Temperature
         SwitchListTile(
-          title: const Text('温度 (Temperature)'),
+          title: Text(AppLocalizations.of(context)!.assistantTemperature),
           subtitle: Text('${vars.temperature}'),
           value: vars.enableTemperature,
           onChanged: (v) => setDlgState(() => vars.enableTemperature = v),
         ),
         if (vars.enableTemperature)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Slider(
               value: vars.temperature,
               min: 0,
@@ -167,9 +157,7 @@ Widget _buildEditParamsTab({
         ),
         if (vars.enableTopP)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Slider(
               value: vars.topP,
               min: 0,
@@ -183,16 +171,14 @@ Widget _buildEditParamsTab({
 
         // Max Tokens
         SwitchListTile(
-          title: const Text('最大Token数 (Max Tokens)'),
+          title: Text(AppLocalizations.of(context)!.assistantMaxTokens),
           subtitle: Text('${vars.maxTokens}'),
           value: vars.enableMaxTokens,
           onChanged: (v) => setDlgState(() => vars.enableMaxTokens = v),
         ),
         if (vars.enableMaxTokens)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Slider(
               value: vars.maxTokens.toDouble(),
               min: 256,
@@ -206,10 +192,13 @@ Widget _buildEditParamsTab({
 
         // Max Tool Calls
         SwitchListTile(
-          title: const Text('工具调用上限 (Max Tool Calls)'),
+          title: Text(AppLocalizations.of(context)!.assistantMaxToolCalls),
           subtitle: vars.enableMaxToolCalls
-              ? Text('${vars.maxToolCalls} 轮')
-              : const Text('无限制'),
+              ? Text(
+                  AppLocalizations.of(context)!
+                      .assistantRounds(vars.maxToolCalls.toString()),
+                )
+              : Text(AppLocalizations.of(context)!.assistantUnlimited),
           value: vars.enableMaxToolCalls,
           onChanged: (v) => setDlgState(() => vars.enableMaxToolCalls = v),
         ),
@@ -217,8 +206,8 @@ Widget _buildEditParamsTab({
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
-              decoration: const InputDecoration(
-                labelText: '轮数',
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.assistantRoundsLabel,
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -234,7 +223,7 @@ Widget _buildEditParamsTab({
 
         // Stream Output
         SwitchListTile(
-          title: const Text('流式输出 (Stream Output)'),
+          title: Text(AppLocalizations.of(context)!.assistantStreamOutput),
           value: vars.streamOutput,
           onChanged: (v) => setDlgState(() => vars.streamOutput = v),
         ),
@@ -242,16 +231,14 @@ Widget _buildEditParamsTab({
 
         // Frequency Penalty
         SwitchListTile(
-          title: const Text('频率惩罚 (Frequency Penalty)'),
+          title: Text(AppLocalizations.of(context)!.assistantFrequencyPenalty),
           subtitle: Text('${vars.frequencyPenalty}'),
           value: vars.enableFrequencyPenalty,
           onChanged: (v) => setDlgState(() => vars.enableFrequencyPenalty = v),
         ),
         if (vars.enableFrequencyPenalty)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Slider(
               value: vars.frequencyPenalty,
               min: -2,
@@ -265,16 +252,14 @@ Widget _buildEditParamsTab({
 
         // Presence Penalty
         SwitchListTile(
-          title: const Text('存在惩罚 (Presence Penalty)'),
+          title: Text(AppLocalizations.of(context)!.assistantPresencePenalty),
           subtitle: Text('${vars.presencePenalty}'),
           value: vars.enablePresencePenalty,
           onChanged: (v) => setDlgState(() => vars.enablePresencePenalty = v),
         ),
         if (vars.enablePresencePenalty)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Slider(
               value: vars.presencePenalty,
               min: -2,
@@ -288,20 +273,22 @@ Widget _buildEditParamsTab({
 
         // Seed
         SwitchListTile(
-          title: const Text('随机种子 (Seed)'),
-          subtitle: Text(vars.seed?.toString() ?? '未设置'),
+          title: Text(AppLocalizations.of(context)!.assistantRandomSeed),
+          subtitle: Text(
+            vars.seed?.toString() ??
+                AppLocalizations.of(context)!.providerNotConfigured,
+          ),
           value: vars.enableSeed,
           onChanged: (v) => setDlgState(() => vars.enableSeed = v),
         ),
         if (vars.enableSeed)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
-              decoration: const InputDecoration(
-                labelText: '种子值',
-                hintText: '输入整数种子',
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.assistantSeedValue,
+                hintText: AppLocalizations.of(context)!
+                    .assistantIntegerSeedHint,
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -316,7 +303,7 @@ Widget _buildEditParamsTab({
 
         // Web Search
         SwitchListTile(
-          title: const Text('联网搜索'),
+          title: Text(AppLocalizations.of(context)!.assistantWebSearch),
           value: vars.enableWebSearch,
           onChanged: (v) => setDlgState(() => vars.enableWebSearch = v),
         ),
@@ -324,38 +311,22 @@ Widget _buildEditParamsTab({
 
         // Custom Parameters section
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              const Text(
-                '自定义参数',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
+              Text(
+                AppLocalizations.of(context)!.chatCustomParameters,
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(
-                  Icons.add_circle_outline,
-                  size: 20,
-                ),
-                tooltip: '添加参数',
+                icon: const Icon(Icons.add_circle_outline, size: 20),
+                tooltip: AppLocalizations.of(context)!.assistantAddParameter,
                 onPressed: () {
-                  showAddCustomParameterDialog(context, (
-                    name,
-                    type,
-                    value,
-                  ) {
+                  showAddCustomParameterDialog(context, (name, type, value) {
                     setDlgState(() {
                       vars.customParameters.add(
-                        CustomParameter(
-                          name: name,
-                          type: type,
-                          value: value,
-                        ),
+                        CustomParameter(name: name, type: type, value: value),
                       );
                     });
                   });
@@ -366,16 +337,11 @@ Widget _buildEditParamsTab({
         ),
         if (vars.customParameters.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              '暂无自定义参数',
+              AppLocalizations.of(context)!.assistantNoCustomParameters,
               style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -388,20 +354,14 @@ Widget _buildEditParamsTab({
               dense: true,
               title: Text(
                 cp.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w500),
               ),
-              subtitle: Text(
-                '${cp.type}: ${cp.value?.toString() ?? 'null'}',
-              ),
+              subtitle: Text('${cp.type}: ${cp.value?.toString() ?? 'null'}'),
               trailing: IconButton(
                 icon: Icon(
                   Icons.delete_outline,
                   size: 18,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.error,
+                  color: Theme.of(context).colorScheme.error,
                 ),
                 onPressed: () {
                   setDlgState(() {
@@ -410,11 +370,7 @@ Widget _buildEditParamsTab({
                 },
               ),
               onTap: () {
-                showEditCustomParameterDialog(context, cp, (
-                  name,
-                  type,
-                  value,
-                ) {
+                showEditCustomParameterDialog(context, cp, (name, type, value) {
                   setDlgState(() {
                     vars.customParameters[i] = CustomParameter(
                       name: name,

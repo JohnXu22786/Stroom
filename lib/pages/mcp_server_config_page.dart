@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/mcp.dart';
@@ -92,8 +93,9 @@ class _McpServerConfigDialogState
       return;
     }
     final config = entry.configs[widget.configIndex];
-    final mcpConfig =
-        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    final mcpConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : null;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
       typeConfig: mcpConfig,
@@ -160,8 +162,10 @@ class _McpServerConfigDialogState
     if (trimmedValue.isEmpty || trimmedValue.toLowerCase() == 'bearer') {
       return '';
     }
-    final bearerMatch =
-        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    final bearerMatch = RegExp(
+      r'^bearer\s+',
+      caseSensitive: false,
+    ).firstMatch(trimmedValue);
     if (bearerMatch == null) return trimmedValue;
 
     final key = trimmedValue.substring(bearerMatch.end).trim();
@@ -197,10 +201,15 @@ class _McpServerConfigDialogState
   }
 
   String _apiKeyValueForSource(
-      String fieldName, String originalValue, String newApiKey) {
+    String fieldName,
+    String originalValue,
+    String newApiKey,
+  ) {
     final trimmedValue = originalValue.trim();
-    final bearerMatch =
-        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    final bearerMatch = RegExp(
+      r'^bearer\s+',
+      caseSensitive: false,
+    ).firstMatch(trimmedValue);
     if (bearerMatch != null) {
       return '${trimmedValue.substring(0, bearerMatch.end)}$newApiKey';
     }
@@ -227,8 +236,11 @@ class _McpServerConfigDialogState
       if (newApiKey == null) {
         values.remove(entry.key);
       } else {
-        values[entry.key] =
-            _apiKeyValueForSource(entry.key, entry.value, newApiKey);
+        values[entry.key] = _apiKeyValueForSource(
+          entry.key,
+          entry.value,
+          newApiKey,
+        );
       }
     }
   }
@@ -252,7 +264,8 @@ class _McpServerConfigDialogState
       return;
     }
 
-    final changed = _nameController.text != _originalName ||
+    final changed =
+        _nameController.text != _originalName ||
         _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
@@ -306,22 +319,31 @@ class _McpServerConfigDialogState
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('请输入 MCP 服务器名称')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.mcpServerNameRequired),
+        ),
+      );
       return;
     }
 
     // Validate transport-specific fields
     if (_transportType == McpTransportType.stdio &&
         _commandController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('stdio 模式需要指定命令')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.mcpStdioCommandRequired),
+        ),
+      );
       return;
     }
     if (_transportType == McpTransportType.sse &&
         _urlController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('SSE 模式需要指定 URL')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.mcpSseUrlRequired),
+        ),
+      );
       return;
     }
 
@@ -334,10 +356,10 @@ class _McpServerConfigDialogState
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
         ? argsStr
-            .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
         : <String>[];
 
     final apiKey = _apiKeyController.text.trim();
@@ -416,8 +438,11 @@ class _McpServerConfigDialogState
         for (final entry in effectiveHeaders.entries.toList()) {
           if (_isApiKeySourceFieldName(entry.key) &&
               _isApiKeyPlaceholder(entry.key, entry.value)) {
-            effectiveHeaders[entry.key] =
-                _apiKeyValueForSource(entry.key, entry.value, effectiveApiKey);
+            effectiveHeaders[entry.key] = _apiKeyValueForSource(
+              entry.key,
+              entry.value,
+              effectiveApiKey,
+            );
           }
         }
       }
@@ -447,7 +472,8 @@ class _McpServerConfigDialogState
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
-    final existingConfig = _isExistingConfig &&
+    final existingConfig =
+        _isExistingConfig &&
             widget.configIndex >= 0 &&
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
@@ -496,8 +522,9 @@ class _McpServerConfigDialogState
       _commandController.text = _transportType == McpTransportType.stdio
           ? _commandController.text.trim()
           : '';
-      _argsController.text =
-          _transportType == McpTransportType.stdio ? args.join(', ') : '';
+      _argsController.text = _transportType == McpTransportType.stdio
+          ? args.join(', ')
+          : '';
       _urlController.text = _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '';
@@ -512,8 +539,10 @@ class _McpServerConfigDialogState
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final title = _isExistingConfig
-        ? (_nameController.text.isNotEmpty ? _nameController.text : '编辑MCP服务器')
-        : '新建MCP服务器';
+        ? (_nameController.text.isNotEmpty
+              ? _nameController.text
+              : AppLocalizations.of(context)!.mcpEditServerTitle)
+        : AppLocalizations.of(context)!.mcpCreateServerTitle;
 
     return PopScope(
       canPop: !_isEditMode || !_hasUnsavedChanges,
@@ -522,17 +551,19 @@ class _McpServerConfigDialogState
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('未保存的更改'),
-            content: const Text('有未保存的更改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.mcpUnsavedChangesTitle),
+            content: Text(
+              AppLocalizations.of(context)!.mcpUnsavedChangesConfirm,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -557,7 +588,9 @@ class _McpServerConfigDialogState
               padding: const EdgeInsets.all(16),
               children: [
                 // Transport type
-                const SectionHeader(title: '传输方式'),
+                SectionHeader(
+                  title: AppLocalizations.of(context)!.mcpTransportType,
+                ),
                 const SizedBox(height: 8),
                 if (_isEditMode && !_isVendor)
                   _buildTransportSelector()
@@ -567,14 +600,16 @@ class _McpServerConfigDialogState
                 const SizedBox(height: 16),
 
                 // Server name
-                const SectionHeader(title: '服务器名称'),
+                SectionHeader(
+                  title: AppLocalizations.of(context)!.mcpServerName,
+                ),
                 const SizedBox(height: 8),
                 if (_isEditMode && !_isVendor)
                   TextField(
                     controller: _nameController,
                     enabled: !_isSaving,
-                    decoration: const InputDecoration(
-                      hintText: '输入 MCP 服务器名称',
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context)!.mcpServerNameHint,
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.label, color: Colors.teal),
                     ),
@@ -584,7 +619,7 @@ class _McpServerConfigDialogState
                   ReadOnlyField(
                     icon: Icons.label,
                     iconColor: Colors.teal,
-                    label: '名称',
+                    label: AppLocalizations.of(context)!.batchDlgSortName,
                     value: _nameController.text,
                   ),
 
@@ -592,14 +627,17 @@ class _McpServerConfigDialogState
 
                 // Transport-specific fields
                 if (_transportType == McpTransportType.stdio) ...[
-                  const SectionHeader(title: '命令'),
+                  SectionHeader(
+                    title: AppLocalizations.of(context)!.mcpCommand,
+                  ),
                   const SizedBox(height: 8),
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _commandController,
                       enabled: !_isSaving,
-                      decoration: const InputDecoration(
-                        hintText: '例如: npx',
+                      decoration: InputDecoration(
+                        hintText: AppLocalizations.of(context)!
+                            .mcpCommandExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.terminal, color: Colors.orange),
                       ),
@@ -609,19 +647,21 @@ class _McpServerConfigDialogState
                     ReadOnlyField(
                       icon: Icons.terminal,
                       iconColor: Colors.orange,
-                      label: '命令',
+                      label: AppLocalizations.of(context)!.mcpCommand,
                       value: _commandController.text,
                     ),
                   const SizedBox(height: 12),
-                  const SectionHeader(title: '参数'),
+                  SectionHeader(
+                    title: AppLocalizations.of(context)!.mcpArguments,
+                  ),
                   const SizedBox(height: 8),
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _argsController,
                       enabled: !_isSaving,
-                      decoration: const InputDecoration(
-                        hintText:
-                            '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
+                      decoration: InputDecoration(
+                        hintText: AppLocalizations.of(context)!
+                            .mcpArgumentsHint,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
@@ -631,18 +671,21 @@ class _McpServerConfigDialogState
                     ReadOnlyField(
                       icon: Icons.list,
                       iconColor: Colors.purple,
-                      label: '参数',
+                      label: AppLocalizations.of(context)!.mcpArguments,
                       value: _argsController.text,
                     ),
                 ] else ...[
-                  const SectionHeader(title: 'SSE URL'),
+                  SectionHeader(
+                    title: AppLocalizations.of(context)!.mcpSseUrlLabel,
+                  ),
                   const SizedBox(height: 8),
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _urlController,
                       enabled: !_isSaving,
-                      decoration: const InputDecoration(
-                        hintText: '例如: http://localhost:3001/sse',
+                      decoration: InputDecoration(
+                        hintText: AppLocalizations.of(context)!
+                            .mcpSseUrlExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link, color: Colors.blue),
                       ),
@@ -652,7 +695,7 @@ class _McpServerConfigDialogState
                     ReadOnlyField(
                       icon: Icons.link,
                       iconColor: Colors.blue,
-                      label: 'URL',
+                      label: AppLocalizations.of(context)!.mcpUrlLabel,
                       value: _urlController.text,
                     ),
                 ],
@@ -660,17 +703,19 @@ class _McpServerConfigDialogState
                 const SizedBox(height: 16),
 
                 // API Key (for built-in and regular configs)
-                const SectionHeader(title: 'API 密钥'),
+                SectionHeader(title: AppLocalizations.of(context)!.mcpApiKey),
                 const SizedBox(height: 8),
                 if (_isEditMode)
                   TextField(
                     controller: _apiKeyController,
                     enabled: !_isSaving,
                     decoration: InputDecoration(
-                      hintText: '输入 API Key（可选）',
+                      hintText: AppLocalizations.of(context)!.mcpApiKeyHint,
                       border: const OutlineInputBorder(),
-                      prefixIcon:
-                          const Icon(Icons.vpn_key, color: Colors.amber),
+                      prefixIcon: const Icon(
+                        Icons.vpn_key,
+                        color: Colors.amber,
+                      ),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscureApiKey
@@ -679,12 +724,14 @@ class _McpServerConfigDialogState
                           size: 20,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                        tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                        tooltip: _obscureApiKey
+                            ? AppLocalizations.of(context)!.mcpShowKey
+                            : AppLocalizations.of(context)!.mcpHideKey,
                         onPressed: _isSaving
                             ? null
                             : () => setState(
-                                  () => _obscureApiKey = !_obscureApiKey,
-                                ),
+                                () => _obscureApiKey = !_obscureApiKey,
+                              ),
                       ),
                     ),
                     obscureText: _obscureApiKey,
@@ -694,21 +741,25 @@ class _McpServerConfigDialogState
                   ReadOnlyField(
                     icon: Icons.vpn_key,
                     iconColor: Colors.amber,
-                    label: 'API 密钥',
+                    label: AppLocalizations.of(context)!.mcpApiKey,
                     value: _apiKeyController.text.isNotEmpty ? '••••••••' : '',
                   ),
 
                 const SizedBox(height: 16),
 
                 // Description
-                const SectionHeader(title: '描述'),
+                SectionHeader(
+                  title: AppLocalizations.of(context)!
+                      .builtInPromptDescriptionHeading,
+                ),
                 const SizedBox(height: 8),
                 if (_isEditMode && !_isVendor)
                   TextField(
                     controller: _descriptionController,
                     enabled: !_isSaving,
-                    decoration: const InputDecoration(
-                      hintText: '输入此 MCP 服务器的描述信息（可选）',
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context)!
+                          .mcpDescriptionHint,
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.description, color: Colors.teal),
                     ),
@@ -720,7 +771,8 @@ class _McpServerConfigDialogState
                   ReadOnlyField(
                     icon: Icons.description,
                     iconColor: Colors.teal,
-                    label: '描述',
+                    label: AppLocalizations.of(context)!
+                        .builtInPromptDescriptionHeading,
                     value: _descriptionController.text,
                   ),
 
@@ -738,8 +790,10 @@ class _McpServerConfigDialogState
                         Expanded(
                           child: Text(
                             _transportType == McpTransportType.stdio
-                                ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
-                                : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
+                                ? AppLocalizations.of(context)!
+                                      .mcpStdioDescription
+                                : AppLocalizations.of(context)!
+                                      .mcpSseDescription,
                             style: TextStyle(
                               fontSize: 12,
                               color: cs.onSurfaceVariant,
@@ -765,7 +819,7 @@ class _McpServerConfigDialogState
           child: _buildTransportOption(
             McpTransportType.stdio,
             Icons.desktop_windows,
-            '本地 (stdio)',
+            AppLocalizations.of(context)!.mcpLocalStdio,
           ),
         ),
         const SizedBox(width: 12),
@@ -773,7 +827,7 @@ class _McpServerConfigDialogState
           child: _buildTransportOption(
             McpTransportType.sse,
             Icons.cloud,
-            '远程 (SSE)',
+            AppLocalizations.of(context)!.mcpRemoteSse,
           ),
         ),
       ],
@@ -833,12 +887,13 @@ class _McpServerConfigDialogState
     final icon = _transportType == McpTransportType.stdio
         ? Icons.desktop_windows
         : Icons.cloud;
-    final label =
-        _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
+    final label = _transportType == McpTransportType.stdio
+        ? AppLocalizations.of(context)!.mcpLocalStdio
+        : AppLocalizations.of(context)!.mcpRemoteSse;
     return ReadOnlyField(
       icon: icon,
       iconColor: cs.primary,
-      label: '传输方式',
+      label: AppLocalizations.of(context)!.mcpTransportType,
       value: label,
     );
   }
@@ -855,12 +910,16 @@ class _McpServerConfigDialogState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save, size: 20),
-          label: Text(_isSaving ? '保存中...' : '保存'),
+          label: Text(
+            _isSaving
+                ? AppLocalizations.of(context)!.mcpSaving
+                : AppLocalizations.of(context)!.mermaidSaveButton,
+          ),
         ),
         TextButton.icon(
           onPressed: _isSaving ? null : _discardChanges,
           icon: const Icon(Icons.close, size: 20),
-          label: const Text('放弃'),
+          label: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
         ),
       ];
     }
@@ -868,7 +927,7 @@ class _McpServerConfigDialogState
       if (_isExistingConfig)
         TextButton.icon(
           icon: const Icon(Icons.edit, size: 20),
-          label: const Text('编辑'),
+          label: Text(AppLocalizations.of(context)!.imagePreviewEdit),
           onPressed: _enterEditMode,
         ),
     ];

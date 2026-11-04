@@ -4219,6 +4219,1566 @@ class AppLocalizationsZh extends AppLocalizations {
   String taskFlowValidationTextEncodingFailed(String index) {
     return '第 $index 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。';
   }
+
+  @override
+  String get assistantParamValueTypeString => '字符串';
+
+  @override
+  String get assistantParamValueTypeNumber => '数字';
+
+  @override
+  String get assistantParamValueTypeBoolean => '布尔值';
+
+  @override
+  String get assistantParamValueTypeJson => 'JSON';
+
+  @override
+  String get providerRequiredFields => '供应商名称、API 地址和密钥均为必填项。';
+
+  @override
+  String get providerJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
+
+  @override
+  String get providerCustomParamRequired => '自定义参数的名称和值不能为空。';
+
+  @override
+  String providerParamNameInvalid(String name) {
+    return '参数名格式不正确（点号分段不能为空）：$name';
+  }
+
+  @override
+  String providerParamAlreadyExists(String name) {
+    return '参数已存在：$name';
+  }
+
+  @override
+  String providerParamInvalidJson(String name, String value) {
+    return '参数“$name”的默认值不是合法 JSON：$value';
+  }
+
+  @override
+  String providerParamOptionsRequired(String name) {
+    return '参数“$name”的数值选项不能为空。';
+  }
+
+  @override
+  String providerParamInvalidNumber(String name, String value) {
+    return '参数“$name”的值不是合法数字：$value';
+  }
+
+  @override
+  String get providerReasoningIncomplete => '请先完整填写推理开关，其他推理参数才能生效。';
+
+  @override
+  String providerReasoningError(String error) {
+    return '推理参数错误：$error';
+  }
+
+  @override
+  String providerParamNameConflict(String name) {
+    return '推理参数与自定义参数重名：$name';
+  }
+
+  @override
+  String get providerMaxTokensMissing => '已启用最大输出 Token 数，但未填写数值。';
+
+  @override
+  String get providerMaxTokensPositive => '最大输出 Token 数必须为正整数。';
+
+  @override
+  String get providerSeedInteger => '随机种子必须为整数。';
+
+  @override
+  String get providerNotConfigured => '未设置';
+
+  @override
+  String get providerAudioChunkingTitle => '音频切块';
+
+  @override
+  String get providerAudioChunkingHint => '智能切块会分析音频和候选切点，优先在句末切分；各片段不会重叠。';
+
+  @override
+  String get providerChunkingMode => '切块方式';
+
+  @override
+  String get providerChunkNone => '不切块';
+
+  @override
+  String get providerChunkSmart => '智能切块（推荐）';
+
+  @override
+  String get providerChunkFixedDuration => '固定时长切块';
+
+  @override
+  String get providerChunkFixedSize => '固定大小切块';
+
+  @override
+  String get providerCompressionTitle => '压缩编码';
+
+  @override
+  String get providerCompressionHint =>
+      '启用后，通用兜底会先压缩完整 WAV；若编码文件或请求体仍超限，再切分源 PCM 并逐块编码。';
+
+  @override
+  String get providerCompressionMode => '压缩方式';
+
+  @override
+  String get providerCompressionNone => '无（原样发送）';
+
+  @override
+  String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
+
+  @override
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+
+  @override
+  String get providerCompressionAdpcmDescription =>
+      'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。';
+
+  @override
+  String get providerCompressionFlacDescription =>
+      'FLAC 无损压缩，纯 Dart 实现，体积约缩小一半。';
+
+  @override
+  String get providerCompressionWavDescription => '不压缩，以 WAV 文件原样发送。';
+
+  @override
+  String get providerLlmParams => 'LLM 参数';
+
+  @override
+  String get providerEnabledParamsHelp => '开启的参数将作为默认值发送到 API 请求中。';
+
+  @override
+  String get providerTemperatureLabel => '温度';
+
+  @override
+  String get providerTemperatureHelp => '控制输出的随机性，值越高越有创造性。';
+
+  @override
+  String get providerTopPHelp => '核采样参数，控制词汇选择的累积概率。';
+
+  @override
+  String get providerFrequencyPenaltyLabel => '频率惩罚';
+
+  @override
+  String get providerFrequencyPenaltyHelp => '减少重复词，负值会增加重复。';
+
+  @override
+  String get providerPresencePenaltyLabel => '存在惩罚';
+
+  @override
+  String get providerPresencePenaltyHelp => '鼓励讨论新话题，负值会鼓励重复话题。';
+
+  @override
+  String get providerMaxOutputTokensLabel => '最大输出 Token 数';
+
+  @override
+  String providerOptionalExample(String example) {
+    return '可选，例如 $example';
+  }
+
+  @override
+  String get providerResponseTokensHelp => '每次响应最多生成的 Token 数。';
+
+  @override
+  String get providerSeedLabel => '随机种子';
+
+  @override
+  String get providerSeedHelp => '设置后可使输出结果可复现。';
+
+  @override
+  String get providerChunkSmartDescription =>
+      '分析音频和候选切点，优先在句末或长静音处切分且不重叠。默认最短 20 秒、目标 45 秒、最长 60 秒。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkDurationDescription =>
+      '每 N 秒切分一次（默认 60 秒）。方式简单，但可能截断语句。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkSizeDescription =>
+      '先按音频数据大小初步切分，再根据编码文件和请求体大小细分。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkNoneDescription => '不切块。完整压缩后仍超出限制时，将拒绝该文件。';
+
+  @override
+  String get providerNameLabel => '供应商名称';
+
+  @override
+  String get providerNameHint => '输入供应商名称';
+
+  @override
+  String get providerApiUrlLabel => 'API 地址';
+
+  @override
+  String get providerApiUrlHint => '输入完整的 API 端点地址';
+
+  @override
+  String providerApiKeyHint(String hint) {
+    return '提示：$hint';
+  }
+
+  @override
+  String get providerEndpointTypeLabel => '端点类型';
+
+  @override
+  String get providerEndpointOpenAi => '兼容 OpenAI（Chat Completions）';
+
+  @override
+  String get providerEndpointAnthropic => 'Anthropic 格式（Messages API）';
+
+  @override
+  String get providerAnthropicEndpointHelp =>
+      '使用官方 Anthropic Messages API 格式（x-api-key 请求头）。API 地址示例：https://api.anthropic.com/v1/messages';
+
+  @override
+  String get providerOpenAiEndpointHelp =>
+      '使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头）。API 地址示例：https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get providerRequestJsonDefault => '请求 JSON 大小默认值';
+
+  @override
+  String get providerUseAppDefault => '留空则使用应用默认值';
+
+  @override
+  String get providerModelJsonBudgetHelp =>
+      '模型可单独设置覆盖值；此处和模型均未设置时，使用 20 MiB 默认值。';
+
+  @override
+  String get providerRequestParamsHelp =>
+      '请求会使用供应商和模型中所有已启用的参数。若参数重名，则以模型参数值为准。';
+
+  @override
+  String get providerUploadSettings => '上传设置';
+
+  @override
+  String get providerUploadMethodHelp => '不同供应商支持的音频上传方式和大小限制不同。';
+
+  @override
+  String get providerUploadMethod => '上传方式';
+
+  @override
+  String get providerMultipart => 'Multipart（通用）';
+
+  @override
+  String get providerUrlUpload => 'URL（链接）';
+
+  @override
+  String get providerMaxUploadSize => '最大上传大小';
+
+  @override
+  String get providerFallbackStrategy => '兜底策略';
+
+  @override
+  String get providerFallbackMethod => '兜底方式';
+
+  @override
+  String get providerPreprocessing => '音频预处理';
+
+  @override
+  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+
+  @override
+  String get providerPreprocessingMethod => '预处理方式';
+
+  @override
+  String get providerUploadMultipartHelp =>
+      '直接以 multipart/form-data 上传。请求体包括音频、表单字段和分段边界。';
+
+  @override
+  String get providerUploadBase64Help =>
+      '以 JSON 发送 Base64，可绕过部分供应商对 multipart 的专属限制。Base64 膨胀和 JSON 字段均计入上传上限。';
+
+  @override
+  String get providerUploadUrlHelp =>
+      '提供公网 URL，由供应商下载。支持较大的文件（例如 Together AI 的 1 GB）。';
+
+  @override
+  String get providerUploadBudgetHelp =>
+      '此值用于触发原始音频兜底并限制最终请求体。应用会分别检查原始音频、编码文件和上传大小。Multipart 计入表单字段和边界；Base64 JSON 计入编码膨胀和字段。默认 25 MB 与 OpenAI 音频 API 上限一致。';
+
+  @override
+  String get providerFallbackTriggerHelp =>
+      '原始音频或完整请求体超出上限时触发。特定兜底（Base64）优先于通用兜底（压缩/切块）。';
+
+  @override
+  String get providerFallbackNone => '无（直接拒绝）';
+
+  @override
+  String get providerFallbackSpecific => '特定兜底（Base64）';
+
+  @override
+  String get providerFallbackGeneric => '通用兜底（压缩/切块）';
+
+  @override
+  String get providerFallbackAll => '全部尝试（推荐）';
+
+  @override
+  String get providerFallbackSpecificHelp =>
+      '尝试 Base64 JSON。只有计入 Base64 膨胀和 JSON 字段后的请求体未超限时才发送。';
+
+  @override
+  String get providerFallbackGenericHelp =>
+      '若已启用压缩，则先压缩完整 WAV。仍超限且已启用切块时，再切分源 PCM 并逐块编码。仅支持 PCM WAV。';
+
+  @override
+  String get providerFallbackAllHelp =>
+      '先尝试符合请求体上限的 Base64；然后在启用压缩时压缩完整 WAV。若仍超限且已启用切块，则切分源 PCM 并逐块编码。仅支持 PCM WAV。';
+
+  @override
+  String get providerFallbackRejectHelp => '文件超出限制时直接拒绝，不尝试兜底。';
+
+  @override
+  String get providerPreprocessNone => '无';
+
+  @override
+  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+
+  @override
+  String get providerPreprocessResampleHelp =>
+      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+
+  @override
+  String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
+
+  @override
+  String get assistantDefaultsScopeHelp =>
+      '默认模型和工具仅用于在此助手下新建的话题。现有话题保留各自设置。工具结果截断适用于全部话题。';
+
+  @override
+  String get assistantDefaultModelTitle => '默认模型';
+
+  @override
+  String get assistantDefaultModelHelp => '新话题使用的模型；留空则不指定默认模型。';
+
+  @override
+  String get assistantNoDefault => '暂不设置';
+
+  @override
+  String get assistantNoModelsAvailable => '暂无可用模型，请在设置中配置 LLM 供应商。';
+
+  @override
+  String get assistantDefaultToolsTitle => '默认启用工具';
+
+  @override
+  String get assistantDisabledToolsHelp => '已关闭的工具不会在新话题中自动启用。';
+
+  @override
+  String get assistantUnconfiguredToolsHelp => '尚未配置默认工具；新话题将自动启用全部工具。';
+
+  @override
+  String get assistantEnableAll => '全部启用';
+
+  @override
+  String get assistantDisableAll => '全部关闭';
+
+  @override
+  String get assistantNoToolsAvailable => '暂无可用工具';
+
+  @override
+  String get assistantTruncateToolOutput => '工具结果截断';
+
+  @override
+  String get assistantTruncateToolOutputHelp =>
+      '发送给模型前，单个工具结果的最大字符数。适用于此助手下的全部话题。';
+
+  @override
+  String get assistantEnableTruncation => '启用截断';
+
+  @override
+  String assistantTruncatedTo(String count) {
+    return '超长结果将截断至 $count 个字符';
+  }
+
+  @override
+  String get assistantSendFullResult => '完整发送（仍受 50 KB 存储上限约束）';
+
+  @override
+  String get assistantMaxCharacters => '最大字符数';
+
+  @override
+  String get assistantCharactersNotTokens => '单位：字符（不是 token）';
+
+  @override
+  String assistantDefaultCharacterCount(String count) {
+    return '默认值：$count';
+  }
+
+  @override
+  String assistantCharacterRange(String minimum, String maximum) {
+    return '有效范围：$minimum–$maximum 个字符';
+  }
+
+  @override
+  String get assistantNewConversationPreview => '新建话题效果';
+
+  @override
+  String assistantEnabledToolCount(String enabled, String total) {
+    return '已启用 $enabled / $total 个';
+  }
+
+  @override
+  String get assistantAllToolsAutoEnabled => '全部自动启用（未配置）';
+
+  @override
+  String get assistantMoreActions => '更多操作';
+
+  @override
+  String get assistantChooseEmoji => '选择表情';
+
+  @override
+  String get assistantNameLabel => '助手名称';
+
+  @override
+  String get assistantDescriptionOptional => '描述（可选）';
+
+  @override
+  String get assistantSelectionTitle => '选择助手';
+
+  @override
+  String get assistantMarketTooltip => '助手市场';
+
+  @override
+  String get assistantCreateNew => '新建助手';
+
+  @override
+  String get assistantEmptyState => '暂无助手，请先创建。';
+
+  @override
+  String get assistantCreate => '创建';
+
+  @override
+  String get assistantReorderHint => '长按并拖动即可调整助手顺序';
+
+  @override
+  String get assistantNewNameHint => '输入助手名称';
+
+  @override
+  String get assistantNewDescriptionHint => '简要描述此助手的功能';
+
+  @override
+  String get assistantDeleteTitle => '删除助手';
+
+  @override
+  String assistantDeleteConfirmation(String name) {
+    return '确定要删除助手“$name”吗？此操作无法撤销。';
+  }
+
+  @override
+  String get assistantEditTitle => '编辑助手';
+
+  @override
+  String get assistantBasicTab => '基本设置';
+
+  @override
+  String get assistantParametersTab => '参数设置';
+
+  @override
+  String get assistantDefaultsTab => '默认设置';
+
+  @override
+  String get assistantAddCustomParameter => '添加自定义参数';
+
+  @override
+  String get assistantEditCustomParameter => '编辑自定义参数';
+
+  @override
+  String get assistantParameterName => '参数名';
+
+  @override
+  String get assistantParameterNameHint => '例如 top_k 或 provider.only';
+
+  @override
+  String get assistantParameterNameInvalid => '参数名格式不正确（点号分段不能为空）';
+
+  @override
+  String get assistantParameterType => '类型';
+
+  @override
+  String get assistantValue => '值';
+
+  @override
+  String get assistantTrueFalseHint => 'true 或 false';
+
+  @override
+  String get assistantNumberHint => '输入数字';
+
+  @override
+  String assistantJsonHint(String example) {
+    return '例如：$example';
+  }
+
+  @override
+  String get assistantValueHint => '输入值';
+
+  @override
+  String get assistantCancel => '取消';
+
+  @override
+  String get assistantSave => '保存';
+
+  @override
+  String get assistantParamOverrideHelp => '启用时助手参数会覆盖模型参数；关闭时使用模型参数。';
+
+  @override
+  String get assistantTemperature => '温度';
+
+  @override
+  String get assistantMaxTokens => '最大 Token 数';
+
+  @override
+  String get assistantMaxToolCalls => '工具调用上限';
+
+  @override
+  String assistantRounds(String count) {
+    return '$count 轮';
+  }
+
+  @override
+  String get assistantUnlimited => '无限制';
+
+  @override
+  String get assistantStreamOutput => '流式输出';
+
+  @override
+  String get assistantFrequencyPenalty => '频率惩罚';
+
+  @override
+  String get assistantPresencePenalty => '存在惩罚';
+
+  @override
+  String get assistantRandomSeed => '随机种子';
+
+  @override
+  String get assistantNotSet => '未设置';
+
+  @override
+  String get assistantSeedValue => '种子值';
+
+  @override
+  String get assistantIntegerSeedHint => '输入整数种子';
+
+  @override
+  String get assistantWebSearch => '联网搜索';
+
+  @override
+  String get assistantAddParameter => '添加参数';
+
+  @override
+  String get assistantNoCustomParameters => '暂无自定义参数';
+
+  @override
+  String get assistantRoundsLabel => '轮数';
+
+  @override
+  String get modelCreateTitle => '添加模型';
+
+  @override
+  String get modelEditTitle => '编辑模型';
+
+  @override
+  String get modelDiscardTitle => '放弃修改？';
+
+  @override
+  String get modelDiscardBody => '当前有未保存的修改，确定要放弃吗？';
+
+  @override
+  String get modelNameLabel => '模型名称';
+
+  @override
+  String get modelNameHint => '输入显示名称（可选）';
+
+  @override
+  String get modelIdLabel => '模型 ID';
+
+  @override
+  String modelIdExample(String id) {
+    return '例如 $id';
+  }
+
+  @override
+  String get modelIdRequired => '模型 ID 为必填项。';
+
+  @override
+  String get modelCustomParamRequired => '自定义参数的参数名和默认值不能为空。';
+
+  @override
+  String modelParamDuplicate(String name) {
+    return '参数已存在：$name';
+  }
+
+  @override
+  String get modelParamName => '参数名';
+
+  @override
+  String get modelParamDefaultValue => '默认参数值';
+
+  @override
+  String get modelParamDelete => '删除参数';
+
+  @override
+  String modelParamJsonInvalid(String name, String value) {
+    return '参数“$name”的默认值不是合法 JSON：$value';
+  }
+
+  @override
+  String get modelAddParameter => '添加参数';
+
+  @override
+  String get modelNoCustomParams => '暂无自定义参数';
+
+  @override
+  String get modelBasicSettings => '基本设置';
+
+  @override
+  String get modelDiscardCancel => '取消';
+
+  @override
+  String get modelSave => '保存';
+
+  @override
+  String get modelUnsavedMaxTokens => '最大输出 Token 数已启用但未填写。';
+
+  @override
+  String get modelMaxTokensPositive => '最大输出 Token 数必须为正整数。';
+
+  @override
+  String get modelSeedInteger => '随机种子必须为整数。';
+
+  @override
+  String get modelContextLengthRequired => '上下文长度为必填项。';
+
+  @override
+  String get modelContextLengthPositive => '上下文长度必须为正整数。';
+
+  @override
+  String get modelAsrLanguageCode => '语言代码（Language）';
+
+  @override
+  String get modelAsrLanguageHint => '例如 zh、en、ja';
+
+  @override
+  String get modelAsrLanguageHelp => 'ISO-639-1 语言代码；留空则由模型自动检测。';
+
+  @override
+  String get modelTemperature => '温度';
+
+  @override
+  String get modelTemperatureHelp => '控制输出的随机性，建议使用较低的值。';
+
+  @override
+  String get modelAsrPrompt => '提示词';
+
+  @override
+  String get modelAsrPromptHint => '输入上下文提示词（可选）';
+
+  @override
+  String get modelAsrPromptHelp => '提供上下文以提高转写准确性，例如专业术语列表。';
+
+  @override
+  String get modelAsrParams => 'ASR 参数';
+
+  @override
+  String get modelEnabledParamsHelp => '开启的参数将作为默认值发送到 API 请求中。';
+
+  @override
+  String get modelAsrResponseFormat => '响应格式';
+
+  @override
+  String get modelAsrResponseHelp => '转写结果的返回格式。';
+
+  @override
+  String get modelAsrTimestampGranularity => '时间戳粒度';
+
+  @override
+  String get modelAsrVerboseHelp => '仅在 response_format 为 verbose_json 时生效。';
+
+  @override
+  String get modelNoTrim => '不裁切';
+
+  @override
+  String get modelAudioTrimTitle => '音频裁切';
+
+  @override
+  String get modelAudioTrimHelp => '选择音频裁切方式。';
+
+  @override
+  String get modelDeleteTrimPreset => '删除裁切预设';
+
+  @override
+  String modelDeleteTrimConfirmation(String name) {
+    return '确定要删除裁切预设“$name”吗？';
+  }
+
+  @override
+  String get modelAddTrimPreset => '添加自定义裁切';
+
+  @override
+  String get modelPlayTestAudio => '播放测试音频';
+
+  @override
+  String get modelPlayingTestAudio => '播放中...';
+
+  @override
+  String get modelParamExists => '该参数已存在';
+
+  @override
+  String get asrModelIdExample => '例如 whisper-1';
+
+  @override
+  String get asrPromptLabel => '提示词';
+
+  @override
+  String get asrResponseFormatJson => 'json – JSON 格式';
+
+  @override
+  String get asrResponseFormatText => 'text – 纯文本';
+
+  @override
+  String get asrResponseFormatSrt => 'srt – 字幕';
+
+  @override
+  String get asrResponseFormatVtt => 'vtt – 字幕';
+
+  @override
+  String get asrResponseFormatVerbose => 'verbose_json – 详细 JSON（含时间戳）';
+
+  @override
+  String get asrVerboseTimestampHelp => '选择 verbose_json 后可启用下方时间戳粒度选项。';
+
+  @override
+  String get asrTimestampSegment => 'segment – 段落级';
+
+  @override
+  String get asrTimestampWord => 'word – 单词级';
+
+  @override
+  String get asrWordTimestampHelp => '单词级时间戳的准确性可能低于段落级。';
+
+  @override
+  String get reasoningAddOptionValue => '添加选项值';
+
+  @override
+  String get reasoningOptionExample => '例如 low、medium、high';
+
+  @override
+  String get reasoningOptionSelectionHelp =>
+      '点按选项块可选中或取消。选中的值会发送；拖动可排序。供应商提供的值不能删除，但可以取消选中来隐藏。';
+
+  @override
+  String get reasoningAddOption => '添加选项';
+
+  @override
+  String get reasoningCurrentProvider => '当前：供应商';
+
+  @override
+  String get reasoningCurrentModel => '当前：模型自定义';
+
+  @override
+  String get reasoningAddEffortValue => '添加推理力度值';
+
+  @override
+  String get reasoningEffortExample => '例如 max、ultra、deep';
+
+  @override
+  String get reasoningAddToggle => '添加推理开关';
+
+  @override
+  String get reasoningToggle => '推理开关';
+
+  @override
+  String get reasoningResetParameter => '还原此参数';
+
+  @override
+  String get reasoningDisableToggle => '停用推理开关';
+
+  @override
+  String get reasoningEnableToggle => '启用推理开关';
+
+  @override
+  String reasoningParameterNameSource(String source) {
+    return '参数名（$source）';
+  }
+
+  @override
+  String get reasoningNameExample => '例如 thinking.type、reasoning';
+
+  @override
+  String get reasoningBooleanHelp => '布尔参数无需配置值；聊天面板提供开关。';
+
+  @override
+  String get reasoningOnValue => '开启时的值';
+
+  @override
+  String get reasoningOnExample => '例如 enabled、true';
+
+  @override
+  String get reasoningOffValue => '关闭时的值';
+
+  @override
+  String get reasoningOffExample => '例如 disabled、false';
+
+  @override
+  String reasoningToggleValuesHelp(String onValue, String offValue) {
+    return '开启时发送“$onValue”，关闭时发送“$offValue”。';
+  }
+
+  @override
+  String get reasoningAddEffort => '添加推理力度';
+
+  @override
+  String get reasoningFillToggleFirst => '请先完整填写推理开关';
+
+  @override
+  String get reasoningFillToggleBeforeEffort => '请先完整填写推理开关，再配置推理力度。';
+
+  @override
+  String get reasoningAddValue => '添加值';
+
+  @override
+  String get reasoningJsonValue => 'JSON 值';
+
+  @override
+  String reasoningJsonExample(String example) {
+    return '例如 $example';
+  }
+
+  @override
+  String get reasoningSelectedChipHelp =>
+      '点按选项块可选中或取消。选中的值会显示在聊天推理面板；拖动可排序。供应商提供的值不能删除，但可以隐藏。';
+
+  @override
+  String get reasoningAddParameter => '添加推理参数';
+
+  @override
+  String get reasoningToggleIncomplete => '请先完整填写推理开关，再配置推理力度。';
+
+  @override
+  String get llmContextLength => '上下文长度';
+
+  @override
+  String get llmContextHint => '输入上下文长度';
+
+  @override
+  String get llmContextHelp => '模型的最大上下文窗口大小（Token 数）。';
+
+  @override
+  String get llmReasoningParams => '推理参数';
+
+  @override
+  String get llmReasoningHelp =>
+      '配置聊天推理参数。推理开关用于设置参数名和开关值；可添加、排序推理力度选项，并选择显示在聊天面板中的值。打开本页时会同步供应商提供的值。这些设置控制模型参数；聊天面板中的推理开关独立管理。';
+
+  @override
+  String get llmAddReasoningParam => '添加推理参数';
+
+  @override
+  String get llmCustomEndpointType => '自定义端点类型';
+
+  @override
+  String get llmInheritEndpointType => '关闭时使用供应商设置的端点类型。';
+
+  @override
+  String get llmEndpointType => '端点类型';
+
+  @override
+  String get llmEndpointOpenAi => '兼容 OpenAI（Chat Completions）';
+
+  @override
+  String get llmEndpointAnthropic => 'Anthropic 格式（Messages API）';
+
+  @override
+  String get llmEndpointHelp => '端点类型必须与供应商 API 地址匹配。更改后，此模型的新对话会使用相应格式。';
+
+  @override
+  String get llmTopPHelp => '核采样参数，用于控制词汇选择的累积概率。';
+
+  @override
+  String get llmFrequencyPenaltyLabel => '频率惩罚';
+
+  @override
+  String get llmFrequencyPenaltyHelp => '减少重复，负值会增加重复。';
+
+  @override
+  String get llmPresencePenaltyLabel => '存在惩罚';
+
+  @override
+  String get llmPresencePenaltyHelp => '鼓励讨论新话题，负值会鼓励重复话题。';
+
+  @override
+  String get llmMaxTokensHint => '可选，例如 4096';
+
+  @override
+  String get llmTokensPerResponse => '每次响应最多生成的 Token 数。';
+
+  @override
+  String get llmSeedLabel => '随机种子（Seed）';
+
+  @override
+  String get llmSeedHint => '可选，例如 42';
+
+  @override
+  String get llmSeedHelp => '设置后可使输出结果可复现。';
+
+  @override
+  String get llmInheritedCustomHelp => '供应商已配置的自定义参数会显示在此处，并在每次打开页面时同步。';
+
+  @override
+  String get llmBooleanParamHelp => '布尔类型无需配置参数值。';
+
+  @override
+  String get modelContextReq => '上下文长度为必填项。';
+
+  @override
+  String get modelContextPositive => '上下文长度必须为正整数。';
+
+  @override
+  String modelParamNameInvalid(String name) {
+    return '参数名格式不正确（点号分段不能为空）：$name';
+  }
+
+  @override
+  String modelParamFinite(String name, String valueLabel, String value) {
+    return '参数“$name”的$valueLabel必须是有限数字：$value';
+  }
+
+  @override
+  String get modelReasoningIncomplete => '请先完整填写推理开关，其他推理参数才能生效。';
+
+  @override
+  String get modelReasoningOptionsRequired => '推理参数必须至少添加一个选项值。';
+
+  @override
+  String modelReasoningError(String error) {
+    return '推理参数错误：$error';
+  }
+
+  @override
+  String modelReasoningDuplicate(String name) {
+    return '推理参数重名：$name';
+  }
+
+  @override
+  String modelReasoningCustomDuplicate(String name) {
+    return '推理参数与自定义参数重名：$name';
+  }
+
+  @override
+  String get modelSeedRequired => '随机种子已启用但未填写。';
+
+  @override
+  String get ocrParamsTitle => 'OCR 参数';
+
+  @override
+  String get ocrParamsHelp =>
+      '使用兼容 OpenAI 的视觉 Chat Completions 格式。以下参数均为可选；未填写或未启用的参数不会发送。供应商特有参数可在下方添加（需接口支持）。';
+
+  @override
+  String get ocrRequestSizeOverride => '请求 JSON 大小覆盖值';
+
+  @override
+  String get ocrInheritProvider => '留空则继承供应商设置';
+
+  @override
+  String get ocrBudgetDefault => '留空时继承供应商设置；供应商也未设置时使用 20 MiB 默认值。';
+
+  @override
+  String ocrBudgetValue(String size) {
+    return '留空时继承供应商设置（$size MiB）；供应商也未设置时使用 20 MiB 默认值。';
+  }
+
+  @override
+  String audioTrimDirection(String direction, String seconds) {
+    return '裁切$direction $seconds 秒';
+  }
+
+  @override
+  String audioTrimBeginning(String seconds) {
+    return '裁切开头 $seconds 秒';
+  }
+
+  @override
+  String get audioTrimNone => '不裁切音频';
+
+  @override
+  String get trimNameLabel => '裁切方式名称 *';
+
+  @override
+  String get trimNameHint => '例如静音裁切';
+
+  @override
+  String get trimDurationLabel => '裁切时长（秒）*';
+
+  @override
+  String get trimDurationHint => '例如 0.123';
+
+  @override
+  String get trimNameAndDurationRequired => '名称和时长为必填项。';
+
+  @override
+  String get trimDurationInvalid => '请输入有效的正数时长。';
+
+  @override
+  String get testAudioHostMissing => '尚未配置 Host。';
+
+  @override
+  String get testAudioKeyMissing => '尚未配置 Key。';
+
+  @override
+  String testAudioContentTypeError(String contentType) {
+    return '响应 Content-Type 为 $contentType，不是音频数据。';
+  }
+
+  @override
+  String get testAudioEmpty => '服务器返回了空音频数据。';
+
+  @override
+  String testAudioTimeoutConnection(String details) {
+    return '连接超时，请检查网络。$details';
+  }
+
+  @override
+  String testAudioTimeoutReceive(String details) {
+    return '接收超时，服务器响应过慢。$details';
+  }
+
+  @override
+  String testAudioRequestCancelled(String details) {
+    return '请求已取消。$details';
+  }
+
+  @override
+  String testAudioNetworkError(String message) {
+    return '网络错误：$message';
+  }
+
+  @override
+  String get testAudioNoBody => '无响应体';
+
+  @override
+  String testAudioCorsHelp(String details) {
+    return '无法连接到服务器。Web 端可能因 CORS 限制或 API 地址错误导致；请检查供应商 API 地址及服务器跨域设置。$details';
+  }
+
+  @override
+  String get trimModelNameHint =>
+      '用于显示和识别的易读名称，例如“GPT-4o Mini TTS”。同一供应商下的模型可用名称区分。';
+
+  @override
+  String get trimModelIdHelp =>
+      'API 调用使用的唯一标识符，例如“gpt-4o-mini-tts”。必须与供应商提供的模型 ID 一致。';
+
+  @override
+  String get ttsVoiceRangeTitle => '音量范围';
+
+  @override
+  String get ttsMinVolume => '最小音量';
+
+  @override
+  String get ttsMaxVolume => '最大音量';
+
+  @override
+  String get ttsSpeedRangeTitle => '语速范围';
+
+  @override
+  String get ttsMinSpeed => '最小语速';
+
+  @override
+  String get ttsMaxSpeed => '最大语速';
+
+  @override
+  String get ttsMaxAudioLength => '单次最长音频字数 *';
+
+  @override
+  String get ttsAudioLengthHint => '例如 1000';
+
+  @override
+  String get ttsNoVoices => '暂无音色，点击进入编辑';
+
+  @override
+  String get ttsInstructionSupported => '模型是否支持 instruction 参数';
+
+  @override
+  String get ttsInstructionHelp => '启用后可在 TTS 请求中附加语气、情绪、语速等指令描述。';
+
+  @override
+  String get ttsStreamSupported => '模型是否支持流式输出';
+
+  @override
+  String get ttsStreamHelp => '启用后此模型可用于需要流式输出的场景；请先确认模型支持流式输出。';
+
+  @override
+  String modelParamBooleanExpected(String name, String value) {
+    return '参数“$name”的值必须是 true 或 false：$value';
+  }
+
+  @override
+  String get ttsMaxAudioLengthRequired => '单次最长音频字数为必填项，请输入大于 0 的整数。';
+
+  @override
+  String get asrLanguageExample => '例如 zh、en、ja';
+
+  @override
+  String get llmReasoningFullHelp =>
+      '推理开关控制是否发送推理参数，并允许设置参数名和开关值。推理力度参数只有一个，可选择值并拖动排序；选中的值会显示在聊天推理面板中。可在下方添加其他推理参数。参数名支持点号嵌套，例如 thinking.type 会转换为嵌套 JSON 对象。打开本页时会同步供应商配置的推理参数。此处开关控制模型参数；聊天中的推理开关独立控制。';
+
+  @override
+  String get llmTemperatureHelp => '控制输出的随机性，值越高越有创造性。';
+
+  @override
+  String get llmBooleanValueHelp => '布尔类型无需配置参数值。';
+
+  @override
+  String get reasoningDisableEffort => '停用推理力度';
+
+  @override
+  String get reasoningEnableEffort => '启用推理力度';
+
+  @override
+  String get ocrJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
+
+  @override
+  String ttsRangePair(String kind) {
+    return '最小和最大$kind必须同时填写，或同时留空。';
+  }
+
+  @override
+  String get ttsEditTrimTitle => '编辑自定义裁切';
+
+  @override
+  String ttsVoicesCount(String count) {
+    return '音色（$count）';
+  }
+
+  @override
+  String ttsRequestFormatExample(String syntax) {
+    return '在请求格式中生成：$syntax';
+  }
+
+  @override
+  String get mcpServerNameRequired => '请输入 MCP 服务器名称。';
+
+  @override
+  String get mcpStdioCommandRequired => 'stdio 模式需要指定命令。';
+
+  @override
+  String get mcpSseUrlRequired => 'SSE 模式需要指定 URL。';
+
+  @override
+  String get mcpEditServerTitle => '编辑 MCP 服务器';
+
+  @override
+  String get mcpCreateServerTitle => '新建 MCP 服务器';
+
+  @override
+  String get mcpUnsavedChangesTitle => '未保存的更改';
+
+  @override
+  String get mcpUnsavedChangesConfirm => '有未保存的更改，确定要放弃吗？';
+
+  @override
+  String get mcpTransportType => '传输方式';
+
+  @override
+  String get mcpServerName => '服务器名称';
+
+  @override
+  String get mcpServerNameHint => '输入 MCP 服务器名称';
+
+  @override
+  String get mcpCommand => '命令';
+
+  @override
+  String get mcpCommandExample => '例如：npx';
+
+  @override
+  String get mcpArguments => '参数';
+
+  @override
+  String get mcpArgumentsHint =>
+      '用逗号分隔参数，例如：-y, @modelcontextprotocol/server-filesystem, /tmp';
+
+  @override
+  String get mcpSseUrlExample => '例如：http://localhost:3001/sse';
+
+  @override
+  String get mcpApiKey => 'API 密钥';
+
+  @override
+  String get mcpApiKeyHint => '输入 API Key（可选）';
+
+  @override
+  String get mcpShowKey => '显示密钥';
+
+  @override
+  String get mcpHideKey => '隐藏密钥';
+
+  @override
+  String get mcpDescriptionHint => '输入此 MCP 服务器的描述信息（可选）';
+
+  @override
+  String get mcpStdioDescription =>
+      'stdio 会在本地启动子进程作为 MCP 服务器，并通过标准输入/输出通信。适用于本地工具。';
+
+  @override
+  String get mcpSseDescription => 'SSE 通过 HTTP SSE 连接远程 MCP 服务器。适用于远程服务。';
+
+  @override
+  String get mcpLocalStdio => '本地 (stdio)';
+
+  @override
+  String get mcpRemoteSse => '远程 (SSE)';
+
+  @override
+  String get mcpSaving => '保存中…';
+
+  @override
+  String get providerTestSafetyNote =>
+      '此测试会向对应服务发送真实请求。MCP 仅调用只读的 tools/list；HTTP 和网页搜索会执行一次查询。Todo 默认读取清单；为保护当前数据，请省略 todos 参数或将其设为 null。';
+
+  @override
+  String get providerDeleteConfigTitle => '删除配置';
+
+  @override
+  String get providerDeleteConfigConfirm => '确定要删除此供应商配置及其所有模型吗？';
+
+  @override
+  String get providerCreateGroup => '新建组别';
+
+  @override
+  String get providerEditGroup => '编辑组别';
+
+  @override
+  String get providerGroupName => '组别名称';
+
+  @override
+  String get providerGroupNameExists => '组别名称已存在。';
+
+  @override
+  String get providerDeleteGroup => '删除组别';
+
+  @override
+  String providerDeleteGroupConfirm(String groupName) {
+    return '删除“$groupName”后，其中的配置会移到“其他 MCP 服务”。';
+  }
+
+  @override
+  String get providerMoveToGroup => '移动到组别';
+
+  @override
+  String get providerUnnamed => '（未命名）';
+
+  @override
+  String get providerHttpSearch => 'HTTP 搜索';
+
+  @override
+  String providerHttpToolSubtitle(String url) {
+    return 'HTTP 工具：$url';
+  }
+
+  @override
+  String providerLocalStdioSubtitle(String command) {
+    return '本地 (stdio)：$command';
+  }
+
+  @override
+  String providerRemoteSseSubtitle(String url) {
+    return '远程 (SSE)：$url';
+  }
+
+  @override
+  String get providerServices => '服务配置';
+
+  @override
+  String get providerServicesDescription => '按组管理远程连接、本地 stdio 与 HTTP 搜索';
+
+  @override
+  String get providerCreateGroupAction => '新建组别';
+
+  @override
+  String get providerGroupEmpty => '此组暂无配置，点击“添加”加入内容。';
+
+  @override
+  String get providerBuiltinTools => '内置工具';
+
+  @override
+  String get providerBuiltinToolsDescription => 'Stroom 提供的本地工具接口；网页搜索归入对应服务组。';
+
+  @override
+  String get providerBuiltinToolInterface => '内置工具接口';
+
+  @override
+  String get providerViewInterface => '查看接口';
+
+  @override
+  String get providerConfigTitle => '配置';
+
+  @override
+  String get providerNotFound => '供应商未找到';
+
+  @override
+  String get providerConfigurationHeading => '供应商配置';
+
+  @override
+  String get providerBuiltinWebSearchEmpty =>
+      '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。';
+
+  @override
+  String get providerNoConfigsAdd => '暂无供应商配置，请点击“添加”创建。';
+
+  @override
+  String get providerNoHost => '(未设置 Host)';
+
+  @override
+  String get providerServicesAndTools => '服务与工具';
+
+  @override
+  String get providerManageServicesDescription =>
+      '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。';
+
+  @override
+  String get providerNoServices => '还没有服务配置';
+
+  @override
+  String get providerAddServiceDescription =>
+      '添加 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。';
+
+  @override
+  String get providerAddService => '添加服务';
+
+  @override
+  String get providerBuiltinBadge => '内置';
+
+  @override
+  String get providerConnectivityTest => '连通性测试';
+
+  @override
+  String get providerMoveGroupTooltip => '移动到组别';
+
+  @override
+  String get providerDeleteTooltip => '删除配置';
+
+  @override
+  String providerGroupItemCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 项内容',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get providerGroupActions => '组别操作';
+
+  @override
+  String get providerEditGroupAction => '编辑组别';
+
+  @override
+  String get providerDeleteGroupAction => '删除组别';
+
+  @override
+  String get providerAddItem => '添加内容';
+
+  @override
+  String get providerMcpMasterLabel => 'MCP 服务器';
+
+  @override
+  String get providerMcpMasterDescription => '控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。';
+
+  @override
+  String get providerEnabled => '已启用';
+
+  @override
+  String get providerDisabled => '已停用';
+
+  @override
+  String get providerEditSettings => '编辑供应商设置';
+
+  @override
+  String get providerModelList => '模型列表';
+
+  @override
+  String get providerNoModels => '暂无模型';
+
+  @override
+  String get providerDeleteModel => '删除模型';
+
+  @override
+  String get providerDeleteModelConfirm => '确定要删除此模型吗？';
+
+  @override
+  String get providerEditConfig => '编辑配置';
+
+  @override
+  String providerCreateNamedConfig(String entryName) {
+    return '新建$entryName配置';
+  }
+
+  @override
+  String get toolHttpSearchType => '接入类型：HTTP 搜索';
+
+  @override
+  String toolInterface(String name) {
+    return '工具接口：$name';
+  }
+
+  @override
+  String get toolParameterDefinitions => '参数定义';
+
+  @override
+  String get toolHttpAddress => 'HTTP 接口地址';
+
+  @override
+  String get toolInvalidHttpUrl => '请输入有效的 HTTP 或 HTTPS 地址。';
+
+  @override
+  String get toolBuiltinType => '接入类型：Stroom 内置工具';
+
+  @override
+  String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
+
+  @override
+  String get mcpSseUrlLabel => 'SSE URL';
+
+  @override
+  String get mcpUrlLabel => 'URL';
+
+  @override
+  String providerModelId(String modelId) {
+    return '模型 ID：$modelId';
+  }
+
+  @override
+  String get providerValueNotSet => '（未设置）';
+
+  @override
+  String get providerApiKeyInputHint => '输入 API 密钥';
+
+  @override
+  String get providerSettingsTitle => '供应商配置';
+
+  @override
+  String get providerBasicInfoTab => '基本信息';
+
+  @override
+  String get providerParameterSettingsTab => '参数设置';
+
+  @override
+  String get providerOptionValuesReorderHelp => '选项值（长按把手拖拽排序）';
+
+  @override
+  String providerOptionIndexLabel(String index) {
+    return '选项 $index';
+  }
+
+  @override
+  String providerOptionExampleHint(String example) {
+    return '如 $example';
+  }
+
+  @override
+  String get providerDeleteOptionTooltip => '删除选项';
+
+  @override
+  String get providerAddOption => '添加选项';
+
+  @override
+  String get providerAddCustomParam => '添加参数';
+
+  @override
+  String get providerNoCustomParams => '暂无自定义参数';
+
+  @override
+  String get providerParamNameLabel => '参数名';
+
+  @override
+  String get providerParamDefaultValueLabel => '默认参数值';
+
+  @override
+  String get providerBooleanParamNoValue => '布尔类型无需配置参数值，聊天面板提供开/关切换。';
+
+  @override
+  String get providerReasoningParamsHeading => '推理参数';
+
+  @override
+  String providerReasoningSettingsHelp(
+    String parameterName,
+    String jsonExample,
+  ) {
+    return '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。推理力度参数最多配置一个，参数名必填，选项值可选；仅填参数名时，参数值由模型配置提供。您还可以通过底部按钮添加额外的推理参数。参数名支持点号嵌套，例如 $parameterName 会展开为 $jsonExample。';
+  }
+
+  @override
+  String get providerAddReasoningParam => '添加推理参数';
+
+  @override
+  String get providerAddReasoningToggle => '添加推理开关';
+
+  @override
+  String get providerReasoningToggle => '推理开关';
+
+  @override
+  String get providerDeleteReasoningToggle => '删除推理开关';
+
+  @override
+  String providerParamNameHint(String examples) {
+    return '如 $examples';
+  }
+
+  @override
+  String get providerReasoningBooleanHelp => '布尔类型无需配置参数值，聊天面板提供开/关切换。';
+
+  @override
+  String get providerToggleOnValueLabel => '开启时值';
+
+  @override
+  String get providerToggleOffValueLabel => '关闭时值';
+
+  @override
+  String providerReasoningToggleSummary(String onValue, String offValue) {
+    return '推理开关打开时发送「$onValue」，关闭时发送「$offValue」。';
+  }
+
+  @override
+  String get providerAddReasoningEffort => '添加推理力度';
+
+  @override
+  String get providerDeleteReasoningEffort => '删除推理力度参数';
+
+  @override
+  String get providerReasoningEffortLockedHint => '请先完整填写推理开关后再配置推理力度。';
+
+  @override
+  String get providerJsonValueLabel => 'JSON 值';
+
+  @override
+  String get providerReasoningOptionsHelp =>
+      '选项值（可选，仅填参数名时参数值由模型配置提供；长按把手拖拽排序）';
+
+  @override
+  String get providerParamNameNestedLabel => '参数名（支持点号嵌套）';
+
+  @override
+  String get providerToggleEffortPrerequisite => '请先完整填写推理开关后再配置推理力度。';
+
+  @override
+  String get providerToggleRequiredHint => '请先填写推理开关';
+
+  @override
+  String get providerDeleteCustomParam => '删除参数';
+
+  @override
+  String get modelSaveSuccess => '模型已保存';
+
+  @override
+  String get modelSaving => '保存中…';
+
+  @override
+  String modelOriginalError(String error) {
+    return '原始错误：$error';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -8434,5 +9994,1565 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String taskFlowValidationTextEncodingFailed(String index) {
     return '第 $index 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。';
+  }
+
+  @override
+  String get assistantParamValueTypeString => '字符串';
+
+  @override
+  String get assistantParamValueTypeNumber => '数字';
+
+  @override
+  String get assistantParamValueTypeBoolean => '布尔值';
+
+  @override
+  String get assistantParamValueTypeJson => 'JSON';
+
+  @override
+  String get providerRequiredFields => '供应商名称、API 地址和密钥均为必填项。';
+
+  @override
+  String get providerJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
+
+  @override
+  String get providerCustomParamRequired => '自定义参数的名称和值不能为空。';
+
+  @override
+  String providerParamNameInvalid(String name) {
+    return '参数名格式不正确（点号分段不能为空）：$name';
+  }
+
+  @override
+  String providerParamAlreadyExists(String name) {
+    return '参数已存在：$name';
+  }
+
+  @override
+  String providerParamInvalidJson(String name, String value) {
+    return '参数“$name”的默认值不是合法 JSON：$value';
+  }
+
+  @override
+  String providerParamOptionsRequired(String name) {
+    return '参数“$name”的数值选项不能为空。';
+  }
+
+  @override
+  String providerParamInvalidNumber(String name, String value) {
+    return '参数“$name”的值不是合法数字：$value';
+  }
+
+  @override
+  String get providerReasoningIncomplete => '请先完整填写推理开关，其他推理参数才能生效。';
+
+  @override
+  String providerReasoningError(String error) {
+    return '推理参数错误：$error';
+  }
+
+  @override
+  String providerParamNameConflict(String name) {
+    return '推理参数与自定义参数重名：$name';
+  }
+
+  @override
+  String get providerMaxTokensMissing => '已启用最大输出 Token 数，但未填写数值。';
+
+  @override
+  String get providerMaxTokensPositive => '最大输出 Token 数必须为正整数。';
+
+  @override
+  String get providerSeedInteger => '随机种子必须为整数。';
+
+  @override
+  String get providerNotConfigured => '未设置';
+
+  @override
+  String get providerAudioChunkingTitle => '音频切块';
+
+  @override
+  String get providerAudioChunkingHint => '智能切块会分析音频和候选切点，优先在句末切分；各片段不会重叠。';
+
+  @override
+  String get providerChunkingMode => '切块方式';
+
+  @override
+  String get providerChunkNone => '不切块';
+
+  @override
+  String get providerChunkSmart => '智能切块（推荐）';
+
+  @override
+  String get providerChunkFixedDuration => '固定时长切块';
+
+  @override
+  String get providerChunkFixedSize => '固定大小切块';
+
+  @override
+  String get providerCompressionTitle => '压缩编码';
+
+  @override
+  String get providerCompressionHint =>
+      '启用后，通用兜底会先压缩完整 WAV；若编码文件或请求体仍超限，再切分源 PCM 并逐块编码。';
+
+  @override
+  String get providerCompressionMode => '压缩方式';
+
+  @override
+  String get providerCompressionNone => '无（原样发送）';
+
+  @override
+  String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
+
+  @override
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+
+  @override
+  String get providerCompressionAdpcmDescription =>
+      'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。';
+
+  @override
+  String get providerCompressionFlacDescription =>
+      'FLAC 无损压缩，纯 Dart 实现，体积约缩小一半。';
+
+  @override
+  String get providerCompressionWavDescription => '不压缩，以 WAV 文件原样发送。';
+
+  @override
+  String get providerLlmParams => 'LLM 参数';
+
+  @override
+  String get providerEnabledParamsHelp => '开启的参数将作为默认值发送到 API 请求中。';
+
+  @override
+  String get providerTemperatureLabel => '温度';
+
+  @override
+  String get providerTemperatureHelp => '控制输出的随机性，值越高越有创造性。';
+
+  @override
+  String get providerTopPHelp => '核采样参数，控制词汇选择的累积概率。';
+
+  @override
+  String get providerFrequencyPenaltyLabel => '频率惩罚';
+
+  @override
+  String get providerFrequencyPenaltyHelp => '减少重复词，负值会增加重复。';
+
+  @override
+  String get providerPresencePenaltyLabel => '存在惩罚';
+
+  @override
+  String get providerPresencePenaltyHelp => '鼓励讨论新话题，负值会鼓励重复话题。';
+
+  @override
+  String get providerMaxOutputTokensLabel => '最大输出 Token 数';
+
+  @override
+  String providerOptionalExample(String example) {
+    return '可选，例如 $example';
+  }
+
+  @override
+  String get providerResponseTokensHelp => '每次响应最多生成的 Token 数。';
+
+  @override
+  String get providerSeedLabel => '随机种子';
+
+  @override
+  String get providerSeedHelp => '设置后可使输出结果可复现。';
+
+  @override
+  String get providerChunkSmartDescription =>
+      '分析音频和候选切点，优先在句末或长静音处切分且不重叠。默认最短 20 秒、目标 45 秒、最长 60 秒。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkDurationDescription =>
+      '每 N 秒切分一次（默认 60 秒）。方式简单，但可能截断语句。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkSizeDescription =>
+      '先按音频数据大小初步切分，再根据编码文件和请求体大小细分。仅由通用兜底使用；压缩切块仅支持 PCM WAV。';
+
+  @override
+  String get providerChunkNoneDescription => '不切块。完整压缩后仍超出限制时，将拒绝该文件。';
+
+  @override
+  String get providerNameLabel => '供应商名称';
+
+  @override
+  String get providerNameHint => '输入供应商名称';
+
+  @override
+  String get providerApiUrlLabel => 'API 地址';
+
+  @override
+  String get providerApiUrlHint => '输入完整的 API 端点地址';
+
+  @override
+  String providerApiKeyHint(String hint) {
+    return '提示：$hint';
+  }
+
+  @override
+  String get providerEndpointTypeLabel => '端点类型';
+
+  @override
+  String get providerEndpointOpenAi => '兼容 OpenAI（Chat Completions）';
+
+  @override
+  String get providerEndpointAnthropic => 'Anthropic 格式（Messages API）';
+
+  @override
+  String get providerAnthropicEndpointHelp =>
+      '使用官方 Anthropic Messages API 格式（x-api-key 请求头）。API 地址示例：https://api.anthropic.com/v1/messages';
+
+  @override
+  String get providerOpenAiEndpointHelp =>
+      '使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头）。API 地址示例：https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get providerRequestJsonDefault => '请求 JSON 大小默认值';
+
+  @override
+  String get providerUseAppDefault => '留空则使用应用默认值';
+
+  @override
+  String get providerModelJsonBudgetHelp =>
+      '模型可单独设置覆盖值；此处和模型均未设置时，使用 20 MiB 默认值。';
+
+  @override
+  String get providerRequestParamsHelp =>
+      '请求会使用供应商和模型中所有已启用的参数。若参数重名，则以模型参数值为准。';
+
+  @override
+  String get providerUploadSettings => '上传设置';
+
+  @override
+  String get providerUploadMethodHelp => '不同供应商支持的音频上传方式和大小限制不同。';
+
+  @override
+  String get providerUploadMethod => '上传方式';
+
+  @override
+  String get providerMultipart => 'Multipart（通用）';
+
+  @override
+  String get providerUrlUpload => 'URL（链接）';
+
+  @override
+  String get providerMaxUploadSize => '最大上传大小';
+
+  @override
+  String get providerFallbackStrategy => '兜底策略';
+
+  @override
+  String get providerFallbackMethod => '兜底方式';
+
+  @override
+  String get providerPreprocessing => '音频预处理';
+
+  @override
+  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+
+  @override
+  String get providerPreprocessingMethod => '预处理方式';
+
+  @override
+  String get providerUploadMultipartHelp =>
+      '直接以 multipart/form-data 上传。请求体包括音频、表单字段和分段边界。';
+
+  @override
+  String get providerUploadBase64Help =>
+      '以 JSON 发送 Base64，可绕过部分供应商对 multipart 的专属限制。Base64 膨胀和 JSON 字段均计入上传上限。';
+
+  @override
+  String get providerUploadUrlHelp =>
+      '提供公网 URL，由供应商下载。支持较大的文件（例如 Together AI 的 1 GB）。';
+
+  @override
+  String get providerUploadBudgetHelp =>
+      '此值用于触发原始音频兜底并限制最终请求体。应用会分别检查原始音频、编码文件和上传大小。Multipart 计入表单字段和边界；Base64 JSON 计入编码膨胀和字段。默认 25 MB 与 OpenAI 音频 API 上限一致。';
+
+  @override
+  String get providerFallbackTriggerHelp =>
+      '原始音频或完整请求体超出上限时触发。特定兜底（Base64）优先于通用兜底（压缩/切块）。';
+
+  @override
+  String get providerFallbackNone => '无（直接拒绝）';
+
+  @override
+  String get providerFallbackSpecific => '特定兜底（Base64）';
+
+  @override
+  String get providerFallbackGeneric => '通用兜底（压缩/切块）';
+
+  @override
+  String get providerFallbackAll => '全部尝试（推荐）';
+
+  @override
+  String get providerFallbackSpecificHelp =>
+      '尝试 Base64 JSON。只有计入 Base64 膨胀和 JSON 字段后的请求体未超限时才发送。';
+
+  @override
+  String get providerFallbackGenericHelp =>
+      '若已启用压缩，则先压缩完整 WAV。仍超限且已启用切块时，再切分源 PCM 并逐块编码。仅支持 PCM WAV。';
+
+  @override
+  String get providerFallbackAllHelp =>
+      '先尝试符合请求体上限的 Base64；然后在启用压缩时压缩完整 WAV。若仍超限且已启用切块，则切分源 PCM 并逐块编码。仅支持 PCM WAV。';
+
+  @override
+  String get providerFallbackRejectHelp => '文件超出限制时直接拒绝，不尝试兜底。';
+
+  @override
+  String get providerPreprocessNone => '无';
+
+  @override
+  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+
+  @override
+  String get providerPreprocessResampleHelp =>
+      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+
+  @override
+  String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
+
+  @override
+  String get assistantDefaultsScopeHelp =>
+      '默认模型和工具仅用于在此助手下新建的话题。现有话题保留各自设置。工具结果截断适用于全部话题。';
+
+  @override
+  String get assistantDefaultModelTitle => '默认模型';
+
+  @override
+  String get assistantDefaultModelHelp => '新话题使用的模型；留空则不指定默认模型。';
+
+  @override
+  String get assistantNoDefault => '暂不设置';
+
+  @override
+  String get assistantNoModelsAvailable => '暂无可用模型，请在设置中配置 LLM 供应商。';
+
+  @override
+  String get assistantDefaultToolsTitle => '默认启用工具';
+
+  @override
+  String get assistantDisabledToolsHelp => '已关闭的工具不会在新话题中自动启用。';
+
+  @override
+  String get assistantUnconfiguredToolsHelp => '尚未配置默认工具；新话题将自动启用全部工具。';
+
+  @override
+  String get assistantEnableAll => '全部启用';
+
+  @override
+  String get assistantDisableAll => '全部关闭';
+
+  @override
+  String get assistantNoToolsAvailable => '暂无可用工具';
+
+  @override
+  String get assistantTruncateToolOutput => '工具结果截断';
+
+  @override
+  String get assistantTruncateToolOutputHelp =>
+      '发送给模型前，单个工具结果的最大字符数。适用于此助手下的全部话题。';
+
+  @override
+  String get assistantEnableTruncation => '启用截断';
+
+  @override
+  String assistantTruncatedTo(String count) {
+    return '超长结果将截断至 $count 个字符';
+  }
+
+  @override
+  String get assistantSendFullResult => '完整发送（仍受 50 KB 存储上限约束）';
+
+  @override
+  String get assistantMaxCharacters => '最大字符数';
+
+  @override
+  String get assistantCharactersNotTokens => '单位：字符（不是 token）';
+
+  @override
+  String assistantDefaultCharacterCount(String count) {
+    return '默认值：$count';
+  }
+
+  @override
+  String assistantCharacterRange(String minimum, String maximum) {
+    return '有效范围：$minimum–$maximum 个字符';
+  }
+
+  @override
+  String get assistantNewConversationPreview => '新建话题效果';
+
+  @override
+  String assistantEnabledToolCount(String enabled, String total) {
+    return '已启用 $enabled / $total 个';
+  }
+
+  @override
+  String get assistantAllToolsAutoEnabled => '全部自动启用（未配置）';
+
+  @override
+  String get assistantMoreActions => '更多操作';
+
+  @override
+  String get assistantChooseEmoji => '选择表情';
+
+  @override
+  String get assistantNameLabel => '助手名称';
+
+  @override
+  String get assistantDescriptionOptional => '描述（可选）';
+
+  @override
+  String get assistantSelectionTitle => '选择助手';
+
+  @override
+  String get assistantMarketTooltip => '助手市场';
+
+  @override
+  String get assistantCreateNew => '新建助手';
+
+  @override
+  String get assistantEmptyState => '暂无助手，请先创建。';
+
+  @override
+  String get assistantCreate => '创建';
+
+  @override
+  String get assistantReorderHint => '长按并拖动即可调整助手顺序';
+
+  @override
+  String get assistantNewNameHint => '输入助手名称';
+
+  @override
+  String get assistantNewDescriptionHint => '简要描述此助手的功能';
+
+  @override
+  String get assistantDeleteTitle => '删除助手';
+
+  @override
+  String assistantDeleteConfirmation(String name) {
+    return '确定要删除助手“$name”吗？此操作无法撤销。';
+  }
+
+  @override
+  String get assistantEditTitle => '编辑助手';
+
+  @override
+  String get assistantBasicTab => '基本设置';
+
+  @override
+  String get assistantParametersTab => '参数设置';
+
+  @override
+  String get assistantDefaultsTab => '默认设置';
+
+  @override
+  String get assistantAddCustomParameter => '添加自定义参数';
+
+  @override
+  String get assistantEditCustomParameter => '编辑自定义参数';
+
+  @override
+  String get assistantParameterName => '参数名';
+
+  @override
+  String get assistantParameterNameHint => '例如 top_k 或 provider.only';
+
+  @override
+  String get assistantParameterNameInvalid => '参数名格式不正确（点号分段不能为空）';
+
+  @override
+  String get assistantParameterType => '类型';
+
+  @override
+  String get assistantValue => '值';
+
+  @override
+  String get assistantTrueFalseHint => 'true 或 false';
+
+  @override
+  String get assistantNumberHint => '输入数字';
+
+  @override
+  String assistantJsonHint(String example) {
+    return '例如：$example';
+  }
+
+  @override
+  String get assistantValueHint => '输入值';
+
+  @override
+  String get assistantCancel => '取消';
+
+  @override
+  String get assistantSave => '保存';
+
+  @override
+  String get assistantParamOverrideHelp => '启用时助手参数会覆盖模型参数；关闭时使用模型参数。';
+
+  @override
+  String get assistantTemperature => '温度';
+
+  @override
+  String get assistantMaxTokens => '最大 Token 数';
+
+  @override
+  String get assistantMaxToolCalls => '工具调用上限';
+
+  @override
+  String assistantRounds(String count) {
+    return '$count 轮';
+  }
+
+  @override
+  String get assistantUnlimited => '无限制';
+
+  @override
+  String get assistantStreamOutput => '流式输出';
+
+  @override
+  String get assistantFrequencyPenalty => '频率惩罚';
+
+  @override
+  String get assistantPresencePenalty => '存在惩罚';
+
+  @override
+  String get assistantRandomSeed => '随机种子';
+
+  @override
+  String get assistantNotSet => '未设置';
+
+  @override
+  String get assistantSeedValue => '种子值';
+
+  @override
+  String get assistantIntegerSeedHint => '输入整数种子';
+
+  @override
+  String get assistantWebSearch => '联网搜索';
+
+  @override
+  String get assistantAddParameter => '添加参数';
+
+  @override
+  String get assistantNoCustomParameters => '暂无自定义参数';
+
+  @override
+  String get assistantRoundsLabel => '轮数';
+
+  @override
+  String get modelCreateTitle => '添加模型';
+
+  @override
+  String get modelEditTitle => '编辑模型';
+
+  @override
+  String get modelDiscardTitle => '放弃修改？';
+
+  @override
+  String get modelDiscardBody => '当前有未保存的修改，确定要放弃吗？';
+
+  @override
+  String get modelNameLabel => '模型名称';
+
+  @override
+  String get modelNameHint => '输入显示名称（可选）';
+
+  @override
+  String get modelIdLabel => '模型 ID';
+
+  @override
+  String modelIdExample(String id) {
+    return '例如 $id';
+  }
+
+  @override
+  String get modelIdRequired => '模型 ID 为必填项。';
+
+  @override
+  String get modelCustomParamRequired => '自定义参数的参数名和默认值不能为空。';
+
+  @override
+  String modelParamDuplicate(String name) {
+    return '参数已存在：$name';
+  }
+
+  @override
+  String get modelParamName => '参数名';
+
+  @override
+  String get modelParamDefaultValue => '默认参数值';
+
+  @override
+  String get modelParamDelete => '删除参数';
+
+  @override
+  String modelParamJsonInvalid(String name, String value) {
+    return '参数“$name”的默认值不是合法 JSON：$value';
+  }
+
+  @override
+  String get modelAddParameter => '添加参数';
+
+  @override
+  String get modelNoCustomParams => '暂无自定义参数';
+
+  @override
+  String get modelBasicSettings => '基本设置';
+
+  @override
+  String get modelDiscardCancel => '取消';
+
+  @override
+  String get modelSave => '保存';
+
+  @override
+  String get modelUnsavedMaxTokens => '最大输出 Token 数已启用但未填写。';
+
+  @override
+  String get modelMaxTokensPositive => '最大输出 Token 数必须为正整数。';
+
+  @override
+  String get modelSeedInteger => '随机种子必须为整数。';
+
+  @override
+  String get modelContextLengthRequired => '上下文长度为必填项。';
+
+  @override
+  String get modelContextLengthPositive => '上下文长度必须为正整数。';
+
+  @override
+  String get modelAsrLanguageCode => '语言代码（Language）';
+
+  @override
+  String get modelAsrLanguageHint => '例如 zh、en、ja';
+
+  @override
+  String get modelAsrLanguageHelp => 'ISO-639-1 语言代码；留空则由模型自动检测。';
+
+  @override
+  String get modelTemperature => '温度';
+
+  @override
+  String get modelTemperatureHelp => '控制输出的随机性，建议使用较低的值。';
+
+  @override
+  String get modelAsrPrompt => '提示词';
+
+  @override
+  String get modelAsrPromptHint => '输入上下文提示词（可选）';
+
+  @override
+  String get modelAsrPromptHelp => '提供上下文以提高转写准确性，例如专业术语列表。';
+
+  @override
+  String get modelAsrParams => 'ASR 参数';
+
+  @override
+  String get modelEnabledParamsHelp => '开启的参数将作为默认值发送到 API 请求中。';
+
+  @override
+  String get modelAsrResponseFormat => '响应格式';
+
+  @override
+  String get modelAsrResponseHelp => '转写结果的返回格式。';
+
+  @override
+  String get modelAsrTimestampGranularity => '时间戳粒度';
+
+  @override
+  String get modelAsrVerboseHelp => '仅在 response_format 为 verbose_json 时生效。';
+
+  @override
+  String get modelNoTrim => '不裁切';
+
+  @override
+  String get modelAudioTrimTitle => '音频裁切';
+
+  @override
+  String get modelAudioTrimHelp => '选择音频裁切方式。';
+
+  @override
+  String get modelDeleteTrimPreset => '删除裁切预设';
+
+  @override
+  String modelDeleteTrimConfirmation(String name) {
+    return '确定要删除裁切预设“$name”吗？';
+  }
+
+  @override
+  String get modelAddTrimPreset => '添加自定义裁切';
+
+  @override
+  String get modelPlayTestAudio => '播放测试音频';
+
+  @override
+  String get modelPlayingTestAudio => '播放中...';
+
+  @override
+  String get modelParamExists => '该参数已存在';
+
+  @override
+  String get asrModelIdExample => '例如 whisper-1';
+
+  @override
+  String get asrPromptLabel => '提示词';
+
+  @override
+  String get asrResponseFormatJson => 'json – JSON 格式';
+
+  @override
+  String get asrResponseFormatText => 'text – 纯文本';
+
+  @override
+  String get asrResponseFormatSrt => 'srt – 字幕';
+
+  @override
+  String get asrResponseFormatVtt => 'vtt – 字幕';
+
+  @override
+  String get asrResponseFormatVerbose => 'verbose_json – 详细 JSON（含时间戳）';
+
+  @override
+  String get asrVerboseTimestampHelp => '选择 verbose_json 后可启用下方时间戳粒度选项。';
+
+  @override
+  String get asrTimestampSegment => 'segment – 段落级';
+
+  @override
+  String get asrTimestampWord => 'word – 单词级';
+
+  @override
+  String get asrWordTimestampHelp => '单词级时间戳的准确性可能低于段落级。';
+
+  @override
+  String get reasoningAddOptionValue => '添加选项值';
+
+  @override
+  String get reasoningOptionExample => '例如 low、medium、high';
+
+  @override
+  String get reasoningOptionSelectionHelp =>
+      '点按选项块可选中或取消。选中的值会发送；拖动可排序。供应商提供的值不能删除，但可以取消选中来隐藏。';
+
+  @override
+  String get reasoningAddOption => '添加选项';
+
+  @override
+  String get reasoningCurrentProvider => '当前：供应商';
+
+  @override
+  String get reasoningCurrentModel => '当前：模型自定义';
+
+  @override
+  String get reasoningAddEffortValue => '添加推理力度值';
+
+  @override
+  String get reasoningEffortExample => '例如 max、ultra、deep';
+
+  @override
+  String get reasoningAddToggle => '添加推理开关';
+
+  @override
+  String get reasoningToggle => '推理开关';
+
+  @override
+  String get reasoningResetParameter => '还原此参数';
+
+  @override
+  String get reasoningDisableToggle => '停用推理开关';
+
+  @override
+  String get reasoningEnableToggle => '启用推理开关';
+
+  @override
+  String reasoningParameterNameSource(String source) {
+    return '参数名（$source）';
+  }
+
+  @override
+  String get reasoningNameExample => '例如 thinking.type、reasoning';
+
+  @override
+  String get reasoningBooleanHelp => '布尔参数无需配置值；聊天面板提供开关。';
+
+  @override
+  String get reasoningOnValue => '开启时的值';
+
+  @override
+  String get reasoningOnExample => '例如 enabled、true';
+
+  @override
+  String get reasoningOffValue => '关闭时的值';
+
+  @override
+  String get reasoningOffExample => '例如 disabled、false';
+
+  @override
+  String reasoningToggleValuesHelp(String onValue, String offValue) {
+    return '开启时发送“$onValue”，关闭时发送“$offValue”。';
+  }
+
+  @override
+  String get reasoningAddEffort => '添加推理力度';
+
+  @override
+  String get reasoningFillToggleFirst => '请先完整填写推理开关';
+
+  @override
+  String get reasoningFillToggleBeforeEffort => '请先完整填写推理开关，再配置推理力度。';
+
+  @override
+  String get reasoningAddValue => '添加值';
+
+  @override
+  String get reasoningJsonValue => 'JSON 值';
+
+  @override
+  String reasoningJsonExample(String example) {
+    return '例如 $example';
+  }
+
+  @override
+  String get reasoningSelectedChipHelp =>
+      '点按选项块可选中或取消。选中的值会显示在聊天推理面板；拖动可排序。供应商提供的值不能删除，但可以隐藏。';
+
+  @override
+  String get reasoningAddParameter => '添加推理参数';
+
+  @override
+  String get reasoningToggleIncomplete => '请先完整填写推理开关，再配置推理力度。';
+
+  @override
+  String get llmContextLength => '上下文长度';
+
+  @override
+  String get llmContextHint => '输入上下文长度';
+
+  @override
+  String get llmContextHelp => '模型的最大上下文窗口大小（Token 数）。';
+
+  @override
+  String get llmReasoningParams => '推理参数';
+
+  @override
+  String get llmReasoningHelp =>
+      '配置聊天推理参数。推理开关用于设置参数名和开关值；可添加、排序推理力度选项，并选择显示在聊天面板中的值。打开本页时会同步供应商提供的值。这些设置控制模型参数；聊天面板中的推理开关独立管理。';
+
+  @override
+  String get llmAddReasoningParam => '添加推理参数';
+
+  @override
+  String get llmCustomEndpointType => '自定义端点类型';
+
+  @override
+  String get llmInheritEndpointType => '关闭时使用供应商设置的端点类型。';
+
+  @override
+  String get llmEndpointType => '端点类型';
+
+  @override
+  String get llmEndpointOpenAi => '兼容 OpenAI（Chat Completions）';
+
+  @override
+  String get llmEndpointAnthropic => 'Anthropic 格式（Messages API）';
+
+  @override
+  String get llmEndpointHelp => '端点类型必须与供应商 API 地址匹配。更改后，此模型的新对话会使用相应格式。';
+
+  @override
+  String get llmTopPHelp => '核采样参数，用于控制词汇选择的累积概率。';
+
+  @override
+  String get llmFrequencyPenaltyLabel => '频率惩罚';
+
+  @override
+  String get llmFrequencyPenaltyHelp => '减少重复，负值会增加重复。';
+
+  @override
+  String get llmPresencePenaltyLabel => '存在惩罚';
+
+  @override
+  String get llmPresencePenaltyHelp => '鼓励讨论新话题，负值会鼓励重复话题。';
+
+  @override
+  String get llmMaxTokensHint => '可选，例如 4096';
+
+  @override
+  String get llmTokensPerResponse => '每次响应最多生成的 Token 数。';
+
+  @override
+  String get llmSeedLabel => '随机种子（Seed）';
+
+  @override
+  String get llmSeedHint => '可选，例如 42';
+
+  @override
+  String get llmSeedHelp => '设置后可使输出结果可复现。';
+
+  @override
+  String get llmInheritedCustomHelp => '供应商已配置的自定义参数会显示在此处，并在每次打开页面时同步。';
+
+  @override
+  String get llmBooleanParamHelp => '布尔类型无需配置参数值。';
+
+  @override
+  String get modelContextReq => '上下文长度为必填项。';
+
+  @override
+  String get modelContextPositive => '上下文长度必须为正整数。';
+
+  @override
+  String modelParamNameInvalid(String name) {
+    return '参数名格式不正确（点号分段不能为空）：$name';
+  }
+
+  @override
+  String modelParamFinite(String name, String valueLabel, String value) {
+    return '参数“$name”的$valueLabel必须是有限数字：$value';
+  }
+
+  @override
+  String get modelReasoningIncomplete => '请先完整填写推理开关，其他推理参数才能生效。';
+
+  @override
+  String get modelReasoningOptionsRequired => '推理参数必须至少添加一个选项值。';
+
+  @override
+  String modelReasoningError(String error) {
+    return '推理参数错误：$error';
+  }
+
+  @override
+  String modelReasoningDuplicate(String name) {
+    return '推理参数重名：$name';
+  }
+
+  @override
+  String modelReasoningCustomDuplicate(String name) {
+    return '推理参数与自定义参数重名：$name';
+  }
+
+  @override
+  String get modelSeedRequired => '随机种子已启用但未填写。';
+
+  @override
+  String get ocrParamsTitle => 'OCR 参数';
+
+  @override
+  String get ocrParamsHelp =>
+      '使用兼容 OpenAI 的视觉 Chat Completions 格式。以下参数均为可选；未填写或未启用的参数不会发送。供应商特有参数可在下方添加（需接口支持）。';
+
+  @override
+  String get ocrRequestSizeOverride => '请求 JSON 大小覆盖值';
+
+  @override
+  String get ocrInheritProvider => '留空则继承供应商设置';
+
+  @override
+  String get ocrBudgetDefault => '留空时继承供应商设置；供应商也未设置时使用 20 MiB 默认值。';
+
+  @override
+  String ocrBudgetValue(String size) {
+    return '留空时继承供应商设置（$size MiB）；供应商也未设置时使用 20 MiB 默认值。';
+  }
+
+  @override
+  String audioTrimDirection(String direction, String seconds) {
+    return '裁切$direction $seconds 秒';
+  }
+
+  @override
+  String audioTrimBeginning(String seconds) {
+    return '裁切开头 $seconds 秒';
+  }
+
+  @override
+  String get audioTrimNone => '不裁切音频';
+
+  @override
+  String get trimNameLabel => '裁切方式名称 *';
+
+  @override
+  String get trimNameHint => '例如静音裁切';
+
+  @override
+  String get trimDurationLabel => '裁切时长（秒）*';
+
+  @override
+  String get trimDurationHint => '例如 0.123';
+
+  @override
+  String get trimNameAndDurationRequired => '名称和时长为必填项。';
+
+  @override
+  String get trimDurationInvalid => '请输入有效的正数时长。';
+
+  @override
+  String get testAudioHostMissing => '尚未配置 Host。';
+
+  @override
+  String get testAudioKeyMissing => '尚未配置 Key。';
+
+  @override
+  String testAudioContentTypeError(String contentType) {
+    return '响应 Content-Type 为 $contentType，不是音频数据。';
+  }
+
+  @override
+  String get testAudioEmpty => '服务器返回了空音频数据。';
+
+  @override
+  String testAudioTimeoutConnection(String details) {
+    return '连接超时，请检查网络。$details';
+  }
+
+  @override
+  String testAudioTimeoutReceive(String details) {
+    return '接收超时，服务器响应过慢。$details';
+  }
+
+  @override
+  String testAudioRequestCancelled(String details) {
+    return '请求已取消。$details';
+  }
+
+  @override
+  String testAudioNetworkError(String message) {
+    return '网络错误：$message';
+  }
+
+  @override
+  String get testAudioNoBody => '无响应体';
+
+  @override
+  String testAudioCorsHelp(String details) {
+    return '无法连接到服务器。Web 端可能因 CORS 限制或 API 地址错误导致；请检查供应商 API 地址及服务器跨域设置。$details';
+  }
+
+  @override
+  String get trimModelNameHint =>
+      '用于显示和识别的易读名称，例如“GPT-4o Mini TTS”。同一供应商下的模型可用名称区分。';
+
+  @override
+  String get trimModelIdHelp =>
+      'API 调用使用的唯一标识符，例如“gpt-4o-mini-tts”。必须与供应商提供的模型 ID 一致。';
+
+  @override
+  String get ttsVoiceRangeTitle => '音量范围';
+
+  @override
+  String get ttsMinVolume => '最小音量';
+
+  @override
+  String get ttsMaxVolume => '最大音量';
+
+  @override
+  String get ttsSpeedRangeTitle => '语速范围';
+
+  @override
+  String get ttsMinSpeed => '最小语速';
+
+  @override
+  String get ttsMaxSpeed => '最大语速';
+
+  @override
+  String get ttsMaxAudioLength => '单次最长音频字数 *';
+
+  @override
+  String get ttsAudioLengthHint => '例如 1000';
+
+  @override
+  String get ttsNoVoices => '暂无音色，点击进入编辑';
+
+  @override
+  String get ttsInstructionSupported => '模型是否支持 instruction 参数';
+
+  @override
+  String get ttsInstructionHelp => '启用后可在 TTS 请求中附加语气、情绪、语速等指令描述。';
+
+  @override
+  String get ttsStreamSupported => '模型是否支持流式输出';
+
+  @override
+  String get ttsStreamHelp => '启用后此模型可用于需要流式输出的场景；请先确认模型支持流式输出。';
+
+  @override
+  String modelParamBooleanExpected(String name, String value) {
+    return '参数“$name”的值必须是 true 或 false：$value';
+  }
+
+  @override
+  String get ttsMaxAudioLengthRequired => '单次最长音频字数为必填项，请输入大于 0 的整数。';
+
+  @override
+  String get asrLanguageExample => '例如 zh、en、ja';
+
+  @override
+  String get llmReasoningFullHelp =>
+      '推理开关控制是否发送推理参数，并允许设置参数名和开关值。推理力度参数只有一个，可选择值并拖动排序；选中的值会显示在聊天推理面板中。可在下方添加其他推理参数。参数名支持点号嵌套，例如 thinking.type 会转换为嵌套 JSON 对象。打开本页时会同步供应商配置的推理参数。此处开关控制模型参数；聊天中的推理开关独立控制。';
+
+  @override
+  String get llmTemperatureHelp => '控制输出的随机性，值越高越有创造性。';
+
+  @override
+  String get llmBooleanValueHelp => '布尔类型无需配置参数值。';
+
+  @override
+  String get reasoningDisableEffort => '停用推理力度';
+
+  @override
+  String get reasoningEnableEffort => '启用推理力度';
+
+  @override
+  String get ocrJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
+
+  @override
+  String ttsRangePair(String kind) {
+    return '最小和最大$kind必须同时填写，或同时留空。';
+  }
+
+  @override
+  String get ttsEditTrimTitle => '编辑自定义裁切';
+
+  @override
+  String ttsVoicesCount(String count) {
+    return '音色（$count）';
+  }
+
+  @override
+  String ttsRequestFormatExample(String syntax) {
+    return '在请求格式中生成：$syntax';
+  }
+
+  @override
+  String get mcpServerNameRequired => '请输入 MCP 服务器名称。';
+
+  @override
+  String get mcpStdioCommandRequired => 'stdio 模式需要指定命令。';
+
+  @override
+  String get mcpSseUrlRequired => 'SSE 模式需要指定 URL。';
+
+  @override
+  String get mcpEditServerTitle => '编辑 MCP 服务器';
+
+  @override
+  String get mcpCreateServerTitle => '新建 MCP 服务器';
+
+  @override
+  String get mcpUnsavedChangesTitle => '未保存的更改';
+
+  @override
+  String get mcpUnsavedChangesConfirm => '有未保存的更改，确定要放弃吗？';
+
+  @override
+  String get mcpTransportType => '传输方式';
+
+  @override
+  String get mcpServerName => '服务器名称';
+
+  @override
+  String get mcpServerNameHint => '输入 MCP 服务器名称';
+
+  @override
+  String get mcpCommand => '命令';
+
+  @override
+  String get mcpCommandExample => '例如：npx';
+
+  @override
+  String get mcpArguments => '参数';
+
+  @override
+  String get mcpArgumentsHint =>
+      '用逗号分隔参数，例如：-y, @modelcontextprotocol/server-filesystem, /tmp';
+
+  @override
+  String get mcpSseUrlExample => '例如：http://localhost:3001/sse';
+
+  @override
+  String get mcpApiKey => 'API 密钥';
+
+  @override
+  String get mcpApiKeyHint => '输入 API Key（可选）';
+
+  @override
+  String get mcpShowKey => '显示密钥';
+
+  @override
+  String get mcpHideKey => '隐藏密钥';
+
+  @override
+  String get mcpDescriptionHint => '输入此 MCP 服务器的描述信息（可选）';
+
+  @override
+  String get mcpStdioDescription =>
+      'stdio 会在本地启动子进程作为 MCP 服务器，并通过标准输入/输出通信。适用于本地工具。';
+
+  @override
+  String get mcpSseDescription => 'SSE 通过 HTTP SSE 连接远程 MCP 服务器。适用于远程服务。';
+
+  @override
+  String get mcpLocalStdio => '本地 (stdio)';
+
+  @override
+  String get mcpRemoteSse => '远程 (SSE)';
+
+  @override
+  String get mcpSaving => '保存中…';
+
+  @override
+  String get providerTestSafetyNote =>
+      '此测试会向对应服务发送真实请求。MCP 仅调用只读的 tools/list；HTTP 和网页搜索会执行一次查询。Todo 默认读取清单；为保护当前数据，请省略 todos 参数或将其设为 null。';
+
+  @override
+  String get providerDeleteConfigTitle => '删除配置';
+
+  @override
+  String get providerDeleteConfigConfirm => '确定要删除此供应商配置及其所有模型吗？';
+
+  @override
+  String get providerCreateGroup => '新建组别';
+
+  @override
+  String get providerEditGroup => '编辑组别';
+
+  @override
+  String get providerGroupName => '组别名称';
+
+  @override
+  String get providerGroupNameExists => '组别名称已存在。';
+
+  @override
+  String get providerDeleteGroup => '删除组别';
+
+  @override
+  String providerDeleteGroupConfirm(String groupName) {
+    return '删除“$groupName”后，其中的配置会移到“其他 MCP 服务”。';
+  }
+
+  @override
+  String get providerMoveToGroup => '移动到组别';
+
+  @override
+  String get providerUnnamed => '（未命名）';
+
+  @override
+  String get providerHttpSearch => 'HTTP 搜索';
+
+  @override
+  String providerHttpToolSubtitle(String url) {
+    return 'HTTP 工具：$url';
+  }
+
+  @override
+  String providerLocalStdioSubtitle(String command) {
+    return '本地 (stdio)：$command';
+  }
+
+  @override
+  String providerRemoteSseSubtitle(String url) {
+    return '远程 (SSE)：$url';
+  }
+
+  @override
+  String get providerServices => '服务配置';
+
+  @override
+  String get providerServicesDescription => '按组管理远程连接、本地 stdio 与 HTTP 搜索';
+
+  @override
+  String get providerCreateGroupAction => '新建组别';
+
+  @override
+  String get providerGroupEmpty => '此组暂无配置，点击“添加”加入内容。';
+
+  @override
+  String get providerBuiltinTools => '内置工具';
+
+  @override
+  String get providerBuiltinToolsDescription => 'Stroom 提供的本地工具接口；网页搜索归入对应服务组。';
+
+  @override
+  String get providerBuiltinToolInterface => '内置工具接口';
+
+  @override
+  String get providerViewInterface => '查看接口';
+
+  @override
+  String get providerConfigTitle => '配置';
+
+  @override
+  String get providerNotFound => '供应商未找到';
+
+  @override
+  String get providerConfigurationHeading => '供应商配置';
+
+  @override
+  String get providerBuiltinWebSearchEmpty =>
+      '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。';
+
+  @override
+  String get providerNoConfigsAdd => '暂无供应商配置，请点击“添加”创建。';
+
+  @override
+  String get providerNoHost => '(未设置 Host)';
+
+  @override
+  String get providerServicesAndTools => '服务与工具';
+
+  @override
+  String get providerManageServicesDescription =>
+      '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。';
+
+  @override
+  String get providerNoServices => '还没有服务配置';
+
+  @override
+  String get providerAddServiceDescription =>
+      '添加 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。';
+
+  @override
+  String get providerAddService => '添加服务';
+
+  @override
+  String get providerBuiltinBadge => '内置';
+
+  @override
+  String get providerConnectivityTest => '连通性测试';
+
+  @override
+  String get providerMoveGroupTooltip => '移动到组别';
+
+  @override
+  String get providerDeleteTooltip => '删除配置';
+
+  @override
+  String providerGroupItemCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# 项内容',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get providerGroupActions => '组别操作';
+
+  @override
+  String get providerEditGroupAction => '编辑组别';
+
+  @override
+  String get providerDeleteGroupAction => '删除组别';
+
+  @override
+  String get providerAddItem => '添加内容';
+
+  @override
+  String get providerMcpMasterLabel => 'MCP 服务器';
+
+  @override
+  String get providerMcpMasterDescription => '控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。';
+
+  @override
+  String get providerEnabled => '已启用';
+
+  @override
+  String get providerDisabled => '已停用';
+
+  @override
+  String get providerEditSettings => '编辑供应商设置';
+
+  @override
+  String get providerModelList => '模型列表';
+
+  @override
+  String get providerNoModels => '暂无模型';
+
+  @override
+  String get providerDeleteModel => '删除模型';
+
+  @override
+  String get providerDeleteModelConfirm => '确定要删除此模型吗？';
+
+  @override
+  String get providerEditConfig => '编辑配置';
+
+  @override
+  String providerCreateNamedConfig(String entryName) {
+    return '新建$entryName配置';
+  }
+
+  @override
+  String get toolHttpSearchType => '接入类型：HTTP 搜索';
+
+  @override
+  String toolInterface(String name) {
+    return '工具接口：$name';
+  }
+
+  @override
+  String get toolParameterDefinitions => '参数定义';
+
+  @override
+  String get toolHttpAddress => 'HTTP 接口地址';
+
+  @override
+  String get toolInvalidHttpUrl => '请输入有效的 HTTP 或 HTTPS 地址。';
+
+  @override
+  String get toolBuiltinType => '接入类型：Stroom 内置工具';
+
+  @override
+  String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
+
+  @override
+  String get mcpSseUrlLabel => 'SSE URL';
+
+  @override
+  String get mcpUrlLabel => 'URL';
+
+  @override
+  String providerModelId(String modelId) {
+    return '模型 ID：$modelId';
+  }
+
+  @override
+  String get providerValueNotSet => '（未设置）';
+
+  @override
+  String get providerApiKeyInputHint => '输入 API 密钥';
+
+  @override
+  String get providerSettingsTitle => '供应商配置';
+
+  @override
+  String get providerBasicInfoTab => '基本信息';
+
+  @override
+  String get providerParameterSettingsTab => '参数设置';
+
+  @override
+  String get providerOptionValuesReorderHelp => '选项值（长按把手拖拽排序）';
+
+  @override
+  String providerOptionIndexLabel(String index) {
+    return '选项 $index';
+  }
+
+  @override
+  String providerOptionExampleHint(String example) {
+    return '如 $example';
+  }
+
+  @override
+  String get providerDeleteOptionTooltip => '删除选项';
+
+  @override
+  String get providerAddOption => '添加选项';
+
+  @override
+  String get providerAddCustomParam => '添加参数';
+
+  @override
+  String get providerNoCustomParams => '暂无自定义参数';
+
+  @override
+  String get providerParamNameLabel => '参数名';
+
+  @override
+  String get providerParamDefaultValueLabel => '默认参数值';
+
+  @override
+  String get providerBooleanParamNoValue => '布尔类型无需配置参数值，聊天面板提供开/关切换。';
+
+  @override
+  String get providerReasoningParamsHeading => '推理参数';
+
+  @override
+  String providerReasoningSettingsHelp(
+    String parameterName,
+    String jsonExample,
+  ) {
+    return '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。推理力度参数最多配置一个，参数名必填，选项值可选；仅填参数名时，参数值由模型配置提供。您还可以通过底部按钮添加额外的推理参数。参数名支持点号嵌套，例如 $parameterName 会展开为 $jsonExample。';
+  }
+
+  @override
+  String get providerAddReasoningParam => '添加推理参数';
+
+  @override
+  String get providerAddReasoningToggle => '添加推理开关';
+
+  @override
+  String get providerReasoningToggle => '推理开关';
+
+  @override
+  String get providerDeleteReasoningToggle => '删除推理开关';
+
+  @override
+  String providerParamNameHint(String examples) {
+    return '如 $examples';
+  }
+
+  @override
+  String get providerReasoningBooleanHelp => '布尔类型无需配置参数值，聊天面板提供开/关切换。';
+
+  @override
+  String get providerToggleOnValueLabel => '开启时值';
+
+  @override
+  String get providerToggleOffValueLabel => '关闭时值';
+
+  @override
+  String providerReasoningToggleSummary(String onValue, String offValue) {
+    return '推理开关打开时发送「$onValue」，关闭时发送「$offValue」。';
+  }
+
+  @override
+  String get providerAddReasoningEffort => '添加推理力度';
+
+  @override
+  String get providerDeleteReasoningEffort => '删除推理力度参数';
+
+  @override
+  String get providerReasoningEffortLockedHint => '请先完整填写推理开关后再配置推理力度。';
+
+  @override
+  String get providerJsonValueLabel => 'JSON 值';
+
+  @override
+  String get providerReasoningOptionsHelp =>
+      '选项值（可选，仅填参数名时参数值由模型配置提供；长按把手拖拽排序）';
+
+  @override
+  String get providerParamNameNestedLabel => '参数名（支持点号嵌套）';
+
+  @override
+  String get providerToggleEffortPrerequisite => '请先完整填写推理开关后再配置推理力度。';
+
+  @override
+  String get providerToggleRequiredHint => '请先填写推理开关';
+
+  @override
+  String get providerDeleteCustomParam => '删除参数';
+
+  @override
+  String get modelSaveSuccess => '模型已保存';
+
+  @override
+  String get modelSaving => '保存中…';
+
+  @override
+  String modelOriginalError(String error) {
+    return '原始错误：$error';
   }
 }

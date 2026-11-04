@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
@@ -76,8 +77,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   ) {
     final credentialHeaderNames =
         HttpToolService.credentialHeaderNamesForProvider(
-      widget.config.providerName,
-    );
+          widget.config.providerName,
+        );
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
@@ -101,7 +102,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
           (url.scheme != 'http' && url.scheme != 'https') ||
           !url.hasAuthority ||
           url.host.isEmpty) {
-        setState(() => _urlError = '请输入有效的 HTTP 或 HTTPS 地址');
+        setState(
+          () => _urlError = AppLocalizations.of(context)!.toolInvalidHttpUrl,
+        );
         return;
       }
     }
@@ -120,24 +123,24 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('接入类型：HTTP 搜索'),
+              Text(AppLocalizations.of(context)!.toolHttpSearchType),
               if (definition != null) ...[
                 const SizedBox(height: 12),
-                Text('工具接口：${definition.name}'),
+                Text(
+                  AppLocalizations.of(context)!.toolInterface(definition.name),
+                ),
                 const SizedBox(height: 4),
                 Text(definition.description),
                 const SizedBox(height: 12),
-                const Text(
-                  '参数定义',
+                Text(
+                  AppLocalizations.of(context)!.toolParameterDefinitions,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 SelectableText(
                   const JsonEncoder.withIndent('  ')
                       .convert(definition.parameters),
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
+                  style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(fontFamily: 'monospace'),
                 ),
               ],
@@ -146,7 +149,7 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _urlController,
                 readOnly: !_allowsCustomUrl,
                 decoration: InputDecoration(
-                  labelText: 'HTTP 接口地址',
+                  labelText: AppLocalizations.of(context)!.toolHttpAddress,
                   border: const OutlineInputBorder(),
                   errorText: _urlError,
                 ),
@@ -159,10 +162,12 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _apiKeyController,
                 obscureText: _obscureApiKey,
                 decoration: InputDecoration(
-                  labelText: 'API Key',
+                  labelText: AppLocalizations.of(context)!.mcpApiKey,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                    tooltip: _obscureApiKey
+                        ? AppLocalizations.of(context)!.mcpShowKey
+                        : AppLocalizations.of(context)!.mcpHideKey,
                     icon: Icon(
                       _obscureApiKey ? Icons.visibility_off : Icons.visibility,
                     ),
@@ -178,9 +183,12 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.batchDlgCancel),
         ),
-        FilledButton(onPressed: _save, child: const Text('保存')),
+        FilledButton(
+          onPressed: _save,
+          child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+        ),
       ],
     );
   }
@@ -202,23 +210,24 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('接入类型：Stroom 内置工具'),
+              Text(AppLocalizations.of(context)!.toolBuiltinType),
               const SizedBox(height: 8),
               Text(definition.description),
               const SizedBox(height: 12),
-              const Text('参数定义', style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                AppLocalizations.of(context)!.toolParameterDefinitions,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 4),
               SelectableText(
                 const JsonEncoder.withIndent('  ')
                     .convert(definition.parameters),
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
+                style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 12),
               Text(
-                '是否在助手中启用，由该助手的默认工具设置管理。',
+                AppLocalizations.of(context)!.toolBuiltinEnableHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -228,7 +237,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: Text(AppLocalizations.of(context)!.mathClose),
         ),
       ],
     );

@@ -1,4 +1,5 @@
 part of 'provider_settings_panel.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -9,12 +10,14 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
   /// 自定义参数选项值区（照搬本面板推理力度的行式样式）：
   /// 多值文本行 + 长按把手排序 + 删除 + 添加选项。
   Widget _buildProviderCustomParamOptionRows(
-      CustomParam param, ColorScheme cs) {
+    CustomParam param,
+    ColorScheme cs,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '选项值（长按把手拖拽排序）',
+          AppLocalizations.of(context)!.providerOptionValuesReorderHelp,
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -40,8 +43,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
               child: SyncedValueField(
                 value: value,
                 decoration: InputDecoration(
-                  labelText: '选项 ${j + 1}',
-                  hintText: '如 low, enabled, true, max',
+                  labelText: AppLocalizations.of(context)!
+                      .providerOptionIndexLabel((j + 1).toString()),
+                  hintText: AppLocalizations.of(context)!
+                      .providerOptionExampleHint('low, enabled, true, max'),
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -63,7 +68,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         param.options.removeAt(j);
                       });
                     },
-                    tooltip: '删除选项',
+                    tooltip: AppLocalizations.of(context)!
+                        .providerDeleteOptionTooltip,
                   )
                 : const SizedBox.shrink();
             final row = SizedBox(
@@ -100,7 +106,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          label: Text(
+            AppLocalizations.of(context)!.providerAddOption,
+            style: const TextStyle(fontSize: 13),
+          ),
           onPressed: () {
             setState(() {
               param.options.add('');
@@ -156,34 +165,36 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
     return [
       Row(
         children: [
-          const Text(
-            '自定义参数',
+          Text(
+            AppLocalizations.of(context)!.chatCustomParameters,
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           TextButton.icon(
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('添加参数'),
+            label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
             onPressed: _addCustomParam,
           ),
         ],
       ),
       const SizedBox(height: 8),
       if (_customParams.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
           child: Center(
-            child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+            child: Text(
+              AppLocalizations.of(context)!.providerNoCustomParams,
+              style: const TextStyle(color: Colors.grey),
+            ),
           ),
         )
       else
         ...List.generate(_customParams.length, (i) {
           final param = _customParams[i];
           final name = param.paramName.trim();
-          final isDuplicate = name.isNotEmpty &&
-              (_customParams.indexWhere(
-                    (p) => p.paramName.trim() == name,
-                  ) !=
+          final isDuplicate =
+              name.isNotEmpty &&
+              (_customParams.indexWhere((p) => p.paramName.trim() == name) !=
                   i);
           final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
           return Card(
@@ -200,14 +211,17 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         child: TextFormField(
                           initialValue: param.paramName,
                           decoration: InputDecoration(
-                            labelText: '参数名',
+                            labelText: AppLocalizations.of(context)!
+                                .providerParamNameLabel,
                             border: const OutlineInputBorder(),
                             isDense: true,
                             errorText: hasInvalidName
-                                ? '参数名格式不正确（点号分段不能为空）'
+                                ? AppLocalizations.of(context)!
+                                      .providerParamNameInvalid(name)
                                 : isDuplicate
-                                    ? '已存在该参数'
-                                    : null,
+                                ? AppLocalizations.of(context)!
+                                      .providerParamAlreadyExists(name)
+                                : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -269,7 +283,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                           size: 20,
                         ),
                         onPressed: () => _removeCustomParam(i),
-                        tooltip: '删除参数',
+                        tooltip: AppLocalizations.of(context)!
+                            .providerDeleteCustomParam,
                       ),
                     ],
                   ),
@@ -292,11 +307,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               fontFamily: 'monospace',
                               fontSize: 13,
                             ),
-                            inputFormatters: const [
-                              CodeSmartInputFormatter(),
-                            ],
+                            inputFormatters: const [CodeSmartInputFormatter()],
                             decoration: InputDecoration(
-                              labelText: '默认参数值',
+                              labelText: AppLocalizations.of(context)!
+                                  .providerParamDefaultValueLabel,
                               hintText: param.paramType.defaultValueHint,
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
@@ -307,9 +321,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                                 ),
                               ),
                               focusedErrorBorder: OutlineInputBorder(
-                                borderSide: const BorderSide(
-                                  color: Colors.red,
-                                ),
+                                borderSide: const BorderSide(color: Colors.red),
                               ),
                               errorText: _jsonErrors[i],
                               errorMaxLines: 3,
@@ -325,7 +337,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.fullscreen, size: 20),
-                          tooltip: '全屏编辑',
+                          tooltip: AppLocalizations.of(context)!
+                              .chatFullscreenEdit,
                           onPressed: () {
                             showJsonValueEditorDialog(
                               context,
@@ -344,7 +357,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     )
                   else if (param.type == 'boolean')
                     Text(
-                      '布尔类型无需配置参数值。',
+                      AppLocalizations.of(context)!.providerBooleanParamNoValue,
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant.withValues(alpha: 0.7),

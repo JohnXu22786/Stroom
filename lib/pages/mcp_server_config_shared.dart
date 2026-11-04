@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 class SectionHeader extends StatelessWidget {
   final String title;
@@ -52,12 +53,15 @@ class ReadOnlyField extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  value.isNotEmpty ? value : '（未设置）',
+                  value.isNotEmpty
+                      ? value
+                      : AppLocalizations.of(context)!.providerNotConfigured,
                   style: TextStyle(
                     fontSize: 15,
                     color: value.isNotEmpty

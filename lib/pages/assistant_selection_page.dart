@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,7 +37,7 @@ class AssistantSelectionPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('选择助手'),
+        title: Text(AppLocalizations.of(context)!.taskFlowUiChooseAssistant),
         centerTitle: true,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -45,12 +46,12 @@ class AssistantSelectionPage extends ConsumerWidget {
             // A storefront icon conveys that this entry opens the
             // built-in assistant "market".
             icon: const Icon(Icons.storefront),
-            tooltip: '助手市场',
+            tooltip: AppLocalizations.of(context)!.builtInPromptMarketTitle,
             onPressed: () => showBuiltInPromptSelector(context, ref),
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: '新建助手',
+            tooltip: AppLocalizations.of(context)!.assistantCreateNew,
             onPressed: () => _showCreateAssistantDialog(context, ref),
           ),
         ],
@@ -67,13 +68,13 @@ class AssistantSelectionPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '暂无助手，请先创建',
+                    AppLocalizations.of(context)!.assistantEmptyState,
                     style: TextStyle(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     icon: const Icon(Icons.add),
-                    label: const Text('创建助手'),
+                    label: Text(AppLocalizations.of(context)!.assistantCreate),
                     onPressed: () => _showCreateAssistantDialog(context, ref),
                   ),
                 ],
@@ -89,7 +90,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Center(
                       child: Text(
-                        '长按拖拽即可调整助手顺序',
+                        AppLocalizations.of(context)!.assistantReorderHint,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,
@@ -163,7 +164,7 @@ class AssistantSelectionPage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('新建助手'),
+          title: Text(AppLocalizations.of(context)!.assistantCreateNew),
           content: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: AssistantEditorFields(
@@ -173,8 +174,9 @@ class AssistantSelectionPage extends ConsumerWidget {
               selectedEmoji: selectedEmoji,
               onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
               autofocusName: true,
-              nameHint: '输入助手名称',
-              descriptionHint: '简短描述此助手的功能',
+              nameHint: AppLocalizations.of(context)!.assistantNewNameHint,
+              descriptionHint: AppLocalizations.of(context)!
+                  .assistantNewDescriptionHint,
             ),
           ),
           actions: [
@@ -183,13 +185,15 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
             ),
             FilledButton(
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref.read(assistantProvider.notifier).createAssistant(
+                ref
+                    .read(assistantProvider.notifier)
+                    .createAssistant(
                       name: name,
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,
@@ -198,7 +202,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: const Text('创建'),
+              child: Text(AppLocalizations.of(context)!.fileManagerCreate),
             ),
           ],
         ),
@@ -222,7 +226,7 @@ class AssistantSelectionPage extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('编辑'),
+              title: Text(AppLocalizations.of(context)!.imagePreviewEdit),
               onTap: () {
                 Navigator.pop(ctx);
                 showAssistantFullEditDialog(context, ref, assistant);
@@ -231,7 +235,7 @@ class AssistantSelectionPage extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.delete_outline),
               title: Text(
-                '删除',
+                AppLocalizations.of(context)!.fileManagerDelete,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
@@ -253,12 +257,15 @@ class AssistantSelectionPage extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除助手'),
-        content: Text('确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
+        title: Text(AppLocalizations.of(context)!.assistantDeleteTitle),
+        content: Text(
+          AppLocalizations.of(context)!
+              .assistantDeleteConfirmation(assistant.name),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () {
@@ -270,7 +277,7 @@ class AssistantSelectionPage extends ConsumerWidget {
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),

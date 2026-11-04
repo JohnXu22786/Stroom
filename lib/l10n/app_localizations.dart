@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -7491,6 +7491,2823 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Input {index}: The text attachment is not valid UTF-8. Convert it and try again.'**
   String taskFlowValidationTextEncodingFailed(String index);
+
+  /// No description provided for @assistantParamValueTypeString.
+  ///
+  /// In en, this message translates to:
+  /// **'String'**
+  String get assistantParamValueTypeString;
+
+  /// No description provided for @assistantParamValueTypeNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Number'**
+  String get assistantParamValueTypeNumber;
+
+  /// No description provided for @assistantParamValueTypeBoolean.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean'**
+  String get assistantParamValueTypeBoolean;
+
+  /// No description provided for @assistantParamValueTypeJson.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON'**
+  String get assistantParamValueTypeJson;
+
+  /// No description provided for @providerRequiredFields.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider name, API URL, and key are required.'**
+  String get providerRequiredFields;
+
+  /// No description provided for @providerJsonSizePositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Request JSON size must be a positive MiB value.'**
+  String get providerJsonSizePositive;
+
+  /// No description provided for @providerCustomParamRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom parameter name and value are required.'**
+  String get providerCustomParamRequired;
+
+  /// No description provided for @providerParamNameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name is invalid (dot-separated segments cannot be empty): {name}'**
+  String providerParamNameInvalid(String name);
+
+  /// No description provided for @providerParamAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter already exists: {name}'**
+  String providerParamAlreadyExists(String name);
+
+  /// No description provided for @providerParamInvalidJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Default value for parameter \"{name}\" is not valid JSON: {value}'**
+  String providerParamInvalidJson(String name, String value);
+
+  /// No description provided for @providerParamOptionsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Numeric options for parameter \"{name}\" cannot be empty.'**
+  String providerParamOptionsRequired(String name);
+
+  /// No description provided for @providerParamInvalidNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Value for parameter \"{name}\" is not a valid number: {value}'**
+  String providerParamInvalidNumber(String name, String value);
+
+  /// No description provided for @providerReasoningIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before enabling other reasoning parameters.'**
+  String get providerReasoningIncomplete;
+
+  /// No description provided for @providerReasoningError.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning parameter error: {error}'**
+  String providerReasoningError(String error);
+
+  /// No description provided for @providerParamNameConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning and custom parameters have the same name: {name}'**
+  String providerParamNameConflict(String name);
+
+  /// No description provided for @providerMaxTokensMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum output tokens is enabled, but no value was entered.'**
+  String get providerMaxTokensMissing;
+
+  /// No description provided for @providerMaxTokensPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum output tokens must be a positive integer.'**
+  String get providerMaxTokensPositive;
+
+  /// No description provided for @providerSeedInteger.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed must be an integer.'**
+  String get providerSeedInteger;
+
+  /// No description provided for @providerNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get providerNotConfigured;
+
+  /// No description provided for @providerAudioChunkingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio chunking'**
+  String get providerAudioChunkingTitle;
+
+  /// No description provided for @providerAudioChunkingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart chunking analyzes the audio and candidate cuts, preferring sentence endings. Chunks do not overlap.'**
+  String get providerAudioChunkingHint;
+
+  /// No description provided for @providerChunkingMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunking method'**
+  String get providerChunkingMode;
+
+  /// No description provided for @providerChunkNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No chunking'**
+  String get providerChunkNone;
+
+  /// No description provided for @providerChunkSmart.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart chunking (recommended)'**
+  String get providerChunkSmart;
+
+  /// No description provided for @providerChunkFixedDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed-duration chunks'**
+  String get providerChunkFixedDuration;
+
+  /// No description provided for @providerChunkFixedSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed-size chunks'**
+  String get providerChunkFixedSize;
+
+  /// No description provided for @providerCompressionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Compression encoding'**
+  String get providerCompressionTitle;
+
+  /// No description provided for @providerCompressionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, the general fallback first compresses the full WAV. If the encoded file or request body still exceeds the limit, the source PCM is chunked and encoded.'**
+  String get providerCompressionHint;
+
+  /// No description provided for @providerCompressionMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Compression method'**
+  String get providerCompressionMode;
+
+  /// No description provided for @providerCompressionNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None (send as is)'**
+  String get providerCompressionNone;
+
+  /// No description provided for @providerCompressionAdpcm.
+  ///
+  /// In en, this message translates to:
+  /// **'ADPCM (~4x compression)'**
+  String get providerCompressionAdpcm;
+
+  /// No description provided for @providerCompressionFlac.
+  ///
+  /// In en, this message translates to:
+  /// **'FLAC (lossless, ~2x)'**
+  String get providerCompressionFlac;
+
+  /// No description provided for @providerCompressionAdpcmDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'IMA ADPCM, lossy 4:1 compression. Pure Dart implementation; audio quality suits transcription.'**
+  String get providerCompressionAdpcmDescription;
+
+  /// No description provided for @providerCompressionFlacDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Lossless FLAC compression, implemented in pure Dart. Reduces size by about half.'**
+  String get providerCompressionFlacDescription;
+
+  /// No description provided for @providerCompressionWavDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No compression; send as a WAV file.'**
+  String get providerCompressionWavDescription;
+
+  /// No description provided for @providerLlmParams.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM parameters'**
+  String get providerLlmParams;
+
+  /// No description provided for @providerEnabledParamsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled parameters are sent as defaults in API requests.'**
+  String get providerEnabledParamsHelp;
+
+  /// No description provided for @providerTemperatureLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature'**
+  String get providerTemperatureLabel;
+
+  /// No description provided for @providerTemperatureHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls output randomness; higher values are more creative.'**
+  String get providerTemperatureHelp;
+
+  /// No description provided for @providerTopPHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Nucleus sampling parameter that controls cumulative probability for word selection.'**
+  String get providerTopPHelp;
+
+  /// No description provided for @providerFrequencyPenaltyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency penalty'**
+  String get providerFrequencyPenaltyLabel;
+
+  /// No description provided for @providerFrequencyPenaltyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduces repeated words; negative values increase repetition.'**
+  String get providerFrequencyPenaltyHelp;
+
+  /// No description provided for @providerPresencePenaltyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence penalty'**
+  String get providerPresencePenaltyLabel;
+
+  /// No description provided for @providerPresencePenaltyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Encourages new topics; negative values encourage returning to previous topics.'**
+  String get providerPresencePenaltyHelp;
+
+  /// No description provided for @providerMaxOutputTokensLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum output tokens'**
+  String get providerMaxOutputTokensLabel;
+
+  /// No description provided for @providerOptionalExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional, e.g. {example}'**
+  String providerOptionalExample(String example);
+
+  /// No description provided for @providerResponseTokensHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of tokens generated per response.'**
+  String get providerResponseTokensHelp;
+
+  /// No description provided for @providerSeedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed'**
+  String get providerSeedLabel;
+
+  /// No description provided for @providerSeedHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Set this to make output reproducible.'**
+  String get providerSeedHelp;
+
+  /// No description provided for @providerChunkSmartDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzes audio and candidate cuts, preferring sentence endings or long silences without overlap. Defaults: 20s minimum / 45s target / 60s maximum. Used only by the general fallback; compression chunking supports PCM WAV only.'**
+  String get providerChunkSmartDescription;
+
+  /// No description provided for @providerChunkDurationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Splits every N seconds (60 by default). Simple, but may cut off speech. Used only by the general fallback; compression chunking supports PCM WAV only.'**
+  String get providerChunkDurationDescription;
+
+  /// No description provided for @providerChunkSizeDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Initially splits by audio data size, then refines by encoded file and request body size. Used only by the general fallback; compression chunking supports PCM WAV only.'**
+  String get providerChunkSizeDescription;
+
+  /// No description provided for @providerChunkNoneDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No chunking. The file is rejected if it exceeds the limit after full compression.'**
+  String get providerChunkNoneDescription;
+
+  /// No description provided for @providerNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider name'**
+  String get providerNameLabel;
+
+  /// No description provided for @providerNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter provider name'**
+  String get providerNameHint;
+
+  /// No description provided for @providerApiUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'API URL'**
+  String get providerApiUrlLabel;
+
+  /// No description provided for @providerApiUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the full API endpoint URL'**
+  String get providerApiUrlHint;
+
+  /// No description provided for @providerApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hint: {hint}'**
+  String providerApiKeyHint(String hint);
+
+  /// No description provided for @providerEndpointTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint type'**
+  String get providerEndpointTypeLabel;
+
+  /// No description provided for @providerEndpointOpenAi.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI compatible (Chat Completions)'**
+  String get providerEndpointOpenAi;
+
+  /// No description provided for @providerEndpointAnthropic.
+  ///
+  /// In en, this message translates to:
+  /// **'Anthropic format (Messages API)'**
+  String get providerEndpointAnthropic;
+
+  /// No description provided for @providerAnthropicEndpointHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the official Anthropic Messages API format (x-api-key header). API URL example: https://api.anthropic.com/v1/messages'**
+  String get providerAnthropicEndpointHelp;
+
+  /// No description provided for @providerOpenAiEndpointHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the official OpenAI Chat Completions compatible format (Bearer header). API URL example: https://api.openai.com/v1/chat/completions'**
+  String get providerOpenAiEndpointHelp;
+
+  /// No description provided for @providerRequestJsonDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default request JSON size'**
+  String get providerRequestJsonDefault;
+
+  /// No description provided for @providerUseAppDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to use the app default'**
+  String get providerUseAppDefault;
+
+  /// No description provided for @providerModelJsonBudgetHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Models can override this value. If neither the provider nor model sets it, the default is 20 MiB.'**
+  String get providerModelJsonBudgetHelp;
+
+  /// No description provided for @providerRequestParamsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests use all enabled provider and model parameters. When names overlap, the model value takes precedence.'**
+  String get providerRequestParamsHelp;
+
+  /// No description provided for @providerUploadSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload settings'**
+  String get providerUploadSettings;
+
+  /// No description provided for @providerUploadMethodHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio upload methods and size limits vary by provider.'**
+  String get providerUploadMethodHelp;
+
+  /// No description provided for @providerUploadMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload method'**
+  String get providerUploadMethod;
+
+  /// No description provided for @providerMultipart.
+  ///
+  /// In en, this message translates to:
+  /// **'Multipart (general)'**
+  String get providerMultipart;
+
+  /// No description provided for @providerUrlUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get providerUrlUpload;
+
+  /// No description provided for @providerMaxUploadSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum upload size'**
+  String get providerMaxUploadSize;
+
+  /// No description provided for @providerFallbackStrategy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fallback strategy'**
+  String get providerFallbackStrategy;
+
+  /// No description provided for @providerFallbackMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Fallback method'**
+  String get providerFallbackMethod;
+
+  /// No description provided for @providerPreprocessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio preprocessing'**
+  String get providerPreprocessing;
+
+  /// No description provided for @providerPreprocessingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduces audio file size without affecting transcription accuracy.'**
+  String get providerPreprocessingHelp;
+
+  /// No description provided for @providerPreprocessingMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Preprocessing method'**
+  String get providerPreprocessingMethod;
+
+  /// No description provided for @providerUploadMultipartHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct multipart/form-data upload. The request body includes audio, form fields, and multipart boundaries.'**
+  String get providerUploadMultipartHelp;
+
+  /// No description provided for @providerUploadBase64Help.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends Base64 in JSON, which can bypass some providers’ multipart-specific limits. Base64 expansion and JSON fields count toward the upload limit.'**
+  String get providerUploadBase64Help;
+
+  /// No description provided for @providerUploadUrlHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Provide a public URL for the provider to download. Supports very large files (e.g. Together AI 1 GB).'**
+  String get providerUploadUrlHelp;
+
+  /// No description provided for @providerUploadBudgetHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This value triggers raw-audio fallback and limits the final request body. The app checks raw audio, encoded files, and upload size. Multipart includes form fields and boundaries; Base64 JSON includes encoding expansion and fields. The 25 MB default matches the OpenAI audio API limit.'**
+  String get providerUploadBudgetHelp;
+
+  /// No description provided for @providerFallbackTriggerHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Triggered when raw audio or the complete request body exceeds its limit. Specific fallback (Base64) takes priority over general fallback (compression/chunking).'**
+  String get providerFallbackTriggerHelp;
+
+  /// No description provided for @providerFallbackNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None (reject immediately)'**
+  String get providerFallbackNone;
+
+  /// No description provided for @providerFallbackSpecific.
+  ///
+  /// In en, this message translates to:
+  /// **'Specific fallback (Base64)'**
+  String get providerFallbackSpecific;
+
+  /// No description provided for @providerFallbackGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'General fallback (compression/chunking)'**
+  String get providerFallbackGeneric;
+
+  /// No description provided for @providerFallbackAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Try all (recommended)'**
+  String get providerFallbackAll;
+
+  /// No description provided for @providerFallbackSpecificHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Base64 JSON. Send only if the request body, including Base64 expansion and JSON fields, fits the limit.'**
+  String get providerFallbackSpecificHelp;
+
+  /// No description provided for @providerFallbackGenericHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'If enabled, compress the full WAV first. If it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.'**
+  String get providerFallbackGenericHelp;
+
+  /// No description provided for @providerFallbackAllHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.'**
+  String get providerFallbackAllHelp;
+
+  /// No description provided for @providerFallbackRejectHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject the file if it exceeds the limit; do not try a fallback.'**
+  String get providerFallbackRejectHelp;
+
+  /// No description provided for @providerPreprocessNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get providerPreprocessNone;
+
+  /// No description provided for @providerPreprocessResample.
+  ///
+  /// In en, this message translates to:
+  /// **'WAV optimization (16 kHz mono)'**
+  String get providerPreprocessResample;
+
+  /// No description provided for @providerPreprocessResampleHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.'**
+  String get providerPreprocessResampleHelp;
+
+  /// No description provided for @providerPreprocessNoneHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'No preprocessing; send as is.'**
+  String get providerPreprocessNoneHelp;
+
+  /// No description provided for @assistantDefaultsScopeHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.'**
+  String get assistantDefaultsScopeHelp;
+
+  /// No description provided for @assistantDefaultModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model'**
+  String get assistantDefaultModelTitle;
+
+  /// No description provided for @assistantDefaultModelHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Model used for new conversations; leave unset to let the conversation choose.'**
+  String get assistantDefaultModelHelp;
+
+  /// No description provided for @assistantNoDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get assistantNoDefault;
+
+  /// No description provided for @assistantNoModelsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No models available. Configure an LLM provider in Settings.'**
+  String get assistantNoModelsAvailable;
+
+  /// No description provided for @assistantDefaultToolsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Default enabled tools'**
+  String get assistantDefaultToolsTitle;
+
+  /// No description provided for @assistantDisabledToolsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled tools will not be enabled automatically in new conversations.'**
+  String get assistantDisabledToolsHelp;
+
+  /// No description provided for @assistantUnconfiguredToolsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Default tools are not configured. New conversations will enable all tools automatically.'**
+  String get assistantUnconfiguredToolsHelp;
+
+  /// No description provided for @assistantEnableAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable all'**
+  String get assistantEnableAll;
+
+  /// No description provided for @assistantDisableAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable all'**
+  String get assistantDisableAll;
+
+  /// No description provided for @assistantNoToolsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No tools available'**
+  String get assistantNoToolsAvailable;
+
+  /// No description provided for @assistantTruncateToolOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool output truncation'**
+  String get assistantTruncateToolOutput;
+
+  /// No description provided for @assistantTruncateToolOutputHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum characters in each tool result before it is sent to the model. Applies to all conversations under this assistant.'**
+  String get assistantTruncateToolOutputHelp;
+
+  /// No description provided for @assistantEnableTruncation.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable truncation'**
+  String get assistantEnableTruncation;
+
+  /// No description provided for @assistantTruncatedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Long results are truncated to {count} characters'**
+  String assistantTruncatedTo(String count);
+
+  /// No description provided for @assistantSendFullResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Send full result (subject to the 50 KB storage limit)'**
+  String get assistantSendFullResult;
+
+  /// No description provided for @assistantMaxCharacters.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum characters'**
+  String get assistantMaxCharacters;
+
+  /// No description provided for @assistantCharactersNotTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Unit: characters (not tokens)'**
+  String get assistantCharactersNotTokens;
+
+  /// No description provided for @assistantDefaultCharacterCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {count}'**
+  String assistantDefaultCharacterCount(String count);
+
+  /// No description provided for @assistantCharacterRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid range: {minimum}–{maximum} characters'**
+  String assistantCharacterRange(String minimum, String maximum);
+
+  /// No description provided for @assistantNewConversationPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation preview'**
+  String get assistantNewConversationPreview;
+
+  /// No description provided for @assistantEnabledToolCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{enabled} / {total} enabled'**
+  String assistantEnabledToolCount(String enabled, String total);
+
+  /// No description provided for @assistantAllToolsAutoEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'All tools are enabled automatically (not configured)'**
+  String get assistantAllToolsAutoEnabled;
+
+  /// No description provided for @assistantMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get assistantMoreActions;
+
+  /// No description provided for @assistantChooseEmoji.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose emoji'**
+  String get assistantChooseEmoji;
+
+  /// No description provided for @assistantNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant name'**
+  String get assistantNameLabel;
+
+  /// No description provided for @assistantDescriptionOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Description (optional)'**
+  String get assistantDescriptionOptional;
+
+  /// No description provided for @assistantSelectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an assistant'**
+  String get assistantSelectionTitle;
+
+  /// No description provided for @assistantMarketTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant marketplace'**
+  String get assistantMarketTooltip;
+
+  /// No description provided for @assistantCreateNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Create assistant'**
+  String get assistantCreateNew;
+
+  /// No description provided for @assistantEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No assistants yet. Create one to get started.'**
+  String get assistantEmptyState;
+
+  /// No description provided for @assistantCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get assistantCreate;
+
+  /// No description provided for @assistantReorderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-press and drag to reorder assistants'**
+  String get assistantReorderHint;
+
+  /// No description provided for @assistantNewNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter assistant name'**
+  String get assistantNewNameHint;
+
+  /// No description provided for @assistantNewDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Briefly describe what this assistant does'**
+  String get assistantNewDescriptionHint;
+
+  /// No description provided for @assistantDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete assistant'**
+  String get assistantDeleteTitle;
+
+  /// No description provided for @assistantDeleteConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete assistant “{name}”? This action cannot be undone.'**
+  String assistantDeleteConfirmation(String name);
+
+  /// No description provided for @assistantEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit assistant'**
+  String get assistantEditTitle;
+
+  /// No description provided for @assistantBasicTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic settings'**
+  String get assistantBasicTab;
+
+  /// No description provided for @assistantParametersTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameters'**
+  String get assistantParametersTab;
+
+  /// No description provided for @assistantDefaultsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Defaults'**
+  String get assistantDefaultsTab;
+
+  /// No description provided for @assistantAddCustomParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add custom parameter'**
+  String get assistantAddCustomParameter;
+
+  /// No description provided for @assistantEditCustomParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit custom parameter'**
+  String get assistantEditCustomParameter;
+
+  /// No description provided for @assistantParameterName.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name'**
+  String get assistantParameterName;
+
+  /// No description provided for @assistantParameterNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. top_k or provider.only'**
+  String get assistantParameterNameHint;
+
+  /// No description provided for @assistantParameterNameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid parameter name (dot-separated segments cannot be empty)'**
+  String get assistantParameterNameInvalid;
+
+  /// No description provided for @assistantParameterType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get assistantParameterType;
+
+  /// No description provided for @assistantValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get assistantValue;
+
+  /// No description provided for @assistantTrueFalseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'true or false'**
+  String get assistantTrueFalseHint;
+
+  /// No description provided for @assistantNumberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a number'**
+  String get assistantNumberHint;
+
+  /// No description provided for @assistantJsonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. {example}'**
+  String assistantJsonHint(String example);
+
+  /// No description provided for @assistantValueHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a value'**
+  String get assistantValueHint;
+
+  /// No description provided for @assistantCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get assistantCancel;
+
+  /// No description provided for @assistantSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get assistantSave;
+
+  /// No description provided for @assistantParamOverrideHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, assistant parameters override model parameters; when disabled, model parameters are used.'**
+  String get assistantParamOverrideHelp;
+
+  /// No description provided for @assistantTemperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature'**
+  String get assistantTemperature;
+
+  /// No description provided for @assistantMaxTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum tokens'**
+  String get assistantMaxTokens;
+
+  /// No description provided for @assistantMaxToolCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum tool calls'**
+  String get assistantMaxToolCalls;
+
+  /// No description provided for @assistantRounds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} rounds'**
+  String assistantRounds(String count);
+
+  /// No description provided for @assistantUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get assistantUnlimited;
+
+  /// No description provided for @assistantStreamOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Stream output'**
+  String get assistantStreamOutput;
+
+  /// No description provided for @assistantFrequencyPenalty.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency penalty'**
+  String get assistantFrequencyPenalty;
+
+  /// No description provided for @assistantPresencePenalty.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence penalty'**
+  String get assistantPresencePenalty;
+
+  /// No description provided for @assistantRandomSeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed'**
+  String get assistantRandomSeed;
+
+  /// No description provided for @assistantNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get assistantNotSet;
+
+  /// No description provided for @assistantSeedValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Seed value'**
+  String get assistantSeedValue;
+
+  /// No description provided for @assistantIntegerSeedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an integer seed'**
+  String get assistantIntegerSeedHint;
+
+  /// No description provided for @assistantWebSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Web search'**
+  String get assistantWebSearch;
+
+  /// No description provided for @assistantAddParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add parameter'**
+  String get assistantAddParameter;
+
+  /// No description provided for @assistantNoCustomParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom parameters'**
+  String get assistantNoCustomParameters;
+
+  /// No description provided for @assistantRoundsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Rounds'**
+  String get assistantRoundsLabel;
+
+  /// No description provided for @modelCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add model'**
+  String get modelCreateTitle;
+
+  /// No description provided for @modelEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit model'**
+  String get modelEditTitle;
+
+  /// No description provided for @modelDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get modelDiscardTitle;
+
+  /// No description provided for @modelDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You have unsaved changes. Discard them?'**
+  String get modelDiscardBody;
+
+  /// No description provided for @modelNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model name'**
+  String get modelNameLabel;
+
+  /// No description provided for @modelNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a display name (optional)'**
+  String get modelNameHint;
+
+  /// No description provided for @modelIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model ID'**
+  String get modelIdLabel;
+
+  /// No description provided for @modelIdExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. {id}'**
+  String modelIdExample(String id);
+
+  /// No description provided for @modelIdRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Model ID is required.'**
+  String get modelIdRequired;
+
+  /// No description provided for @modelCustomParamRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom parameter name and default value are required.'**
+  String get modelCustomParamRequired;
+
+  /// No description provided for @modelParamDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter already exists: {name}'**
+  String modelParamDuplicate(String name);
+
+  /// No description provided for @modelParamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name'**
+  String get modelParamName;
+
+  /// No description provided for @modelParamDefaultValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Default parameter value'**
+  String get modelParamDefaultValue;
+
+  /// No description provided for @modelParamDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete parameter'**
+  String get modelParamDelete;
+
+  /// No description provided for @modelParamJsonInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Default value for parameter \"{name}\" is not valid JSON: {value}'**
+  String modelParamJsonInvalid(String name, String value);
+
+  /// No description provided for @modelAddParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add parameter'**
+  String get modelAddParameter;
+
+  /// No description provided for @modelNoCustomParams.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom parameters'**
+  String get modelNoCustomParams;
+
+  /// No description provided for @modelBasicSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic settings'**
+  String get modelBasicSettings;
+
+  /// No description provided for @modelDiscardCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get modelDiscardCancel;
+
+  /// No description provided for @modelSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get modelSave;
+
+  /// No description provided for @modelUnsavedMaxTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum output tokens is enabled but has no value.'**
+  String get modelUnsavedMaxTokens;
+
+  /// No description provided for @modelMaxTokensPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum output tokens must be a positive integer.'**
+  String get modelMaxTokensPositive;
+
+  /// No description provided for @modelSeedInteger.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed must be an integer.'**
+  String get modelSeedInteger;
+
+  /// No description provided for @modelContextLengthRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Context length is required.'**
+  String get modelContextLengthRequired;
+
+  /// No description provided for @modelContextLengthPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Context length must be a positive integer.'**
+  String get modelContextLengthPositive;
+
+  /// No description provided for @modelAsrLanguageCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Language code (Language)'**
+  String get modelAsrLanguageCode;
+
+  /// No description provided for @modelAsrLanguageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. zh, en, ja'**
+  String get modelAsrLanguageHint;
+
+  /// No description provided for @modelAsrLanguageHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'ISO-639-1 language code; leave empty for automatic detection.'**
+  String get modelAsrLanguageHelp;
+
+  /// No description provided for @modelTemperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature'**
+  String get modelTemperature;
+
+  /// No description provided for @modelTemperatureHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls output randomness; a lower value is recommended.'**
+  String get modelTemperatureHelp;
+
+  /// No description provided for @modelAsrPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get modelAsrPrompt;
+
+  /// No description provided for @modelAsrPromptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a context prompt (optional)'**
+  String get modelAsrPromptHint;
+
+  /// No description provided for @modelAsrPromptHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Provide context to improve transcription accuracy, such as a list of specialist terms.'**
+  String get modelAsrPromptHelp;
+
+  /// No description provided for @modelAsrParams.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR parameters'**
+  String get modelAsrParams;
+
+  /// No description provided for @modelEnabledParamsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled parameters are sent as defaults in API requests.'**
+  String get modelEnabledParamsHelp;
+
+  /// No description provided for @modelAsrResponseFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Response format'**
+  String get modelAsrResponseFormat;
+
+  /// No description provided for @modelAsrResponseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Format of the returned transcription.'**
+  String get modelAsrResponseHelp;
+
+  /// No description provided for @modelAsrTimestampGranularity.
+  ///
+  /// In en, this message translates to:
+  /// **'Timestamp granularity'**
+  String get modelAsrTimestampGranularity;
+
+  /// No description provided for @modelAsrVerboseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Available only when response_format is verbose_json.'**
+  String get modelAsrVerboseHelp;
+
+  /// No description provided for @modelNoTrim.
+  ///
+  /// In en, this message translates to:
+  /// **'No trimming'**
+  String get modelNoTrim;
+
+  /// No description provided for @modelAudioTrimTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio trimming'**
+  String get modelAudioTrimTitle;
+
+  /// No description provided for @modelAudioTrimHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to trim the audio.'**
+  String get modelAudioTrimHelp;
+
+  /// No description provided for @modelDeleteTrimPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete trim preset'**
+  String get modelDeleteTrimPreset;
+
+  /// No description provided for @modelDeleteTrimConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete trim preset \"{name}\"?'**
+  String modelDeleteTrimConfirmation(String name);
+
+  /// No description provided for @modelAddTrimPreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Add custom trim'**
+  String get modelAddTrimPreset;
+
+  /// No description provided for @modelPlayTestAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Play test audio'**
+  String get modelPlayTestAudio;
+
+  /// No description provided for @modelPlayingTestAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing...'**
+  String get modelPlayingTestAudio;
+
+  /// No description provided for @modelParamExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter already exists'**
+  String get modelParamExists;
+
+  /// No description provided for @asrModelIdExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. whisper-1'**
+  String get asrModelIdExample;
+
+  /// No description provided for @asrPromptLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get asrPromptLabel;
+
+  /// No description provided for @asrResponseFormatJson.
+  ///
+  /// In en, this message translates to:
+  /// **'json – JSON'**
+  String get asrResponseFormatJson;
+
+  /// No description provided for @asrResponseFormatText.
+  ///
+  /// In en, this message translates to:
+  /// **'text – Plain text'**
+  String get asrResponseFormatText;
+
+  /// No description provided for @asrResponseFormatSrt.
+  ///
+  /// In en, this message translates to:
+  /// **'srt – Subtitles'**
+  String get asrResponseFormatSrt;
+
+  /// No description provided for @asrResponseFormatVtt.
+  ///
+  /// In en, this message translates to:
+  /// **'vtt – Subtitles'**
+  String get asrResponseFormatVtt;
+
+  /// No description provided for @asrResponseFormatVerbose.
+  ///
+  /// In en, this message translates to:
+  /// **'verbose_json – Detailed JSON (includes timestamps)'**
+  String get asrResponseFormatVerbose;
+
+  /// No description provided for @asrVerboseTimestampHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Selecting verbose_json enables the timestamp granularity option below.'**
+  String get asrVerboseTimestampHelp;
+
+  /// No description provided for @asrTimestampSegment.
+  ///
+  /// In en, this message translates to:
+  /// **'segment – Segment level'**
+  String get asrTimestampSegment;
+
+  /// No description provided for @asrTimestampWord.
+  ///
+  /// In en, this message translates to:
+  /// **'word – Word level'**
+  String get asrTimestampWord;
+
+  /// No description provided for @asrWordTimestampHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Word-level timestamps may be less accurate than segment-level timestamps.'**
+  String get asrWordTimestampHelp;
+
+  /// No description provided for @reasoningAddOptionValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add option value'**
+  String get reasoningAddOptionValue;
+
+  /// No description provided for @reasoningOptionExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. low, medium, high'**
+  String get reasoningOptionExample;
+
+  /// No description provided for @reasoningOptionSelectionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.'**
+  String get reasoningOptionSelectionHelp;
+
+  /// No description provided for @reasoningAddOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Add option'**
+  String get reasoningAddOption;
+
+  /// No description provided for @reasoningCurrentProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Current: provider'**
+  String get reasoningCurrentProvider;
+
+  /// No description provided for @reasoningCurrentModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current: model custom'**
+  String get reasoningCurrentModel;
+
+  /// No description provided for @reasoningAddEffortValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning effort value'**
+  String get reasoningAddEffortValue;
+
+  /// No description provided for @reasoningEffortExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. max, ultra, deep'**
+  String get reasoningEffortExample;
+
+  /// No description provided for @reasoningAddToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning toggle'**
+  String get reasoningAddToggle;
+
+  /// No description provided for @reasoningToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning toggle'**
+  String get reasoningToggle;
+
+  /// No description provided for @reasoningResetParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset this parameter'**
+  String get reasoningResetParameter;
+
+  /// No description provided for @reasoningDisableToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable reasoning toggle'**
+  String get reasoningDisableToggle;
+
+  /// No description provided for @reasoningEnableToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable reasoning toggle'**
+  String get reasoningEnableToggle;
+
+  /// No description provided for @reasoningParameterNameSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name ({source})'**
+  String reasoningParameterNameSource(String source);
+
+  /// No description provided for @reasoningNameExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. thinking.type, reasoning'**
+  String get reasoningNameExample;
+
+  /// No description provided for @reasoningBooleanHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean parameters need no value; the chat panel provides an on/off switch.'**
+  String get reasoningBooleanHelp;
+
+  /// No description provided for @reasoningOnValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Value when enabled'**
+  String get reasoningOnValue;
+
+  /// No description provided for @reasoningOnExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. enabled, true'**
+  String get reasoningOnExample;
+
+  /// No description provided for @reasoningOffValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Value when disabled'**
+  String get reasoningOffValue;
+
+  /// No description provided for @reasoningOffExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. disabled, false'**
+  String get reasoningOffExample;
+
+  /// No description provided for @reasoningToggleValuesHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, sends “{onValue}”; when disabled, sends “{offValue}”.'**
+  String reasoningToggleValuesHelp(String onValue, String offValue);
+
+  /// No description provided for @reasoningAddEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning effort'**
+  String get reasoningAddEffort;
+
+  /// No description provided for @reasoningFillToggleFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle first'**
+  String get reasoningFillToggleFirst;
+
+  /// No description provided for @reasoningFillToggleBeforeEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before configuring reasoning effort.'**
+  String get reasoningFillToggleBeforeEffort;
+
+  /// No description provided for @reasoningAddValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add value'**
+  String get reasoningAddValue;
+
+  /// No description provided for @reasoningJsonValue.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON value'**
+  String get reasoningJsonValue;
+
+  /// No description provided for @reasoningJsonExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. {example}'**
+  String reasoningJsonExample(String example);
+
+  /// No description provided for @reasoningSelectedChipHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a chip to select or clear it. Selected values appear in the chat reasoning panel; drag to reorder. Provider values cannot be deleted, but can be hidden.'**
+  String get reasoningSelectedChipHelp;
+
+  /// No description provided for @reasoningAddParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning parameter'**
+  String get reasoningAddParameter;
+
+  /// No description provided for @reasoningToggleIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before configuring reasoning effort.'**
+  String get reasoningToggleIncomplete;
+
+  /// No description provided for @llmContextLength.
+  ///
+  /// In en, this message translates to:
+  /// **'Context length'**
+  String get llmContextLength;
+
+  /// No description provided for @llmContextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter context length'**
+  String get llmContextHint;
+
+  /// No description provided for @llmContextHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum context window size for the model (tokens).'**
+  String get llmContextHelp;
+
+  /// No description provided for @llmReasoningParams.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning parameters'**
+  String get llmReasoningParams;
+
+  /// No description provided for @llmReasoningHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure reasoning parameters for chat. The reasoning toggle controls its parameter name and on/off values. Add reasoning effort values, reorder them, and select which values appear in the chat panel. Provider values are synchronized when this page opens. These settings control model parameter availability; the chat panel toggle is managed separately.'**
+  String get llmReasoningHelp;
+
+  /// No description provided for @llmAddReasoningParam.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning parameter'**
+  String get llmAddReasoningParam;
+
+  /// No description provided for @llmCustomEndpointType.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom endpoint type'**
+  String get llmCustomEndpointType;
+
+  /// No description provided for @llmInheritEndpointType.
+  ///
+  /// In en, this message translates to:
+  /// **'When disabled, use the endpoint type from provider settings.'**
+  String get llmInheritEndpointType;
+
+  /// No description provided for @llmEndpointType.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint type'**
+  String get llmEndpointType;
+
+  /// No description provided for @llmEndpointOpenAi.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI compatible (Chat Completions)'**
+  String get llmEndpointOpenAi;
+
+  /// No description provided for @llmEndpointAnthropic.
+  ///
+  /// In en, this message translates to:
+  /// **'Anthropic format (Messages API)'**
+  String get llmEndpointAnthropic;
+
+  /// No description provided for @llmEndpointHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The endpoint type must match the provider API URL. Changing it affects the format used for new conversations with this model.'**
+  String get llmEndpointHelp;
+
+  /// No description provided for @llmTopPHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Nucleus sampling parameter; controls cumulative probability for word selection.'**
+  String get llmTopPHelp;
+
+  /// No description provided for @llmFrequencyPenaltyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency penalty'**
+  String get llmFrequencyPenaltyLabel;
+
+  /// No description provided for @llmFrequencyPenaltyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduces repetition; negative values increase it.'**
+  String get llmFrequencyPenaltyHelp;
+
+  /// No description provided for @llmPresencePenaltyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence penalty'**
+  String get llmPresencePenaltyLabel;
+
+  /// No description provided for @llmPresencePenaltyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Encourages new topics; negative values encourage repetition.'**
+  String get llmPresencePenaltyHelp;
+
+  /// No description provided for @llmMaxTokensHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional, e.g. 4096'**
+  String get llmMaxTokensHint;
+
+  /// No description provided for @llmTokensPerResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum tokens generated per response.'**
+  String get llmTokensPerResponse;
+
+  /// No description provided for @llmSeedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed (Seed)'**
+  String get llmSeedLabel;
+
+  /// No description provided for @llmSeedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional, e.g. 42'**
+  String get llmSeedHint;
+
+  /// No description provided for @llmSeedHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Setting this makes output reproducible.'**
+  String get llmSeedHelp;
+
+  /// No description provided for @llmInheritedCustomHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider custom parameters are shown here and synchronized whenever this page opens.'**
+  String get llmInheritedCustomHelp;
+
+  /// No description provided for @llmBooleanParamHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean parameters do not need a value.'**
+  String get llmBooleanParamHelp;
+
+  /// No description provided for @modelContextReq.
+  ///
+  /// In en, this message translates to:
+  /// **'Context length is required.'**
+  String get modelContextReq;
+
+  /// No description provided for @modelContextPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Context length must be a positive integer.'**
+  String get modelContextPositive;
+
+  /// No description provided for @modelParamNameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid parameter name (dot-separated segments cannot be empty): {name}'**
+  String modelParamNameInvalid(String name);
+
+  /// No description provided for @modelParamFinite.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter \"{name}\" {valueLabel} must be a finite number: {value}'**
+  String modelParamFinite(String name, String valueLabel, String value);
+
+  /// No description provided for @modelReasoningIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before enabling other reasoning parameters.'**
+  String get modelReasoningIncomplete;
+
+  /// No description provided for @modelReasoningOptionsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one option value to the reasoning parameter.'**
+  String get modelReasoningOptionsRequired;
+
+  /// No description provided for @modelReasoningError.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning parameter error: {error}'**
+  String modelReasoningError(String error);
+
+  /// No description provided for @modelReasoningDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate reasoning parameter: {name}'**
+  String modelReasoningDuplicate(String name);
+
+  /// No description provided for @modelReasoningCustomDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning and custom parameters share the name: {name}'**
+  String modelReasoningCustomDuplicate(String name);
+
+  /// No description provided for @modelSeedRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Random seed is enabled but empty.'**
+  String get modelSeedRequired;
+
+  /// No description provided for @ocrParamsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR parameters'**
+  String get ocrParamsTitle;
+
+  /// No description provided for @ocrParamsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the OpenAI-compatible vision Chat Completions format. Parameters below are optional; unset or disabled parameters are not sent. Add provider-specific parameters below if supported by its API.'**
+  String get ocrParamsHelp;
+
+  /// No description provided for @ocrRequestSizeOverride.
+  ///
+  /// In en, this message translates to:
+  /// **'Request JSON size override'**
+  String get ocrRequestSizeOverride;
+
+  /// No description provided for @ocrInheritProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to inherit provider settings'**
+  String get ocrInheritProvider;
+
+  /// No description provided for @ocrBudgetDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'When empty, inherits provider settings; if the provider has no value, the default is 20 MiB.'**
+  String get ocrBudgetDefault;
+
+  /// No description provided for @ocrBudgetValue.
+  ///
+  /// In en, this message translates to:
+  /// **'When empty, inherits provider settings ({size} MiB); if the provider has no value, the default is 20 MiB.'**
+  String ocrBudgetValue(String size);
+
+  /// No description provided for @audioTrimDirection.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim {direction} {seconds}s'**
+  String audioTrimDirection(String direction, String seconds);
+
+  /// No description provided for @audioTrimBeginning.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim the first {seconds}s'**
+  String audioTrimBeginning(String seconds);
+
+  /// No description provided for @audioTrimNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not trim audio'**
+  String get audioTrimNone;
+
+  /// No description provided for @trimNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim method name *'**
+  String get trimNameLabel;
+
+  /// No description provided for @trimNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. silence trimming'**
+  String get trimNameHint;
+
+  /// No description provided for @trimDurationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Trim duration (seconds) *'**
+  String get trimDurationLabel;
+
+  /// No description provided for @trimDurationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 0.123'**
+  String get trimDurationHint;
+
+  /// No description provided for @trimNameAndDurationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Name and duration are required.'**
+  String get trimNameAndDurationRequired;
+
+  /// No description provided for @trimDurationInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid positive duration.'**
+  String get trimDurationInvalid;
+
+  /// No description provided for @testAudioHostMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Host is not configured.'**
+  String get testAudioHostMissing;
+
+  /// No description provided for @testAudioKeyMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Key is not configured.'**
+  String get testAudioKeyMissing;
+
+  /// No description provided for @testAudioContentTypeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Response Content-Type is {contentType}, not audio.'**
+  String testAudioContentTypeError(String contentType);
+
+  /// No description provided for @testAudioEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned empty audio data.'**
+  String get testAudioEmpty;
+
+  /// No description provided for @testAudioTimeoutConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Check your network. {details}'**
+  String testAudioTimeoutConnection(String details);
+
+  /// No description provided for @testAudioTimeoutReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive timed out; the server responded too slowly. {details}'**
+  String testAudioTimeoutReceive(String details);
+
+  /// No description provided for @testAudioRequestCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Request cancelled. {details}'**
+  String testAudioRequestCancelled(String details);
+
+  /// No description provided for @testAudioNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error: {message}'**
+  String testAudioNetworkError(String message);
+
+  /// No description provided for @testAudioNoBody.
+  ///
+  /// In en, this message translates to:
+  /// **'No response body'**
+  String get testAudioNoBody;
+
+  /// No description provided for @testAudioCorsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to server. On web, this may be caused by CORS or an incorrect API URL. Check the provider API URL and whether the server allows cross-origin requests. {details}'**
+  String testAudioCorsHelp(String details);
+
+  /// No description provided for @trimModelNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A friendly name for display and identification, e.g. \"GPT-4o Mini TTS\". Use different names to distinguish models from the same provider.'**
+  String get trimModelNameHint;
+
+  /// No description provided for @trimModelIdHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Unique identifier used in API calls, e.g. \"gpt-4o-mini-tts\". It must match the model ID provided by the vendor.'**
+  String get trimModelIdHelp;
+
+  /// No description provided for @ttsVoiceRangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume range'**
+  String get ttsVoiceRangeTitle;
+
+  /// No description provided for @ttsMinVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum volume'**
+  String get ttsMinVolume;
+
+  /// No description provided for @ttsMaxVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum volume'**
+  String get ttsMaxVolume;
+
+  /// No description provided for @ttsSpeedRangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed range'**
+  String get ttsSpeedRangeTitle;
+
+  /// No description provided for @ttsMinSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum speed'**
+  String get ttsMinSpeed;
+
+  /// No description provided for @ttsMaxSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum speed'**
+  String get ttsMaxSpeed;
+
+  /// No description provided for @ttsMaxAudioLength.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum audio length per request *'**
+  String get ttsMaxAudioLength;
+
+  /// No description provided for @ttsAudioLengthHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 1000'**
+  String get ttsAudioLengthHint;
+
+  /// No description provided for @ttsNoVoices.
+  ///
+  /// In en, this message translates to:
+  /// **'No voices. Tap to edit.'**
+  String get ttsNoVoices;
+
+  /// No description provided for @ttsInstructionSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Model supports the instruction parameter'**
+  String get ttsInstructionSupported;
+
+  /// No description provided for @ttsInstructionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, TTS requests can include instructions for tone, emotion, speaking speed, and more.'**
+  String get ttsInstructionHelp;
+
+  /// No description provided for @ttsStreamSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Model supports streaming output'**
+  String get ttsStreamSupported;
+
+  /// No description provided for @ttsStreamHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Enables this model for streaming scenarios. Confirm the model supports streaming before enabling.'**
+  String get ttsStreamHelp;
+
+  /// No description provided for @modelParamBooleanExpected.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter “{name}” must be true or false: {value}'**
+  String modelParamBooleanExpected(String name, String value);
+
+  /// No description provided for @ttsMaxAudioLengthRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum audio length per request is required; enter a positive integer.'**
+  String get ttsMaxAudioLengthRequired;
+
+  /// No description provided for @asrLanguageExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. zh, en, ja'**
+  String get asrLanguageExample;
+
+  /// No description provided for @llmReasoningFullHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The reasoning toggle controls whether reasoning is sent and lets you define the parameter name and on/off values. There is one reasoning-effort parameter. Select values and drag to reorder them; selected values appear in the chat reasoning panel. Add other reasoning parameters below. Parameter names support dot notation such as thinking.type, which becomes a nested JSON object. Provider reasoning parameters synchronize when this page opens. The switches here control model parameters; the chat reasoning toggle is separate.'**
+  String get llmReasoningFullHelp;
+
+  /// No description provided for @llmTemperatureHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls output randomness; higher values are more creative.'**
+  String get llmTemperatureHelp;
+
+  /// No description provided for @llmBooleanValueHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean parameters do not need a value.'**
+  String get llmBooleanValueHelp;
+
+  /// No description provided for @reasoningDisableEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable reasoning effort'**
+  String get reasoningDisableEffort;
+
+  /// No description provided for @reasoningEnableEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable reasoning effort'**
+  String get reasoningEnableEffort;
+
+  /// No description provided for @ocrJsonSizePositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Request JSON size must be a positive MiB value.'**
+  String get ocrJsonSizePositive;
+
+  /// No description provided for @ttsRangePair.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter both the minimum and maximum {kind}, or leave both empty.'**
+  String ttsRangePair(String kind);
+
+  /// No description provided for @ttsEditTrimTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit custom trim'**
+  String get ttsEditTrimTitle;
+
+  /// No description provided for @ttsVoicesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Voices ({count})'**
+  String ttsVoicesCount(String count);
+
+  /// No description provided for @ttsRequestFormatExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Generated in the request format: {syntax}'**
+  String ttsRequestFormatExample(String syntax);
+
+  /// No description provided for @mcpServerNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an MCP server name.'**
+  String get mcpServerNameRequired;
+
+  /// No description provided for @mcpStdioCommandRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'stdio mode requires a command.'**
+  String get mcpStdioCommandRequired;
+
+  /// No description provided for @mcpSseUrlRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE mode requires a URL.'**
+  String get mcpSseUrlRequired;
+
+  /// No description provided for @mcpEditServerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit MCP server'**
+  String get mcpEditServerTitle;
+
+  /// No description provided for @mcpCreateServerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New MCP server'**
+  String get mcpCreateServerTitle;
+
+  /// No description provided for @mcpUnsavedChangesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes'**
+  String get mcpUnsavedChangesTitle;
+
+  /// No description provided for @mcpUnsavedChangesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'You have unsaved changes. Discard them?'**
+  String get mcpUnsavedChangesConfirm;
+
+  /// No description provided for @mcpTransportType.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport type'**
+  String get mcpTransportType;
+
+  /// No description provided for @mcpServerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Server name'**
+  String get mcpServerName;
+
+  /// No description provided for @mcpServerNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an MCP server name'**
+  String get mcpServerNameHint;
+
+  /// No description provided for @mcpCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Command'**
+  String get mcpCommand;
+
+  /// No description provided for @mcpCommandExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Example: npx'**
+  String get mcpCommandExample;
+
+  /// No description provided for @mcpArguments.
+  ///
+  /// In en, this message translates to:
+  /// **'Arguments'**
+  String get mcpArguments;
+
+  /// No description provided for @mcpArgumentsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate arguments with commas, for example: -y, @modelcontextprotocol/server-filesystem, /tmp'**
+  String get mcpArgumentsHint;
+
+  /// No description provided for @mcpSseUrlExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Example: http://localhost:3001/sse'**
+  String get mcpSseUrlExample;
+
+  /// No description provided for @mcpApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get mcpApiKey;
+
+  /// No description provided for @mcpApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an API key (optional)'**
+  String get mcpApiKeyHint;
+
+  /// No description provided for @mcpShowKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Show key'**
+  String get mcpShowKey;
+
+  /// No description provided for @mcpHideKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide key'**
+  String get mcpHideKey;
+
+  /// No description provided for @mcpDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a description for this MCP server (optional)'**
+  String get mcpDescriptionHint;
+
+  /// No description provided for @mcpStdioDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'stdio starts a local child process as an MCP server and communicates through standard input/output. Recommended for local tools.'**
+  String get mcpStdioDescription;
+
+  /// No description provided for @mcpSseDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE connects to a remote MCP server over HTTP SSE. Recommended for remote services.'**
+  String get mcpSseDescription;
+
+  /// No description provided for @mcpLocalStdio.
+  ///
+  /// In en, this message translates to:
+  /// **'Local (stdio)'**
+  String get mcpLocalStdio;
+
+  /// No description provided for @mcpRemoteSse.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote (SSE)'**
+  String get mcpRemoteSse;
+
+  /// No description provided for @mcpSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get mcpSaving;
+
+  /// No description provided for @providerTestSafetyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This test sends a real request to the selected service. MCP only calls the read-only tools/list method; HTTP and web search run one query. Todo reads the list by default; to protect current data, omit the todos parameter or set it to null.'**
+  String get providerTestSafetyNote;
+
+  /// No description provided for @providerDeleteConfigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete configuration'**
+  String get providerDeleteConfigTitle;
+
+  /// No description provided for @providerDeleteConfigConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this provider configuration and all of its models?'**
+  String get providerDeleteConfigConfirm;
+
+  /// No description provided for @providerCreateGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get providerCreateGroup;
+
+  /// No description provided for @providerEditGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit group'**
+  String get providerEditGroup;
+
+  /// No description provided for @providerGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get providerGroupName;
+
+  /// No description provided for @providerGroupNameExists.
+  ///
+  /// In en, this message translates to:
+  /// **'A group with this name already exists.'**
+  String get providerGroupNameExists;
+
+  /// No description provided for @providerDeleteGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group'**
+  String get providerDeleteGroup;
+
+  /// No description provided for @providerDeleteGroupConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting “{groupName}” will move its configurations to “Other MCP services”.'**
+  String providerDeleteGroupConfirm(String groupName);
+
+  /// No description provided for @providerMoveToGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to group'**
+  String get providerMoveToGroup;
+
+  /// No description provided for @providerUnnamed.
+  ///
+  /// In en, this message translates to:
+  /// **'(Unnamed)'**
+  String get providerUnnamed;
+
+  /// No description provided for @providerHttpSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP search'**
+  String get providerHttpSearch;
+
+  /// No description provided for @providerHttpToolSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP tool: {url}'**
+  String providerHttpToolSubtitle(String url);
+
+  /// No description provided for @providerLocalStdioSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local (stdio): {command}'**
+  String providerLocalStdioSubtitle(String command);
+
+  /// No description provided for @providerRemoteSseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote (SSE): {url}'**
+  String providerRemoteSseSubtitle(String url);
+
+  /// No description provided for @providerServices.
+  ///
+  /// In en, this message translates to:
+  /// **'Service configurations'**
+  String get providerServices;
+
+  /// No description provided for @providerServicesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage remote connections, local stdio, and HTTP search by group'**
+  String get providerServicesDescription;
+
+  /// No description provided for @providerCreateGroupAction.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get providerCreateGroupAction;
+
+  /// No description provided for @providerGroupEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This group has no configurations. Select “Add” to add an item.'**
+  String get providerGroupEmpty;
+
+  /// No description provided for @providerBuiltinTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in tools'**
+  String get providerBuiltinTools;
+
+  /// No description provided for @providerBuiltinToolsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom-provided local tool interfaces. Web search is listed in its service group.'**
+  String get providerBuiltinToolsDescription;
+
+  /// No description provided for @providerBuiltinToolInterface.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in tool interface'**
+  String get providerBuiltinToolInterface;
+
+  /// No description provided for @providerViewInterface.
+  ///
+  /// In en, this message translates to:
+  /// **'View interface'**
+  String get providerViewInterface;
+
+  /// No description provided for @providerConfigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration'**
+  String get providerConfigTitle;
+
+  /// No description provided for @providerNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider not found'**
+  String get providerNotFound;
+
+  /// No description provided for @providerConfigurationHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider configuration'**
+  String get providerConfigurationHeading;
+
+  /// No description provided for @providerBuiltinWebSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in web search supports Google, Bing, and Baidu. Its model tool name is web_search.'**
+  String get providerBuiltinWebSearchEmpty;
+
+  /// No description provided for @providerNoConfigsAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'No provider configurations yet. Select “Add” to create one.'**
+  String get providerNoConfigsAdd;
+
+  /// No description provided for @providerNoHost.
+  ///
+  /// In en, this message translates to:
+  /// **'(Host not set)'**
+  String get providerNoHost;
+
+  /// No description provided for @providerServicesAndTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Services and tools'**
+  String get providerServicesAndTools;
+
+  /// No description provided for @providerManageServicesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage MCP servers, HTTP search, and Stroom built-in tools.'**
+  String get providerManageServicesDescription;
+
+  /// No description provided for @providerNoServices.
+  ///
+  /// In en, this message translates to:
+  /// **'No service configurations yet'**
+  String get providerNoServices;
+
+  /// No description provided for @providerAddServiceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an MCP service or HTTP search interface to use it in assistants.'**
+  String get providerAddServiceDescription;
+
+  /// No description provided for @providerAddService.
+  ///
+  /// In en, this message translates to:
+  /// **'Add service'**
+  String get providerAddService;
+
+  /// No description provided for @providerBuiltinBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in'**
+  String get providerBuiltinBadge;
+
+  /// No description provided for @providerConnectivityTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Connectivity test'**
+  String get providerConnectivityTest;
+
+  /// No description provided for @providerMoveGroupTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to group'**
+  String get providerMoveGroupTooltip;
+
+  /// No description provided for @providerDeleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete configuration'**
+  String get providerDeleteTooltip;
+
+  /// No description provided for @providerGroupItemCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No items} one{# item} other{# items}}'**
+  String providerGroupItemCount(num count);
+
+  /// No description provided for @providerGroupActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Group actions'**
+  String get providerGroupActions;
+
+  /// No description provided for @providerEditGroupAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit group'**
+  String get providerEditGroupAction;
+
+  /// No description provided for @providerDeleteGroupAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group'**
+  String get providerDeleteGroupAction;
+
+  /// No description provided for @providerAddItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Add item'**
+  String get providerAddItem;
+
+  /// No description provided for @providerMcpMasterLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP servers'**
+  String get providerMcpMasterLabel;
+
+  /// No description provided for @providerMcpMasterDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls whether MCP servers and built-in search tools are available in assistants and chats.'**
+  String get providerMcpMasterDescription;
+
+  /// No description provided for @providerEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get providerEnabled;
+
+  /// No description provided for @providerDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get providerDisabled;
+
+  /// No description provided for @providerEditSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit provider settings'**
+  String get providerEditSettings;
+
+  /// No description provided for @providerModelList.
+  ///
+  /// In en, this message translates to:
+  /// **'Models'**
+  String get providerModelList;
+
+  /// No description provided for @providerNoModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No models yet'**
+  String get providerNoModels;
+
+  /// No description provided for @providerDeleteModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete model'**
+  String get providerDeleteModel;
+
+  /// No description provided for @providerDeleteModelConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this model?'**
+  String get providerDeleteModelConfirm;
+
+  /// No description provided for @providerEditConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit configuration'**
+  String get providerEditConfig;
+
+  /// No description provided for @providerCreateNamedConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'New {entryName} configuration'**
+  String providerCreateNamedConfig(String entryName);
+
+  /// No description provided for @toolHttpSearchType.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection type: HTTP search'**
+  String get toolHttpSearchType;
+
+  /// No description provided for @toolInterface.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool interface: {name}'**
+  String toolInterface(String name);
+
+  /// No description provided for @toolParameterDefinitions.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter definitions'**
+  String get toolParameterDefinitions;
+
+  /// No description provided for @toolHttpAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP endpoint URL'**
+  String get toolHttpAddress;
+
+  /// No description provided for @toolInvalidHttpUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid HTTP or HTTPS URL.'**
+  String get toolInvalidHttpUrl;
+
+  /// No description provided for @toolBuiltinType.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection type: Stroom built-in tool'**
+  String get toolBuiltinType;
+
+  /// No description provided for @toolBuiltinEnableHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable this tool for an assistant in that assistant’s default tool settings.'**
+  String get toolBuiltinEnableHelp;
+
+  /// No description provided for @mcpSseUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE URL'**
+  String get mcpSseUrlLabel;
+
+  /// No description provided for @mcpUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get mcpUrlLabel;
+
+  /// No description provided for @providerModelId.
+  ///
+  /// In en, this message translates to:
+  /// **'Model ID: {modelId}'**
+  String providerModelId(String modelId);
+
+  /// No description provided for @providerValueNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'(Not set)'**
+  String get providerValueNotSet;
+
+  /// No description provided for @providerApiKeyInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an API key'**
+  String get providerApiKeyInputHint;
+
+  /// No description provided for @providerSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider configuration'**
+  String get providerSettingsTitle;
+
+  /// No description provided for @providerBasicInfoTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic information'**
+  String get providerBasicInfoTab;
+
+  /// No description provided for @providerParameterSettingsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter settings'**
+  String get providerParameterSettingsTab;
+
+  /// No description provided for @providerOptionValuesReorderHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Option values (hold the handle to drag and reorder)'**
+  String get providerOptionValuesReorderHelp;
+
+  /// No description provided for @providerOptionIndexLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Option {index}'**
+  String providerOptionIndexLabel(String index);
+
+  /// No description provided for @providerOptionExampleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. {example}'**
+  String providerOptionExampleHint(String example);
+
+  /// No description provided for @providerDeleteOptionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete option'**
+  String get providerDeleteOptionTooltip;
+
+  /// No description provided for @providerAddOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Add option'**
+  String get providerAddOption;
+
+  /// No description provided for @providerAddCustomParam.
+  ///
+  /// In en, this message translates to:
+  /// **'Add parameter'**
+  String get providerAddCustomParam;
+
+  /// No description provided for @providerNoCustomParams.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom parameters yet'**
+  String get providerNoCustomParams;
+
+  /// No description provided for @providerParamNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name'**
+  String get providerParamNameLabel;
+
+  /// No description provided for @providerParamDefaultValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default parameter value'**
+  String get providerParamDefaultValueLabel;
+
+  /// No description provided for @providerBooleanParamNoValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean parameters do not need a value. The chat panel provides an on/off toggle.'**
+  String get providerBooleanParamNoValue;
+
+  /// No description provided for @providerReasoningParamsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning parameters'**
+  String get providerReasoningParamsHeading;
+
+  /// No description provided for @providerReasoningSettingsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The reasoning toggle turns reasoning on or off in chat; you choose its parameter name and on/off values. You can configure one reasoning effort parameter with a required name and optional choices. If you enter only a name, the model configuration can provide the values. Use the buttons below to add other reasoning parameters. Parameter names support dot nesting, for example {parameterName} expands to {jsonExample}.'**
+  String providerReasoningSettingsHelp(
+    String parameterName,
+    String jsonExample,
+  );
+
+  /// No description provided for @providerAddReasoningParam.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning parameter'**
+  String get providerAddReasoningParam;
+
+  /// No description provided for @providerAddReasoningToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning toggle'**
+  String get providerAddReasoningToggle;
+
+  /// No description provided for @providerReasoningToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning toggle'**
+  String get providerReasoningToggle;
+
+  /// No description provided for @providerDeleteReasoningToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete reasoning toggle'**
+  String get providerDeleteReasoningToggle;
+
+  /// No description provided for @providerParamNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. {examples}'**
+  String providerParamNameHint(String examples);
+
+  /// No description provided for @providerReasoningBooleanHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean parameters do not need a value. The chat panel provides an on/off toggle.'**
+  String get providerReasoningBooleanHelp;
+
+  /// No description provided for @providerToggleOnValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'On value'**
+  String get providerToggleOnValueLabel;
+
+  /// No description provided for @providerToggleOffValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Off value'**
+  String get providerToggleOffValueLabel;
+
+  /// No description provided for @providerReasoningToggleSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'When reasoning is on, send “{onValue}”; when it is off, send “{offValue}”.'**
+  String providerReasoningToggleSummary(String onValue, String offValue);
+
+  /// No description provided for @providerAddReasoningEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reasoning effort'**
+  String get providerAddReasoningEffort;
+
+  /// No description provided for @providerDeleteReasoningEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete reasoning effort parameter'**
+  String get providerDeleteReasoningEffort;
+
+  /// No description provided for @providerReasoningEffortLockedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before configuring reasoning effort.'**
+  String get providerReasoningEffortLockedHint;
+
+  /// No description provided for @providerJsonValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON value'**
+  String get providerJsonValueLabel;
+
+  /// No description provided for @providerReasoningOptionsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Option values (optional; if only the parameter name is entered, the model configuration supplies the value). Hold the handle to drag and reorder.'**
+  String get providerReasoningOptionsHelp;
+
+  /// No description provided for @providerParamNameNestedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter name (supports dot nesting)'**
+  String get providerParamNameNestedLabel;
+
+  /// No description provided for @providerToggleEffortPrerequisite.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle before configuring reasoning effort.'**
+  String get providerToggleEffortPrerequisite;
+
+  /// No description provided for @providerToggleRequiredHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the reasoning toggle first.'**
+  String get providerToggleRequiredHint;
+
+  /// No description provided for @providerDeleteCustomParam.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete parameter'**
+  String get providerDeleteCustomParam;
+
+  /// No description provided for @modelSaveSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Model saved'**
+  String get modelSaveSuccess;
+
+  /// No description provided for @modelSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get modelSaving;
+
+  /// No description provided for @modelOriginalError.
+  ///
+  /// In en, this message translates to:
+  /// **'Original error: {error}'**
+  String modelOriginalError(String error);
 }
 
 class _AppLocalizationsDelegate
