@@ -1,3 +1,5 @@
+import '../l10n/app_localizations.dart';
+
 /// A built-in, opt-in output-format instruction for standalone OCR.
 ///
 /// [selectionValue] is stable because non-negative selector values are
@@ -52,9 +54,48 @@ const ocrOutputTemplates = <OcrOutputTemplate>[
   ),
 ];
 
-OcrOutputTemplate? ocrOutputTemplateForSelection(int selectionValue) {
+/// Returns the bundled OCR formats in the selected app language.
+List<OcrOutputTemplate> localizedOcrOutputTemplates(
+  AppLocalizations strings,
+) =>
+    [
+      OcrOutputTemplate(
+        id: 'plain_text',
+        label: strings.ocrTemplatePlainTextLabel,
+        content: strings.ocrTemplatePlainTextContent,
+        selectionValue: -3,
+      ),
+      OcrOutputTemplate(
+        id: 'markdown',
+        label: strings.ocrTemplateMarkdownLabel,
+        content: strings.ocrTemplateMarkdownContent,
+        selectionValue: -4,
+      ),
+      OcrOutputTemplate(
+        id: 'table',
+        label: strings.ocrTemplateTableLabel,
+        content: strings.ocrTemplateTableContent,
+        selectionValue: -5,
+      ),
+      OcrOutputTemplate(
+        id: 'latex',
+        label: strings.ocrTemplateLatexLabel,
+        content: strings.ocrTemplateLatexContent,
+        selectionValue: -6,
+      ),
+    ];
+
+OcrOutputTemplate? ocrOutputTemplateForSelection(
+  int selectionValue, {
+  AppLocalizations? strings,
+}) {
   for (final template in ocrOutputTemplates) {
-    if (template.selectionValue == selectionValue) return template;
+    if (template.selectionValue == selectionValue) {
+      if (strings == null) return template;
+      return localizedOcrOutputTemplates(strings).firstWhere(
+        (localized) => localized.selectionValue == selectionValue,
+      );
+    }
   }
   return null;
 }

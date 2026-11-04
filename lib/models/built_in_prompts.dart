@@ -3,6 +3,8 @@
 // These are read-only presets that users can import as regular assistants.
 // ============================================================================
 
+import '../l10n/app_localizations.dart';
+
 /// Represents a built-in (preset) assistant prompt that users can import.
 /// Once imported, it becomes a regular [Assistant] that the user can edit.
 class BuiltInPrompt {
@@ -138,6 +140,86 @@ const List<BuiltInPrompt> builtInPrompts = [
         '保持共情但不越界，支持但不替代决策。',
   ),
 ];
+
+/// Returns the bundled prompt presets in the selected app language.
+///
+/// Imported prompts become user-owned assistant content, so callers should
+/// localize them at the point of import and then persist that chosen copy.
+List<BuiltInPrompt> localizedBuiltInPrompts(AppLocalizations strings) => [
+      _localizedPrompt(
+        builtInPrompts[0],
+        strings.builtInPromptGeneralName,
+        strings.builtInPromptGeneralDescription,
+        strings.builtInPromptGeneralPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[1],
+        strings.builtInPromptCodeExpertName,
+        strings.builtInPromptCodeExpertDescription,
+        strings.builtInPromptCodeExpertPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[2],
+        strings.builtInPromptTranslationName,
+        strings.builtInPromptTranslationDescription,
+        strings.builtInPromptTranslationPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[3],
+        strings.builtInPromptEnglishTeacherName,
+        strings.builtInPromptEnglishTeacherDescription,
+        strings.builtInPromptEnglishTeacherPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[4],
+        strings.builtInPromptInterviewerName,
+        strings.builtInPromptInterviewerDescription,
+        strings.builtInPromptInterviewerPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[5],
+        strings.builtInPromptWritingName,
+        strings.builtInPromptWritingDescription,
+        strings.builtInPromptWritingPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[6],
+        strings.builtInPromptCreativeThinkerName,
+        strings.builtInPromptCreativeThinkerDescription,
+        strings.builtInPromptCreativeThinkerPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[7],
+        strings.builtInPromptDataAnalystName,
+        strings.builtInPromptDataAnalystDescription,
+        strings.builtInPromptDataAnalystPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[8],
+        strings.builtInPromptRoleplayName,
+        strings.builtInPromptRoleplayDescription,
+        strings.builtInPromptRoleplayPrompt,
+      ),
+      _localizedPrompt(
+        builtInPrompts[9],
+        strings.builtInPromptLifeAdvisorName,
+        strings.builtInPromptLifeAdvisorDescription,
+        strings.builtInPromptLifeAdvisorPrompt,
+      ),
+    ];
+
+BuiltInPrompt _localizedPrompt(
+  BuiltInPrompt original,
+  String name,
+  String description,
+  String prompt,
+) =>
+    BuiltInPrompt(
+      name: name,
+      emoji: original.emoji,
+      description: description,
+      prompt: prompt,
+    );
 
 /// Prefix of a built-in assistant id used by the task-flow chat block
 /// (`builtin:prompt_<index>`). Other built-in ids (system assistants)

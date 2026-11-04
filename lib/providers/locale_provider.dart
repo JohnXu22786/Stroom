@@ -34,6 +34,14 @@ Locale resolveSystemLocale(Locale systemLocale) {
   return const Locale('en', 'US');
 }
 
+/// Resolves localization resources with the same override/follow-system
+/// behavior used by MaterialApp, for app services without a BuildContext.
+AppLocalizations appLocalizationsForLocale(Locale? override) {
+  final locale = override ??
+      resolveSystemLocale(WidgetsBinding.instance.platformDispatcher.locale);
+  return lookupAppLocalizations(locale);
+}
+
 final localeProvider = NotifierProvider<LocaleSelectionController, Locale?>(
   LocaleSelectionController.new,
 );

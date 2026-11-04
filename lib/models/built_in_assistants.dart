@@ -1,6 +1,8 @@
 // ============================================================================
 // 内置系统助手 — 对话页自动任务（标题生成 / 上下文压缩）使用的内置助手
 // ============================================================================
+
+import '../l10n/app_localizations.dart';
 //
 // 参照 opencode 的"隐藏系统 agent"设计（title agent / compaction agent）：
 // - 内置助手是虚拟条目（不进入用户助手列表，固定 id），默认使用；
@@ -113,4 +115,32 @@ BuiltInSystemAssistant? builtInSystemAssistantById(String? id) {
     if (a.id == id) return a;
   }
   return null;
+}
+
+/// Resolves a built-in system assistant with content in the selected locale.
+BuiltInSystemAssistant? localizedBuiltInSystemAssistantById(
+  String? id,
+  AppLocalizations strings,
+) {
+  final original = builtInSystemAssistantById(id);
+  if (original == null) return null;
+  if (id == kBuiltInTitleAssistantId) {
+    return BuiltInSystemAssistant(
+      id: original.id,
+      name: strings.builtInSystemTitleName,
+      emoji: original.emoji,
+      description: strings.builtInSystemTitleDescription,
+      prompt: strings.builtInSystemTitlePrompt,
+    );
+  }
+  if (id == kBuiltInCompactionAssistantId) {
+    return BuiltInSystemAssistant(
+      id: original.id,
+      name: strings.builtInSystemCompactionName,
+      emoji: original.emoji,
+      description: strings.builtInSystemCompactionDescription,
+      prompt: strings.builtInSystemCompactionPrompt,
+    );
+  }
+  return original;
 }

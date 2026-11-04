@@ -9,9 +9,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -20,7 +22,7 @@ import 'package:stroom/providers/update_provider.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
-Widget _buildSettingsTestApp() {
+Widget _buildSettingsTestApp({Locale locale = const Locale('zh', 'CN')}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
@@ -32,7 +34,17 @@ Widget _buildSettingsTestApp() {
       }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
-    child: const MaterialApp(home: SettingsPage()),
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const SettingsPage(),
+    ),
   );
 }
 
@@ -111,6 +123,30 @@ String _llmEntryWithModels() {
 }
 
 void main() {
+  testWidgets('settings page headings follow the selected locale',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('en', 'US')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
+    await tester.ensureVisible(find.text('About'));
+    expect(find.text('About'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('zh', 'CN')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('常规设置'), findsOneWidget);
+    await tester.ensureVisible(find.text('关于'));
+    expect(find.text('关于'), findsOneWidget);
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // From settings_page_asr_test.dart
   // ─────────────────────────────────────────────────────────────────────
