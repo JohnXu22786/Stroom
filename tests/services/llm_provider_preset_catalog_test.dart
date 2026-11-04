@@ -86,6 +86,17 @@ void main() {
       'helyxai',
       'heroku',
       'hyperbolic',
+      'inception',
+      'inference-net',
+      'kenari',
+      'kilo-gateway',
+      'lambda-ai',
+      'liquid',
+      'literouter',
+      'llamagate',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -173,6 +184,17 @@ void main() {
         'helyxai': 'https://helyxai.space/v1/chat/completions',
         'heroku': 'https://us.inference.heroku.com/v1/chat/completions',
         'hyperbolic': 'https://api.hyperbolic.xyz/v1/chat/completions',
+        'inception': 'https://api.inceptionlabs.ai/v1/chat/completions',
+        'inference-net': 'https://api.inference.net/v1/chat/completions',
+        'kenari': 'https://kenari.id/v1/chat/completions',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/chat/completions',
+        'lambda-ai': 'https://api.lambda.ai/v1/chat/completions',
+        'liquid': 'https://inference.liquid.ai/v1/chat/completions',
+        'literouter': 'https://api.literouter.com/v1/chat/completions',
+        'llamagate': 'https://llamagate.ai/v1/chat/completions',
+        'llm-kiwi': 'https://api.llm.kiwi/v1/chat/completions',
+        'llm7': 'https://api.llm7.io/v1/chat/completions',
+        'llmgateway': 'https://api.llmgateway.io/v1/chat/completions',
       },
     );
     expect(
@@ -186,6 +208,61 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset('byteplus')?.modelsUrl,
       'https://ark.ap-southeast.bytepluses.com/api/v3/models',
+    );
+    expect(
+      {
+        for (final id in [
+          'kenari',
+          'kilo-gateway',
+          'liquid',
+          'literouter',
+          'llm-kiwi',
+          'llm7',
+          'llmgateway',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'kenari': 'https://kenari.id/v1/models',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/models',
+        'liquid': 'https://inference.liquid.ai/v1/models',
+        'literouter': 'https://api.literouter.com/v1/models',
+        'llm-kiwi': 'https://api.llm.kiwi/v1/models',
+        'llm7': 'https://api.llm7.io/v1/models',
+        'llmgateway': 'https://api.llmgateway.io/v1/models',
+      },
+    );
+    expect(
+      {
+        for (final id in [
+          'inception',
+          'inference-net',
+          'lambda-ai',
+          'llamagate'
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'inception': null,
+        'inference-net': null,
+        'lambda-ai': null,
+        'llamagate': null,
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('inception')!.fallbackModels.map(
+            (model) => [model.id, model.capabilities],
+          ),
+      [
+        [
+          'mercury-2',
+          {'contextLength': 128000, 'maxOutputTokens': 50000},
+        ],
+        [
+          'mercury-2.5',
+          {'contextLength': 260000, 'maxOutputTokens': 65536},
+        ],
+      ],
     );
     expect(
       {
@@ -600,6 +677,113 @@ void main() {
     );
   });
 
+  test(
+    'M41 candidates match pinned registry endpoints, models, and deferrals',
+    () {
+      const expectedModelsUrls = {
+        'inception': null,
+        'inference-net': null,
+        'kenari': 'https://kenari.id/v1/models',
+        'kilo-gateway': 'https://api.kilo.ai/api/gateway/models',
+        'lambda-ai': null,
+        'liquid': 'https://inference.liquid.ai/v1/models',
+        'literouter': 'https://api.literouter.com/v1/models',
+        'llamagate': null,
+        'llm-kiwi': 'https://api.llm.kiwi/v1/models',
+        'llm7': 'https://api.llm7.io/v1/models',
+        'llmgateway': 'https://api.llmgateway.io/v1/models',
+      };
+      for (final entry in expectedModelsUrls.entries) {
+        final preset = findLlmOpenAiProviderPreset(entry.key)!;
+        expect(preset.modelsUrl, entry.value, reason: entry.key);
+        expect(preset.authType, 'api_key', reason: entry.key);
+        expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+        expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+        expect(
+          preset.defaultApiProtocol,
+          'openai.chat_completions',
+          reason: entry.key,
+        );
+      }
+      expect(
+        {
+          for (final id in [
+            'inception',
+            'inference-net',
+            'kenari',
+            'kilo-gateway',
+            'lambda-ai',
+            'liquid',
+            'literouter',
+            'llamagate',
+            'llm-kiwi',
+            'llm7',
+            'llmgateway',
+          ])
+            id: findLlmOpenAiProviderPreset(id)!
+                .fallbackModels
+                .map((model) => model.id)
+                .toList(),
+        },
+        {
+          'inception': ['mercury-2', 'mercury-2.5'],
+          'inference-net': [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'deepseek-ai/DeepSeek-R1',
+            'Qwen/Qwen2.5-72B-Instruct',
+          ],
+          'kenari': <String>[],
+          'kilo-gateway': [
+            'kilo-auto/frontier',
+            'kilo-auto/balanced',
+            'kilo-auto/free',
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'minimax/minimax-m2.5:free',
+            'arcee-ai/trinity-large-preview:free',
+          ],
+          'lambda-ai': [
+            'deepseek-r1-671b',
+            'llama3.3-70b-instruct-fp8',
+            'qwen25-coder-32b-instruct',
+          ],
+          'liquid': ['liquid-lfm-40b'],
+          'literouter': <String>[],
+          'llamagate': [
+            'qwen2.5-coder-7b',
+            'deepseek-coder-6.7b',
+            'qwen3-vl-8b',
+          ],
+          'llm-kiwi': ['auto', 'hrLLM'],
+          'llm7': [
+            'gpt-4o-mini-2024-07-18',
+            'gpt-4.1-nano-2025-04-14',
+            'deepseek-r1-0528',
+            'qwen2.5-coder-32b-instruct',
+          ],
+          'llmgateway': <String>[],
+        },
+      );
+      expect(
+        findLlmOpenAiProviderPreset('inception')!
+            .fallbackModels
+            .map((model) => model.capabilities),
+        [
+          {'contextLength': 128000, 'maxOutputTokens': 50000},
+          {'contextLength': 260000, 'maxOutputTokens': 65536},
+        ],
+      );
+      // Deferred: open-sse/config/providers/registry/kimi/index.ts:4-15 uses
+      // executor "moonshot" and forces streaming, outside the shared default
+      // OpenAI Chat Completions preset path.
+      // Deferred: open-sse/config/providers/registry/kimi/coding-apikey/index.ts:4-9
+      // inherits the Claude format, Anthropic endpoint, and x-api-key header.
+      // The separate Kimi Code OAuth/session mode still needs its later approved
+      // auth/provider unit; this API-key deferral does not cover that work.
+      expect(findLlmOpenAiProviderPreset('kimi'), isNull);
+      expect(findLlmOpenAiProviderPreset('kimi-coding-apikey'), isNull);
+    },
+  );
+
   test('M40 presets match pinned runtime endpoints, discovery, and models', () {
     const expectedModelsUrls = {
       'freeaiapikey': 'https://api.freeaiapikey.com/v1/models',
@@ -753,307 +937,313 @@ void main() {
     expect(findLlmOpenAiProviderPreset('glmt'), isNull);
   });
 
-  test('M37 presets retain the pinned source fallback catalog', () {
-    final fallbackIds = {
-      for (final id in [
-        'agnes-cn',
-        'ainative',
-        'ainetcafe',
-        'aion',
-        'ant-ling',
-        'anyapi',
-        'apmix',
-        'auriko',
-        'baidu',
-        'bazaarlink',
-        'beatapi',
-      ])
-        id: findLlmOpenAiProviderPreset(id)!
-            .fallbackModels
-            .map((model) => model.id)
-            .toList(),
-    };
-    expect(fallbackIds, {
-      'agnes-cn': ['agnes-2.0-flash', 'agnes-2.5-flash', 'agnes-3.0-flash'],
-      'ainative': [
-        'qwen3-235b-cerebras',
-        'qwen3-32b',
-        'qwen3-14b',
-        'qwen3-8b',
-        'llama-4-maverick',
-        'llama3.1-8b-cerebras',
-        'deepseek-r1',
-        'nous-coder',
-        'gemini-flash',
-      ],
-      'ainetcafe': <String>[],
-      'aion': [
-        'aion-labs/aion-3.0',
-        'aion-labs/aion-3.0-mini',
-        'aion-labs/aion-2.5',
-        'aion-labs/aion-2.0',
-        'aion-labs/aion-rp-llama-3.1-8b',
-      ],
-      'ant-ling': ['Ling-2.6-1T', 'Ring-2.6-1T', 'Ling-2.6-flash'],
-      'anyapi': <String>[],
-      'apmix': [
-        'claude-haiku-4-5',
-        'claude-sonnet-5',
-        'claude-opus-5',
-        'claude-opus-4-8',
-        'claude-opus-4-7',
-        'claude-opus-4-6',
-        'claude-fable-5',
-        'claude-sonnet-4-6',
-        'gpt-5.6-terra',
-        'gpt-5.6-sol',
-        'gpt-5.6-luna',
-        'gpt-5.5',
-        'gpt-6-astra',
-        'gpt-6-sol',
-        'gpt-6-luna',
-        'gpt-6-luna-free',
-        'gemini-3.8-flash',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.1-pro',
-        'grok-4.5',
-        'grok-4.6',
-        'grok-4.7',
-        'deepseek-v4-pro',
-        'deepseek-v4-flash',
-        'deepseek-v4.1-flash',
-        'deepseek-v4-flash-free',
-        'qwen3.8-flash',
-        'qwen3.8-max',
-        'glm-5.3-flash',
-        'glm-5.3',
-        'glm-5.2',
-        'glm-5-turbo',
-        'kimi-k2.7-code',
-        'kimi-k3',
-        'mimo-v2.5-pro',
-        'mimo-v2.5',
-        'hy4-preview',
-        'composer-2.5-fast',
-        'minimax-m3',
-        'muse-spark-1.3',
-      ],
-      'auriko': <String>[],
-      'baidu': [
-        'ernie-5.1',
-        'ernie-5.0',
-        'ernie-x1.1',
-        'ernie-4.5-turbo-128k',
-        'ernie-4.5-turbo-32k',
-        'ernie-4.5-turbo-vl',
-        'ernie-4.5-21b-a3b',
-        'ernie-4.5-0.3b',
-        'ernie-4.0-8k',
-        'ernie-4.0-turbo-128k',
-        'ernie-4.0-turbo-8k',
-        'ernie-3.5-8k',
-        'ernie-speed-128k',
-        'ernie-speed-8k',
-        'ernie-lite-8k',
-        'ernie-tiny-8k',
-      ],
-      'bazaarlink': [
-        'auto:free',
-        'claude-opus-4.7',
-        'claude-sonnet-4.6',
-        'claude-haiku-4.5',
-        'gpt-5.5',
-        'gpt-5.4',
-        'gpt-5.4-mini',
-        'gpt-5.4-nano',
-        'grok-4.3',
-        'grok-4.20',
-        'gemini-3.1-pro-preview',
-        'gemini-3-flash-preview',
-        'gemini-3.1-flash-lite-preview',
-        'gemma-4-31b-it',
-        'gemma-4-26b-a4b-it',
-        'deepseek-v3.2',
-        'kimi-k2.6',
-        'kimi-k2.5',
-        'glm-5.1',
-        'glm-5',
-        'mimo-v2.5-pro',
-        'mimo-v2.5',
-        'minimax-m3',
-        'minimax-m2.7',
-        'minimax-m2.5',
-        'llama-4-maverick',
-        'llama-4-scout',
-        'llama-3.3-70b-instruct',
-        'qwen3.6-plus',
-        'mistral-large-2512',
-        'mistral-medium-3.1',
-        'mistral-small-2603',
-        'nemotron-3-super-120b-a12b',
-      ],
-      'beatapi': <String>[],
-    });
-    expect(
-        findLlmOpenAiProviderPreset('agnes-cn')!
-            .fallbackModels
-            .first
-            .capabilities,
-        containsPair('reasoning', true));
-    expect(
-        findLlmOpenAiProviderPreset('ainative')!
-            .fallbackModels
-            .first
-            .capabilities,
-        containsPair('toolCalling', true));
-    expect(
-        findLlmOpenAiProviderPreset('baidu')!.fallbackModels.first.capabilities,
-        containsPair('contextLength', 131072));
-    expect(
-        findLlmOpenAiProviderPreset('apmix')!.fallbackModels[39].capabilities,
-        containsPair('vision', true));
-    expect(
-        findLlmOpenAiProviderPreset('bazaarlink')!
-            .fallbackModels[22]
-            .capabilities,
-        containsPair('vision', true));
-    expect(
-      findLlmOpenAiProviderPreset('bluesminds')!
-          .fallbackModels
-          .firstWhere((model) => model.id == 'deepseek-reasoner')
-          .capabilities,
-      {'contextLength': 128000, 'reasoning': true},
-    );
-    expect(
-      {
-        for (final model
-            in findLlmOpenAiProviderPreset('bluesminds')!.fallbackModels)
-          model.id: model.displayName,
-      },
-      {
-        'gpt-4o': 'GPT-4o',
-        'gpt-4o-mini': 'GPT-4o Mini',
-        'gpt-4.1': 'GPT-4.1',
-        'gpt-4.1-mini': 'GPT-4.1 Mini',
-        'gpt-4.1-nano': 'GPT-4.1 Nano',
-        'claude-sonnet-4-5': 'Claude Sonnet 4.5',
-        'claude-haiku-4-5': 'Claude Haiku 4.5',
-        'gemini-2.0-flash': 'Gemini 2.0 Flash',
-        'gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Exp)',
-        'deepseek-reasoner': 'DeepSeek Reasoner',
-        'deepseek-chat': 'DeepSeek Chat',
-        'qwen-plus': 'Qwen Plus',
-        'qwen-turbo': 'Qwen Turbo',
-        'kimi-k2': 'Kimi K2',
-        'kimi-k2-thinking': 'Kimi K2 Thinking',
-        'glm-4.7': 'GLM 4.7',
-        'glm-4-flash': 'GLM 4 Flash',
-        'minimax-m2.5': 'MiniMax M2.5',
-        'claude-opus-4-5': 'Claude Opus 4.5 (VIP)',
-        'gemini-2.5-pro': 'Gemini 2.5 Pro (VIP)',
-        'grok-3': 'Grok-3 (VIP)',
-        'qwen-max': 'Qwen Max (VIP)',
-      },
-    );
-    expect(
-      findLlmOpenAiProviderPreset('bluesminds')!
-          .fallbackModels
-          .firstWhere((model) => model.id == 'gemini-2.5-pro')
-          .capabilities,
-      {'contextLength': 1048576},
-    );
-    expect(
-      {
+  test(
+    'M37 presets retain the pinned source fallback catalog',
+    () {
+      final fallbackIds = {
         for (final id in [
-          'bluesminds',
-          'bytez',
-          'charm-hyper',
-          'chat-oripe',
-          'chatanywhere',
-          'cloudcode-one',
-          'codestral',
-          'cohere',
-          'coze',
+          'agnes-cn',
+          'ainative',
+          'ainetcafe',
+          'aion',
+          'ant-ling',
+          'anyapi',
+          'apmix',
+          'auriko',
+          'baidu',
+          'bazaarlink',
+          'beatapi',
         ])
           id: findLlmOpenAiProviderPreset(id)!
               .fallbackModels
               .map((model) => model.id)
               .toList(),
-      },
-      {
-        'bluesminds': [
-          'gpt-4o',
-          'gpt-4o-mini',
-          'gpt-4.1',
-          'gpt-4.1-mini',
-          'gpt-4.1-nano',
-          'claude-sonnet-4-5',
+      };
+      expect(fallbackIds, {
+        'agnes-cn': ['agnes-2.0-flash', 'agnes-2.5-flash', 'agnes-3.0-flash'],
+        'ainative': [
+          'qwen3-235b-cerebras',
+          'qwen3-32b',
+          'qwen3-14b',
+          'qwen3-8b',
+          'llama-4-maverick',
+          'llama3.1-8b-cerebras',
+          'deepseek-r1',
+          'nous-coder',
+          'gemini-flash',
+        ],
+        'ainetcafe': <String>[],
+        'aion': [
+          'aion-labs/aion-3.0',
+          'aion-labs/aion-3.0-mini',
+          'aion-labs/aion-2.5',
+          'aion-labs/aion-2.0',
+          'aion-labs/aion-rp-llama-3.1-8b',
+        ],
+        'ant-ling': ['Ling-2.6-1T', 'Ring-2.6-1T', 'Ling-2.6-flash'],
+        'anyapi': <String>[],
+        'apmix': [
           'claude-haiku-4-5',
-          'gemini-2.0-flash',
-          'gemini-2.0-flash-exp',
-          'deepseek-reasoner',
-          'deepseek-chat',
-          'qwen-plus',
-          'qwen-turbo',
-          'kimi-k2',
-          'kimi-k2-thinking',
-          'glm-4.7',
-          'glm-4-flash',
+          'claude-sonnet-5',
+          'claude-opus-5',
+          'claude-opus-4-8',
+          'claude-opus-4-7',
+          'claude-opus-4-6',
+          'claude-fable-5',
+          'claude-sonnet-4-6',
+          'gpt-5.6-terra',
+          'gpt-5.6-sol',
+          'gpt-5.6-luna',
+          'gpt-5.5',
+          'gpt-6-astra',
+          'gpt-6-sol',
+          'gpt-6-luna',
+          'gpt-6-luna-free',
+          'gemini-3.8-flash',
+          'gemini-3.7-flash',
+          'gemini-3.6-flash',
+          'gemini-3.1-pro',
+          'grok-4.5',
+          'grok-4.6',
+          'grok-4.7',
+          'deepseek-v4-pro',
+          'deepseek-v4-flash',
+          'deepseek-v4.1-flash',
+          'deepseek-v4-flash-free',
+          'qwen3.8-flash',
+          'qwen3.8-max',
+          'glm-5.3-flash',
+          'glm-5.3',
+          'glm-5.2',
+          'glm-5-turbo',
+          'kimi-k2.7-code',
+          'kimi-k3',
+          'mimo-v2.5-pro',
+          'mimo-v2.5',
+          'hy4-preview',
+          'composer-2.5-fast',
+          'minimax-m3',
+          'muse-spark-1.3',
+        ],
+        'auriko': <String>[],
+        'baidu': [
+          'ernie-5.1',
+          'ernie-5.0',
+          'ernie-x1.1',
+          'ernie-4.5-turbo-128k',
+          'ernie-4.5-turbo-32k',
+          'ernie-4.5-turbo-vl',
+          'ernie-4.5-21b-a3b',
+          'ernie-4.5-0.3b',
+          'ernie-4.0-8k',
+          'ernie-4.0-turbo-128k',
+          'ernie-4.0-turbo-8k',
+          'ernie-3.5-8k',
+          'ernie-speed-128k',
+          'ernie-speed-8k',
+          'ernie-lite-8k',
+          'ernie-tiny-8k',
+        ],
+        'bazaarlink': [
+          'auto:free',
+          'claude-opus-4.7',
+          'claude-sonnet-4.6',
+          'claude-haiku-4.5',
+          'gpt-5.5',
+          'gpt-5.4',
+          'gpt-5.4-mini',
+          'gpt-5.4-nano',
+          'grok-4.3',
+          'grok-4.20',
+          'gemini-3.1-pro-preview',
+          'gemini-3-flash-preview',
+          'gemini-3.1-flash-lite-preview',
+          'gemma-4-31b-it',
+          'gemma-4-26b-a4b-it',
+          'deepseek-v3.2',
+          'kimi-k2.6',
+          'kimi-k2.5',
+          'glm-5.1',
+          'glm-5',
+          'mimo-v2.5-pro',
+          'mimo-v2.5',
+          'minimax-m3',
+          'minimax-m2.7',
           'minimax-m2.5',
-          'claude-opus-4-5',
-          'gemini-2.5-pro',
-          'grok-3',
-          'qwen-max',
+          'llama-4-maverick',
+          'llama-4-scout',
+          'llama-3.3-70b-instruct',
+          'qwen3.6-plus',
+          'mistral-large-2512',
+          'mistral-medium-3.1',
+          'mistral-small-2603',
+          'nemotron-3-super-120b-a12b',
         ],
-        'bytez': [
-          'meta-llama/Llama-3.3-70B-Instruct',
-          'mistralai/Mistral-7B-Instruct-v0.3',
-          'Qwen/Qwen2.5-72B-Instruct',
-        ],
-        'charm-hyper': ['hyper/auto'],
-        'chat-oripe': <String>[],
-        'chatanywhere': <String>[],
-        'cloudcode-one': ['glm-4.7-flash', 'glm-4.6v-flash'],
-        'codestral': ['codestral-2508', 'codestral-latest'],
-        'cohere': [
-          'command-a-reasoning-08-2025',
-          'command-a-vision-07-2025',
-          'command-a-03-2025',
-          'command-r7b-12-2024',
-          'command-r-plus-08-2024',
-          'command-r-08-2024',
-        ],
-        'coze': ['claude-3-7-sonnet-20250514'],
-      },
-    );
-    // Deferred: registry/blackbox/index.ts:4,6,7,14-18 documents 404s for
-    // both audited URLs and an account-gated enterprise host;
-    // registry/cheaperinference/index.ts:240-252 declares Responses-target
-    // models and executor-specific routing; registry/chenzk/index.ts:4,6-11,13-14
-    // sets defaultContextLength for runtime-discovered models, which this
-    // catalog cannot represent; registry/cloudflare-ai/index.ts:4,6,7,9-11,17
-    // and executors/cloudflare-ai.ts:17-56 require an account ID in the URL
-    // and a provider-specific executor.
-    for (final id in [
-      'blackbox',
-      'cheaperinference',
-      'chenzk',
-      'cloudflare-ai',
-    ]) {
-      expect(findLlmOpenAiProviderPreset(id), isNull);
-    }
-    // Deferred: open-sse/config/providers/registry/api-airforce/index.ts:13-16
-    // requires HTTP-Referer and X-Title headers that presets cannot represent.
-    expect(findLlmOpenAiProviderPreset('api-airforce'), isNull);
-    // Deferred: open-sse/config/providers/registry/bai/index.ts:16 requires
-    // reasoning-content echo, which presets cannot represent.
-    expect(findLlmOpenAiProviderPreset('bai'), isNull);
-    // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
-    expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
-    // The eligible M38 registry entries use distinct chat URLs, so no aliases
-    // in this cohort need to collapse to a single user-facing choice.
-  });
+        'beatapi': <String>[],
+      });
+      expect(
+          findLlmOpenAiProviderPreset('agnes-cn')!
+              .fallbackModels
+              .first
+              .capabilities,
+          containsPair('reasoning', true));
+      expect(
+          findLlmOpenAiProviderPreset('ainative')!
+              .fallbackModels
+              .first
+              .capabilities,
+          containsPair('toolCalling', true));
+      expect(
+          findLlmOpenAiProviderPreset('baidu')!
+              .fallbackModels
+              .first
+              .capabilities,
+          containsPair('contextLength', 131072));
+      expect(
+          findLlmOpenAiProviderPreset('apmix')!.fallbackModels[39].capabilities,
+          containsPair('vision', true));
+      expect(
+          findLlmOpenAiProviderPreset('bazaarlink')!
+              .fallbackModels[22]
+              .capabilities,
+          containsPair('vision', true));
+      expect(
+        findLlmOpenAiProviderPreset('bluesminds')!
+            .fallbackModels
+            .firstWhere((model) => model.id == 'deepseek-reasoner')
+            .capabilities,
+        {'contextLength': 128000, 'reasoning': true},
+      );
+      expect(
+        {
+          for (final model
+              in findLlmOpenAiProviderPreset('bluesminds')!.fallbackModels)
+            model.id: model.displayName,
+        },
+        {
+          'gpt-4o': 'GPT-4o',
+          'gpt-4o-mini': 'GPT-4o Mini',
+          'gpt-4.1': 'GPT-4.1',
+          'gpt-4.1-mini': 'GPT-4.1 Mini',
+          'gpt-4.1-nano': 'GPT-4.1 Nano',
+          'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+          'claude-haiku-4-5': 'Claude Haiku 4.5',
+          'gemini-2.0-flash': 'Gemini 2.0 Flash',
+          'gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Exp)',
+          'deepseek-reasoner': 'DeepSeek Reasoner',
+          'deepseek-chat': 'DeepSeek Chat',
+          'qwen-plus': 'Qwen Plus',
+          'qwen-turbo': 'Qwen Turbo',
+          'kimi-k2': 'Kimi K2',
+          'kimi-k2-thinking': 'Kimi K2 Thinking',
+          'glm-4.7': 'GLM 4.7',
+          'glm-4-flash': 'GLM 4 Flash',
+          'minimax-m2.5': 'MiniMax M2.5',
+          'claude-opus-4-5': 'Claude Opus 4.5 (VIP)',
+          'gemini-2.5-pro': 'Gemini 2.5 Pro (VIP)',
+          'grok-3': 'Grok-3 (VIP)',
+          'qwen-max': 'Qwen Max (VIP)',
+        },
+      );
+      expect(
+        findLlmOpenAiProviderPreset('bluesminds')!
+            .fallbackModels
+            .firstWhere((model) => model.id == 'gemini-2.5-pro')
+            .capabilities,
+        {'contextLength': 1048576},
+      );
+      expect(
+        {
+          for (final id in [
+            'bluesminds',
+            'bytez',
+            'charm-hyper',
+            'chat-oripe',
+            'chatanywhere',
+            'cloudcode-one',
+            'codestral',
+            'cohere',
+            'coze',
+          ])
+            id: findLlmOpenAiProviderPreset(id)!
+                .fallbackModels
+                .map((model) => model.id)
+                .toList(),
+        },
+        {
+          'bluesminds': [
+            'gpt-4o',
+            'gpt-4o-mini',
+            'gpt-4.1',
+            'gpt-4.1-mini',
+            'gpt-4.1-nano',
+            'claude-sonnet-4-5',
+            'claude-haiku-4-5',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-exp',
+            'deepseek-reasoner',
+            'deepseek-chat',
+            'qwen-plus',
+            'qwen-turbo',
+            'kimi-k2',
+            'kimi-k2-thinking',
+            'glm-4.7',
+            'glm-4-flash',
+            'minimax-m2.5',
+            'claude-opus-4-5',
+            'gemini-2.5-pro',
+            'grok-3',
+            'qwen-max',
+          ],
+          'bytez': [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'mistralai/Mistral-7B-Instruct-v0.3',
+            'Qwen/Qwen2.5-72B-Instruct',
+          ],
+          'charm-hyper': ['hyper/auto'],
+          'chat-oripe': <String>[],
+          'chatanywhere': <String>[],
+          'cloudcode-one': ['glm-4.7-flash', 'glm-4.6v-flash'],
+          'codestral': ['codestral-2508', 'codestral-latest'],
+          'cohere': [
+            'command-a-reasoning-08-2025',
+            'command-a-vision-07-2025',
+            'command-a-03-2025',
+            'command-r7b-12-2024',
+            'command-r-plus-08-2024',
+            'command-r-08-2024',
+          ],
+          'coze': ['claude-3-7-sonnet-20250514'],
+        },
+      );
+      // Deferred: registry/blackbox/index.ts:4,6,7,14-18 documents 404s for
+      // both audited URLs and an account-gated enterprise host;
+      // registry/cheaperinference/index.ts:240-252 declares Responses-target
+      // models and executor-specific routing; registry/chenzk/index.ts:4,6-11,13-14
+      // sets defaultContextLength for runtime-discovered models, which this
+      // catalog cannot represent; registry/cloudflare-ai/index.ts:4,6,7,9-11,17
+      // and executors/cloudflare-ai.ts:17-56 require an account ID in the URL
+      // and a provider-specific executor.
+      for (final id in [
+        'blackbox',
+        'cheaperinference',
+        'chenzk',
+        'cloudflare-ai',
+      ]) {
+        expect(findLlmOpenAiProviderPreset(id), isNull);
+      }
+      // Deferred: open-sse/config/providers/registry/api-airforce/index.ts:13-16
+      // requires HTTP-Referer and X-Title headers that presets cannot represent.
+      expect(findLlmOpenAiProviderPreset('api-airforce'), isNull);
+      // Deferred: open-sse/config/providers/registry/bai/index.ts:16 requires
+      // reasoning-content echo, which presets cannot represent.
+      expect(findLlmOpenAiProviderPreset('bai'), isNull);
+      // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
+      expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
+      // The eligible M38 registry entries use distinct chat URLs, so no aliases
+      // in this cohort need to collapse to a single user-facing choice.
+    },
+  );
 
   test('each M37 eligible preset saves and reloads source defaults', () async {
     final preferences = _MemoryLlmAccountPreferences();
@@ -1384,6 +1574,69 @@ void main() {
         models.single.upstreamModelId, 'accounts/fireworks/models/test-model');
   });
 
+  test('M41 discoverable presets refresh from their pinned URL with key auth',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        final providerId = [
+          'kenari',
+          'kilo-gateway',
+          'liquid',
+          'literouter',
+          'llm-kiwi',
+          'llm7',
+          'llmgateway',
+        ][requests.length - 1];
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': '$providerId-model'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json']
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = [
+      'kenari',
+      'kilo-gateway',
+      'liquid',
+      'literouter',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm41-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(models.single.upstreamModelId, '$presetId-model');
+    }
+    expect(requests, hasLength(presetIds.length));
+  });
+
   test(
     'model protocol override remains independent of preset supplier default',
     () {
@@ -1559,6 +1812,84 @@ void main() {
       expect(restored.models.single.capabilities, model.capabilities);
       final group = LlmModelGroup(
         id: 'm40-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+    }
+  });
+
+  test('each M41 preset persists and routes through Chat and Task Flow',
+      () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const presetIds = [
+      'inception',
+      'inference-net',
+      'kenari',
+      'kilo-gateway',
+      'lambda-ai',
+      'liquid',
+      'literouter',
+      'llamagate',
+      'llm-kiwi',
+      'llm7',
+      'llmgateway',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallbackModel = preset.fallbackModels.firstOrNull;
+      final model = LlmUpstreamModel(
+        id: 'm41-$presetId:${fallbackModel?.id ?? 'user-model'}',
+        upstreamModelId: fallbackModel?.id ?? 'user-model',
+        displayName: fallbackModel?.displayName ?? 'User model',
+        capabilities: fallbackModel?.capabilities ?? const {},
+        config: const {'apiProtocolOverride': 'anthropic.messages'},
+      );
+      final account = LlmAccount(
+        id: 'm41-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig({
+          'accountOwnedConfig': 'preserved',
+        }),
+        models: [model],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility', reason: presetId);
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+      expect(
+        restored.models.single.config['apiProtocolOverride'],
+        'anthropic.messages',
+      );
+
+      final group = LlmModelGroup(
+        id: 'm41-$presetId-group',
         displayName: preset.displayName,
         members: [
           LlmModelGroupMember(
