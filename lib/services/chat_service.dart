@@ -44,14 +44,13 @@ part 'chat_service_params.dart';
 
 /// 每次请求的 usage 计量事件回调（per-request、事件驱动）。
 ///
-/// 由上层（ChatStreamManager）注入：每次请求的完整 usage 数据返回时
-/// 立即调用，把该请求的计量/花费累加到对应对话——对话级累计按
-/// "每次完整请求数据返回立即累加"进行，绝不从头重算。
+/// 由上层（ChatStreamManager）注入：provider 返回请求 usage 快照时
+/// 立即调用，把该请求的计量/新增花费累加到对应对话。
 ///
 /// [recordInput] 为 false 时只应累计 cost，不应写入 input/output tokens
 /// （内部任务请求如压缩/标题：其输入不代表"当前上下文大小"）。
 typedef UsageEventCallback = void Function(Map<String, dynamic> usage,
-    {required bool recordInput});
+    {required bool recordInput, double? costIncrement});
 
 class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
@@ -183,7 +182,7 @@ class ChatService {
   /// 每次请求的 usage 计量事件回调（per-request 隔离、事件驱动）。
   ///
   /// 由上层（ChatStreamManager）按对话绑定：provider 在每次请求的
-  /// 流末尾/错误轮产出 usage 事件时立即回调，上层据此把该请求的
+  /// 流中/错误轮产出 usage 事件时立即回调，上层据此把该请求的
   /// cost/tokens **立即**累加到对话——对话级累计按"每次完整请求
   /// 数据返回"增量进行，而非整次发送攒到流结束一次性提交（后者在
   /// service 被复用/异常清理时会把旧请求的 usage 重复提交双计）。
@@ -293,7 +292,9 @@ class ChatService {
         if (event.isReasoning || event.isToolCallEvent) continue;
         // usage 计量事件（provider 流末尾产出，per-request 隔离）
         if (event.usage != null && accumulateUsage) {
-          onUsageEvent?.call(event.usage!, recordInput: recordInputTokens);
+          onUsageEvent?.call(event.usage!,
+              recordInput: recordInputTokens,
+              costIncrement: event.usageCostIncrement);
         }
         if (event.text.isNotEmpty) chunks.add(event.text);
       }

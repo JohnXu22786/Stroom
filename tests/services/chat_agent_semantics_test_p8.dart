@@ -266,6 +266,48 @@ void chatAgentSemanticsGroup8() {
       container.dispose();
     });
 
+    test('同一请求的 usage 快照按修正后的 cost 结算且不双计', () async {
+      final container =
+          _makeContainer(conversations: [convWithTitle('conv-usage-updates')]);
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _UsageQueueProvider([
+        [
+          AIStreamEvent('',
+              usage: {
+                'inputTokens': 100,
+                'outputTokens': 1,
+                'cost': 0.0003,
+              },
+              usageCostIncrement: 0.0003),
+          AIStreamEvent('',
+              usage: {
+                'inputTokens': 100,
+                'outputTokens': 10,
+                'cost': 0.0002,
+              },
+              usageCostIncrement: -0.0001),
+          AIStreamEvent('完成'),
+        ],
+      ]);
+      manager.adapter.forceService(_makeService(provider));
+
+      await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-usage-updates',
+        history: [ChatMessage(role: 'user', content: 'hi')],
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-usage-updates')
+          .first;
+      expect(conv.totalCost, closeTo(0.0002, 1e-9),
+          reason: '后续 usage 快照修正较低 cost 时必须回调差额，不能保留旧值或双计');
+      expect(conv.lastInputTokens, 100);
+      expect(conv.lastOutputTokens, 10);
+      container.dispose();
+    });
+
     test('usage 中 cost 为整数（非 double）时计量不整体丢失', () async {
       final container =
           _makeContainer(conversations: [convWithTitle('conv-intcost')]);

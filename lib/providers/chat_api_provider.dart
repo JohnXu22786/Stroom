@@ -352,6 +352,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     // 本次请求的 usage（局部收集，per-request 隔离——
     // 共享 provider 实例的 _lastUsage 槽会被并发对话覆盖）
     Map<String, dynamic>? localUsage;
+    var usageEmitted = false;
+    var emittedCost = 0.0;
 
     try {
       // Mark as successfully connected once we start receiving events
@@ -396,6 +398,22 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           if (usage != null) {
             localUsage ??= {};
             localUsage.addAll(usage);
+            final totalCost = localUsage['cost'] is num
+                ? (localUsage['cost'] as num).toDouble()
+                : null;
+            final costIncrement =
+                totalCost == null ? null : totalCost - emittedCost;
+            if (totalCost != null) emittedCost = totalCost;
+            usageEmitted = true;
+            // Emit as soon as the provider has observed usage. A later
+            // cancellation can stop this async* stream before its terminal
+            // event, so deferring this snapshot until after [DONE] loses
+            // already-received billing data.
+            yield AIStreamEvent(
+              '',
+              usage: Map<String, dynamic>.from(localUsage),
+              usageCostIncrement: costIncrement,
+            );
           }
 
           // Parse the stream event using the static helper method
@@ -419,8 +437,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       await _resetForStreamError(e);
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛，
       // 让 ChatService 在 onError 之前累计到成本
-      if (localUsage != null) {
-        _lastUsage = localUsage;
+      if (localUsage != null) _lastUsage = localUsage;
+      if (localUsage != null && !usageEmitted) {
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
@@ -428,11 +446,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
     // After stream ends, yield the usage metering for this request
     // (per-request isolation via event, not the shared _lastUsage slot)
-    if (localUsage != null) {
+    if (localUsage != null && !usageEmitted) {
       // 同时填充诊断槽（与 lastResponseData 同语义）
       _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
+    if (localUsage != null) _lastUsage = localUsage;
 
     // After stream ends, yield tool calls if any were accumulated
     final toolEvent = _buildToolCallEvent(toolCallAccumulators);

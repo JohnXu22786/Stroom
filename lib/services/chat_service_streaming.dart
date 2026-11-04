@@ -84,7 +84,8 @@ extension ChatServiceStreamingExt on ChatService {
             } else if (event.usage != null) {
               // usage 计量事件（provider 流末尾产出，per-request 隔离）
               // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-              onUsageEvent?.call(event.usage!, recordInput: true);
+              onUsageEvent?.call(event.usage!,
+                  recordInput: true, costIncrement: event.usageCostIncrement);
             } else if (!_controller!.isClosed) {
               _controller!.add(event.text);
             }
@@ -246,7 +247,8 @@ extension ChatServiceStreamingExt on ChatService {
               if (event.usage != null) {
                 // usage 计量事件（provider 流末尾产出，per-request 隔离）
                 // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-                onUsageEvent?.call(event.usage!, recordInput: true);
+                onUsageEvent?.call(event.usage!,
+                    recordInput: true, costIncrement: event.usageCostIncrement);
               }
               if (_isCancelledByUser) return;
               // Anthropic extended thinking 签名（协议续接用，静默透传）
