@@ -316,7 +316,7 @@ void chatAgentSemanticsGroup2() {
       // 压缩助手 prompt 只应出现 1 次（首次发送）：
       // 第二次发送基于发送量（摘要 + 快照 tail）不再触发压缩
       final compactionName = appLocalizationsForLocale(const Locale('en', 'US'))
-          .builtInSystemCompactionName;
+          .builtInSystemCompactionPrompt;
       final compactionCalls = provider.captures
           .where((c) => ((c['messages'] as List).first as Map)['content']
               .toString()
