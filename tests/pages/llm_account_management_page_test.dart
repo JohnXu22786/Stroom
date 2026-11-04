@@ -23,6 +23,153 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('OpenAI-compatible account offers named API presets', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final presetField = find.byType(DropdownButtonFormField<String>).at(1);
+    final presetButton = find.descendant(
+      of: presetField,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final items = tester.widget<DropdownButton<String>>(presetButton).items!;
+    expect(
+      items.map((item) => item.value),
+      containsAll([
+        'ai21',
+        'aimlapi',
+        'arcee-ai',
+        'baseten',
+        'cerebras',
+        'fireworks',
+        'groq',
+        'huggingface',
+        'mistral',
+        'novita',
+        'nvidia',
+        'together',
+      ]),
+    );
+    tester.widget<DropdownButton<String>>(presetButton).onChanged!('fireworks');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      'Fireworks AI',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.fireworks.ai/inference/v1/chat/completions',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      contains('accounts/fireworks/models/deepseek-v4-flash'),
+    );
+  });
+
+  testWidgets('changing OpenAI provider preset requires a replacement key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'preset-key-change',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Fireworks account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'fireworks',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'fireworks-model',
+            upstreamModelId: 'accounts/fireworks/models/deepseek-v4-flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'reasoning': true,
+            },
+          ),
+          LlmUpstreamModel(
+            id: 'custom-groq-compatible-model',
+            upstreamModelId: 'openai/gpt-oss-120b',
+            displayName: 'Custom Groq model choice',
+            capabilities: {'chat': true},
+          ),
+        ],
+      ),
+      secret: 'existing-fireworks-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('groq');
+    await tester.pumpAndSettle();
+    final modelLines = tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == '上游模型与能力',
+          ),
+        )
+        .controller!
+        .text;
+    expect(modelLines, contains('groq/compound,reasoning=false'));
+    expect(modelLines, isNot(contains('accounts/fireworks/models/')));
+    expect(
+      modelLines
+          .split('\n')
+          .where((line) => line.startsWith('openai/gpt-oss-120b')),
+      hasLength(1),
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(await service.readCredential('preset-key-change'),
+        'existing-fireworks-key');
+    expect(
+        (await service.listAccounts())
+            .single
+            .endpointConfig['providerPresetId'],
+        'fireworks');
+  });
+
   testWidgets('Trae offers token import and in-app SOLO sign-in', (
     tester,
   ) async {
