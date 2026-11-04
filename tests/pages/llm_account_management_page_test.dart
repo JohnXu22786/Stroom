@@ -85,6 +85,18 @@ void main() {
         'stepfun-international',
         'together',
         'yi',
+        'freeaiapikey',
+        'freeinference',
+        'freemodel-dev',
+        'freetheai',
+        'friendliai',
+        'galadriel',
+        'greenpt',
+        'hcnsec',
+        'helixmind',
+        'helyxai',
+        'heroku',
+        'hyperbolic',
       ]),
     );
     tester.widget<DropdownButton<String>>(presetButton).onChanged!('fireworks');
@@ -465,6 +477,121 @@ void main() {
           .config['apiProtocolOverride'],
       'anthropic.messages',
     );
+  });
+
+  testWidgets('switching to an M40 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm40-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Fireworks account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+          'modelsUrl':
+              'https://api.fireworks.ai/v1/accounts/fireworks/models?filter=supports_serverless=true',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'fireworks',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm40-preset-switch:accounts/fireworks/models/deepseek-v4-flash',
+            upstreamModelId: 'accounts/fireworks/models/deepseek-v4-flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm40-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'old-fireworks-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('heroku');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://us.inference.heroku.com/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('claude-opus-4-7'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(modelsField.controller!.text,
+        isNot(contains('accounts/fireworks/models/deepseek-v4-flash')));
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(
+        await service.readCredential('m40-preset-switch'), 'old-fireworks-key');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'new-heroku-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'heroku');
+    expect(saved.endpointConfig['baseUrl'],
+        'https://us.inference.heroku.com/v1/chat/completions');
+    expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-heroku-key');
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('custom-model'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        contains('claude-opus-4-7'));
+    expect(saved.models.map((model) => model.upstreamModelId),
+        isNot(contains('accounts/fireworks/models/deepseek-v4-flash')));
+    final herokuModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'claude-opus-4-7',
+    );
+    expect(herokuModel.capabilities, isEmpty);
+    final customModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'custom-model',
+    );
+    expect(customModel.capabilities, {'vision': true});
+    expect(customModel.config['apiProtocolOverride'], 'anthropic.messages');
   });
 
   testWidgets('Trae offers token import and in-app SOLO sign-in', (

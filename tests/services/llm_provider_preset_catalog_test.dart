@@ -74,6 +74,18 @@ void main() {
       'stepfun-international',
       'together',
       'yi',
+      'freeaiapikey',
+      'freeinference',
+      'freemodel-dev',
+      'freetheai',
+      'friendliai',
+      'galadriel',
+      'greenpt',
+      'hcnsec',
+      'helixmind',
+      'helyxai',
+      'heroku',
+      'hyperbolic',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -149,6 +161,18 @@ void main() {
         'stepfun-international': 'https://api.stepfun.ai/v1/chat/completions',
         'together': 'https://api.together.xyz/v1/chat/completions',
         'yi': 'https://api.lingyiwanwu.com/v1/chat/completions',
+        'freeaiapikey': 'https://api.freeaiapikey.com/v1/chat/completions',
+        'freeinference': 'https://freeinference.org/v1/chat/completions',
+        'freemodel-dev': 'https://api.freemodel.dev/v1/chat/completions',
+        'freetheai': 'https://api.freetheai.org/v1/chat/completions',
+        'friendliai': 'https://api.friendli.ai/serverless/v1/chat/completions',
+        'galadriel': 'https://api.galadriel.ai/v1/chat/completions',
+        'greenpt': 'https://api.greenpt.ai/v1/chat/completions',
+        'hcnsec': 'https://api.hcnsec.cn/v1/chat/completions',
+        'helixmind': 'https://helixmind.online/v1/chat/completions',
+        'helyxai': 'https://helyxai.space/v1/chat/completions',
+        'heroku': 'https://us.inference.heroku.com/v1/chat/completions',
+        'hyperbolic': 'https://api.hyperbolic.xyz/v1/chat/completions',
       },
     );
     expect(
@@ -574,6 +598,159 @@ void main() {
       findLlmOpenAiProviderPreset('deepinfra')!.fallbackModels[7].id,
       'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning',
     );
+  });
+
+  test('M40 presets match pinned runtime endpoints, discovery, and models', () {
+    const expectedModelsUrls = {
+      'freeaiapikey': 'https://api.freeaiapikey.com/v1/models',
+      'freeinference': 'https://freeinference.org/v1/models',
+      'freemodel-dev': 'https://api.freemodel.dev/v1/models',
+      'freetheai': 'https://api.freetheai.org/v1/models',
+      'friendliai': 'https://api.friendli.ai/serverless/v1/models',
+      'galadriel': null,
+      'greenpt': 'https://api.greenpt.ai/v1/models',
+      'hcnsec': 'https://api.hcnsec.cn/v1/models',
+      'helixmind': 'https://helixmind.online/v1/models',
+      'helyxai': 'https://helyxai.space/v1/models',
+      'heroku': null,
+      'hyperbolic': null,
+    };
+    final m40Presets = [
+      for (final id in expectedModelsUrls.keys)
+        findLlmOpenAiProviderPreset(id)!,
+    ];
+    expect(m40Presets.map((preset) => preset.baseUrl).toSet(), hasLength(12));
+    for (final entry in expectedModelsUrls.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.modelsUrl, entry.value, reason: entry.key);
+      expect(preset.baseUrl, startsWith('https://'));
+      expect(preset.authType, 'api_key');
+      expect(preset.authorizationHeader, 'Authorization');
+      expect(preset.authorizationScheme, 'Bearer');
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect(
+      findLlmOpenAiProviderPreset('freeaiapikey')!
+          .fallbackModels
+          .map((model) => model.id),
+      [
+        'openai/gpt-4o',
+        'openai/gpt-5.4',
+        'openai/gpt-5.5',
+        'openai/gpt-5.6-sol',
+        'anthropic/claude-opus-4.6',
+        'anthropic/claude-opus-4.7',
+        'anthropic/claude-opus-4.8',
+        'anthropic/claude-opus-5',
+        'anthropic/claude-sonnet-4.6',
+        'anthropic/claude-sonnet-5',
+      ],
+    );
+    final freeAiModels =
+        findLlmOpenAiProviderPreset('freeaiapikey')!.fallbackModels;
+    expect(
+      freeAiModels.map((model) => model.capabilities['contextLength']),
+      [
+        128000,
+        128000,
+        128000,
+        128000,
+        1000000,
+        128000,
+        128000,
+        128000,
+        1000000,
+        128000,
+      ],
+    );
+    expect(
+      freeAiModels[4].capabilities,
+      {
+        'contextLength': 1000000,
+        'reasoning': true,
+        'supportedThinkingEfforts': ['low', 'medium', 'high', 'max'],
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('freeinference')!.fallbackModels,
+      isEmpty,
+    );
+    expect(
+      findLlmOpenAiProviderPreset('freemodel-dev')!
+          .fallbackModels
+          .map((model) => model.id),
+      ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('freemodel-dev')!
+          .fallbackModels
+          .map((model) => model.capabilities['contextLength']),
+      [400000, 400000, 128000, 128000],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('freetheai')!
+          .fallbackModels
+          .map((model) => model.id),
+      ['fta/zai/glm-5.3', 'fta/kimi/k3'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('freetheai')!
+          .fallbackModels
+          .map((model) => model.capabilities['contextLength']),
+      [128000, 128000],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('friendliai')!
+          .fallbackModels
+          .map((model) => model.id),
+      ['meta-llama-3.1-70b-instruct', 'meta-llama-3.1-8b-instruct'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('galadriel')!
+          .fallbackModels
+          .map((model) => model.id),
+      ['galadriel-latest'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('heroku')!
+          .fallbackModels
+          .map((model) => model.id),
+      [
+        'claude-opus-4-7',
+        'claude-4-6-sonnet',
+        'claude-4-5-haiku',
+        'glm-4-7',
+        'kimi-k2-5',
+        'minimax-m2-1',
+        'deepseek-v3-2',
+        'qwen3-coder-480b',
+        'qwen3-235b',
+        'gpt-oss-120b',
+        'nova-pro',
+        'nova-2-lite',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('hyperbolic')!
+          .fallbackModels
+          .map((model) => model.id),
+      [
+        'Qwen/QwQ-32B',
+        'deepseek-ai/DeepSeek-R1',
+        'deepseek-ai/DeepSeek-V3',
+        'meta-llama/Llama-3.3-70B-Instruct',
+        'meta-llama/Llama-3.2-3B-Instruct',
+        'Qwen/Qwen2.5-72B-Instruct',
+        'Qwen/Qwen2.5-Coder-32B-Instruct',
+        'NousResearch/Hermes-3-Llama-3.1-70B',
+      ],
+    );
+    // Deferred: pinned registry/glm/t/index.ts:4-16 selects `executor: glm`,
+    // the +08:00 reset timezone, request defaults, and a custom timeout. The
+    // registered GLM provider routes through executors/default.ts:448-455, while
+    // executors/default.ts:583-590 emits the GLM-specific x-api-key header.
+    // `REGISTRY.glmt` at config/providers/index.ts:313 confirms runtime registration.
+    expect(findLlmOpenAiProviderPreset('glmt'), isNull);
   });
 
   test('M37 presets retain the pinned source fallback catalog', () {
@@ -1314,6 +1491,91 @@ void main() {
       AiGateway.defaultProviderCatalog.findProvider('openai-compatibility'),
       isNotNull,
     );
+  });
+
+  test('each M40 preset persists and routes through Chat and Task Flow',
+      () async {
+    final preferences = _MemoryLlmAccountPreferences();
+    final credentials = _MemoryLlmCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    const presetIds = [
+      'freeaiapikey',
+      'freeinference',
+      'freemodel-dev',
+      'freetheai',
+      'friendliai',
+      'galadriel',
+      'greenpt',
+      'hcnsec',
+      'helixmind',
+      'helyxai',
+      'heroku',
+      'hyperbolic',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final model = preset.fallbackModels.isEmpty
+          ? LlmUpstreamModel(
+              id: 'm40-$presetId:user-model',
+              upstreamModelId: 'user-model',
+              displayName: 'User model',
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            )
+          : LlmUpstreamModel(
+              id: 'm40-$presetId:${preset.fallbackModels.first.id}',
+              upstreamModelId: preset.fallbackModels.first.id,
+              displayName: preset.fallbackModels.first.displayName,
+              capabilities: preset.fallbackModels.first.capabilities,
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            );
+      final account = LlmAccount(
+        id: 'm40-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {
+          'customEndpointFlag': 'preserved',
+        }),
+        models: [model],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility');
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      if (preset.modelsUrl == null) {
+        expect(restored.endpointConfig.containsKey('modelsUrl'), isFalse);
+      } else {
+        expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      }
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['customEndpointFlag'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+      expect(restored.models.single.capabilities, model.capabilities);
+      final group = LlmModelGroup(
+        id: 'm40-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+    }
   });
 
   test('M39 presets use the shared Chat and Task Flow route', () {
