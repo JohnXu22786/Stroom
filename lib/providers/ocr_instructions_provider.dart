@@ -127,7 +127,12 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
             .toList();
         final preserveUserMutations =
             _userMutationVersion != loadMutationVersion;
-        state = preserveUserMutations ? [...list, ...state] : list;
+        state = preserveUserMutations
+            ? [
+                ...list,
+                ...state.where((instruction) => !list.contains(instruction)),
+              ]
+            : list;
         if (preserveUserMutations) await _persist();
         return;
       }
