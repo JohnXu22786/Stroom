@@ -188,6 +188,50 @@ void main() {
       expect(displayed.data, contains('401'));
     });
 
+    testWidgets(
+        'OCR diagnostics exclude URL credentials with a malformed query component',
+        (tester) async {
+      const credential = 'opaque-secret';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://ocr.test/v1?api_key=$credential&other=%FF',
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, isNot(contains(credential)));
+    });
+
     testWidgets('OCR diagnostics redact legacy masked Authorization keys',
         (tester) async {
       const credential = 'opaque-user-secret-174';
