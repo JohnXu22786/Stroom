@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart'
     show CustomParam, ReasoningParam, findEffortParam;
@@ -84,7 +85,7 @@ void showModelPanel({
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '选择模型',
+                        AppLocalizations.of(context)!.chatSelectModel,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -99,7 +100,7 @@ void showModelPanel({
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
                         child: Text(
-                          '暂无可用模型',
+                          AppLocalizations.of(context)!.chatNoModelsAvailable,
                           style: TextStyle(
                             color: cs.onSurfaceVariant,
                             fontSize: 14,
@@ -251,7 +252,7 @@ void showToolsPanel({
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '可用工具',
+                        AppLocalizations.of(context)!.chatAvailableTools,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -266,7 +267,7 @@ void showToolsPanel({
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
                         child: Text(
-                          '暂无可用工具',
+                          AppLocalizations.of(context)!.chatNoToolsAvailable,
                           style: TextStyle(
                             color: cs.onSurfaceVariant,
                             fontSize: 14,
@@ -438,7 +439,7 @@ void showReasoningPanel({
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '推理设置',
+                        AppLocalizations.of(context)!.chatReasoningSettings,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -466,7 +467,7 @@ void showReasoningPanel({
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '推理',
+                                    AppLocalizations.of(context)!.chatReasoning,
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w500,
@@ -492,7 +493,8 @@ void showReasoningPanel({
                             Padding(
                               padding: const EdgeInsets.only(top: 8, left: 4),
                               child: Text(
-                                '当前模型未配置推理参数，请在模型设置中添加',
+                                AppLocalizations.of(context)!
+                                    .chatReasoningNotConfigured,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: cs.onSurfaceVariant
@@ -518,7 +520,8 @@ void showReasoningPanel({
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '推理力度',
+                                    AppLocalizations.of(context)!
+                                        .chatReasoningEffort,
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w500,
@@ -544,7 +547,8 @@ void showReasoningPanel({
                             Padding(
                               padding: const EdgeInsets.only(top: 8, left: 4),
                               child: Text(
-                                '当前模型未配置推理力度参数，请在模型设置中添加',
+                                AppLocalizations.of(context)!
+                                    .chatReasoningEffortNotConfigured,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: cs.onSurfaceVariant
@@ -561,7 +565,8 @@ void showReasoningPanel({
                             Padding(
                               padding: const EdgeInsets.only(top: 8, left: 4),
                               child: Text(
-                                '该参数暂无选项值，请在模型设置中添加',
+                                AppLocalizations.of(context)!
+                                    .chatParameterNoOptions,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: cs.onSurfaceVariant
@@ -609,7 +614,8 @@ void showReasoningPanel({
                               padding: const EdgeInsets.only(top: 16),
                               child: Center(
                                 child: Text(
-                                  '当前模型未配置其他推理参数\n请在模型设置中添加',
+                                  AppLocalizations.of(context)!
+                                      .chatOtherReasoningNotConfigured,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -735,7 +741,7 @@ void showCustomReasoningParamsPanel({
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '自定义参数',
+                        AppLocalizations.of(context)!.chatCustomParameters,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -750,7 +756,8 @@ void showCustomReasoningParamsPanel({
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
                         child: Text(
-                          '当前模型未配置自定义参数\n请在模型设置中添加',
+                          AppLocalizations.of(context)!
+                              .chatCustomParamsNotConfigured,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,
@@ -806,7 +813,8 @@ void showCustomReasoningParamsPanel({
                                         // 无选项值的参数（供应商仅声明参数名）：
                                         // 开关无法产生值，给出引导而非死开关
                                         Text(
-                                          '无选项值，请在模型设置中添加',
+                                          AppLocalizations.of(context)!
+                                              .chatNoOptionValues,
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: cs.onSurfaceVariant

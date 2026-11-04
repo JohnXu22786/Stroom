@@ -1911,6 +1911,1032 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The image could not be processed. Select it again and try again.'**
   String get ocrImagePreparationFailed;
+
+  /// No description provided for @homeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeTitle;
+
+  /// No description provided for @homeWelcome.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Stroom'**
+  String get homeWelcome;
+
+  /// No description provided for @homeChooseModule.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a module to get started'**
+  String get homeChooseModule;
+
+  /// No description provided for @homeOcrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text recognition'**
+  String get homeOcrSubtitle;
+
+  /// No description provided for @homeAsrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition'**
+  String get homeAsrTitle;
+
+  /// No description provided for @homeAsrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech to text'**
+  String get homeAsrSubtitle;
+
+  /// No description provided for @homeWebDownloadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download web media'**
+  String get homeWebDownloadTitle;
+
+  /// No description provided for @homeWebDownloadSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download audio and video from webpages'**
+  String get homeWebDownloadSubtitle;
+
+  /// No description provided for @homeAudioSeparationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio separation'**
+  String get homeAudioSeparationTitle;
+
+  /// No description provided for @homeAudioSeparationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract audio from video'**
+  String get homeAudioSeparationSubtitle;
+
+  /// No description provided for @homeTtsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text to speech'**
+  String get homeTtsTitle;
+
+  /// No description provided for @homeTtsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert text to speech'**
+  String get homeTtsSubtitle;
+
+  /// No description provided for @homeChartsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart maker'**
+  String get homeChartsTitle;
+
+  /// No description provided for @homeChartsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid chart editor'**
+  String get homeChartsSubtitle;
+
+  /// No description provided for @homeMathTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Math plotting'**
+  String get homeMathTitle;
+
+  /// No description provided for @homeMathSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plot functions'**
+  String get homeMathSubtitle;
+
+  /// No description provided for @homeAnkiTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki flashcards'**
+  String get homeAnkiTitle;
+
+  /// No description provided for @homeAnkiSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Memory aid system'**
+  String get homeAnkiSubtitle;
+
+  /// No description provided for @homeTaskFlowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task flows'**
+  String get homeTaskFlowTitle;
+
+  /// No description provided for @homeTaskFlowEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Create an automated flow to run multiple modules in sequence'**
+  String get homeTaskFlowEmpty;
+
+  /// Number of task flows on the home screen
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} task flow · Manage} other{{count} task flows · Manage}}'**
+  String homeTaskFlowManage(int count);
+
+  /// No description provided for @homeRecentTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent tasks'**
+  String get homeRecentTasks;
+
+  /// No description provided for @homeViewAll.
+  ///
+  /// In en, this message translates to:
+  /// **'View all'**
+  String get homeViewAll;
+
+  /// No description provided for @statusInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get statusInProgress;
+
+  /// No description provided for @statusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statusCompleted;
+
+  /// No description provided for @statusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get statusFailed;
+
+  /// No description provided for @navHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get navHome;
+
+  /// No description provided for @navChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get navChat;
+
+  /// No description provided for @navFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get navFiles;
+
+  /// No description provided for @navSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get navSettings;
+
+  /// No description provided for @conversationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation history'**
+  String get conversationsTitle;
+
+  /// No description provided for @conversationNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation'**
+  String get conversationNew;
+
+  /// No description provided for @conversationDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete conversation'**
+  String get conversationDeleteTitle;
+
+  /// Confirmation for deleting multiple conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Delete the selected {count} conversation? This cannot be undone.} other{Delete the selected {count} conversations? This cannot be undone.}}'**
+  String conversationDeleteMany(int count);
+
+  /// No description provided for @actionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get actionCancel;
+
+  /// No description provided for @actionDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get actionDelete;
+
+  /// No description provided for @conversationRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename conversation'**
+  String get conversationRename;
+
+  /// No description provided for @conversationRenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a new name'**
+  String get conversationRenameHint;
+
+  /// No description provided for @actionConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get actionConfirm;
+
+  /// No description provided for @conversationNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching conversations found'**
+  String get conversationNoMatches;
+
+  /// No description provided for @conversationEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversation history'**
+  String get conversationEmpty;
+
+  /// No description provided for @conversationSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search messages in all conversations...'**
+  String get conversationSearchHint;
+
+  /// Selected conversation count
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String conversationSelected(int count);
+
+  /// No description provided for @conversationSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get conversationSearch;
+
+  /// No description provided for @conversationDeleteSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete selected'**
+  String get conversationDeleteSelected;
+
+  /// No description provided for @actionUnselect.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel selection'**
+  String get actionUnselect;
+
+  /// No description provided for @actionSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get actionSelect;
+
+  /// Delete action with selected count
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {count}'**
+  String conversationDeleteCount(int count);
+
+  /// No description provided for @conversationPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get conversationPin;
+
+  /// No description provided for @conversationUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get conversationUnpin;
+
+  /// No description provided for @actionRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get actionRename;
+
+  /// No description provided for @conversationAutoRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-name'**
+  String get conversationAutoRename;
+
+  /// No description provided for @conversationTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary conversation'**
+  String get conversationTemporary;
+
+  /// No description provided for @conversationCloseTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Close temporary conversation'**
+  String get conversationCloseTemporary;
+
+  /// No description provided for @taskListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task list'**
+  String get taskListTitle;
+
+  /// No description provided for @taskListEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No tasks'**
+  String get taskListEmpty;
+
+  /// No description provided for @chatSearchCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Search this conversation...'**
+  String get chatSearchCurrent;
+
+  /// No description provided for @chatSearchAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Search all conversations...'**
+  String get chatSearchAll;
+
+  /// No description provided for @searchPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous match'**
+  String get searchPrevious;
+
+  /// No description provided for @searchNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next match'**
+  String get searchNext;
+
+  /// No description provided for @searchClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close search'**
+  String get searchClose;
+
+  /// No description provided for @searchCurrentConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Current conversation'**
+  String get searchCurrentConversation;
+
+  /// No description provided for @searchAllConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'All conversations'**
+  String get searchAllConversations;
+
+  /// No description provided for @chatReasoning.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning'**
+  String get chatReasoning;
+
+  /// No description provided for @chatTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get chatTools;
+
+  /// No description provided for @chatCustomParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom parameters'**
+  String get chatCustomParameters;
+
+  /// No description provided for @chatEditMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit message'**
+  String get chatEditMessage;
+
+  /// No description provided for @actionClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get actionClose;
+
+  /// No description provided for @chatEditWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'All messages below will be lost when you edit and resend'**
+  String get chatEditWarning;
+
+  /// No description provided for @chatAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment'**
+  String get chatAttachment;
+
+  /// No description provided for @chatMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a message...'**
+  String get chatMessageHint;
+
+  /// No description provided for @chatFullscreenEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Full-screen editor'**
+  String get chatFullscreenEdit;
+
+  /// No description provided for @chatStopGeneration.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop generating'**
+  String get chatStopGeneration;
+
+  /// No description provided for @actionSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get actionSend;
+
+  /// No description provided for @chatCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get chatCopy;
+
+  /// No description provided for @actionSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get actionSave;
+
+  /// No description provided for @actionRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get actionRetry;
+
+  /// No description provided for @actionEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get actionEdit;
+
+  /// No description provided for @chatViewResponseData.
+  ///
+  /// In en, this message translates to:
+  /// **'View response data'**
+  String get chatViewResponseData;
+
+  /// No description provided for @chatViewRequestData.
+  ///
+  /// In en, this message translates to:
+  /// **'View request data'**
+  String get chatViewRequestData;
+
+  /// No description provided for @chatInspectJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect JSON'**
+  String get chatInspectJson;
+
+  /// No description provided for @chatConfirmEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit message'**
+  String get chatConfirmEditTitle;
+
+  /// No description provided for @chatConfirmEditDeleteFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit this message? This message and all following messages will be deleted.'**
+  String get chatConfirmEditDeleteFollowing;
+
+  /// No description provided for @chatConfirmResend.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend this message?'**
+  String get chatConfirmResend;
+
+  /// No description provided for @chatConfirmRetryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatConfirmRetryTitle;
+
+  /// No description provided for @chatConfirmRetryDeleteFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry this response? This message and all following messages will be deleted.'**
+  String get chatConfirmRetryDeleteFollowing;
+
+  /// No description provided for @chatConfirmRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate the response?'**
+  String get chatConfirmRegenerate;
+
+  /// No description provided for @chatDeleteMessageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message'**
+  String get chatDeleteMessageTitle;
+
+  /// No description provided for @chatDeleteMessageConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this message? This cannot be undone.'**
+  String get chatDeleteMessageConfirm;
+
+  /// No description provided for @chatThinking.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get chatThinking;
+
+  /// No description provided for @chatThinkingComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Thought'**
+  String get chatThinkingComplete;
+
+  /// No description provided for @conversationDeleteOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this conversation? This cannot be undone.'**
+  String get conversationDeleteOne;
+
+  /// Selected and total detected resource counts
+  ///
+  /// In en, this message translates to:
+  /// **'{total, plural, one{Selected {selected}/{total} resource} other{Selected {selected}/{total} resources}}'**
+  String mediaSelectionCount(int selected, int total);
+
+  /// No description provided for @mediaSelectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select media to download'**
+  String get mediaSelectionTitle;
+
+  /// Hide media playlist segments
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Hide {count} segment} other{Hide {count} segments}}'**
+  String mediaCollapseSegments(int count);
+
+  /// Show media playlist segments
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Show {count} segment} other{Show {count} segments}}'**
+  String mediaExpandSegments(int count);
+
+  /// No description provided for @mediaNoResources.
+  ///
+  /// In en, this message translates to:
+  /// **'No resources detected'**
+  String get mediaNoResources;
+
+  /// No description provided for @mediaSegment.
+  ///
+  /// In en, this message translates to:
+  /// **'Segment'**
+  String get mediaSegment;
+
+  /// No description provided for @mediaPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist'**
+  String get mediaPlaylist;
+
+  /// No description provided for @mediaFullVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Full video'**
+  String get mediaFullVideo;
+
+  /// Media duration display
+  ///
+  /// In en, this message translates to:
+  /// **'Duration: {value}'**
+  String mediaDuration(String value);
+
+  /// Media dimensions display
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution: {width}x{height}'**
+  String mediaResolution(int width, int height);
+
+  /// No description provided for @mediaPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get mediaPreview;
+
+  /// No description provided for @mediaSegmentPreviewHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview segments from the playlist'**
+  String get mediaSegmentPreviewHint;
+
+  /// Download selected resources
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Download {count} selected resource} other{Download {count} selected resources}}'**
+  String mediaDownloadSelected(int count);
+
+  /// No description provided for @mediaConfirmDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm download'**
+  String get mediaConfirmDownload;
+
+  /// No description provided for @chatNoMoreHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No more messages'**
+  String get chatNoMoreHistory;
+
+  /// No description provided for @chatSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Message failed to send'**
+  String get chatSendFailed;
+
+  /// No description provided for @chatViewErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View error details'**
+  String get chatViewErrorDetails;
+
+  /// No description provided for @chatCompactionCollapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Context compacted · older messages summarized (click to collapse)'**
+  String get chatCompactionCollapsed;
+
+  /// No description provided for @chatCompactionExpanded.
+  ///
+  /// In en, this message translates to:
+  /// **'Context compacted · older messages summarized (click to view summary)'**
+  String get chatCompactionExpanded;
+
+  /// No description provided for @chatEditConversationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit conversation title'**
+  String get chatEditConversationTitle;
+
+  /// No description provided for @chatSearchMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Search messages'**
+  String get chatSearchMessages;
+
+  /// No description provided for @chatApiMissingSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Chat API is not configured — go to Settings'**
+  String get chatApiMissingSettings;
+
+  /// No description provided for @appSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get appSettings;
+
+  /// No description provided for @chatCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get chatCopied;
+
+  /// No description provided for @chatNoSavableText.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no text to save'**
+  String get chatNoSavableText;
+
+  /// No description provided for @chatSaveMarkdownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save message as Markdown'**
+  String get chatSaveMarkdownTitle;
+
+  /// No description provided for @chatSaveToolCallChoice.
+  ///
+  /// In en, this message translates to:
+  /// **'This reply contains multiple tool calls. Choose what to save:'**
+  String get chatSaveToolCallChoice;
+
+  /// No description provided for @chatSaveCompleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save complete message'**
+  String get chatSaveCompleteMessage;
+
+  /// No description provided for @chatSaveLastMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save last message'**
+  String get chatSaveLastMessage;
+
+  /// No description provided for @chatSaveToAppFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to app files'**
+  String get chatSaveToAppFiles;
+
+  /// No description provided for @chatSaveFolderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose or create a folder for the .md file'**
+  String get chatSaveFolderHint;
+
+  /// No description provided for @chatSaveFilenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a file name (.md is added automatically)'**
+  String get chatSaveFilenameHint;
+
+  /// No description provided for @chatFilenameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The file name cannot be empty'**
+  String get chatFilenameRequired;
+
+  /// Path of the saved Markdown file
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to: {path}'**
+  String chatSavedToPath(String path);
+
+  /// Error from a failed save operation
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String chatSaveFailed(String error);
+
+  /// Path of the saved application file
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to app files: {path}'**
+  String chatSavedToAppFiles(String path);
+
+  /// No description provided for @chatSelectModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a model'**
+  String get chatSelectModel;
+
+  /// No description provided for @chatNoModelsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No models available'**
+  String get chatNoModelsAvailable;
+
+  /// No description provided for @chatAvailableTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Available tools'**
+  String get chatAvailableTools;
+
+  /// No description provided for @chatNoToolsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No tools available'**
+  String get chatNoToolsAvailable;
+
+  /// No description provided for @chatReasoningSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning settings'**
+  String get chatReasoningSettings;
+
+  /// No description provided for @chatReasoningNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No reasoning parameters are configured for this model. Add them in model settings.'**
+  String get chatReasoningNotConfigured;
+
+  /// No description provided for @chatReasoningEffort.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning effort'**
+  String get chatReasoningEffort;
+
+  /// No description provided for @chatReasoningEffortNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No reasoning effort parameter is configured for this model. Add it in model settings.'**
+  String get chatReasoningEffortNotConfigured;
+
+  /// No description provided for @chatParameterNoOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'This parameter has no option values. Add them in model settings.'**
+  String get chatParameterNoOptions;
+
+  /// No description provided for @chatOtherReasoningNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No other reasoning parameters are configured for this model.\nAdd them in model settings.'**
+  String get chatOtherReasoningNotConfigured;
+
+  /// No description provided for @chatCustomParamsNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom parameters are configured for this model.\nAdd them in model settings.'**
+  String get chatCustomParamsNotConfigured;
+
+  /// No description provided for @chatNoOptionValues.
+  ///
+  /// In en, this message translates to:
+  /// **'No option values. Add them in model settings.'**
+  String get chatNoOptionValues;
+
+  /// No description provided for @chatImageLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load image'**
+  String get chatImageLoadFailed;
+
+  /// No description provided for @chatVideoLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load video'**
+  String get chatVideoLoadFailed;
+
+  /// No description provided for @chatHtmlLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading HTML preview...'**
+  String get chatHtmlLoading;
+
+  /// No description provided for @chatPreviewLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview failed to load'**
+  String get chatPreviewLoadFailed;
+
+  /// No description provided for @chatHtmlPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'HTML preview'**
+  String get chatHtmlPreview;
+
+  /// No description provided for @chatMermaidLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading chart preview...'**
+  String get chatMermaidLoading;
+
+  /// No description provided for @chatMermaidPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid preview'**
+  String get chatMermaidPreview;
+
+  /// No description provided for @chatZoomOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom out'**
+  String get chatZoomOut;
+
+  /// No description provided for @chatZoomIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom in'**
+  String get chatZoomIn;
+
+  /// No description provided for @chatJsonInspection.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON inspection'**
+  String get chatJsonInspection;
+
+  /// No description provided for @chatNoRequestData.
+  ///
+  /// In en, this message translates to:
+  /// **'No request data'**
+  String get chatNoRequestData;
+
+  /// No description provided for @chatNoResponseData.
+  ///
+  /// In en, this message translates to:
+  /// **'No response data'**
+  String get chatNoResponseData;
+
+  /// No description provided for @chatSaveMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save message'**
+  String get chatSaveMessage;
+
+  /// No description provided for @chatChooseSaveLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose where to save the message'**
+  String get chatChooseSaveLocation;
+
+  /// No description provided for @chatChooseSaveLocationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a save location:'**
+  String get chatChooseSaveLocationLabel;
+
+  /// No description provided for @chatSaveAppFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to app files'**
+  String get chatSaveAppFile;
+
+  /// No description provided for @chatSaveDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to device'**
+  String get chatSaveDevice;
+
+  /// No description provided for @chatFileTypeAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file'**
+  String get chatFileTypeAudio;
+
+  /// No description provided for @chatFileTypeVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video file'**
+  String get chatFileTypeVideo;
+
+  /// No description provided for @chatFileTypeDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'Document'**
+  String get chatFileTypeDocument;
+
+  /// No description provided for @chatFileTypeGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get chatFileTypeGeneric;
+
+  /// No description provided for @chatInfoType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get chatInfoType;
+
+  /// No description provided for @chatInfoSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get chatInfoSize;
+
+  /// No description provided for @chatInfoPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Path'**
+  String get chatInfoPath;
+
+  /// No description provided for @chatErrorBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get chatErrorBack;
+
+  /// No description provided for @chatDataDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Data details'**
+  String get chatDataDetails;
+
+  /// No description provided for @chatAudioPreviewClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get chatAudioPreviewClose;
+
+  /// No description provided for @chatPreviewClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close preview'**
+  String get chatPreviewClose;
+
+  /// No description provided for @actionBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get actionBack;
+
+  /// No description provided for @chatCannotLoadFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load file'**
+  String get chatCannotLoadFile;
+
+  /// Label for a numbered reasoning section
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking {index}'**
+  String chatThinkingNumbered(int index);
 }
 
 class _AppLocalizationsDelegate

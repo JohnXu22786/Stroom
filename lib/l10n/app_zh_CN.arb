@@ -301,5 +301,294 @@
   "ocrImageDimensionsTooLarge": "图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。",
   "ocrImageOrientationPngTooLarge": "校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。",
   "ocrImageOrientationFailed": "无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。",
-  "ocrImagePreparationFailed": "无法处理图片，请重新选择后重试。"
+  "ocrImagePreparationFailed": "无法处理图片，请重新选择后重试。",
+  "homeTitle": "主页",
+  "homeWelcome": "欢迎使用 Stroom",
+  "homeChooseModule": "选择一个功能模块开始使用",
+  "homeOcrSubtitle": "文字识别",
+  "homeAsrTitle": "语音识别",
+  "homeAsrSubtitle": "语音转文字",
+  "homeWebDownloadTitle": "下载网页资源",
+  "homeWebDownloadSubtitle": "下载网页中的音视频",
+  "homeAudioSeparationTitle": "音频分离",
+  "homeAudioSeparationSubtitle": "从视频中提取音频",
+  "homeTtsTitle": "语音合成",
+  "homeTtsSubtitle": "文字转语音",
+  "homeChartsTitle": "图表制作",
+  "homeChartsSubtitle": "Mermaid 图表编辑",
+  "homeMathTitle": "数学绘图",
+  "homeMathSubtitle": "函数绘图",
+  "homeAnkiTitle": "Anki 闪卡",
+  "homeAnkiSubtitle": "记忆辅助系统",
+  "homeTaskFlowTitle": "任务流",
+  "homeTaskFlowEmpty": "创建一个自动化任务流，依次执行多个功能",
+  "homeTaskFlowManage": "{count} 个任务流 · 点击管理",
+  "homeRecentTasks": "最近任务",
+  "homeViewAll": "查看全部",
+  "statusInProgress": "进行中",
+  "statusCompleted": "已完成",
+  "statusFailed": "失败",
+  "navHome": "主页",
+  "navChat": "对话",
+  "navFiles": "文件",
+  "navSettings": "设置",
+  "conversationsTitle": "对话历史",
+  "conversationNew": "新对话",
+  "conversationDeleteTitle": "删除对话",
+  "conversationDeleteMany": "确定要删除选中的 {count} 个对话吗？此操作无法撤销。",
+  "actionCancel": "取消",
+  "actionDelete": "删除",
+  "conversationRename": "重命名对话",
+  "conversationRenameHint": "输入新名称",
+  "actionConfirm": "确定",
+  "conversationNoMatches": "没有找到匹配的对话",
+  "conversationEmpty": "暂无历史记录",
+  "conversationSearchHint": "搜索所有对话中的消息...",
+  "conversationSelected": "已选 {count} 个",
+  "conversationSearch": "搜索",
+  "conversationDeleteSelected": "删除选中",
+  "actionUnselect": "取消选择",
+  "actionSelect": "选择",
+  "conversationDeleteCount": "删除 {count} 个",
+  "conversationPin": "置顶",
+  "conversationUnpin": "取消置顶",
+  "actionRename": "重命名",
+  "conversationAutoRename": "自动命名",
+  "conversationTemporary": "临时对话",
+  "conversationCloseTemporary": "关闭临时对话",
+  "taskListTitle": "任务列表",
+  "taskListEmpty": "暂无任务",
+  "@homeTaskFlowManage": {
+    "description": "Number of task flows on the home screen",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationDeleteMany": {
+    "description": "Confirmation for deleting multiple conversations",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationSelected": {
+    "description": "Selected conversation count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationDeleteCount": {
+    "description": "Delete action with selected count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatSearchCurrent": "搜索当前对话...",
+  "chatSearchAll": "搜索所有对话...",
+  "searchPrevious": "上一个",
+  "searchNext": "下一个",
+  "searchClose": "关闭搜索",
+  "searchCurrentConversation": "当前对话",
+  "searchAllConversations": "所有对话",
+  "chatReasoning": "推理",
+  "chatTools": "工具",
+  "chatCustomParameters": "自定义参数",
+  "chatEditMessage": "编辑消息",
+  "actionClose": "关闭",
+  "chatEditWarning": "重新编辑发送后下面所有的消息将丢失",
+  "chatAttachment": "附件",
+  "chatMessageHint": "输入消息...",
+  "chatFullscreenEdit": "全屏编辑",
+  "chatStopGeneration": "停止生成",
+  "actionSend": "发送",
+  "chatCopy": "复制",
+  "actionSave": "保存",
+  "actionRetry": "重试",
+  "actionEdit": "编辑",
+  "chatViewResponseData": "查看响应数据",
+  "chatViewRequestData": "查看请求数据",
+  "chatInspectJson": "JSON 审查",
+  "chatConfirmEditTitle": "编辑消息",
+  "chatConfirmEditDeleteFollowing": "确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。",
+  "chatConfirmResend": "确定要重新发送这条消息吗？",
+  "chatConfirmRetryTitle": "重试",
+  "chatConfirmRetryDeleteFollowing": "确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。",
+  "chatConfirmRegenerate": "确定要重新生成回复吗？",
+  "chatDeleteMessageTitle": "删除消息",
+  "chatDeleteMessageConfirm": "确定要删除这条消息吗？此操作无法撤销。",
+  "chatThinking": "思考中",
+  "chatThinkingComplete": "思考完成",
+  "conversationDeleteOne": "确定要删除这个对话吗？此操作无法撤销。",
+  "mediaSelectionCount": "已选 {selected}/{total} 个资源",
+  "mediaSelectionTitle": "选择要下载的资源",
+  "mediaCollapseSegments": "收起 {count} 个分片",
+  "mediaExpandSegments": "显示 {count} 个分片",
+  "mediaNoResources": "检测到 0 个资源",
+  "mediaSegment": "分片",
+  "mediaPlaylist": "播放列表",
+  "mediaFullVideo": "整片",
+  "mediaDuration": "时长：{value}",
+  "mediaResolution": "分辨率：{width}x{height}",
+  "mediaPreview": "预览",
+  "mediaSegmentPreviewHint": "分片需通过播放列表预览",
+  "mediaDownloadSelected": "下载选中的 {count} 个资源",
+  "mediaConfirmDownload": "确认下载",
+  "@mediaSelectionCount": {
+    "description": "Selected and total detected resource counts",
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaCollapseSegments": {
+    "description": "Hide media playlist segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaExpandSegments": {
+    "description": "Show media playlist segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaDuration": {
+    "description": "Media duration display",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@mediaResolution": {
+    "description": "Media dimensions display",
+    "placeholders": {
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaDownloadSelected": {
+    "description": "Download selected resources",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatNoMoreHistory": "没有更多内容了",
+  "chatSendFailed": "发送失败",
+  "chatViewErrorDetails": "查看详细错误",
+  "chatCompactionCollapsed": "上下文已压缩，旧对话已总结（点击收起）",
+  "chatCompactionExpanded": "上下文已压缩，旧对话已总结（点击查看摘要）",
+  "chatEditConversationTitle": "编辑对话标题",
+  "chatSearchMessages": "搜索消息",
+  "chatApiMissingSettings": "⚠️ 未配置聊天 API — 前往设置",
+  "appSettings": "设置",
+  "chatCopied": "已复制",
+  "chatNoSavableText": "没有可保存的文本内容",
+  "chatSaveMarkdownTitle": "保存消息为 Markdown",
+  "chatSaveToolCallChoice": "该回复包含多步工具调用，选择要保存的内容：",
+  "chatSaveCompleteMessage": "保存完整消息",
+  "chatSaveLastMessage": "保存最后的消息",
+  "chatSaveToAppFiles": "保存到应用文件",
+  "chatSaveFolderHint": "选择或创建文件夹保存 .md 文件",
+  "chatSaveFilenameHint": "输入文件名（自动添加 .md 后缀）",
+  "chatFilenameRequired": "文件名不能为空",
+  "chatSavedToPath": "已保存到：{path}",
+  "chatSaveFailed": "保存失败：{error}",
+  "chatSavedToAppFiles": "已保存到应用文件：{path}",
+  "chatSelectModel": "选择模型",
+  "chatNoModelsAvailable": "暂无可用模型",
+  "chatAvailableTools": "可用工具",
+  "chatNoToolsAvailable": "暂无可用工具",
+  "chatReasoningSettings": "推理设置",
+  "chatReasoningNotConfigured": "当前模型未配置推理参数，请在模型设置中添加",
+  "chatReasoningEffort": "推理力度",
+  "chatReasoningEffortNotConfigured": "当前模型未配置推理力度参数，请在模型设置中添加",
+  "chatParameterNoOptions": "该参数暂无选项值，请在模型设置中添加",
+  "chatOtherReasoningNotConfigured": "当前模型未配置其他推理参数\n请在模型设置中添加",
+  "chatCustomParamsNotConfigured": "当前模型未配置自定义参数\n请在模型设置中添加",
+  "chatNoOptionValues": "无选项值，请在模型设置中添加",
+  "chatImageLoadFailed": "无法加载图片",
+  "chatVideoLoadFailed": "视频加载失败",
+  "chatHtmlLoading": "加载 HTML 预览...",
+  "chatPreviewLoadFailed": "加载失败",
+  "chatHtmlPreview": "HTML 预览",
+  "chatMermaidLoading": "加载图表预览...",
+  "chatMermaidPreview": "Mermaid 预览",
+  "chatZoomOut": "缩小",
+  "chatZoomIn": "放大",
+  "chatJsonInspection": "JSON 审查",
+  "chatNoRequestData": "无请求数据",
+  "chatNoResponseData": "无响应数据",
+  "chatSaveMessage": "保存消息",
+  "chatChooseSaveLocation": "选择消息保存位置",
+  "chatChooseSaveLocationLabel": "选择保存位置：",
+  "chatSaveAppFile": "保存到应用文件",
+  "chatSaveDevice": "保存到设备",
+  "chatFileTypeAudio": "音频文件",
+  "chatFileTypeVideo": "视频文件",
+  "chatFileTypeDocument": "文档",
+  "chatFileTypeGeneric": "文件",
+  "chatInfoType": "类型",
+  "chatInfoSize": "大小",
+  "chatInfoPath": "路径",
+  "chatErrorBack": "返回",
+  "chatDataDetails": "数据详情",
+  "chatAudioPreviewClose": "关闭",
+  "@chatSavedToPath": {
+    "description": "Path of the saved Markdown file",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@chatSavedToAppFiles": {
+    "description": "Path of the saved application file",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@chatSaveFailed": {
+    "description": "Error from a failed save operation",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPreviewClose": "关闭预览",
+  "actionBack": "返回",
+  "chatCannotLoadFile": "无法加载文件",
+  "chatThinkingNumbered": "思考 {index}",
+  "@chatThinkingNumbered": {
+    "description": "Label for a numbered reasoning section",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  }
 }

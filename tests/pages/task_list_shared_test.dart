@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/task_list_page.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -85,7 +86,12 @@ Future<_RecordingTasks> _pumpList(WidgetTester tester,
         taskFlowExecutionRestoreStatusProvider
             .overrideWith((ref) => restoreStatus),
       ],
-      child: const MaterialApp(home: TaskListPage()),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('zh', 'CN'),
+        home: TaskListPage(),
+      ),
     ),
   );
   await tester.pump();

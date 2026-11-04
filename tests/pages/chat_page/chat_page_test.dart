@@ -8,6 +8,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
@@ -40,6 +42,14 @@ Widget createChatTestApp({String? activeConversationId}) {
       }),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const ChatPage(),
     ),
   );
@@ -122,7 +132,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -214,7 +233,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -314,7 +342,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -378,7 +415,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -458,7 +504,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -521,7 +576,16 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pumpAndSettle();

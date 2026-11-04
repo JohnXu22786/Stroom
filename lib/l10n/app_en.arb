@@ -301,5 +301,294 @@
   "ocrImageDimensionsTooLarge": "The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.",
   "ocrImageOrientationPngTooLarge": "The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.",
   "ocrImageOrientationFailed": "The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.",
-  "ocrImagePreparationFailed": "The image could not be processed. Select it again and try again."
+  "ocrImagePreparationFailed": "The image could not be processed. Select it again and try again.",
+  "homeTitle": "Home",
+  "homeWelcome": "Welcome to Stroom",
+  "homeChooseModule": "Choose a module to get started",
+  "homeOcrSubtitle": "Text recognition",
+  "homeAsrTitle": "Speech recognition",
+  "homeAsrSubtitle": "Speech to text",
+  "homeWebDownloadTitle": "Download web media",
+  "homeWebDownloadSubtitle": "Download audio and video from webpages",
+  "homeAudioSeparationTitle": "Audio separation",
+  "homeAudioSeparationSubtitle": "Extract audio from video",
+  "homeTtsTitle": "Text to speech",
+  "homeTtsSubtitle": "Convert text to speech",
+  "homeChartsTitle": "Chart maker",
+  "homeChartsSubtitle": "Mermaid chart editor",
+  "homeMathTitle": "Math plotting",
+  "homeMathSubtitle": "Plot functions",
+  "homeAnkiTitle": "Anki flashcards",
+  "homeAnkiSubtitle": "Memory aid system",
+  "homeTaskFlowTitle": "Task flows",
+  "homeTaskFlowEmpty": "Create an automated flow to run multiple modules in sequence",
+  "homeTaskFlowManage": "{count, plural, one{{count} task flow · Manage} other{{count} task flows · Manage}}",
+  "homeRecentTasks": "Recent tasks",
+  "homeViewAll": "View all",
+  "statusInProgress": "In progress",
+  "statusCompleted": "Completed",
+  "statusFailed": "Failed",
+  "navHome": "Home",
+  "navChat": "Chat",
+  "navFiles": "Files",
+  "navSettings": "Settings",
+  "conversationsTitle": "Conversation history",
+  "conversationNew": "New conversation",
+  "conversationDeleteTitle": "Delete conversation",
+  "conversationDeleteMany": "{count, plural, one{Delete the selected {count} conversation? This cannot be undone.} other{Delete the selected {count} conversations? This cannot be undone.}}",
+  "actionCancel": "Cancel",
+  "actionDelete": "Delete",
+  "conversationRename": "Rename conversation",
+  "conversationRenameHint": "Enter a new name",
+  "actionConfirm": "Confirm",
+  "conversationNoMatches": "No matching conversations found",
+  "conversationEmpty": "No conversation history",
+  "conversationSearchHint": "Search messages in all conversations...",
+  "conversationSelected": "{count} selected",
+  "conversationSearch": "Search",
+  "conversationDeleteSelected": "Delete selected",
+  "actionUnselect": "Cancel selection",
+  "actionSelect": "Select",
+  "conversationDeleteCount": "Delete {count}",
+  "conversationPin": "Pin",
+  "conversationUnpin": "Unpin",
+  "actionRename": "Rename",
+  "conversationAutoRename": "Auto-name",
+  "conversationTemporary": "Temporary conversation",
+  "conversationCloseTemporary": "Close temporary conversation",
+  "taskListTitle": "Task list",
+  "taskListEmpty": "No tasks",
+  "@homeTaskFlowManage": {
+    "description": "Number of task flows on the home screen",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationDeleteMany": {
+    "description": "Confirmation for deleting multiple conversations",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationSelected": {
+    "description": "Selected conversation count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@conversationDeleteCount": {
+    "description": "Delete action with selected count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatSearchCurrent": "Search this conversation...",
+  "chatSearchAll": "Search all conversations...",
+  "searchPrevious": "Previous match",
+  "searchNext": "Next match",
+  "searchClose": "Close search",
+  "searchCurrentConversation": "Current conversation",
+  "searchAllConversations": "All conversations",
+  "chatReasoning": "Reasoning",
+  "chatTools": "Tools",
+  "chatCustomParameters": "Custom parameters",
+  "chatEditMessage": "Edit message",
+  "actionClose": "Close",
+  "chatEditWarning": "All messages below will be lost when you edit and resend",
+  "chatAttachment": "Attachment",
+  "chatMessageHint": "Enter a message...",
+  "chatFullscreenEdit": "Full-screen editor",
+  "chatStopGeneration": "Stop generating",
+  "actionSend": "Send",
+  "chatCopy": "Copy",
+  "actionSave": "Save",
+  "actionRetry": "Retry",
+  "actionEdit": "Edit",
+  "chatViewResponseData": "View response data",
+  "chatViewRequestData": "View request data",
+  "chatInspectJson": "Inspect JSON",
+  "chatConfirmEditTitle": "Edit message",
+  "chatConfirmEditDeleteFollowing": "Edit this message? This message and all following messages will be deleted.",
+  "chatConfirmResend": "Resend this message?",
+  "chatConfirmRetryTitle": "Retry",
+  "chatConfirmRetryDeleteFollowing": "Retry this response? This message and all following messages will be deleted.",
+  "chatConfirmRegenerate": "Regenerate the response?",
+  "chatDeleteMessageTitle": "Delete message",
+  "chatDeleteMessageConfirm": "Delete this message? This cannot be undone.",
+  "chatThinking": "Thinking",
+  "chatThinkingComplete": "Thought",
+  "conversationDeleteOne": "Delete this conversation? This cannot be undone.",
+  "mediaSelectionCount": "{total, plural, one{Selected {selected}/{total} resource} other{Selected {selected}/{total} resources}}",
+  "mediaSelectionTitle": "Select media to download",
+  "mediaCollapseSegments": "{count, plural, one{Hide {count} segment} other{Hide {count} segments}}",
+  "mediaExpandSegments": "{count, plural, one{Show {count} segment} other{Show {count} segments}}",
+  "mediaNoResources": "No resources detected",
+  "mediaSegment": "Segment",
+  "mediaPlaylist": "Playlist",
+  "mediaFullVideo": "Full video",
+  "mediaDuration": "Duration: {value}",
+  "mediaResolution": "Resolution: {width}x{height}",
+  "mediaPreview": "Preview",
+  "mediaSegmentPreviewHint": "Preview segments from the playlist",
+  "mediaDownloadSelected": "{count, plural, one{Download {count} selected resource} other{Download {count} selected resources}}",
+  "mediaConfirmDownload": "Confirm download",
+  "@mediaSelectionCount": {
+    "description": "Selected and total detected resource counts",
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaCollapseSegments": {
+    "description": "Hide media playlist segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaExpandSegments": {
+    "description": "Show media playlist segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaDuration": {
+    "description": "Media duration display",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@mediaResolution": {
+    "description": "Media dimensions display",
+    "placeholders": {
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    }
+  },
+  "@mediaDownloadSelected": {
+    "description": "Download selected resources",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatNoMoreHistory": "No more messages",
+  "chatSendFailed": "Message failed to send",
+  "chatViewErrorDetails": "View error details",
+  "chatCompactionCollapsed": "Context compacted · older messages summarized (click to collapse)",
+  "chatCompactionExpanded": "Context compacted · older messages summarized (click to view summary)",
+  "chatEditConversationTitle": "Edit conversation title",
+  "chatSearchMessages": "Search messages",
+  "chatApiMissingSettings": "⚠️ Chat API is not configured — go to Settings",
+  "appSettings": "Settings",
+  "chatCopied": "Copied",
+  "chatNoSavableText": "There is no text to save",
+  "chatSaveMarkdownTitle": "Save message as Markdown",
+  "chatSaveToolCallChoice": "This reply contains multiple tool calls. Choose what to save:",
+  "chatSaveCompleteMessage": "Save complete message",
+  "chatSaveLastMessage": "Save last message",
+  "chatSaveToAppFiles": "Save to app files",
+  "chatSaveFolderHint": "Choose or create a folder for the .md file",
+  "chatSaveFilenameHint": "Enter a file name (.md is added automatically)",
+  "chatFilenameRequired": "The file name cannot be empty",
+  "chatSavedToPath": "Saved to: {path}",
+  "chatSaveFailed": "Save failed: {error}",
+  "chatSavedToAppFiles": "Saved to app files: {path}",
+  "chatSelectModel": "Select a model",
+  "chatNoModelsAvailable": "No models available",
+  "chatAvailableTools": "Available tools",
+  "chatNoToolsAvailable": "No tools available",
+  "chatReasoningSettings": "Reasoning settings",
+  "chatReasoningNotConfigured": "No reasoning parameters are configured for this model. Add them in model settings.",
+  "chatReasoningEffort": "Reasoning effort",
+  "chatReasoningEffortNotConfigured": "No reasoning effort parameter is configured for this model. Add it in model settings.",
+  "chatParameterNoOptions": "This parameter has no option values. Add them in model settings.",
+  "chatOtherReasoningNotConfigured": "No other reasoning parameters are configured for this model.\nAdd them in model settings.",
+  "chatCustomParamsNotConfigured": "No custom parameters are configured for this model.\nAdd them in model settings.",
+  "chatNoOptionValues": "No option values. Add them in model settings.",
+  "chatImageLoadFailed": "Unable to load image",
+  "chatVideoLoadFailed": "Unable to load video",
+  "chatHtmlLoading": "Loading HTML preview...",
+  "chatPreviewLoadFailed": "Preview failed to load",
+  "chatHtmlPreview": "HTML preview",
+  "chatMermaidLoading": "Loading chart preview...",
+  "chatMermaidPreview": "Mermaid preview",
+  "chatZoomOut": "Zoom out",
+  "chatZoomIn": "Zoom in",
+  "chatJsonInspection": "JSON inspection",
+  "chatNoRequestData": "No request data",
+  "chatNoResponseData": "No response data",
+  "chatSaveMessage": "Save message",
+  "chatChooseSaveLocation": "Choose where to save the message",
+  "chatChooseSaveLocationLabel": "Choose a save location:",
+  "chatSaveAppFile": "Save to app files",
+  "chatSaveDevice": "Save to device",
+  "chatFileTypeAudio": "Audio file",
+  "chatFileTypeVideo": "Video file",
+  "chatFileTypeDocument": "Document",
+  "chatFileTypeGeneric": "File",
+  "chatInfoType": "Type",
+  "chatInfoSize": "Size",
+  "chatInfoPath": "Path",
+  "chatErrorBack": "Back",
+  "chatDataDetails": "Data details",
+  "chatAudioPreviewClose": "Close",
+  "@chatSavedToPath": {
+    "description": "Path of the saved Markdown file",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@chatSavedToAppFiles": {
+    "description": "Path of the saved application file",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@chatSaveFailed": {
+    "description": "Error from a failed save operation",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPreviewClose": "Close preview",
+  "actionBack": "Back",
+  "chatCannotLoadFile": "Unable to load file",
+  "chatThinkingNumbered": "Thinking {index}",
+  "@chatThinkingNumbered": {
+    "description": "Label for a numbered reasoning section",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  }
 }

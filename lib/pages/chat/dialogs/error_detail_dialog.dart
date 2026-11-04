@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import '../utils/format_chat_error.dart';
 import '../../../utils/ocr_diagnostics.dart';
 
@@ -113,7 +114,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('关闭'),
+                      child: Text(AppLocalizations.of(context)!.actionClose),
                     ),
                   ),
                 ),
@@ -149,7 +150,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               },
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              tooltip: '返回',
+              tooltip: AppLocalizations.of(context)!.chatErrorBack,
             ),
           if (_selectedSectionId != null) const SizedBox(width: 8),
           Icon(
@@ -161,7 +162,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           Text(
             _selectedSectionId != null
                 ? _findSectionLabel(_selectedSectionId!)
-                : '数据详情',
+                : AppLocalizations.of(context)!.chatDataDetails,
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,

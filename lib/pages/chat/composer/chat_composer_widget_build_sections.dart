@@ -63,7 +63,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
-      reasoningLabel = '推理';
+      reasoningLabel = AppLocalizations.of(context)!.chatReasoning;
     }
     // Reasoning chip color: purple only when reasoning is actually usable
     // (a model with configured reasoning params AND the toggle on).
@@ -94,8 +94,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // reasoning extras, which remain available in this same panel.
     // ═══════════════════════════════════════════════════════════
     final customParamValues = ref.watch(customParamValuesProvider);
-    final activeConfiguredCustomParamsCount =
-        widget.customParams.where((param) {
+    final activeConfiguredCustomParamsCount = widget.customParams.where((
+      param,
+    ) {
       final selected = customParamValues != null
           ? customParamValues.containsKey(param.paramName)
               ? param.type == 'json'
@@ -169,7 +170,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               ),
               _SettingsChip(
                 icon: Icons.build_outlined,
-                label: '工具',
+                label: AppLocalizations.of(context)!.chatTools,
                 color: toolColor,
                 onTap: _showToolsPanel,
                 badgeCount: toolBadgeCount,
@@ -187,7 +188,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               // a panel that explains "当前模型未配置自定义参数".
               _SettingsChip(
                 icon: Icons.tune,
-                label: '自定义参数',
+                label: AppLocalizations.of(context)!.chatCustomParameters,
                 color: customParamsColor,
                 onTap: _showCustomParamsPanel,
                 enabled: true,
@@ -205,12 +206,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   /// and fades in when it returns after the warning is dismissed.
   Widget _buildEditModeCapsule({required ColorScheme cs}) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 6,
-        bottom: 0,
-      ),
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -229,21 +225,14 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   width: 1,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.edit,
-                    size: 16,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.edit, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                    '编辑消息',
+                    AppLocalizations.of(context)!.chatEditMessage,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -252,7 +241,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   ),
                   const SizedBox(width: 6),
                   Tooltip(
-                    message: '关闭',
+                    message: AppLocalizations.of(context)!.actionClose,
                     child: GestureDetector(
                       onTap: widget.onEditCancel,
                       // Small padding around the close icon for a slightly
@@ -290,12 +279,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     required bool fadingOut,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 6,
-        bottom: 0,
-      ),
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -335,7 +319,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        '重新编辑发送后下面所有的消息将丢失',
+                        AppLocalizations.of(context)!.chatEditWarning,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -347,7 +331,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     ),
                     const SizedBox(width: 6),
                     Tooltip(
-                      message: '关闭',
+                      message: AppLocalizations.of(context)!.actionClose,
                       child: GestureDetector(
                         onTap: _dismissEditWarning,
                         // Small padding around the close icon (see the
@@ -390,11 +374,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
       child: Row(
         children: [
           IconButton(
-            icon: Icon(
-              Icons.attach_file_outlined,
-              color: cs.onSurfaceVariant,
-            ),
-            tooltip: '附件',
+            icon: Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
+            tooltip: AppLocalizations.of(context)!.chatAttachment,
             onPressed: _showAttachmentPicker,
           ),
           const SizedBox(width: 4),
@@ -415,7 +396,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               minLines: 1,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText: '输入消息...',
+                hintText: AppLocalizations.of(context)!.chatMessageHint,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -432,7 +413,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     size: 20,
                     color: cs.onSurfaceVariant,
                   ),
-                  tooltip: '全屏编辑',
+                  tooltip: AppLocalizations.of(context)!.chatFullscreenEdit,
                   onPressed: _showComposerFullscreenEditor,
                 ),
                 suffixIconConstraints: const BoxConstraints(
@@ -445,17 +426,14 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
           const SizedBox(width: 4),
           if (isStreaming)
             IconButton(
-              icon: Icon(
-                Icons.stop_circle_outlined,
-                color: Colors.red[400],
-              ),
-              tooltip: '停止生成',
+              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400]),
+              tooltip: AppLocalizations.of(context)!.chatStopGeneration,
               onPressed: widget.onStop,
             )
           else
             IconButton(
               icon: Icon(Icons.send_rounded, color: cs.primary),
-              tooltip: '发送',
+              tooltip: AppLocalizations.of(context)!.actionSend,
               onPressed: (hasText || hasAttachments)
                   ? () => _handleSubmitted(_textController.text)
                   : null,

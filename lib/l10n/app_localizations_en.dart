@@ -1129,6 +1129,602 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ocrImagePreparationFailed =>
       'The image could not be processed. Select it again and try again.';
+
+  @override
+  String get homeTitle => 'Home';
+
+  @override
+  String get homeWelcome => 'Welcome to Stroom';
+
+  @override
+  String get homeChooseModule => 'Choose a module to get started';
+
+  @override
+  String get homeOcrSubtitle => 'Text recognition';
+
+  @override
+  String get homeAsrTitle => 'Speech recognition';
+
+  @override
+  String get homeAsrSubtitle => 'Speech to text';
+
+  @override
+  String get homeWebDownloadTitle => 'Download web media';
+
+  @override
+  String get homeWebDownloadSubtitle =>
+      'Download audio and video from webpages';
+
+  @override
+  String get homeAudioSeparationTitle => 'Audio separation';
+
+  @override
+  String get homeAudioSeparationSubtitle => 'Extract audio from video';
+
+  @override
+  String get homeTtsTitle => 'Text to speech';
+
+  @override
+  String get homeTtsSubtitle => 'Convert text to speech';
+
+  @override
+  String get homeChartsTitle => 'Chart maker';
+
+  @override
+  String get homeChartsSubtitle => 'Mermaid chart editor';
+
+  @override
+  String get homeMathTitle => 'Math plotting';
+
+  @override
+  String get homeMathSubtitle => 'Plot functions';
+
+  @override
+  String get homeAnkiTitle => 'Anki flashcards';
+
+  @override
+  String get homeAnkiSubtitle => 'Memory aid system';
+
+  @override
+  String get homeTaskFlowTitle => 'Task flows';
+
+  @override
+  String get homeTaskFlowEmpty =>
+      'Create an automated flow to run multiple modules in sequence';
+
+  @override
+  String homeTaskFlowManage(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count task flows · Manage',
+      one: '$count task flow · Manage',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeRecentTasks => 'Recent tasks';
+
+  @override
+  String get homeViewAll => 'View all';
+
+  @override
+  String get statusInProgress => 'In progress';
+
+  @override
+  String get statusCompleted => 'Completed';
+
+  @override
+  String get statusFailed => 'Failed';
+
+  @override
+  String get navHome => 'Home';
+
+  @override
+  String get navChat => 'Chat';
+
+  @override
+  String get navFiles => 'Files';
+
+  @override
+  String get navSettings => 'Settings';
+
+  @override
+  String get conversationsTitle => 'Conversation history';
+
+  @override
+  String get conversationNew => 'New conversation';
+
+  @override
+  String get conversationDeleteTitle => 'Delete conversation';
+
+  @override
+  String conversationDeleteMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete the selected $count conversations? This cannot be undone.',
+      one: 'Delete the selected $count conversation? This cannot be undone.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get actionCancel => 'Cancel';
+
+  @override
+  String get actionDelete => 'Delete';
+
+  @override
+  String get conversationRename => 'Rename conversation';
+
+  @override
+  String get conversationRenameHint => 'Enter a new name';
+
+  @override
+  String get actionConfirm => 'Confirm';
+
+  @override
+  String get conversationNoMatches => 'No matching conversations found';
+
+  @override
+  String get conversationEmpty => 'No conversation history';
+
+  @override
+  String get conversationSearchHint =>
+      'Search messages in all conversations...';
+
+  @override
+  String conversationSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get conversationSearch => 'Search';
+
+  @override
+  String get conversationDeleteSelected => 'Delete selected';
+
+  @override
+  String get actionUnselect => 'Cancel selection';
+
+  @override
+  String get actionSelect => 'Select';
+
+  @override
+  String conversationDeleteCount(int count) {
+    return 'Delete $count';
+  }
+
+  @override
+  String get conversationPin => 'Pin';
+
+  @override
+  String get conversationUnpin => 'Unpin';
+
+  @override
+  String get actionRename => 'Rename';
+
+  @override
+  String get conversationAutoRename => 'Auto-name';
+
+  @override
+  String get conversationTemporary => 'Temporary conversation';
+
+  @override
+  String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get taskListTitle => 'Task list';
+
+  @override
+  String get taskListEmpty => 'No tasks';
+
+  @override
+  String get chatSearchCurrent => 'Search this conversation...';
+
+  @override
+  String get chatSearchAll => 'Search all conversations...';
+
+  @override
+  String get searchPrevious => 'Previous match';
+
+  @override
+  String get searchNext => 'Next match';
+
+  @override
+  String get searchClose => 'Close search';
+
+  @override
+  String get searchCurrentConversation => 'Current conversation';
+
+  @override
+  String get searchAllConversations => 'All conversations';
+
+  @override
+  String get chatReasoning => 'Reasoning';
+
+  @override
+  String get chatTools => 'Tools';
+
+  @override
+  String get chatCustomParameters => 'Custom parameters';
+
+  @override
+  String get chatEditMessage => 'Edit message';
+
+  @override
+  String get actionClose => 'Close';
+
+  @override
+  String get chatEditWarning =>
+      'All messages below will be lost when you edit and resend';
+
+  @override
+  String get chatAttachment => 'Attachment';
+
+  @override
+  String get chatMessageHint => 'Enter a message...';
+
+  @override
+  String get chatFullscreenEdit => 'Full-screen editor';
+
+  @override
+  String get chatStopGeneration => 'Stop generating';
+
+  @override
+  String get actionSend => 'Send';
+
+  @override
+  String get chatCopy => 'Copy';
+
+  @override
+  String get actionSave => 'Save';
+
+  @override
+  String get actionRetry => 'Retry';
+
+  @override
+  String get actionEdit => 'Edit';
+
+  @override
+  String get chatViewResponseData => 'View response data';
+
+  @override
+  String get chatViewRequestData => 'View request data';
+
+  @override
+  String get chatInspectJson => 'Inspect JSON';
+
+  @override
+  String get chatConfirmEditTitle => 'Edit message';
+
+  @override
+  String get chatConfirmEditDeleteFollowing =>
+      'Edit this message? This message and all following messages will be deleted.';
+
+  @override
+  String get chatConfirmResend => 'Resend this message?';
+
+  @override
+  String get chatConfirmRetryTitle => 'Retry';
+
+  @override
+  String get chatConfirmRetryDeleteFollowing =>
+      'Retry this response? This message and all following messages will be deleted.';
+
+  @override
+  String get chatConfirmRegenerate => 'Regenerate the response?';
+
+  @override
+  String get chatDeleteMessageTitle => 'Delete message';
+
+  @override
+  String get chatDeleteMessageConfirm =>
+      'Delete this message? This cannot be undone.';
+
+  @override
+  String get chatThinking => 'Thinking';
+
+  @override
+  String get chatThinkingComplete => 'Thought';
+
+  @override
+  String get conversationDeleteOne =>
+      'Delete this conversation? This cannot be undone.';
+
+  @override
+  String mediaSelectionCount(int selected, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: 'Selected $selected/$total resources',
+      one: 'Selected $selected/$total resource',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaSelectionTitle => 'Select media to download';
+
+  @override
+  String mediaCollapseSegments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hide $count segments',
+      one: 'Hide $count segment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String mediaExpandSegments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Show $count segments',
+      one: 'Show $count segment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaNoResources => 'No resources detected';
+
+  @override
+  String get mediaSegment => 'Segment';
+
+  @override
+  String get mediaPlaylist => 'Playlist';
+
+  @override
+  String get mediaFullVideo => 'Full video';
+
+  @override
+  String mediaDuration(String value) {
+    return 'Duration: $value';
+  }
+
+  @override
+  String mediaResolution(int width, int height) {
+    return 'Resolution: ${width}x$height';
+  }
+
+  @override
+  String get mediaPreview => 'Preview';
+
+  @override
+  String get mediaSegmentPreviewHint => 'Preview segments from the playlist';
+
+  @override
+  String mediaDownloadSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Download $count selected resources',
+      one: 'Download $count selected resource',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaConfirmDownload => 'Confirm download';
+
+  @override
+  String get chatNoMoreHistory => 'No more messages';
+
+  @override
+  String get chatSendFailed => 'Message failed to send';
+
+  @override
+  String get chatViewErrorDetails => 'View error details';
+
+  @override
+  String get chatCompactionCollapsed =>
+      'Context compacted · older messages summarized (click to collapse)';
+
+  @override
+  String get chatCompactionExpanded =>
+      'Context compacted · older messages summarized (click to view summary)';
+
+  @override
+  String get chatEditConversationTitle => 'Edit conversation title';
+
+  @override
+  String get chatSearchMessages => 'Search messages';
+
+  @override
+  String get chatApiMissingSettings =>
+      '⚠️ Chat API is not configured — go to Settings';
+
+  @override
+  String get appSettings => 'Settings';
+
+  @override
+  String get chatCopied => 'Copied';
+
+  @override
+  String get chatNoSavableText => 'There is no text to save';
+
+  @override
+  String get chatSaveMarkdownTitle => 'Save message as Markdown';
+
+  @override
+  String get chatSaveToolCallChoice =>
+      'This reply contains multiple tool calls. Choose what to save:';
+
+  @override
+  String get chatSaveCompleteMessage => 'Save complete message';
+
+  @override
+  String get chatSaveLastMessage => 'Save last message';
+
+  @override
+  String get chatSaveToAppFiles => 'Save to app files';
+
+  @override
+  String get chatSaveFolderHint => 'Choose or create a folder for the .md file';
+
+  @override
+  String get chatSaveFilenameHint =>
+      'Enter a file name (.md is added automatically)';
+
+  @override
+  String get chatFilenameRequired => 'The file name cannot be empty';
+
+  @override
+  String chatSavedToPath(String path) {
+    return 'Saved to: $path';
+  }
+
+  @override
+  String chatSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String chatSavedToAppFiles(String path) {
+    return 'Saved to app files: $path';
+  }
+
+  @override
+  String get chatSelectModel => 'Select a model';
+
+  @override
+  String get chatNoModelsAvailable => 'No models available';
+
+  @override
+  String get chatAvailableTools => 'Available tools';
+
+  @override
+  String get chatNoToolsAvailable => 'No tools available';
+
+  @override
+  String get chatReasoningSettings => 'Reasoning settings';
+
+  @override
+  String get chatReasoningNotConfigured =>
+      'No reasoning parameters are configured for this model. Add them in model settings.';
+
+  @override
+  String get chatReasoningEffort => 'Reasoning effort';
+
+  @override
+  String get chatReasoningEffortNotConfigured =>
+      'No reasoning effort parameter is configured for this model. Add it in model settings.';
+
+  @override
+  String get chatParameterNoOptions =>
+      'This parameter has no option values. Add them in model settings.';
+
+  @override
+  String get chatOtherReasoningNotConfigured =>
+      'No other reasoning parameters are configured for this model.\nAdd them in model settings.';
+
+  @override
+  String get chatCustomParamsNotConfigured =>
+      'No custom parameters are configured for this model.\nAdd them in model settings.';
+
+  @override
+  String get chatNoOptionValues =>
+      'No option values. Add them in model settings.';
+
+  @override
+  String get chatImageLoadFailed => 'Unable to load image';
+
+  @override
+  String get chatVideoLoadFailed => 'Unable to load video';
+
+  @override
+  String get chatHtmlLoading => 'Loading HTML preview...';
+
+  @override
+  String get chatPreviewLoadFailed => 'Preview failed to load';
+
+  @override
+  String get chatHtmlPreview => 'HTML preview';
+
+  @override
+  String get chatMermaidLoading => 'Loading chart preview...';
+
+  @override
+  String get chatMermaidPreview => 'Mermaid preview';
+
+  @override
+  String get chatZoomOut => 'Zoom out';
+
+  @override
+  String get chatZoomIn => 'Zoom in';
+
+  @override
+  String get chatJsonInspection => 'JSON inspection';
+
+  @override
+  String get chatNoRequestData => 'No request data';
+
+  @override
+  String get chatNoResponseData => 'No response data';
+
+  @override
+  String get chatSaveMessage => 'Save message';
+
+  @override
+  String get chatChooseSaveLocation => 'Choose where to save the message';
+
+  @override
+  String get chatChooseSaveLocationLabel => 'Choose a save location:';
+
+  @override
+  String get chatSaveAppFile => 'Save to app files';
+
+  @override
+  String get chatSaveDevice => 'Save to device';
+
+  @override
+  String get chatFileTypeAudio => 'Audio file';
+
+  @override
+  String get chatFileTypeVideo => 'Video file';
+
+  @override
+  String get chatFileTypeDocument => 'Document';
+
+  @override
+  String get chatFileTypeGeneric => 'File';
+
+  @override
+  String get chatInfoType => 'Type';
+
+  @override
+  String get chatInfoSize => 'Size';
+
+  @override
+  String get chatInfoPath => 'Path';
+
+  @override
+  String get chatErrorBack => 'Back';
+
+  @override
+  String get chatDataDetails => 'Data details';
+
+  @override
+  String get chatAudioPreviewClose => 'Close';
+
+  @override
+  String get chatPreviewClose => 'Close preview';
+
+  @override
+  String get actionBack => 'Back';
+
+  @override
+  String get chatCannotLoadFile => 'Unable to load file';
+
+  @override
+  String chatThinkingNumbered(int index) {
+    return 'Thinking $index';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -2255,4 +2851,600 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ocrImagePreparationFailed =>
       'The image could not be processed. Select it again and try again.';
+
+  @override
+  String get homeTitle => 'Home';
+
+  @override
+  String get homeWelcome => 'Welcome to Stroom';
+
+  @override
+  String get homeChooseModule => 'Choose a module to get started';
+
+  @override
+  String get homeOcrSubtitle => 'Text recognition';
+
+  @override
+  String get homeAsrTitle => 'Speech recognition';
+
+  @override
+  String get homeAsrSubtitle => 'Speech to text';
+
+  @override
+  String get homeWebDownloadTitle => 'Download web media';
+
+  @override
+  String get homeWebDownloadSubtitle =>
+      'Download audio and video from webpages';
+
+  @override
+  String get homeAudioSeparationTitle => 'Audio separation';
+
+  @override
+  String get homeAudioSeparationSubtitle => 'Extract audio from video';
+
+  @override
+  String get homeTtsTitle => 'Text to speech';
+
+  @override
+  String get homeTtsSubtitle => 'Convert text to speech';
+
+  @override
+  String get homeChartsTitle => 'Chart maker';
+
+  @override
+  String get homeChartsSubtitle => 'Mermaid chart editor';
+
+  @override
+  String get homeMathTitle => 'Math plotting';
+
+  @override
+  String get homeMathSubtitle => 'Plot functions';
+
+  @override
+  String get homeAnkiTitle => 'Anki flashcards';
+
+  @override
+  String get homeAnkiSubtitle => 'Memory aid system';
+
+  @override
+  String get homeTaskFlowTitle => 'Task flows';
+
+  @override
+  String get homeTaskFlowEmpty =>
+      'Create an automated flow to run multiple modules in sequence';
+
+  @override
+  String homeTaskFlowManage(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count task flows · Manage',
+      one: '$count task flow · Manage',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeRecentTasks => 'Recent tasks';
+
+  @override
+  String get homeViewAll => 'View all';
+
+  @override
+  String get statusInProgress => 'In progress';
+
+  @override
+  String get statusCompleted => 'Completed';
+
+  @override
+  String get statusFailed => 'Failed';
+
+  @override
+  String get navHome => 'Home';
+
+  @override
+  String get navChat => 'Chat';
+
+  @override
+  String get navFiles => 'Files';
+
+  @override
+  String get navSettings => 'Settings';
+
+  @override
+  String get conversationsTitle => 'Conversation history';
+
+  @override
+  String get conversationNew => 'New conversation';
+
+  @override
+  String get conversationDeleteTitle => 'Delete conversation';
+
+  @override
+  String conversationDeleteMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete the selected $count conversations? This cannot be undone.',
+      one: 'Delete the selected $count conversation? This cannot be undone.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get actionCancel => 'Cancel';
+
+  @override
+  String get actionDelete => 'Delete';
+
+  @override
+  String get conversationRename => 'Rename conversation';
+
+  @override
+  String get conversationRenameHint => 'Enter a new name';
+
+  @override
+  String get actionConfirm => 'Confirm';
+
+  @override
+  String get conversationNoMatches => 'No matching conversations found';
+
+  @override
+  String get conversationEmpty => 'No conversation history';
+
+  @override
+  String get conversationSearchHint =>
+      'Search messages in all conversations...';
+
+  @override
+  String conversationSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get conversationSearch => 'Search';
+
+  @override
+  String get conversationDeleteSelected => 'Delete selected';
+
+  @override
+  String get actionUnselect => 'Cancel selection';
+
+  @override
+  String get actionSelect => 'Select';
+
+  @override
+  String conversationDeleteCount(int count) {
+    return 'Delete $count';
+  }
+
+  @override
+  String get conversationPin => 'Pin';
+
+  @override
+  String get conversationUnpin => 'Unpin';
+
+  @override
+  String get actionRename => 'Rename';
+
+  @override
+  String get conversationAutoRename => 'Auto-name';
+
+  @override
+  String get conversationTemporary => 'Temporary conversation';
+
+  @override
+  String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get taskListTitle => 'Task list';
+
+  @override
+  String get taskListEmpty => 'No tasks';
+
+  @override
+  String get chatSearchCurrent => 'Search this conversation...';
+
+  @override
+  String get chatSearchAll => 'Search all conversations...';
+
+  @override
+  String get searchPrevious => 'Previous match';
+
+  @override
+  String get searchNext => 'Next match';
+
+  @override
+  String get searchClose => 'Close search';
+
+  @override
+  String get searchCurrentConversation => 'Current conversation';
+
+  @override
+  String get searchAllConversations => 'All conversations';
+
+  @override
+  String get chatReasoning => 'Reasoning';
+
+  @override
+  String get chatTools => 'Tools';
+
+  @override
+  String get chatCustomParameters => 'Custom parameters';
+
+  @override
+  String get chatEditMessage => 'Edit message';
+
+  @override
+  String get actionClose => 'Close';
+
+  @override
+  String get chatEditWarning =>
+      'All messages below will be lost when you edit and resend';
+
+  @override
+  String get chatAttachment => 'Attachment';
+
+  @override
+  String get chatMessageHint => 'Enter a message...';
+
+  @override
+  String get chatFullscreenEdit => 'Full-screen editor';
+
+  @override
+  String get chatStopGeneration => 'Stop generating';
+
+  @override
+  String get actionSend => 'Send';
+
+  @override
+  String get chatCopy => 'Copy';
+
+  @override
+  String get actionSave => 'Save';
+
+  @override
+  String get actionRetry => 'Retry';
+
+  @override
+  String get actionEdit => 'Edit';
+
+  @override
+  String get chatViewResponseData => 'View response data';
+
+  @override
+  String get chatViewRequestData => 'View request data';
+
+  @override
+  String get chatInspectJson => 'Inspect JSON';
+
+  @override
+  String get chatConfirmEditTitle => 'Edit message';
+
+  @override
+  String get chatConfirmEditDeleteFollowing =>
+      'Edit this message? This message and all following messages will be deleted.';
+
+  @override
+  String get chatConfirmResend => 'Resend this message?';
+
+  @override
+  String get chatConfirmRetryTitle => 'Retry';
+
+  @override
+  String get chatConfirmRetryDeleteFollowing =>
+      'Retry this response? This message and all following messages will be deleted.';
+
+  @override
+  String get chatConfirmRegenerate => 'Regenerate the response?';
+
+  @override
+  String get chatDeleteMessageTitle => 'Delete message';
+
+  @override
+  String get chatDeleteMessageConfirm =>
+      'Delete this message? This cannot be undone.';
+
+  @override
+  String get chatThinking => 'Thinking';
+
+  @override
+  String get chatThinkingComplete => 'Thought';
+
+  @override
+  String get conversationDeleteOne =>
+      'Delete this conversation? This cannot be undone.';
+
+  @override
+  String mediaSelectionCount(int selected, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: 'Selected $selected/$total resources',
+      one: 'Selected $selected/$total resource',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaSelectionTitle => 'Select media to download';
+
+  @override
+  String mediaCollapseSegments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hide $count segments',
+      one: 'Hide $count segment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String mediaExpandSegments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Show $count segments',
+      one: 'Show $count segment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaNoResources => 'No resources detected';
+
+  @override
+  String get mediaSegment => 'Segment';
+
+  @override
+  String get mediaPlaylist => 'Playlist';
+
+  @override
+  String get mediaFullVideo => 'Full video';
+
+  @override
+  String mediaDuration(String value) {
+    return 'Duration: $value';
+  }
+
+  @override
+  String mediaResolution(int width, int height) {
+    return 'Resolution: ${width}x$height';
+  }
+
+  @override
+  String get mediaPreview => 'Preview';
+
+  @override
+  String get mediaSegmentPreviewHint => 'Preview segments from the playlist';
+
+  @override
+  String mediaDownloadSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Download $count selected resources',
+      one: 'Download $count selected resource',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mediaConfirmDownload => 'Confirm download';
+
+  @override
+  String get chatNoMoreHistory => 'No more messages';
+
+  @override
+  String get chatSendFailed => 'Message failed to send';
+
+  @override
+  String get chatViewErrorDetails => 'View error details';
+
+  @override
+  String get chatCompactionCollapsed =>
+      'Context compacted · older messages summarized (click to collapse)';
+
+  @override
+  String get chatCompactionExpanded =>
+      'Context compacted · older messages summarized (click to view summary)';
+
+  @override
+  String get chatEditConversationTitle => 'Edit conversation title';
+
+  @override
+  String get chatSearchMessages => 'Search messages';
+
+  @override
+  String get chatApiMissingSettings =>
+      '⚠️ Chat API is not configured — go to Settings';
+
+  @override
+  String get appSettings => 'Settings';
+
+  @override
+  String get chatCopied => 'Copied';
+
+  @override
+  String get chatNoSavableText => 'There is no text to save';
+
+  @override
+  String get chatSaveMarkdownTitle => 'Save message as Markdown';
+
+  @override
+  String get chatSaveToolCallChoice =>
+      'This reply contains multiple tool calls. Choose what to save:';
+
+  @override
+  String get chatSaveCompleteMessage => 'Save complete message';
+
+  @override
+  String get chatSaveLastMessage => 'Save last message';
+
+  @override
+  String get chatSaveToAppFiles => 'Save to app files';
+
+  @override
+  String get chatSaveFolderHint => 'Choose or create a folder for the .md file';
+
+  @override
+  String get chatSaveFilenameHint =>
+      'Enter a file name (.md is added automatically)';
+
+  @override
+  String get chatFilenameRequired => 'The file name cannot be empty';
+
+  @override
+  String chatSavedToPath(String path) {
+    return 'Saved to: $path';
+  }
+
+  @override
+  String chatSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String chatSavedToAppFiles(String path) {
+    return 'Saved to app files: $path';
+  }
+
+  @override
+  String get chatSelectModel => 'Select a model';
+
+  @override
+  String get chatNoModelsAvailable => 'No models available';
+
+  @override
+  String get chatAvailableTools => 'Available tools';
+
+  @override
+  String get chatNoToolsAvailable => 'No tools available';
+
+  @override
+  String get chatReasoningSettings => 'Reasoning settings';
+
+  @override
+  String get chatReasoningNotConfigured =>
+      'No reasoning parameters are configured for this model. Add them in model settings.';
+
+  @override
+  String get chatReasoningEffort => 'Reasoning effort';
+
+  @override
+  String get chatReasoningEffortNotConfigured =>
+      'No reasoning effort parameter is configured for this model. Add it in model settings.';
+
+  @override
+  String get chatParameterNoOptions =>
+      'This parameter has no option values. Add them in model settings.';
+
+  @override
+  String get chatOtherReasoningNotConfigured =>
+      'No other reasoning parameters are configured for this model.\nAdd them in model settings.';
+
+  @override
+  String get chatCustomParamsNotConfigured =>
+      'No custom parameters are configured for this model.\nAdd them in model settings.';
+
+  @override
+  String get chatNoOptionValues =>
+      'No option values. Add them in model settings.';
+
+  @override
+  String get chatImageLoadFailed => 'Unable to load image';
+
+  @override
+  String get chatVideoLoadFailed => 'Unable to load video';
+
+  @override
+  String get chatHtmlLoading => 'Loading HTML preview...';
+
+  @override
+  String get chatPreviewLoadFailed => 'Preview failed to load';
+
+  @override
+  String get chatHtmlPreview => 'HTML preview';
+
+  @override
+  String get chatMermaidLoading => 'Loading chart preview...';
+
+  @override
+  String get chatMermaidPreview => 'Mermaid preview';
+
+  @override
+  String get chatZoomOut => 'Zoom out';
+
+  @override
+  String get chatZoomIn => 'Zoom in';
+
+  @override
+  String get chatJsonInspection => 'JSON inspection';
+
+  @override
+  String get chatNoRequestData => 'No request data';
+
+  @override
+  String get chatNoResponseData => 'No response data';
+
+  @override
+  String get chatSaveMessage => 'Save message';
+
+  @override
+  String get chatChooseSaveLocation => 'Choose where to save the message';
+
+  @override
+  String get chatChooseSaveLocationLabel => 'Choose a save location:';
+
+  @override
+  String get chatSaveAppFile => 'Save to app files';
+
+  @override
+  String get chatSaveDevice => 'Save to device';
+
+  @override
+  String get chatFileTypeAudio => 'Audio file';
+
+  @override
+  String get chatFileTypeVideo => 'Video file';
+
+  @override
+  String get chatFileTypeDocument => 'Document';
+
+  @override
+  String get chatFileTypeGeneric => 'File';
+
+  @override
+  String get chatInfoType => 'Type';
+
+  @override
+  String get chatInfoSize => 'Size';
+
+  @override
+  String get chatInfoPath => 'Path';
+
+  @override
+  String get chatErrorBack => 'Back';
+
+  @override
+  String get chatDataDetails => 'Data details';
+
+  @override
+  String get chatAudioPreviewClose => 'Close';
+
+  @override
+  String get chatPreviewClose => 'Close preview';
+
+  @override
+  String get actionBack => 'Back';
+
+  @override
+  String get chatCannotLoadFile => 'Unable to load file';
+
+  @override
+  String chatThinkingNumbered(int index) {
+    return 'Thinking $index';
+  }
 }
