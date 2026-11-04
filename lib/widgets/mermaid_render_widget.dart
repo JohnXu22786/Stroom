@@ -263,8 +263,12 @@ class MermaidRenderWidget extends StatefulWidget {
         // An unresolvable resource in the diagram still belongs to this page.
       }
       if (sameOrigin) return;
-      reportError(${jsonEncode(resourceErrorMessage)});
+      reportError('Mermaid resource failed to load');
     }, true);''',
+      );
+      skeleton = skeleton.replaceFirst(
+        "'Mermaid resource failed to load'",
+        jsonEncode(resourceErrorMessage),
       );
     }
     if (transformDocumentGeneration != null) {
