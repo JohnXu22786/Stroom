@@ -3324,6 +3324,51 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a password mask split by a newline',
+      () {
+        const apiKey = 'passwordabcdef123456';
+        const instruction = 'password\nabcdef123456';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-password-newline-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer password…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+          'retryData': OcrRetrySnapshot.capture(
+            images: const [],
+            instructionContent: instruction,
+          ).toMap(),
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          '[redacted]',
+        );
+        expect(serializedRetryData['instructionContent'], '[redacted]');
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains('abcdef123456')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a lowercase line-broken documentation credential echo',
       () {
         const apiKey = 'documentationfoobarxyz';
@@ -18270,6 +18315,77 @@ void main() {
         expect(persisted, isNot(contains(wrappedBody)));
       }
     });
+
+    test(
+      'legacy OCR password masks redact newline-split task and step echoes',
+      () {
+        const apiKey = 'passwordabcdef123456';
+        const echo = 'password\nabcdef123456';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-password-newline-split-error-echo',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'error': 'Provider rejected credential $echo',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [
+            {
+              'label': '请求 OCR',
+              'status': 'failed',
+              'error': 'Provider rejected credential $echo',
+            },
+          ],
+          'rawRequest': {
+            'url': 'https://api.example.com/v1',
+            'headers': {'Authorization': 'Bearer password…'},
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.error, 'OCR 错误详情已隐藏');
+        expect(task.steps.single.error, 'OCR 错误详情已隐藏');
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains('abcdef123456')));
+      },
+    );
+
+    test(
+      'legacy OCR password masks preserve ordinary prose across line breaks',
+      () {
+        const instruction = 'Please change your password\n before saving.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-password-natural-line-break',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer password…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        expect(serializedRetryData['instructionContent'], instruction);
+      },
+    );
 
     test(
       'legacy OCR task and step errors redact credentials from auth headers',

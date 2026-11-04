@@ -1397,6 +1397,15 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
       _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(text, prefix)) {
     return r'(?:[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
   }
+  if (prefix.toLowerCase() == 'password') {
+    // A common word can be a masked key prefix; only bridge a newline when
+    // the following token also has substantial alphabetic and numeric runs.
+    return r'(?:[\r\n]+[ \t]*'
+        r'(?=[a-zA-Z0-9]{10,}'
+        r'(?=[a-zA-Z0-9]*[a-zA-Z]{4,})'
+        r'(?=[a-zA-Z0-9]*[0-9]{4,})'
+        r'(?=$|[^a-zA-Z0-9])))?';
+  }
   return '';
 }
 
