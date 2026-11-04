@@ -90,12 +90,46 @@ void main() {
     expect(find.text('无请求数据'), findsOneWidget);
   });
 
-  test('preview dialog entry points remain available for localized callers',
-      () {
-    expect(const AudioPreviewDialog(filePath: '/tmp/a.wav', fileName: 'a.wav'),
-        isA<AudioPreviewDialog>());
-    expect(const VideoPreviewDialog(filePath: '/tmp/a.mp4', fileName: 'a.mp4'),
-        isA<VideoPreviewDialog>());
-    expect(showHtmlPreviewDialog, isA<Function>());
+  testWidgets('audio preview dialog shows the localized close action',
+      (tester) async {
+    await tester.pumpWidget(localizedApp(const AudioPreviewDialog(
+      filePath: '/missing/audio.wav',
+      fileName: 'audio.wav',
+    )));
+    await tester.pump();
+
+    expect(find.text('audio.wav'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
+  });
+
+  testWidgets('video preview dialog shows localized load errors',
+      (tester) async {
+    await tester.pumpWidget(localizedApp(const VideoPreviewDialog(
+      filePath: '/missing/video.mp4',
+      fileName: 'video.mp4',
+    )));
+    await tester.pumpAndSettle();
+
+    expect(find.text('video.mp4'), findsOneWidget);
+    expect(find.text('视频加载失败'), findsOneWidget);
+  });
+
+  testWidgets('HTML preview dialog shows localized title and close tooltip',
+      (tester) async {
+    await tester.pumpWidget(localizedApp(Builder(
+      builder: (context) => TextButton(
+        onPressed: () => showHtmlPreviewDialog(
+          context: context,
+          htmlCode: '<p>preview</p>',
+        ),
+        child: const Text('open'),
+      ),
+    )));
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+
+    expect(find.text('HTML 预览'), findsOneWidget);
+    expect(find.byTooltip('关闭预览'), findsOneWidget);
   });
 }
