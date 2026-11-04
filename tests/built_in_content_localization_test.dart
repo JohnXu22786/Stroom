@@ -92,9 +92,12 @@ void main() {
         expect(english, hasLength(builtInPrompts.length));
         expect(chinese, hasLength(builtInPrompts.length));
         expect(english.first.name, 'General Assistant');
-        expect(english.first.prompt, contains('Answer the user in Chinese'));
+        expect(
+          english.first.prompt,
+          contains('Answer the user in the language they use'),
+        );
         expect(chinese.first.name, '通用助手');
-        expect(chinese.first.prompt, contains('请用中文回答'));
+        expect(chinese.first.prompt, contains('请使用用户所用的语言回答问题'));
         expect(
           english.map((prompt) => prompt.name).toSet(),
           hasLength(english.length),
