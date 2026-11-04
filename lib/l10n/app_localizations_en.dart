@@ -487,6 +487,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get ocrPreviewInvalidIndex => 'Invalid image index';
+
+  @override
   String get ocrViewErrorDetails => 'View error details';
 
   @override
@@ -888,6 +891,124 @@ class AppLocalizationsEn extends AppLocalizations {
   String contextPercentHint(Object percent) {
     return 'For example, $percent';
   }
+
+  @override
+  String get versionInfoTitle => 'Version information';
+
+  @override
+  String get versionNumberLabel => 'Version';
+
+  @override
+  String get versionReleaseTimeLabel => 'Release time';
+
+  @override
+  String get versionLocalBuild => 'Local build';
+
+  @override
+  String get versionReleaseNotesLabel => 'Release notes';
+
+  @override
+  String get versionClose => 'Close';
+
+  @override
+  String get updateDialogTitle => 'New version available';
+
+  @override
+  String get updateLatestVersionLabel => 'Latest version';
+
+  @override
+  String get updateSelectedVersionLabel => 'Selected version';
+
+  @override
+  String get updateReleaseNotesLabel => 'Release notes';
+
+  @override
+  String get updateInstalling => 'Installing…';
+
+  @override
+  String get updateDownloadComplete => 'Download complete';
+
+  @override
+  String get updateClose => 'Close';
+
+  @override
+  String get updateManualInstall => 'Install manually';
+
+  @override
+  String get updateOpenInstaller => 'Open installer';
+
+  @override
+  String get updateRetryDownload => 'Retry download';
+
+  @override
+  String get updateSkipVersion => 'Skip this version';
+
+  @override
+  String get updateRemindLater => 'Remind me later';
+
+  @override
+  String get updateOpenBrowser => 'Download in browser';
+
+  @override
+  String get updateNow => 'Update now';
+
+  @override
+  String get updatePreviewBadge => 'Preview';
+
+  @override
+  String get updateLatestBadge => 'Latest';
+
+  @override
+  String get updateSelectVersion => 'Select version';
+
+  @override
+  String get updateDownloading => 'Downloading update…';
+
+  @override
+  String get updateDownloadUrlUnavailable => 'The download URL is unavailable.';
+
+  @override
+  String get updateNoDirectDownloadLink =>
+      'There is no direct download link for this platform. Download it in a browser.';
+
+  @override
+  String updateAutomaticInstallFailed(Object details) {
+    return 'Automatic installation failed: $details';
+  }
+
+  @override
+  String updateDownloadHttpFailed(Object statusCode) {
+    return 'Download failed: HTTP $statusCode';
+  }
+
+  @override
+  String updateDownloadFailed(Object details) {
+    return 'Download failed: $details';
+  }
+
+  @override
+  String updateInstallFailed(Object details) {
+    return 'Installation failed: $details';
+  }
+
+  @override
+  String updateFailed(Object details) {
+    return 'Update failed: $details';
+  }
+
+  @override
+  String updateManualInstallFileError(Object path) {
+    return 'Could not open the file. Install it manually: $path';
+  }
+
+  @override
+  String updateApkInstallFailed(Object details) {
+    return 'Installation failed. Open the APK manually: $details';
+  }
+
+  @override
+  String get updateApkInstallFailedNoDetails =>
+      'Installation failed. Open the APK manually.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -1372,6 +1493,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
+  String get ocrPreviewInvalidIndex => 'Invalid image index';
+
+  @override
   String get ocrViewErrorDetails => 'View error details';
 
   @override
@@ -1773,4 +1897,122 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String contextPercentHint(Object percent) {
     return 'For example, $percent';
   }
+
+  @override
+  String get versionInfoTitle => 'Version information';
+
+  @override
+  String get versionNumberLabel => 'Version';
+
+  @override
+  String get versionReleaseTimeLabel => 'Release time';
+
+  @override
+  String get versionLocalBuild => 'Local build';
+
+  @override
+  String get versionReleaseNotesLabel => 'Release notes';
+
+  @override
+  String get versionClose => 'Close';
+
+  @override
+  String get updateDialogTitle => 'New version available';
+
+  @override
+  String get updateLatestVersionLabel => 'Latest version';
+
+  @override
+  String get updateSelectedVersionLabel => 'Selected version';
+
+  @override
+  String get updateReleaseNotesLabel => 'Release notes';
+
+  @override
+  String get updateInstalling => 'Installing…';
+
+  @override
+  String get updateDownloadComplete => 'Download complete';
+
+  @override
+  String get updateClose => 'Close';
+
+  @override
+  String get updateManualInstall => 'Install manually';
+
+  @override
+  String get updateOpenInstaller => 'Open installer';
+
+  @override
+  String get updateRetryDownload => 'Retry download';
+
+  @override
+  String get updateSkipVersion => 'Skip this version';
+
+  @override
+  String get updateRemindLater => 'Remind me later';
+
+  @override
+  String get updateOpenBrowser => 'Download in browser';
+
+  @override
+  String get updateNow => 'Update now';
+
+  @override
+  String get updatePreviewBadge => 'Preview';
+
+  @override
+  String get updateLatestBadge => 'Latest';
+
+  @override
+  String get updateSelectVersion => 'Select version';
+
+  @override
+  String get updateDownloading => 'Downloading update…';
+
+  @override
+  String get updateDownloadUrlUnavailable => 'The download URL is unavailable.';
+
+  @override
+  String get updateNoDirectDownloadLink =>
+      'There is no direct download link for this platform. Download it in a browser.';
+
+  @override
+  String updateAutomaticInstallFailed(Object details) {
+    return 'Automatic installation failed: $details';
+  }
+
+  @override
+  String updateDownloadHttpFailed(Object statusCode) {
+    return 'Download failed: HTTP $statusCode';
+  }
+
+  @override
+  String updateDownloadFailed(Object details) {
+    return 'Download failed: $details';
+  }
+
+  @override
+  String updateInstallFailed(Object details) {
+    return 'Installation failed: $details';
+  }
+
+  @override
+  String updateFailed(Object details) {
+    return 'Update failed: $details';
+  }
+
+  @override
+  String updateManualInstallFileError(Object path) {
+    return 'Could not open the file. Install it manually: $path';
+  }
+
+  @override
+  String updateApkInstallFailed(Object details) {
+    return 'Installation failed. Open the APK manually: $details';
+  }
+
+  @override
+  String get updateApkInstallFailedNoDetails =>
+      'Installation failed. Open the APK manually.';
 }

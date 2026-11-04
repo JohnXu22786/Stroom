@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
@@ -79,6 +80,7 @@ Widget _buildTestApp({
   Map<String, dynamic>? retryData,
   String? retryTaskId,
   List<OcrPageOutcome> retryPageOutcomes = const [],
+  Locale locale = const Locale('zh', 'CN'),
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   ProviderEntriesNotifier? testProviderEntriesNotifier,
@@ -129,6 +131,7 @@ Widget _buildTestApp({
       }),
     ],
     child: MaterialApp(
+      locale: locale,
       home: OcrPage(
         testImages: testImages,
         testOcrServiceFactory: testOcrServiceFactory,
@@ -142,10 +145,8 @@ Widget _buildTestApp({
         testRetryImageRestorer: testRetryImageRestorer,
         testRetrySnapshotCacher: testRetrySnapshotCacher,
       ),
-      localizationsDelegates: const [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     ),
   );
 }
@@ -470,6 +471,9 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: OcrPage(
                 testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
                     camera.future,
@@ -2060,6 +2064,25 @@ void main() {
           const resetWarning = '已重置原重试输入，请重新选择本次 OCR 的全部图片';
           expect(find.text(resetWarning), findsOneWidget);
 
+          await tester.pumpWidget(
+            _buildTestApp(
+              locale: const Locale('en', 'US'),
+              testImages: [_createValidOcrTestImage()],
+              retryTaskId: 'unknown-image-count-$importMethod',
+              testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                  XFile.fromData(
+                replacementImage.bytes,
+                name: 'replacement.png',
+              ),
+              testImagePayloadPreparer: (_) async =>
+                  prepareOcrImagePayloadSync(replacementImage.bytes),
+            ),
+          );
+          await tester.pumpAndSettle();
+          const englishResetWarning =
+              'The previous retry input was reset. Select all images for this OCR task again.';
+          expect(find.text(englishResetWarning), findsOneWidget);
+
           if (importMethod == 'camera') {
             await tester.tap(find.text('拍照识别'));
             await tester.pumpAndSettle();
@@ -2083,6 +2106,7 @@ void main() {
           }
 
           expect(find.text(resetWarning), findsNothing);
+          expect(find.text(englishResetWarning), findsNothing);
           expect(find.text('已选 1 张图片'), findsOneWidget);
         },
       );
@@ -3782,10 +3806,9 @@ void main() {
                   'instructionIndex': 1,
                 },
               ),
-              localizationsDelegates: const [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
             ),
           ),
         );
@@ -3832,10 +3855,9 @@ void main() {
                   'instructionIndex': 1,
                 },
               ),
-              localizationsDelegates: const [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
             ),
           ),
         );
@@ -3885,6 +3907,9 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) => Scaffold(
                 body: Center(

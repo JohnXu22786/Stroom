@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/widgets/update_dialog.dart';
@@ -12,6 +13,7 @@ import 'package:stroom/widgets/update_dialog.dart';
 Future<void> _showDialog({
   required WidgetTester tester,
   required UpdateNotifier notifier,
+  Locale locale = const Locale('zh', 'CN'),
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -19,6 +21,9 @@ Future<void> _showDialog({
         updateProvider.overrideWith((ref) => notifier),
       ],
       child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) {
             Future.microtask(() {
@@ -93,6 +98,32 @@ String _githubRelease(String tagName,
 
 void main() {
   group('UpdateDialog - Shared Dialog', () {
+    testWidgets('labels follow the selected locale', (tester) async {
+      final (notifier, container) = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: 'v0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14',
+          updateAvailable: true,
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('New version available'), findsOneWidget);
+      expect(find.text('Latest version: v0.2.14'), findsOneWidget);
+      expect(find.text('Skip this version'), findsOneWidget);
+      expect(find.text('Remind me later'), findsOneWidget);
+      expect(find.text('Download in browser'), findsOneWidget);
+      await tester.tap(find.text('Remind me later'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('skip button calls skipVersion and closes dialog',
         (tester) async {
       SharedPreferences.setMockInitialValues({});

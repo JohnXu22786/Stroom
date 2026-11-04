@@ -31,12 +31,9 @@ void main() {
           .toList();
       final templateKeys = resources.first.keys.toSet();
 
-      expect(
-        resources
-            .skip(1)
-            .every((resource) => resource.keys.toSet() == templateKeys),
-        isTrue,
-      );
+      for (final resource in resources.skip(1)) {
+        expect(resource.keys.toSet(), unorderedEquals(templateKeys));
+      }
       for (final resource in resources) {
         for (final value in resource.values.whereType<String>()) {
           expect(value, isNotEmpty);

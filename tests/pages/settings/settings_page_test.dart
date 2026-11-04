@@ -545,6 +545,35 @@ void main() {
       expect(find.text('点击查看版本信息'), findsNothing);
     });
 
+    testWidgets('version info dialog labels follow the selected locale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(locale: const Locale('en', 'US')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stroom'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Version information'), findsOneWidget);
+      expect(find.text('Version'), findsOneWidget);
+      expect(find.text('Release time'), findsOneWidget);
+      expect(find.text('Local build'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('version info dialog closes via 关闭 button', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;

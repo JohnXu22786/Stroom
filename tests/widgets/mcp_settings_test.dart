@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mcp_server_config_shared.dart' as mcp_shared;
 import 'package:stroom/pages/settings_page.dart';
@@ -27,7 +28,12 @@ Widget _buildTestApp({Future<void>? updateGate}) {
       }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
-    child: const MaterialApp(home: SettingsPage()),
+    child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const SettingsPage(),
+    ),
   );
 }
 

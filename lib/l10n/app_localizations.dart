@@ -910,6 +910,12 @@ abstract class AppLocalizations {
   /// **'Image_{index}.{format}'**
   String ocrImageFileName(Object format, Object index);
 
+  /// No description provided for @ocrPreviewInvalidIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid image index'**
+  String get ocrPreviewInvalidIndex;
+
   /// No description provided for @ocrViewErrorDetails.
   ///
   /// In en, this message translates to:
@@ -1587,6 +1593,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'For example, {percent}'**
   String contextPercentHint(Object percent);
+
+  /// No description provided for @versionInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Version information'**
+  String get versionInfoTitle;
+
+  /// No description provided for @versionNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get versionNumberLabel;
+
+  /// No description provided for @versionReleaseTimeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Release time'**
+  String get versionReleaseTimeLabel;
+
+  /// No description provided for @versionLocalBuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Local build'**
+  String get versionLocalBuild;
+
+  /// No description provided for @versionReleaseNotesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get versionReleaseNotesLabel;
+
+  /// No description provided for @versionClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get versionClose;
+
+  /// No description provided for @updateDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New version available'**
+  String get updateDialogTitle;
+
+  /// No description provided for @updateLatestVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest version'**
+  String get updateLatestVersionLabel;
+
+  /// No description provided for @updateSelectedVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected version'**
+  String get updateSelectedVersionLabel;
+
+  /// No description provided for @updateReleaseNotesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get updateReleaseNotesLabel;
+
+  /// No description provided for @updateInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing…'**
+  String get updateInstalling;
+
+  /// No description provided for @updateDownloadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Download complete'**
+  String get updateDownloadComplete;
+
+  /// No description provided for @updateClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get updateClose;
+
+  /// No description provided for @updateManualInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install manually'**
+  String get updateManualInstall;
+
+  /// No description provided for @updateOpenInstaller.
+  ///
+  /// In en, this message translates to:
+  /// **'Open installer'**
+  String get updateOpenInstaller;
+
+  /// No description provided for @updateRetryDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry download'**
+  String get updateRetryDownload;
+
+  /// No description provided for @updateSkipVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip this version'**
+  String get updateSkipVersion;
+
+  /// No description provided for @updateRemindLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me later'**
+  String get updateRemindLater;
+
+  /// No description provided for @updateOpenBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Download in browser'**
+  String get updateOpenBrowser;
+
+  /// No description provided for @updateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update now'**
+  String get updateNow;
+
+  /// No description provided for @updatePreviewBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get updatePreviewBadge;
+
+  /// No description provided for @updateLatestBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get updateLatestBadge;
+
+  /// No description provided for @updateSelectVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Select version'**
+  String get updateSelectVersion;
+
+  /// No description provided for @updateDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading update…'**
+  String get updateDownloading;
+
+  /// No description provided for @updateDownloadUrlUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The download URL is unavailable.'**
+  String get updateDownloadUrlUnavailable;
+
+  /// No description provided for @updateNoDirectDownloadLink.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no direct download link for this platform. Download it in a browser.'**
+  String get updateNoDirectDownloadLink;
+
+  /// No description provided for @updateAutomaticInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic installation failed: {details}'**
+  String updateAutomaticInstallFailed(Object details);
+
+  /// No description provided for @updateDownloadHttpFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: HTTP {statusCode}'**
+  String updateDownloadHttpFailed(Object statusCode);
+
+  /// No description provided for @updateDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {details}'**
+  String updateDownloadFailed(Object details);
+
+  /// No description provided for @updateInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed: {details}'**
+  String updateInstallFailed(Object details);
+
+  /// No description provided for @updateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed: {details}'**
+  String updateFailed(Object details);
+
+  /// No description provided for @updateManualInstallFileError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the file. Install it manually: {path}'**
+  String updateManualInstallFileError(Object path);
+
+  /// No description provided for @updateApkInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed. Open the APK manually: {details}'**
+  String updateApkInstallFailed(Object details);
+
+  /// No description provided for @updateApkInstallFailedNoDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed. Open the APK manually.'**
+  String get updateApkInstallFailedNoDetails;
 }
 
 class _AppLocalizationsDelegate

@@ -247,9 +247,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _useOriginalImageQuality = false;
   String? _errorMessageValue;
   String? _lastImageImportErrorMessage;
-  String? get _errorMessage => _errorMessageValue;
+  bool _isRetryImageResetWarning = false;
+  String? get _errorMessage =>
+      _isRetryImageResetWarning ? _retryImageResetMessage : _errorMessageValue;
   set _errorMessage(String? message) {
     _errorMessageValue = message;
+    _isRetryImageResetWarning = false;
     _lastImageImportErrorMessage = null;
   }
 
@@ -2030,7 +2033,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _retryImageResetMessage ||
+        if (_isRetryImageResetWarning ||
             _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -2237,7 +2240,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         );
         _clearOcrErrorDetails();
-        if (_errorMessage == _retryImageResetMessage ||
+        if (_isRetryImageResetWarning ||
             _errorMessage == _lastImageImportErrorMessage) {
           _errorMessage = null;
         }
@@ -2441,6 +2444,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           : _requiredRetryImageCount == null
               ? null
               : _retryReselectAllMessage(_requiredRetryImageCount!);
+      _isRetryImageResetWarning = imageCountUnknown;
     });
   }
 
@@ -3187,7 +3191,10 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
             },
             itemBuilder: (context, index) {
               if (index < 0 || index >= widget.images.length) {
-                return const Center(child: Text('Invalid index'));
+                return Center(
+                  child: Text(
+                      AppLocalizations.of(context)!.ocrPreviewInvalidIndex),
+                );
               }
               final image = widget.images[index];
               return GestureDetector(

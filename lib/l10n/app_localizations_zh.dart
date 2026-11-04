@@ -454,6 +454,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get ocrPreviewInvalidIndex => '图片索引无效';
+
+  @override
   String get ocrViewErrorDetails => '查看详细错误';
 
   @override
@@ -826,6 +829,122 @@ class AppLocalizationsZh extends AppLocalizations {
   String contextPercentHint(Object percent) {
     return '如 $percent';
   }
+
+  @override
+  String get versionInfoTitle => '版本信息';
+
+  @override
+  String get versionNumberLabel => '版本号';
+
+  @override
+  String get versionReleaseTimeLabel => '发布时间';
+
+  @override
+  String get versionLocalBuild => '本地构建';
+
+  @override
+  String get versionReleaseNotesLabel => '更新内容';
+
+  @override
+  String get versionClose => '关闭';
+
+  @override
+  String get updateDialogTitle => '发现新版本';
+
+  @override
+  String get updateLatestVersionLabel => '最新版本';
+
+  @override
+  String get updateSelectedVersionLabel => '已选择';
+
+  @override
+  String get updateReleaseNotesLabel => '更新内容';
+
+  @override
+  String get updateInstalling => '正在安装...';
+
+  @override
+  String get updateDownloadComplete => '下载完成';
+
+  @override
+  String get updateClose => '关闭';
+
+  @override
+  String get updateManualInstall => '手动安装';
+
+  @override
+  String get updateOpenInstaller => '打开安装包';
+
+  @override
+  String get updateRetryDownload => '重试下载';
+
+  @override
+  String get updateSkipVersion => '跳过此版本';
+
+  @override
+  String get updateRemindLater => '稍后提醒';
+
+  @override
+  String get updateOpenBrowser => '前往浏览器下载';
+
+  @override
+  String get updateNow => '立即更新';
+
+  @override
+  String get updatePreviewBadge => '预览版';
+
+  @override
+  String get updateLatestBadge => '最新';
+
+  @override
+  String get updateSelectVersion => '选择版本';
+
+  @override
+  String get updateDownloading => '正在下载更新...';
+
+  @override
+  String get updateDownloadUrlUnavailable => '下载地址不可用';
+
+  @override
+  String get updateNoDirectDownloadLink => '当前平台暂无直接下载链接，请前往浏览器手动下载';
+
+  @override
+  String updateAutomaticInstallFailed(Object details) {
+    return '自动安装失败：$details';
+  }
+
+  @override
+  String updateDownloadHttpFailed(Object statusCode) {
+    return '下载失败：HTTP $statusCode';
+  }
+
+  @override
+  String updateDownloadFailed(Object details) {
+    return '下载失败：$details';
+  }
+
+  @override
+  String updateInstallFailed(Object details) {
+    return '安装失败：$details';
+  }
+
+  @override
+  String updateFailed(Object details) {
+    return '更新失败：$details';
+  }
+
+  @override
+  String updateManualInstallFileError(Object path) {
+    return '无法打开文件，请手动安装：$path';
+  }
+
+  @override
+  String updateApkInstallFailed(Object details) {
+    return '安装失败，请手动打开 APK 安装：$details';
+  }
+
+  @override
+  String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1277,6 +1396,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String get ocrPreviewInvalidIndex => '图片索引无效';
+
+  @override
   String get ocrViewErrorDetails => '查看详细错误';
 
   @override
@@ -1649,4 +1771,120 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String contextPercentHint(Object percent) {
     return '如 $percent';
   }
+
+  @override
+  String get versionInfoTitle => '版本信息';
+
+  @override
+  String get versionNumberLabel => '版本号';
+
+  @override
+  String get versionReleaseTimeLabel => '发布时间';
+
+  @override
+  String get versionLocalBuild => '本地构建';
+
+  @override
+  String get versionReleaseNotesLabel => '更新内容';
+
+  @override
+  String get versionClose => '关闭';
+
+  @override
+  String get updateDialogTitle => '发现新版本';
+
+  @override
+  String get updateLatestVersionLabel => '最新版本';
+
+  @override
+  String get updateSelectedVersionLabel => '已选择';
+
+  @override
+  String get updateReleaseNotesLabel => '更新内容';
+
+  @override
+  String get updateInstalling => '正在安装...';
+
+  @override
+  String get updateDownloadComplete => '下载完成';
+
+  @override
+  String get updateClose => '关闭';
+
+  @override
+  String get updateManualInstall => '手动安装';
+
+  @override
+  String get updateOpenInstaller => '打开安装包';
+
+  @override
+  String get updateRetryDownload => '重试下载';
+
+  @override
+  String get updateSkipVersion => '跳过此版本';
+
+  @override
+  String get updateRemindLater => '稍后提醒';
+
+  @override
+  String get updateOpenBrowser => '前往浏览器下载';
+
+  @override
+  String get updateNow => '立即更新';
+
+  @override
+  String get updatePreviewBadge => '预览版';
+
+  @override
+  String get updateLatestBadge => '最新';
+
+  @override
+  String get updateSelectVersion => '选择版本';
+
+  @override
+  String get updateDownloading => '正在下载更新...';
+
+  @override
+  String get updateDownloadUrlUnavailable => '下载地址不可用';
+
+  @override
+  String get updateNoDirectDownloadLink => '当前平台暂无直接下载链接，请前往浏览器手动下载';
+
+  @override
+  String updateAutomaticInstallFailed(Object details) {
+    return '自动安装失败：$details';
+  }
+
+  @override
+  String updateDownloadHttpFailed(Object statusCode) {
+    return '下载失败：HTTP $statusCode';
+  }
+
+  @override
+  String updateDownloadFailed(Object details) {
+    return '下载失败：$details';
+  }
+
+  @override
+  String updateInstallFailed(Object details) {
+    return '安装失败：$details';
+  }
+
+  @override
+  String updateFailed(Object details) {
+    return '更新失败：$details';
+  }
+
+  @override
+  String updateManualInstallFileError(Object path) {
+    return '无法打开文件，请手动安装：$path';
+  }
+
+  @override
+  String updateApkInstallFailed(Object details) {
+    return '安装失败，请手动打开 APK 安装：$details';
+  }
+
+  @override
+  String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 }
