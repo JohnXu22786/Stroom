@@ -1985,7 +1985,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     authTypes.sort();
     final oauthLimitation = connector.authTypeLimitations['oauth'];
-    if (!authTypes.contains(_authType)) _authType = authTypes.first;
+    if (!authTypes.contains(_authType)) {
+      _authType = _connectorType == 'gitlab-duo' && authTypes.contains('pat')
+          ? 'pat'
+          : authTypes.first;
+    }
     final commandCodeModels = _commandCodeModels;
     final commandCodeProtocols = _commandCodeProtocolsForSelectedModel();
     final selectedCommandCodeProtocol =
@@ -2069,7 +2073,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         .supportedAuthTypes
                         .toList()
                       ..sort();
-                    if (!available.contains(_authType)) {
+                    if (value == 'gitlab-duo' &&
+                        previousConnectorType != value) {
+                      _authType = 'pat';
+                    } else if (!available.contains(_authType)) {
                       _authType = available.first;
                     }
                     if (_connectorType == 'bedrock' &&
@@ -2283,6 +2290,29 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     '输入以 pt- 开头的 Qoder Personal Access Token。通过本机 qodercli 调用；仅支持文本聊天，不支持调用方 tools，响应会缓冲后返回，单次请求最多 45 秒。',
                   ),
                 ),
+              if (_connectorType == 'gitlab-duo' && _authType == 'oauth') ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'GitLab Duo OAuth 需要先在 GitLab 注册应用，并设置回调 http://localhost:20128/callback、权限 ai_features read_user。OAuth client ID 必填，client secret 按注册应用的类型填写；访问令牌会安全保存并在支持时自动刷新。PAT 可直接选择 Personal Access Token。',
+                ),
+                TextField(
+                  controller: _oauthClientId,
+                  decoration: const InputDecoration(
+                    labelText: 'GitLab Duo OAuth client ID',
+                    helperText: 'GitLab 用户设置 → Applications',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+                TextField(
+                  controller: _oauthClientSecret,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'GitLab Duo OAuth client secret',
+                    helperText: '仅保存在平台安全存储；公开客户端可留空。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               if ((_connectorType == 'gemini' ||
                       _connectorType == 'aistudio') &&
                   _authType == 'oauth') ...[
@@ -2727,6 +2757,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         widget.account?.authType == 'oauth' &&
         widget.account!.endpointConfig['qoderClientId'] !=
             _oauthClientId.text.trim();
+    final gitLabOAuthConfigurationChanged = widget.account?.connectorType ==
+            'gitlab-duo' &&
+        widget.account?.authType == 'oauth' &&
+        _connectorType == 'gitlab-duo' &&
+        _authType == 'oauth' &&
+        (widget.account!.endpointConfig['baseUrl'] != _endpoint.text.trim() ||
+            widget.account!.endpointConfig['clientId'] !=
+                _oauthClientId.text.trim() ||
+            _oauthClientSecret.text.trim().isNotEmpty);
     final gheOAuthConfigurationChanged = widget.account?.connectorType ==
             'ghe-copilot' &&
         widget.account?.authType == 'oauth' &&
@@ -2741,7 +2780,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             geminiOAuthClientChanged ||
             geminiOAuthClientSecretChanged ||
             qoderOAuthConfigurationChanged ||
+            gitLabOAuthConfigurationChanged ||
             gheOAuthConfigurationChanged);
+    if (_connectorType == 'gitlab-duo' &&
+        _authType == 'oauth' &&
+        _oauthClientId.text.trim().isEmpty) {
+      setState(() => _error = '请输入 GitLab Duo OAuth client ID。');
+      return;
+    }
     if (_connectorType == 'qoder' && _authType == 'oauth') {
       try {
         for (final value in [
@@ -2965,6 +3011,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         _oauthClientId.text.trim().isNotEmpty) {
       endpointConfig['clientId'] = _oauthClientId.text.trim();
     }
+    if (_connectorType == 'gitlab-duo' &&
+        _authType == 'oauth' &&
+        _oauthClientId.text.trim().isNotEmpty) {
+      endpointConfig['clientId'] = _oauthClientId.text.trim();
+    }
     if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _googleCloudProjectId.text.trim().isNotEmpty) {
@@ -3067,6 +3118,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         'authorizeUrl': _qoderAuthorizeUrl.text.trim(),
         'tokenUrl': _qoderTokenUrl.text.trim(),
         'userInfoUrl': _qoderUserInfoUrl.text.trim(),
+      },
+      if (_connectorType == 'gitlab-duo' && _authType == 'oauth') ...{
+        'clientId': _oauthClientId.text.trim(),
+        if (_oauthClientSecret.text.trim().isNotEmpty)
+          'clientSecret': _oauthClientSecret.text.trim(),
       },
     };
     if (_connectorType == 'aistudio' && _authType == 'relay') {

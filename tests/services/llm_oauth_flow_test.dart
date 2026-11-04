@@ -9,6 +9,92 @@ import 'package:stroom/services/llm_oauth_flow.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
 
 void main() {
+  test('GitLab Duo OAuth uses the configured PKCE application contract', () {
+    final attempt = LlmOAuthAuthorizationAttempt.gitlabDuo(
+      redirectUri: Uri.parse('http://localhost:20128/callback'),
+      baseUrl: 'https://gitlab.example.com/gitlab',
+      clientId: 'registered-client-id',
+    );
+    expect(
+      attempt.authorizationUri.origin,
+      'https://gitlab.example.com',
+    );
+    expect(attempt.authorizationUri.path, '/gitlab/oauth/authorize');
+    expect(attempt.authorizationUri.queryParameters['scope'],
+        'ai_features read_user');
+    expect(attempt.authorizationUri.queryParameters['client_id'],
+        'registered-client-id');
+    expect(attempt.authorizationUri.queryParameters['code_challenge_method'],
+        'S256');
+    expect(attempt.codeVerifier.length, greaterThanOrEqualTo(43));
+    final callback = attempt.consumeCallback(
+      Uri.parse(
+        'http://localhost:20128/callback?code=oauth-code&state=${attempt.state}',
+      ),
+    );
+    expect(callback.code, 'oauth-code');
+    expect(callback.clientId, 'registered-client-id');
+    expect(
+      () => LlmOAuthAuthorizationAttempt.gitlabDuo(
+        redirectUri: Uri.parse('http://localhost:20128/callback'),
+        baseUrl: 'http://gitlab.example.com',
+        clientId: 'registered-client-id',
+      ),
+      throwsA(isA<LlmOAuthFlowException>()),
+    );
+  });
+
+  test('GitLab Duo OAuth exchange stores refreshable tokens in its bundle',
+      () async {
+    RequestOptions? tokenRequest;
+    final dio = Dio()
+      ..httpClientAdapter = _OAuthAdapter((request) async {
+        tokenRequest = request;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'gitlab-access',
+            'refresh_token': 'gitlab-refresh',
+            'expires_in': 7200,
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final attempt = LlmOAuthAuthorizationAttempt.gitlabDuo(
+      redirectUri: Uri.parse('http://localhost:20128/callback'),
+      baseUrl: 'https://gitlab.example.com/gitlab',
+      clientId: 'configured-client',
+    );
+    final callback = attempt.consumeCallback(
+      Uri.parse(
+        'http://localhost:20128/callback?code=authorization-code&state=${attempt.state}',
+      ),
+    );
+
+    final bundle = await LlmOAuthTokenClient(dio: dio).exchangeGitLabDuoCode(
+      attempt: attempt,
+      callback: callback,
+      baseUrl: 'https://gitlab.example.com/gitlab',
+      clientSecret: 'configured-secret',
+    );
+
+    expect(tokenRequest!.uri.toString(),
+        'https://gitlab.example.com/gitlab/oauth/token');
+    expect(
+        tokenRequest!.data, containsPair('grant_type', 'authorization_code'));
+    expect(
+        tokenRequest!.data, containsPair('client_secret', 'configured-secret'));
+    expect(tokenRequest!.data,
+        containsPair('code_verifier', attempt.codeVerifier));
+    expect(bundle['oauth_contract'], 'gitlab-duo-pkce-v1');
+    expect(bundle['access_token'], 'gitlab-access');
+    expect(bundle['refresh_token'], 'gitlab-refresh');
+    expect(bundle['client_secret'], 'configured-secret');
+    expect(DateTime.parse(bundle['expires_at'] as String), isA<DateTime>());
+  });
+
   test(
     'GitHub Copilot uses the source-backed public device OAuth flow',
     () async {

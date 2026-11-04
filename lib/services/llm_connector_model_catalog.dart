@@ -1,3 +1,9 @@
+/// GitLab Duo conversational models in the pinned OmniRoute provider catalog.
+const kPinnedGitLabDuoModels = <String>[
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+];
+
 // Model IDs from the frozen Cursor provider catalog. Refresh this list only
 // when the pinned Cursor catalog revision changes.
 

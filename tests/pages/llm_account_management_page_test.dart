@@ -202,6 +202,70 @@ void main() {
     },
   );
 
+  testWidgets('GitLab Duo offers PAT and configured OAuth with prerequisites',
+      (tester) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('gitlab-duo')!;
+    expect(provider.supportedAuthTypes, {'pat', 'oauth'});
+    expect(provider.supportsChatAdapter, isTrue);
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      'gitlab-duo',
+    );
+    await tester.pumpAndSettle();
+
+    final auth = find.byType(DropdownButtonFormField<String>).at(1);
+    final authButton = find.descendant(
+      of: auth,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final authDropdown = tester.widget<DropdownButton<String>>(authButton);
+    expect(authDropdown.value, 'pat');
+    authDropdown.onChanged!('oauth');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('GitLab 用户设置'), findsOneWidget);
+    expect(find.textContaining('ai_features read_user'), findsOneWidget);
+    expect(
+        find.textContaining('http://localhost:20128/callback'), findsOneWidget);
+    expect(find.text('GitLab Duo OAuth client ID'), findsOneWidget);
+    final clientSecret = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'GitLab Duo OAuth client secret',
+      ),
+    );
+    expect(clientSecret.obscureText, isTrue);
+    final updatedAuth = find.byType(DropdownButtonFormField<String>).at(1);
+    final updatedAuthButton = find.descendant(
+      of: updatedAuth,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(updatedAuthButton)
+          .items!
+          .map((item) => item.value),
+      containsAll(['pat', 'oauth']),
+    );
+  });
+
   testWidgets('reauthorizes Qoder OAuth when the admin client secret changes', (
     tester,
   ) async {

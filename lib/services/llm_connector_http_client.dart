@@ -519,6 +519,35 @@ class LlmConnectorHttpClient {
             ),
           );
         }
+        if (storedAccount.connectorType == 'gitlab-duo') {
+          final responseData = response.data;
+          final rawResponse = responseData is ResponseBody
+              ? await _readResponseStream(responseData.stream)
+              : responseData is Stream<List<int>>
+                  ? await _readResponseStream(responseData)
+                  : responseData;
+          final normalized = _normalizeGitLabDuoResponse(
+            _decodeResponseBody(rawResponse),
+            modelId,
+          );
+          final bodyObservation = parseLlmConnectorObservation(
+            storedAccount.connectorType,
+            normalized,
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: stream
+                ? Stream<List<int>>.value(
+                    _encodeOpenAiChatCompletionStream(normalized),
+                  )
+                : normalized,
+            observation: mergeLlmConnectorObservations(
+              headerObservation,
+              bodyObservation,
+            ),
+          );
+        }
         if (stream) {
           final responseBody = response.data;
           final source = responseBody is ResponseBody
@@ -1284,6 +1313,86 @@ class LlmConnectorHttpClient {
 
 /// Safe failure that never forwards the upstream error body or transport
 /// exception, either of which may include private prompt or credential data.
+Map<String, dynamic> _normalizeGitLabDuoResponse(
+  Object? value,
+  String requestedModel,
+) {
+  if (value is! Map) throw const LlmConnectorHttpException();
+  final payload = Map<String, dynamic>.from(value);
+  final choices = payload['choices'];
+  final firstChoice =
+      choices is List && choices.isNotEmpty && choices.first is Map
+          ? Map<String, dynamic>.from(choices.first as Map)
+          : const <String, dynamic>{};
+  final rawMessage = firstChoice['message'];
+  final message =
+      rawMessage is Map ? Map<String, dynamic>.from(rawMessage) : null;
+  final content = firstChoice['text'] is String
+      ? firstChoice['text'] as String
+      : message?['content'] is String
+          ? message!['content'] as String
+          : payload['content'] is String
+              ? payload['content'] as String
+              : null;
+  if (content == null) throw const LlmConnectorHttpException();
+  final model = payload['model'];
+  final modelName = model is String
+      ? model
+      : model is Map
+          ? model['name'] is String
+              ? model['name'] as String
+              : model['id'] is String
+                  ? model['id'] as String
+                  : requestedModel
+          : requestedModel;
+  final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  return {
+    'id': 'chatcmpl-gitlab-$created',
+    'object': 'chat.completion',
+    'created': created,
+    'model': modelName,
+    'choices': [
+      {
+        'index': 0,
+        'message': {'role': 'assistant', 'content': content},
+        'finish_reason': 'stop',
+      },
+    ],
+  };
+}
+
+Uint8List _encodeOpenAiChatCompletionStream(Map<String, dynamic> completion) {
+  final choice = (completion['choices'] as List).first as Map;
+  final message = choice['message'] as Map;
+  final chunk = {
+    'id': completion['id'],
+    'object': 'chat.completion.chunk',
+    'created': completion['created'],
+    'model': completion['model'],
+    'choices': [
+      {
+        'index': 0,
+        'delta': {'content': message['content']},
+        'finish_reason': null,
+      },
+    ],
+  };
+  final finish = {
+    'id': completion['id'],
+    'object': 'chat.completion.chunk',
+    'created': completion['created'],
+    'model': completion['model'],
+    'choices': [
+      {'index': 0, 'delta': {}, 'finish_reason': 'stop'},
+    ],
+  };
+  return Uint8List.fromList(
+    utf8.encode(
+      'data: ${jsonEncode(chunk)}\n\ndata: ${jsonEncode(finish)}\n\ndata: [DONE]\n\n',
+    ),
+  );
+}
+
 class LlmConnectorHttpException implements Exception {
   final int? statusCode;
 

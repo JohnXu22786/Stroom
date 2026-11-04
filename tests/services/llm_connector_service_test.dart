@@ -20,6 +20,456 @@ import '../fixtures/vertex_service_account.dart';
 
 void main() {
   test(
+    'GitLab Duo keeps PAT and configured OAuth as distinct account modes',
+    () {
+      final connector = LlmConnectorRegistry.find('gitlab-duo');
+      expect(connector, isNotNull);
+      expect(connector!.authTypes, {'pat', 'oauth'});
+      expect(connector.canRefreshCredentials, isTrue);
+      expect(connector.modelCatalog, ['claude-sonnet-4-6', 'claude-haiku-4-5']);
+      expect(
+        LlmOAuthProviderPolicy.forProvider('gitlab-duo').supported,
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gitlab-duo'),
+        'openai',
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('gitlab-duo'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(null, connectorType: 'gitlab-duo'),
+        {'openai.chat_completions'},
+      );
+      expect(
+        resolveApiProtocol(
+          modelOverride: 'openai.chat_completions',
+          supplierProtocol: 'anthropic.messages',
+          builtinDefault: builtinDefaultApiProtocolForConnector('gitlab-duo'),
+        ),
+        'openai.chat_completions',
+      );
+    },
+  );
+
+  test(
+    'GitLab Duo requests use Code Suggestions shape and account base URL',
+    () {
+      final builder = LlmNativeRequestBuilder();
+      final pat = builder.build(
+        account: _account(
+          'gitlab-pat',
+          'gitlab-duo',
+          authType: 'pat',
+          endpointConfig: const {'baseUrl': 'https://gitlab.example.com/'},
+        ),
+        credential: 'gitlab-pat-secret',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'model': 'claude-sonnet-4-6',
+          'messages': [
+            {'role': 'system', 'content': 'You are helpful.'},
+            {'role': 'user', 'content': 'Explain this code.'},
+          ],
+          'stream': true,
+        },
+        stream: true,
+      );
+      expect(
+        pat.uri.toString(),
+        'https://gitlab.example.com/api/v4/code_suggestions/completions',
+      );
+      expect(pat.headers['Authorization'], 'Bearer gitlab-pat-secret');
+      expect(pat.body, {
+        'current_file': {
+          'file_name': 'snippet.txt',
+          'content_above_cursor':
+              'System instruction: You are helpful.\nUser: Explain this code.',
+          'content_below_cursor': '',
+        },
+        'intent': 'generation',
+        'generation_type': 'small_file',
+        'stream': false,
+        'user_instruction':
+            'System instruction: You are helpful.\nUser: Explain this code.',
+      });
+
+      final oauth = builder.build(
+        account: _account('gitlab-oauth', 'gitlab-duo', authType: 'oauth'),
+        credential: jsonEncode({'access_token': 'gitlab-oauth-access'}),
+        modelId: 'claude-haiku-4-5',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Say hello.'},
+          ],
+        },
+      );
+      expect(
+        oauth.uri.toString(),
+        'https://gitlab.com/api/v4/code_suggestions/completions',
+      );
+      expect(oauth.headers['Authorization'], 'Bearer gitlab-oauth-access');
+    },
+  );
+
+  test('GitLab Duo preserves supported text conversation history in order', () {
+    final request = LlmNativeRequestBuilder().build(
+      account: _account('gitlab-history', 'gitlab-duo', authType: 'pat'),
+      credential: 'gitlab-pat-secret',
+      modelId: 'claude-sonnet-4-6',
+      body: const {
+        'messages': [
+          {'role': 'system', 'content': 'Follow the user carefully. '},
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': ' What does'},
+              {'type': 'input_text', 'text': ' this function do? '},
+            ],
+          },
+          {'role': 'developer', 'content': 'Keep the answer concise.'},
+          {
+            'role': 'assistant',
+            'content': [
+              {'type': 'text', 'text': 'It sorts'},
+              {'type': 'text', 'text': ' a list.'},
+            ],
+          },
+          {'role': 'user', 'content': 'Now explain its complexity. '},
+        ],
+      },
+    );
+
+    const expectedPrompt = 'System instruction: Follow the user carefully. \n'
+        'User:  What does this function do? \n'
+        'Developer instruction: Keep the answer concise.\n'
+        'Assistant: It sorts a list.\n'
+        'User: Now explain its complexity. ';
+    final requestBody = request.body as Map;
+    expect(requestBody['user_instruction'], expectedPrompt);
+    expect(
+      (requestBody['current_file'] as Map)['content_above_cursor'],
+      expectedPrompt,
+    );
+  });
+
+  test('GitLab Duo rejects unsupported models, protocol shapes and tools', () {
+    final builder = LlmNativeRequestBuilder();
+    final account = _account('gitlab-limits', 'gitlab-duo', authType: 'pat');
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-opus-4-6',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
+        },
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    for (final messages in const [
+      [
+        {'role': 'user', 'content': 'Hello'},
+        42,
+      ],
+      [
+        {'role': 'user', 'content': 'Hello'},
+        {'role': 'function', 'content': 'hidden response'},
+      ],
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {'messages': messages},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    for (final assistantCall in const [
+      {
+        'function_call': {'name': 'lookup'}
+      },
+      {'function_call': null},
+      {'tool_calls': 'malformed'},
+      {
+        'functions': [
+          {'name': 'lookup'}
+        ]
+      },
+      {'tools': []},
+      {'tool_choice': 'none'},
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'Calling a tool.',
+                ...assistantCall
+              },
+              {'role': 'user', 'content': 'Continue.'},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    for (final role in const ['user', 'system']) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {'role': role, 'content': 'Text', 'tool_calls': []},
+            ],
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'messages': [
+            {
+              'role': 'assistant',
+              'content': 'Calling a tool.',
+              'parallel_tool_calls': true,
+            },
+            {'role': 'user', 'content': 'Continue.'},
+          ],
+        },
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
+        },
+        nativeFormat: 'openai.responses',
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    for (final unsupportedMetadata in const [
+      {'tools': []},
+      {'tool_choice': 'none'},
+      {'tool_calls': []},
+      {'function_call': null},
+      {
+        'functions': [
+          {'name': 'lookup'}
+        ]
+      },
+      {'parallel_tool_calls': true},
+      {
+        'function_call': {'name': 'lookup'}
+      },
+    ]) {
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'gitlab-pat',
+          modelId: 'claude-sonnet-4-6',
+          body: {
+            'messages': [
+              {'role': 'user', 'content': 'Hello'},
+            ],
+            ...unsupportedMetadata,
+          },
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    }
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
+          'tools': [
+            {
+              'type': 'function',
+              'function': {'name': 'lookup'}
+            },
+          ],
+        },
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    expect(
+      () => builder.build(
+        account: account,
+        credential: 'gitlab-pat',
+        modelId: 'claude-sonnet-4-6',
+        body: const {
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image_url',
+                  'image_url': {'url': 'data:image/png'}
+                }
+              ],
+            },
+          ],
+        },
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+  });
+
+  test('GitLab Duo turns its JSON completion into Stroom chat events',
+      () async {
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+    );
+    final account = await accounts.saveAccount(
+      _account(
+        'gitlab-stream',
+        'gitlab-duo',
+        authType: 'pat',
+        endpointConfig: const {'baseUrl': 'https://gitlab.example.com'},
+      ),
+      secret: 'gitlab-pat-secret',
+    );
+    RequestOptions? request;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        request = options;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'model': {'name': 'claude-sonnet-4-6'},
+            'choices': [
+              {'text': 'GitLab Duo reply'},
+            ],
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final response = await LlmConnectorHttpClient(
+      accountService: accounts,
+      dio: dio,
+    ).request(
+      account: account,
+      modelId: 'claude-sonnet-4-6',
+      body: const {
+        'model': 'claude-sonnet-4-6',
+        'messages': [
+          {'role': 'user', 'content': 'Hello'},
+        ],
+      },
+      stream: true,
+    );
+
+    expect(request!.uri.toString(),
+        'https://gitlab.example.com/api/v4/code_suggestions/completions');
+    expect(request!.headers['Authorization'], 'Bearer gitlab-pat-secret');
+    expect(request!.data['stream'], false);
+    expect(response.body, isA<Stream<List<int>>>());
+    final bytes = await (response.body as Stream<List<int>>).fold<List<int>>(
+      [],
+      (previous, chunk) => previous..addAll(chunk),
+    );
+    final events = utf8.decode(bytes);
+    expect(events, contains('GitLab Duo reply'));
+    expect(events, contains('chat.completion.chunk'));
+    expect(events, contains('data: [DONE]'));
+  });
+
+  test('GitLab Duo OAuth refresh rotates credentials in secure storage',
+      () async {
+    RequestOptions? refreshRequest;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        refreshRequest = options;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'rotated-gitlab-access',
+            'refresh_token': 'rotated-gitlab-refresh',
+            'expires_in': 3600,
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final credentials = _MemoryCredentials();
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+      dio: dio,
+    );
+    final account = await accounts.saveAccount(
+      _account(
+        'gitlab-oauth-refresh',
+        'gitlab-duo',
+        authType: 'oauth',
+        endpointConfig: const {
+          'baseUrl': 'https://gitlab.example.com/gitlab',
+          'clientId': 'registered-client',
+        },
+      ),
+      secret: jsonEncode({
+        'oauth_contract': 'gitlab-duo-pkce-v1',
+        'access_token': 'expired-gitlab-access',
+        'refresh_token': 'old-gitlab-refresh',
+        'expires_at': DateTime.utc(2020).toIso8601String(),
+        'client_id': 'registered-client',
+        'client_secret': 'registered-secret',
+        'base_url': 'https://gitlab.example.com/gitlab',
+      }),
+    );
+
+    expect(await accounts.refreshCredential(account), isTrue);
+    expect(refreshRequest!.uri.toString(),
+        'https://gitlab.example.com/gitlab/oauth/token');
+    expect(refreshRequest!.data,
+        containsPair('refresh_token', 'old-gitlab-refresh'));
+    expect(refreshRequest!.data,
+        containsPair('client_secret', 'registered-secret'));
+    final saved = jsonDecode(
+      (await credentials.read(account.credentialRef!))!,
+    ) as Map;
+    expect(saved['access_token'], 'rotated-gitlab-access');
+    expect(saved['refresh_token'], 'rotated-gitlab-refresh');
+    expect(saved['client_secret'], 'registered-secret');
+    expect(
+      DateTime.parse(saved['expires_at'] as String).isAfter(DateTime.now()),
+      isTrue,
+    );
+  });
+
+  test(
     'Copilot connectors preserve model-specific protocols and auth ownership',
     () {
       for (final connectorId in ['github', 'ghe-copilot']) {
