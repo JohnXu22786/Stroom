@@ -33,6 +33,7 @@ part 'chat_service_streaming_test_p4.dart';
 class CapturingChatProvider extends BaseChatProvider {
   Map<String, dynamic>? capturedBody;
   List<Attachment>? mediaAttachments;
+  String? inputTranscript;
   bool throwError = false;
 
   @override
@@ -90,7 +91,11 @@ class CapturingChatProvider extends BaseChatProvider {
       'extraParams': extraParams,
     };
     // Yield a minimal event so the stream doesn't hang
-    yield AIStreamEvent('', mediaAttachments: mediaAttachments);
+    yield AIStreamEvent(
+      '',
+      inputTranscript: inputTranscript,
+      mediaAttachments: mediaAttachments,
+    );
   }
 }
 

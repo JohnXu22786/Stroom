@@ -3863,6 +3863,14 @@ class LlmAccountConnectorService {
                   ? (map['displayName'] ?? map['display_name']) as String
                   : modelId,
               capabilities: {
+                if ((account.connectorType == 'openai-api' &&
+                        modelId.toLowerCase().startsWith('gpt-realtime')) ||
+                    (account.connectorType == 'xai' &&
+                        (modelId.toLowerCase() == 'grok-voice' ||
+                            modelId.toLowerCase().startsWith('grok-voice-'))))
+                  // The source-defined Realtime model families carry audio
+                  // support even when their model-list rows omit capabilities.
+                  'audio': true,
                 if (account.connectorType == 'workbuddy') ...{
                   'chat': true,
                   'streaming': true,
@@ -4406,6 +4414,7 @@ class LlmAccountConnectorService {
 
   static bool _catalogImpliesToolSupport(String connectorType, String modelId) {
     if (connectorType == 'openai-api') {
+      if (modelId.toLowerCase().startsWith('gpt-realtime')) return true;
       return RegExp(
         r'^(?:gpt-(?:3\.5-turbo|4\.5|4|4o|4\.1|5)(?:-|$)|o[134](?:-|$))',
         caseSensitive: false,
@@ -6370,16 +6379,13 @@ class LlmNativeRequestBuilder {
             nativeFormat == null;
     switch (account.connectorType) {
       case 'amazon-q':
-        amazonQRegion = _amazonQRegion(
-          account,
-          {
-            'region': _credentialBundleString(credential, const [
-              'region',
-              'regionId',
-              'region_id',
-            ]),
-          },
-        );
+        amazonQRegion = _amazonQRegion(account, {
+          'region': _credentialBundleString(credential, const [
+            'region',
+            'regionId',
+            'region_id',
+          ]),
+        });
         final target = AmazonQConnector.chatUri(amazonQRegion);
         baseUrl = target.origin;
         path = target.path;
@@ -6671,11 +6677,7 @@ class LlmNativeRequestBuilder {
         !_isBaseSchemeAllowed(account, parsed)) {
       throw const LlmAccountConnectorException();
     }
-    _validateProviderBaseUrl(
-      account,
-      parsed,
-      amazonQRegion: amazonQRegion,
-    );
+    _validateProviderBaseUrl(account, parsed, amazonQRegion: amazonQRegion);
     if (preserveLegacyOcrEndpoint) return parsed.replace(fragment: null);
     final basePath = account.connectorType == 'openai-compatibility'
         ? parsed.path.replaceFirst(RegExp(r'/+$'), '')
