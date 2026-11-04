@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -18,6 +19,7 @@ import '../../services/llm_credential_store.dart';
 import '../../services/llm_oauth_flow.dart';
 import '../../services/llm_oauth_loopback.dart';
 import '../../services/llm_oauth_token_client.dart';
+import '../../services/zed_hosted_connector.dart';
 import '../../services/llm_routing_service.dart';
 
 /// Reproduces M1's stable identity for a legacy account/model reference.
@@ -591,12 +593,19 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
   Future<AiGatewayAccount> authorize(
     AiGatewayAccount account, {
     Map<String, String> configuration = const {},
+    Future<bool> Function(
+      Uri authorizationUri,
+      Uri callbackUri,
+      Future<void> cancelSignal,
+    )? openInAppAuthorization,
   }) async {
     if (account.authType != 'oauth' ||
         !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
       throw const AiGatewayOAuthException();
     }
     LlmOAuthLoopback? listener;
+    ZedHostedAuthorizationAttempt? zedAttempt;
+    Completer<void>? cancelBrowser;
     try {
       final isOpenAi = account.connectorType == 'codex';
       final isGemini = account.connectorType == 'gemini' ||
@@ -608,6 +617,7 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       final isOpenference = account.connectorType == 'openference';
       final isCline = account.connectorType == 'cline' ||
           account.connectorType == 'clinepass';
+      final isZedHosted = account.connectorType == 'zed-hosted';
       if (!isOpenAi &&
           !isGemini &&
           !isClaude &&
@@ -615,7 +625,8 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
           !isQoder &&
           !isGitLabDuo &&
           !isOpenference &&
-          !isCline) {
+          !isCline &&
+          !isZedHosted) {
         throw const AiGatewayOAuthException();
       }
       if (isGemini &&
@@ -626,15 +637,15 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       }
       if (kIsWeb) throw const AiGatewayOAuthException();
 
-      final callbackPath = isCline
-          ? LlmOAuthAuthorizationAttempt.newClineCallbackPath()
-          : isGemini
-              ? '/'
-              : isOpenference
-                  ? '/callback'
-                  : isClaude || isDevin
+      final callbackPath = isZedHosted
+          ? '/'
+          : isCline
+              ? LlmOAuthAuthorizationAttempt.newClineCallbackPath()
+              : isGemini
+                  ? '/'
+                  : isOpenference
                       ? '/callback'
-                      : isGitLabDuo
+                      : isGitLabDuo || isClaude || isDevin
                           ? '/callback'
                           : '/auth/callback';
       listener = await LlmOAuthLoopback.bind(
@@ -648,6 +659,74 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
                     ? 20128
                     : 0,
       );
+      if (isZedHosted) {
+        zedAttempt = ZedHostedAuthorizationAttempt.create(
+          callbackUri: listener.redirectUri,
+        );
+        if (openInAppAuthorization == null) {
+          throw const AiGatewayOAuthException();
+        }
+        final callbackFuture = listener.nextCallback().timeout(
+              const Duration(minutes: 5),
+            );
+        final browserResult = Completer<bool>();
+        cancelBrowser = Completer<void>();
+        unawaited(
+          openInAppAuthorization(
+            zedAttempt.authorizationUri,
+            listener.redirectUri,
+            cancelBrowser.future,
+          ).then(browserResult.complete, onError: browserResult.completeError),
+        );
+        final callback = await Future.any<Uri>([
+          callbackFuture,
+          browserResult.future.then((opened) {
+            if (!opened) throw const AiGatewayOAuthException();
+            return callbackFuture;
+          }),
+        ]);
+        final callbackCredentials = zedAttempt.consumeCallback(callback);
+        final rawCredentials = {
+          'user_id': callbackCredentials.userId,
+          'access_token': callbackCredentials.accessToken,
+          'system_id': callbackCredentials.systemId,
+        };
+        ZedHostedIdentity? identity;
+        try {
+          identity = await ZedHostedApiClient(dio: _dio).fetchIdentity(
+            rawCredentials,
+          );
+        } catch (_) {
+          // Identity metadata is optional; the authenticated model catalog
+          // resolves the account's organization when it is next refreshed.
+        }
+        final tokenBundle = callbackCredentials.toCredentialBundle(
+          email: identity?.email,
+          name: identity?.name,
+          organizationId: identity?.organizationId,
+        );
+        final saved = await _accountManagement.saveAuthorizedOAuthAccount(
+          AiGatewayAccount(
+            id: account.id,
+            connectorType: account.connectorType,
+            authType: account.authType,
+            displayName:
+                identity?.name ?? identity?.email ?? account.displayName,
+            status: AiGatewayAccountStatus.ready,
+            hasCredential: true,
+            credentialRef: account.credentialRef,
+            endpointConfig: account.endpointConfig,
+            models: account.models,
+            policy: account.policy,
+            usageByWindow: account.usageByWindow,
+            remainingQuota: account.remainingQuota,
+            quotaSignals: account.quotaSignals,
+          ),
+          secret: jsonEncode(tokenBundle),
+        );
+        await listener.respond(accepted: true);
+        return saved;
+      }
       final redirectUri = isGemini
           ? listener.redirectUri.replace(path: '')
           : listener.redirectUri;
@@ -838,6 +917,10 @@ class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
       if (listener != null) await listener.respond(accepted: false);
       throw const AiGatewayOAuthException();
     } finally {
+      if (cancelBrowser != null && !cancelBrowser.isCompleted) {
+        cancelBrowser.complete();
+      }
+      zedAttempt?.cancel();
       await listener?.close();
     }
   }

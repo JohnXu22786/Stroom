@@ -15,6 +15,7 @@ import 'devin_connect_rpc.dart';
 import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
+import 'zed_hosted_connector.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -42,6 +43,7 @@ class LlmConnectorHttpClient {
   final LlmAccountConnectorService accountService;
   final Dio _dio;
   final LlmNativeRequestBuilder _requestBuilder;
+  late final ZedHostedApiClient _zedHostedApi = ZedHostedApiClient(dio: _dio);
 
   LlmConnectorHttpClient({
     required this.accountService,
@@ -160,6 +162,7 @@ class LlmConnectorHttpClient {
       }
     }
 
+    var didRetryZedToken = false;
     while (true) {
       final requestCancelToken = _requestCancelToken(cancelToken);
       final credential = await accountService.readCredential(storedAccount.id);
@@ -268,6 +271,20 @@ class LlmConnectorHttpClient {
       late final LlmPreparedNativeRequest prepared;
       try {
         AwsSigV4Credentials? awsCredentials;
+        String? zedLlmToken;
+        if (storedAccount.connectorType == 'zed-hosted') {
+          final decoded = jsonDecode(credential ?? '');
+          if (decoded is! Map) {
+            throw const LlmConnectorAuthenticationRequired();
+          }
+          final zedCredentials = Map<String, dynamic>.from(decoded);
+          zedCredentials['account_id'] = storedAccount.id;
+          zedLlmToken = await _zedHostedApi.fetchInferenceToken(
+            zedCredentials,
+            forceRefresh: didRetryZedToken,
+            cancelToken: requestCancelToken,
+          );
+        }
         if (storedAccount.connectorType == 'bedrock') {
           try {
             if (storedAccount.authType == 'aws_credentials') {
@@ -296,6 +313,7 @@ class LlmConnectorHttpClient {
           account: storedAccount,
           credential: credential,
           awsCredentials: awsCredentials,
+          zedLlmToken: zedLlmToken,
           modelId: modelId,
           body: body,
           conversationId: conversationId,
@@ -307,6 +325,18 @@ class LlmConnectorHttpClient {
         );
       } on LlmConnectorHttpException {
         rethrow;
+      } on ZedHostedAuthorizationException {
+        throw const LlmConnectorAuthenticationRequired();
+      } on ZedHostedUnsupportedRequest {
+        throw const LlmConnectorHttpException(code: 'unsupported_capability');
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) {
+          throw const LlmConnectorRequestCancelled();
+        }
+        if (_isConnectionFailure(error)) {
+          throw const LlmConnectorHttpException(code: 'connection_error');
+        }
+        throw const LlmConnectorHttpException();
       } on CursorConnectRpcException catch (error) {
         throw LlmConnectorHttpException(
           code: error.code == 'unsupported_images'
@@ -473,6 +503,14 @@ class LlmConnectorHttpClient {
               requestCancelToken.cancel('Error response body limit reached');
             },
           );
+          if (storedAccount.connectorType == 'zed-hosted' &&
+              zedHostedInferenceTokenRejected(status, response.headers.map)) {
+            ZedHostedApiClient.clearAccountTokenCache(storedAccount.id);
+            if (!didRetryZedToken) {
+              didRetryZedToken = true;
+              continue;
+            }
+          }
           if (status == 401 && !didRetry && _canRefresh(storedAccount)) {
             didRetry = true;
             try {
@@ -655,9 +693,12 @@ class LlmConnectorHttpClient {
               ? responseBody.stream
               : responseBody as Stream<List<int>>;
           final completed = Completer<LlmConnectorObservation>();
+          final normalizedSource = storedAccount.connectorType == 'zed-hosted'
+              ? zedHostedCompletionEvents(source)
+              : source;
           final chunks = _observeResponseStream(
             storedAccount.connectorType,
-            source,
+            normalizedSource,
             headerObservation,
             completed,
           );

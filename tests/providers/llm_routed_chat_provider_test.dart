@@ -144,6 +144,130 @@ void main() {
     );
   });
 
+  test('routes Zed Hosted models through their catalog-declared protocols', () {
+    for (final protocol in const [
+      'openai.chat_completions',
+      'openai.responses',
+      'anthropic.messages',
+      'google.gemini.generate_content',
+    ]) {
+      expect(
+        llmRoutedChatSupportedConnectorTypes(protocol),
+        contains('zed-hosted'),
+        reason: protocol,
+      );
+    }
+    final account = AiGatewayAccount(
+      id: 'zed-hosted-account',
+      connectorType: 'zed-hosted',
+      authType: 'oauth',
+      displayName: 'Zed Hosted Models',
+      models: [
+        AiGatewayUpstreamModel(
+          id: 'zed-hosted:claude-model',
+          upstreamModelId: 'claude-model',
+          displayName: 'Claude Model',
+          config: const {'apiProtocolOverride': 'anthropic.messages'},
+        ),
+      ],
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'claude-model',
+        endpointType: 'openai.chat_completions',
+      ),
+      'anthropic.messages',
+    );
+  });
+
+  test('routes tool-capable Zed Hosted models when tools are requested',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'zed-tool-account',
+        connectorType: 'zed-hosted',
+        authType: 'oauth',
+        displayName: 'Zed Hosted Models',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'zed-tool-model',
+            upstreamModelId: 'claude-tool-model',
+            displayName: 'Claude Tool Model',
+            capabilities: const {
+              'chat': true,
+              'streaming': true,
+              'toolCalls': true,
+              'tools': true,
+              'streamingTools': true,
+              'supportedApiProtocols': ['anthropic.messages'],
+            },
+            config: const {
+              'upstreamProvider': 'anthropic',
+              'apiProtocolOverride': 'anthropic.messages',
+            },
+          ),
+        ],
+      ),
+      secret: jsonEncode({'oauth_contract': 'zed-hosted-native-rsa-v1'}),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'zed-tool-group',
+        displayName: 'Zed Tool Group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'zed-tool-account',
+            localModelId: 'zed-tool-model',
+            upstreamModelId: 'claude-tool-model',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.value(utf8.encode('data: [DONE]\n\n')),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'zed-tool-group',
+      localModelId: 'zed-tool-model',
+      endpointType: 'openai',
+    );
+
+    await for (final _ in provider.chatStream(
+      const [
+        {'role': 'user', 'content': 'look this up'},
+      ],
+      tools: const [
+        {
+          'name': 'lookup',
+          'description': 'Look up a value.',
+          'input_schema': {'type': 'object'},
+        },
+      ],
+    )) {}
+    expect(connector.requestedAccountIds, ['zed-tool-account']);
+    expect(connector.lastNativeFormat, 'anthropic');
+    expect(connector.requestBody?['tools'], isA<List>());
+  });
+
   test('routes Devin accounts only through Devin Connect-RPC', () {
     expect(llmRoutedChatSupportedConnectorTypes('devin.connect_rpc'), {
       'devin',

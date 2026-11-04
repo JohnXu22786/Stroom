@@ -22,6 +22,7 @@ import 'qoder_cli_service.dart';
 import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
+import 'zed_hosted_connector.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -345,6 +346,12 @@ abstract final class LlmConnectorRegistry {
       authTypes: {'pat', 'oauth'},
       modelCatalog: kPinnedGitLabDuoModels,
       canRefreshCredentials: true,
+    ),
+    LlmConnectorDefinition(
+      id: 'zed-hosted',
+      displayName: 'Zed Hosted Models',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'oauth'},
     ),
     LlmConnectorDefinition(
       id: 'codex',
@@ -731,6 +738,7 @@ abstract final class LlmConnectorRegistry {
         'github' ||
         'ghe-copilot' ||
         'gitlab-duo' ||
+        'zed-hosted' ||
         'qoder' ||
         'kilocode' =>
           'openai',
@@ -1577,6 +1585,7 @@ class LlmAccountConnectorService {
       'workbuddy',
       'github',
       'ghe-copilot',
+      'zed-hosted',
       'kilocode',
       'openference',
       'openference-api',
@@ -1592,6 +1601,7 @@ class LlmAccountConnectorService {
     }
     final accountEntitlementCatalog = account.connectorType == 'github' ||
         account.connectorType == 'ghe-copilot' ||
+        account.connectorType == 'zed-hosted' ||
         account.connectorType == 'grok-cli' ||
         account.connectorType == 'xai-oauth' ||
         account.connectorType == 'trae';
@@ -3042,6 +3052,23 @@ class LlmAccountConnectorService {
         account.connectorType == 'ghe-copilot') {
       return _discoverCopilotModels(account);
     }
+    if (account.connectorType == 'zed-hosted') {
+      if (account.authType != 'oauth') {
+        throw const LlmAccountConnectorException();
+      }
+      final secret = account.credentialRef == null
+          ? null
+          : await _readSecureValue(account.credentialRef!);
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final credentials = _decodeCredentialBundle(secret)
+        ..['account_id'] = account.id;
+      return ZedHostedApiClient(dio: _dio).fetchModels(
+        credentials,
+        forceRefresh: true,
+      );
+    }
     if (account.connectorType == 'cline' ||
         account.connectorType == 'clinepass') {
       return _discoverClineModels(account);
@@ -4357,6 +4384,7 @@ class LlmAccountConnectorService {
   /// Stable model-group IDs are retained even when the removed account was the
   /// last member so callers can decide how to repair the group.
   Future<void> deleteAccount(String accountId) async {
+    ZedHostedApiClient.clearAccountTokenCache(accountId);
     final lease =
         await LlmAccountMigrationService.acquireCredentialTransaction();
     final preferenceKeys = [
@@ -4922,8 +4950,54 @@ class LlmNativeRequestBuilder {
     AwsSigV4Credentials? awsCredentials,
     bool stream = false,
     String? nativeFormat,
+    String? zedLlmToken,
   }) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
+    if (account.connectorType == 'zed-hosted') {
+      final model = account.models
+          .where((item) => item.upstreamModelId == modelId)
+          .firstOrNull;
+      if (connector?.id != 'zed-hosted' ||
+          account.authType != 'oauth' ||
+          _credentialBundleString(credential, const ['oauth_contract']) !=
+              'zed-hosted-native-rsa-v1' ||
+          _credentialBundleString(credential, const ['user_id', 'userId']) ==
+              null ||
+          _credentialBundleString(
+                credential,
+                const ['access_token', 'accessToken'],
+              ) ==
+              null ||
+          _credentialBundleString(
+                  credential, const ['system_id', 'systemId']) ==
+              null ||
+          model == null ||
+          zedLlmToken == null ||
+          zedLlmToken.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final envelope = buildZedHostedCompletionEnvelope(
+        model: model,
+        body: body,
+        nativeFormat: nativeFormat,
+        stream: stream,
+        conversationId: conversationId,
+      );
+      return LlmPreparedNativeRequest(
+        uri: Uri.parse('https://cloud.zed.dev/completions'),
+        method: 'POST',
+        headers: {
+          'Accept': 'application/x-ndjson, text/event-stream, */*',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $zedLlmToken',
+          'User-Agent': 'Stroom/zed-hosted',
+          'x-zed-client-supports-status-messages': 'true',
+          'x-zed-client-supports-stream-ended-request-completion-status':
+              'true',
+        },
+        body: jsonEncode(envelope),
+      );
+    }
     if (account.connectorType == 'cursor') {
       final accessToken = _credentialBundleString(credential, const [
         'access_token',

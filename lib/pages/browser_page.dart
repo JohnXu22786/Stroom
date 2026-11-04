@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -269,6 +268,7 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
+  final Uri? oauthCallbackUri;
 
   /// Builds a test body with the real capture callback, without a native WebView.
   @visibleForTesting
@@ -277,6 +277,7 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
+    this.oauthCallbackUri,
     this.testBodyBuilder,
   });
 
@@ -292,6 +293,16 @@ class _BrowserPageState extends State<BrowserPage> {
   Timer? _mainFrameErrorTimer;
   String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
+
+  bool _isOAuthCallbackUrl(Uri? candidate) {
+    final expected = widget.oauthCallbackUri;
+    return expected != null &&
+        candidate != null &&
+        candidate.scheme == expected.scheme &&
+        candidate.host == expected.host &&
+        candidate.port == expected.port &&
+        candidate.path == expected.path;
+  }
 
   /// Whether to use desktop user agent.
   bool _isDesktopMode = false;
@@ -709,6 +720,10 @@ class _BrowserPageState extends State<BrowserPage> {
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
                         noteBrowserPageNavigationUrl(url.toString());
+                        if (_isOAuthCallbackUrl(url)) {
+                          Navigator.of(context).pop(true);
+                          return;
+                        }
                         _injectScripts();
                         // Re-inject cat-catch hook if somehow missed or if an
                         // earlier injection was for a previous page

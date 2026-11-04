@@ -481,6 +481,11 @@ abstract interface class AiGatewayOAuthAuthorization {
   Future<AiGatewayAccount> authorize(
     AiGatewayAccount account, {
     Map<String, String> configuration = const {},
+    Future<bool> Function(
+      Uri authorizationUri,
+      Uri callbackUri,
+      Future<void> cancelSignal,
+    )? openInAppAuthorization,
   });
 
   Future<AiGatewayOAuthDeviceAuthorization> beginKimiCodeDeviceAuthorization(

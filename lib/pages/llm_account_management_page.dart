@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -347,6 +348,23 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       return gateway.oauthAuthorization.authorize(
         result.account,
         configuration: result.oauthConfiguration,
+        openInAppAuthorization: result.account.connectorType == 'zed-hosted'
+            ? (authorizationUri, callbackUri, cancelSignal) async {
+                if (!mounted) return false;
+                final navigator = Navigator.of(context);
+                final route = MaterialPageRoute<bool>(
+                  builder: (_) => BrowserPage(
+                    initialUrl: authorizationUri.toString(),
+                    oauthCallbackUri: callbackUri,
+                  ),
+                );
+                final browserResult = navigator.push<bool>(route);
+                unawaited(cancelSignal.then((_) {
+                  if (route.isCurrent) navigator.pop(false);
+                }));
+                return await browserResult == true;
+              }
+            : null,
       );
     }
 

@@ -19,6 +19,7 @@ import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import '../fixtures/vertex_service_account.dart';
 
 void main() {
+  _registerZedHostedHttpRetryTest();
   test(
     'GitLab Duo keeps PAT and configured OAuth as distinct account modes',
     () {
@@ -10367,6 +10368,165 @@ void _appendVarint(List<int> output, int value) {
     remaining >>= 7;
   }
   output.add(remaining.toInt());
+}
+
+void _registerZedHostedHttpRetryTest() {
+  test('Zed Hosted refreshes an expired inference token exactly once',
+      () async {
+    var tokenRequests = 0;
+    var completionRequests = 0;
+    final receivedTokens = <String?>[];
+    Map<String, dynamic>? sentEnvelope;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        if (options.uri.path == '/client/llm_tokens') {
+          tokenRequests++;
+          return ResponseBody.fromString(
+            jsonEncode({'token': 'inference-$tokenRequests'}),
+            200,
+            headers: const {
+              'content-type': ['application/json']
+            },
+          );
+        }
+        if (options.uri.path == '/completions') {
+          completionRequests++;
+          receivedTokens.add(options.headers['Authorization'] as String?);
+          sentEnvelope =
+              jsonDecode(options.data as String) as Map<String, dynamic>;
+          if (completionRequests == 1) {
+            return ResponseBody.fromString(
+              '{}',
+              401,
+              headers: const {},
+            );
+          }
+          return ResponseBody.fromString(
+            '{"event":{"type":"message_start"}}\n',
+            200,
+            headers: const {
+              'content-type': ['application/x-ndjson']
+            },
+          );
+        }
+        throw StateError('Unexpected Zed endpoint: ${options.uri}');
+      });
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+    );
+    final account = await accounts.saveAccount(
+      _account(
+        'zed-expiry-retry',
+        'zed-hosted',
+        authType: 'oauth',
+        models: [
+          LlmUpstreamModel(
+            id: 'zed-hosted:claude-model',
+            upstreamModelId: 'claude-model',
+            displayName: 'Claude Model',
+            capabilities: const {
+              'supportedApiProtocols': ['anthropic.messages'],
+              'streaming': true,
+            },
+            config: const {'upstreamProvider': 'anthropic'},
+          ),
+        ],
+      ),
+      secret: jsonEncode({
+        'oauth_contract': 'zed-hosted-native-rsa-v1',
+        'user_id': 'zed-user',
+        'access_token': 'account-token',
+        'system_id': 'system-id',
+        'organization_id': 'org-1',
+      }),
+    );
+
+    final response = await LlmConnectorHttpClient(
+      accountService: accounts,
+      dio: dio,
+    ).request(
+      account: account,
+      modelId: 'claude-model',
+      body: const {'messages': [], 'stream': true},
+      nativeFormat: 'anthropic.messages',
+      stream: true,
+    );
+    final chunks = (response.body as Stream<List<int>>).toList();
+    expect(await chunks, isNotEmpty);
+    expect(tokenRequests, 2);
+    expect(completionRequests, 2);
+    expect(receivedTokens, ['Bearer inference-1', 'Bearer inference-2']);
+    expect(sentEnvelope?['provider'], 'anthropic');
+    expect(sentEnvelope?['model'], 'claude-model');
+    expect(sentEnvelope?['provider_request'], {
+      'messages': [],
+      'stream': true,
+    });
+  });
+
+  test('Zed Hosted stops after one inference-token retry', () async {
+    var tokenRequests = 0;
+    var completionRequests = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        if (options.uri.path == '/client/llm_tokens') {
+          tokenRequests++;
+          return ResponseBody.fromString(
+            jsonEncode({'token': 'inference-$tokenRequests'}),
+            200,
+          );
+        }
+        if (options.uri.path == '/completions') {
+          completionRequests++;
+          return ResponseBody.fromString('{}', 401);
+        }
+        throw StateError('Unexpected Zed endpoint: ${options.uri}');
+      });
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+    );
+    final account = await accounts.saveAccount(
+      _account(
+        'zed-expiry-retry-fails',
+        'zed-hosted',
+        authType: 'oauth',
+        models: [
+          LlmUpstreamModel(
+            id: 'zed-hosted:claude-model',
+            upstreamModelId: 'claude-model',
+            displayName: 'Claude Model',
+            capabilities: const {
+              'supportedApiProtocols': ['anthropic.messages'],
+              'streaming': true,
+            },
+            config: const {'upstreamProvider': 'anthropic'},
+          ),
+        ],
+      ),
+      secret: jsonEncode({
+        'oauth_contract': 'zed-hosted-native-rsa-v1',
+        'user_id': 'zed-user',
+        'access_token': 'account-token',
+        'system_id': 'system-id',
+        'organization_id': 'org-1',
+      }),
+    );
+
+    await expectLater(
+      LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+        account: account,
+        modelId: 'claude-model',
+        body: const {'messages': [], 'stream': true},
+        nativeFormat: 'anthropic.messages',
+        stream: true,
+      ),
+      throwsA(isA<LlmConnectorHttpException>()),
+    );
+    expect(tokenRequests, 2);
+    expect(completionRequests, 2);
+  });
 }
 
 LlmAccount _account(
