@@ -325,8 +325,8 @@ extension ChatServiceStreamingExt on ChatService {
           // (including reasoning_content) when sending subsequent requests
           // in the same tool call chain.
           final roundReasoning = _reasoningBuffer.toString().substring(
-            _lastReasoningLength,
-          );
+                _lastReasoningLength,
+              );
 
           // Collect all tool calls and results first, then build the chain
           // messages via the protocol (format-specific). The neutral
