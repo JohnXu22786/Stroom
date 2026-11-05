@@ -202,6 +202,7 @@ class ChatStreamManager {
     final ref = _ref;
     if (ref == null) return;
     ref.read(streamingFullReplyProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningProvider(convId).notifier).state = '';
     ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
     ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
     ref.read(streamingToolCallsProvider(convId).notifier).state = [];
