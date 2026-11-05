@@ -124,6 +124,12 @@ jobs:
               lib/utils/file_picker_utils.dart)
                 test_f="tests/utils/file_picker_utils_test.dart"
                 ;;
+              lib/pages/voice_editor_page.dart)
+                test_f="tests/task_flow/tts_voice_save_propagation_test.dart"
+                ;;
+              lib/pages/voice_editor_shared.dart)
+                test_f="tests/pages/voice_editor_shared_test.dart"
+                ;;
               lib/pages/model_config_shared.dart)
                 test_f="tests/pages/settings/provider_config_detail_page_test.dart"
                 ;;

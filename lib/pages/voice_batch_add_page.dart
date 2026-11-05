@@ -457,9 +457,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                         l10n.voiceBatchSingleColumn,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimaryContainer,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -559,9 +558,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   // 表头
                   TableRow(
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     children: [
                       VbTableCell(l10n.voiceName, isHeader: true),
@@ -593,13 +591,13 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       LineStatus.newVoice => (l10n.voiceNew, Colors.green.shade700),
       LineStatus.duplicate => (l10n.voiceIdExists, Colors.orange.shade700),
       LineStatus.formatError => (
-        l10n.voiceFormatError(
-          line.errorMsg != null
-              ? ': ${line.errorMsg}'
-              : ': ${l10n.voiceInsufficientColumnData}',
+          l10n.voiceFormatError(
+            line.errorMsg != null
+                ? ': ${line.errorMsg}'
+                : ': ${l10n.voiceInsufficientColumnData}',
+          ),
+          Colors.red.shade700,
         ),
-        Colors.red.shade700,
-      ),
     };
 
     return Padding(

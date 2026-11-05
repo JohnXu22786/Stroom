@@ -568,9 +568,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(folderListProvider)
-                  .where(
+              ...ref.read(folderListProvider).where(
                     (folder) => names.any(
                       (name) => folder == name || folder.startsWith('$name/'),
                     ),
@@ -609,9 +607,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref
-            .read(folderListProvider)
-            .where(
+        ...ref.read(folderListProvider).where(
               (folder) => names.any(
                 (name) => folder == name || folder.startsWith('$name/'),
               ),
