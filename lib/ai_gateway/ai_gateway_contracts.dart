@@ -85,6 +85,15 @@ class AiGatewayExecutionException implements Exception {
 
   @override
   String toString() {
+    if (code == 'cursor_api_key_rejected') {
+      return 'Cursor rejected this User API Key. Create or copy an active key from cursor.com/dashboard/api, then edit this account to replace it.';
+    }
+    if (code == 'cursor_api_key_session_rejected') {
+      return 'Cursor rejected the temporary session token twice after exchanging the saved User API Key. Try again; if it continues, validate or replace the key in this account.';
+    }
+    if (code == 'cursor_api_key_exchange_failed') {
+      return 'Cursor could not validate this User API Key. Check the network and try again; the saved key has not been replaced.';
+    }
     if (code == 'cursor_inline_images_only') {
       return 'Cursor supports inline PNG, JPEG, GIF, or WebP image data only, with a maximum of 12 images at 1 MiB each. Remote URLs and other image representations are unsupported.';
     }

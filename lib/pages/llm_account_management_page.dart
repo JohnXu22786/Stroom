@@ -1524,6 +1524,9 @@ String _connectionExplanation(AiGatewayAccountStatus status) =>
     };
 
 String _authLabel(String type, {String? connectorType}) {
+  if (connectorType == 'cursor' && type == 'api_key') {
+    return 'Cursor User API Key';
+  }
   if (connectorType == 'trae' && type == 'session_token') {
     return '粘贴 Cloud-IDE-JWT';
   }
@@ -2794,6 +2797,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                             ? 'Claude Setup Token'
                                             : _authType == 'api_key'
                                                 ? switch (_connectorType) {
+                                                    'cursor' =>
+                                                      'Cursor User API Key',
                                                     'cloudflare-ai' =>
                                                       'Cloudflare API Token',
                                                     'azure-ai' ||
@@ -2823,9 +2828,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                                         : '凭据',
                     helperText: _connectorType == 'trae'
                         ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
-                        : _connectorType == 'aihorde' && _authType == 'api_key'
-                            ? '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。'
-                            : null,
+                        : _connectorType == 'cursor' && _authType == 'api_key'
+                            ? '从 cursor.com/dashboard/api 获取 User API Key（crsr_… 或 grok_…）。不会读取 Cursor IDE 登录。'
+                            : _connectorType == 'aihorde' &&
+                                    _authType == 'api_key'
+                                ? '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。'
+                                : null,
                     hintText: _connectorType == 'trae'
                         ? 'Cloud-IDE-JWT eyJ…'
                         : _authType == 'aws_credential_chain'
@@ -3123,6 +3131,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       return;
     }
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
+    if (_connectorType == 'cursor' && _authType == 'api_key') {
+      final candidate = _credential.text.trim();
+      final retainingExistingKey = candidate.isEmpty &&
+          widget.hasCredential &&
+          widget.account?.connectorType == 'cursor' &&
+          widget.account?.authType == 'api_key';
+      if (!retainingExistingKey &&
+          !(candidate.startsWith('crsr_') || candidate.startsWith('grok_'))) {
+        setState(
+          () => _error = '请输入以 crsr_ 开头的 Cursor User API Key。',
+        );
+        return;
+      }
+    }
     final oauthLimitation = connector.authTypeLimitations['oauth'];
     final previousGoogleClientId = widget.account?.endpointConfig['clientId'];
     final isGoogleGenerativeLanguageAccount =

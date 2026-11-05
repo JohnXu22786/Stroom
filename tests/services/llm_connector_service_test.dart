@@ -1187,10 +1187,10 @@ void main() {
   });
 
   test(
-    'Cursor is a provider-owned OAuth adapter, not a selectable API protocol',
+    'Cursor API-key and OAuth accounts share the provider-owned adapter',
     () {
       final connector = LlmConnectorRegistry.find('cursor')!;
-      expect(connector.authTypes, {'oauth'});
+      expect(connector.authTypes, {'oauth', 'api_key'});
       expect(connector.protocol, LlmNativeProtocol.cursorAgentConnectRpc);
       expect(connector.canRefreshCredentials, isTrue);
       expect(connector.modelCatalog, hasLength(242));
@@ -1208,6 +1208,15 @@ void main() {
       expect(
         builtinDefaultApiProtocolForConnector('cursor'),
         'openai.chat_completions',
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported('cursor', 'oauth'),
+        isTrue,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+            'cursor', 'api_key'),
+        isTrue,
       );
 
       final request = LlmNativeRequestBuilder().build(
@@ -1241,8 +1250,64 @@ void main() {
           jsonEncode({'role': 'system', 'content': 'Keep the answer concise.'}),
         ),
       );
+
+      final apiKeyRequest = LlmNativeRequestBuilder().build(
+        account: _account(
+          'cursor-api-key-account',
+          'cursor',
+          authType: 'api_key',
+          models: [_upstreamModel('claude-sonnet-5-high')],
+        ),
+        credential: 'crsr_user-key',
+        modelId: 'claude-sonnet-5-high',
+        conversationId: 'conversation-1',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+      );
+      expect(apiKeyRequest.uri, request.uri);
+      expect(apiKeyRequest.body, isA<List<int>>());
+      expect(apiKeyRequest.headers.keys, isNot(contains('Authorization')));
     },
   );
+  test('Cursor API-key accounts create, edit, and delete secure credentials',
+      () async {
+    final credentials = _MemoryCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final created = await service.saveAccount(
+      _account(
+        'cursor-api-key-crud',
+        'cursor',
+        authType: 'api_key',
+        models: [_upstreamModel('claude-sonnet-5-high')],
+      ),
+      secret: 'crsr_original-key',
+    );
+
+    expect(await credentials.read(created.credentialRef!), 'crsr_original-key');
+    expect(created.authType, 'api_key');
+
+    final edited = await service.saveAccount(
+      _account(
+        'cursor-api-key-crud',
+        'cursor',
+        authType: 'api_key',
+        models: [_upstreamModel('claude-sonnet-5-high')],
+      ),
+      secret: 'crsr_replacement-key',
+    );
+    expect(
+        await credentials.read(edited.credentialRef!), 'crsr_replacement-key');
+
+    await service.deleteAccount(edited.id);
+    expect(await service.listAccounts(), isEmpty);
+    expect(await credentials.read(edited.credentialRef!), isNull);
+  });
 
   test('Cline and ClinePass register distinct OAuth and direct-key owners', () {
     for (final connectorId in ['cline', 'clinepass']) {

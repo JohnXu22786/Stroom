@@ -261,6 +261,64 @@ void main() {
     },
   );
 
+  test('Cursor API-key model group resolves through Chat in Task Flow',
+      () async {
+    final account = LlmAccount(
+      id: 'cursor-api-key',
+      connectorType: 'cursor',
+      authType: 'api_key',
+      displayName: 'Cursor User API Key',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'cursor-sonnet-local',
+          upstreamModelId: 'claude-sonnet-5-high',
+          displayName: 'Claude Sonnet 5 High',
+          capabilities: {'chat': true, 'streaming': true, 'vision': true},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'cursor-api-key-task-flow-group',
+      displayName: 'Cursor group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'cursor-api-key',
+          localModelId: 'cursor-sonnet-local',
+          upstreamModelId: 'claude-sonnet-5-high',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Cursor assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(config.key, isEmpty, reason: 'credentials stay in secure storage');
+    expect(
+      flowChatEndpointType(assistant, providers),
+      'openai.chat_completions',
+    );
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
+
   test(
     'Codex model group resolves as Responses during Task Flow preflight',
     () async {
