@@ -17,6 +17,20 @@ class StreamingTextAppend {
   });
 }
 
+/// Incremental reasoning content for the currently active section.
+/// Completed section snapshots remain in [streamingReasoningSectionsProvider].
+class StreamingReasoningAppend {
+  final int sequence;
+  final int sectionIndex;
+  final String text;
+
+  const StreamingReasoningAppend({
+    required this.sequence,
+    required this.sectionIndex,
+    required this.text,
+  });
+}
+
 final streamingTextAppendProvider =
     StateProvider.family<StreamingTextAppend?, String>(
   (ref, conversationId) => null,
@@ -38,16 +52,21 @@ final streamingFullReplyProvider =
 final streamingHasFirstTokenProvider =
     StateProvider.family<bool, String>((ref, convId) => false);
 
-/// The reasoning content accumulated during streaming for the current
-/// (most recent) reasoning section. Persists across page lifecycle so
-/// the reasoning section is visible when returning to the page.
+/// Snapshot of the most recently completed reasoning section. Active live
+/// content is delivered incrementally through [streamingReasoningAppendProvider].
 final streamingReasoningProvider =
     StateProvider.family<String, String>((ref, convId) => '');
 
-/// All reasoning sections accumulated during streaming. Each entry is a
-/// completed or in-progress reasoning chain. Used to display multiple
-/// reasoning buttons when there are multi-step tool call rounds.
-/// The last entry is the currently active section (if streaming).
+/// Throttled deltas for the active reasoning section. Consumers append these
+/// to their live section state instead of receiving a copied growing prefix.
+final streamingReasoningAppendProvider =
+    StateProvider.family<StreamingReasoningAppend?, String>(
+  (ref, convId) => null,
+);
+
+/// Snapshot of reasoning sections accumulated during streaming. Live text in
+/// the active section arrives through [streamingReasoningAppendProvider]; this
+/// snapshot is refreshed at section boundaries and when stream state is restored.
 final streamingReasoningSectionsProvider =
     StateProvider.family<List<String>, String>((ref, convId) => []);
 

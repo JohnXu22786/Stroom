@@ -149,6 +149,10 @@ class ChatStreamManager {
         : const [];
   }
 
+  /// Number of active-section characters waiting for the next throttled delta.
+  int pendingReasoningDeltaLengthFor(String convId) =>
+      _streams[convId]?._pendingReasoningDelta.length ?? 0;
+
   /// Tool calls for the first active conversation.
   List<ToolCallData> get toolCalls {
     final first = activeStreamingConvId;
@@ -207,6 +211,7 @@ class ChatStreamManager {
     if (ref == null) return;
     ref.read(streamingFullReplyProvider(convId).notifier).state = '';
     ref.read(streamingReasoningProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningAppendProvider(convId).notifier).state = null;
     ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
     ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
     ref.read(streamingTextAppendProvider(convId).notifier).state = null;

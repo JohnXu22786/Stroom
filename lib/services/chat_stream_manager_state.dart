@@ -113,6 +113,21 @@ class _ConversationStreamState {
   String get _reasoningSnapshot =>
       _reasoningBufferSnapshot ??= _reasoningBuffer.toString();
   String get reasoningBuffer => _reasoningSnapshot;
+  final StringBuffer _pendingReasoningDelta = StringBuffer();
+  int _reasoningUpdateSequence = 0;
+  int get currentReasoningSectionIndex => _reasoningSections.length;
+
+  StreamingReasoningAppend? takeReasoningAppend() {
+    if (_pendingReasoningDelta.isEmpty) return null;
+    final append = StreamingReasoningAppend(
+      sequence: _reasoningUpdateSequence++,
+      sectionIndex: currentReasoningSectionIndex,
+      text: _pendingReasoningDelta.toString(),
+    );
+    _pendingReasoningDelta.clear();
+    return append;
+  }
+
   List<String> _reasoningSections = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
@@ -127,6 +142,7 @@ class _ConversationStreamState {
       _reasoningSections.removeLast();
     }
     _reasoningBuffer.write(text);
+    _pendingReasoningDelta.write(text);
     _reasoningBufferSnapshot = null;
     _reasoningSectionActive = true;
   }

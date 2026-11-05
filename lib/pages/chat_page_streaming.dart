@@ -273,6 +273,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingFullReplyProvider(convId).notifier).state = '';
         ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
         ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningAppendProvider(convId).notifier).state =
+            null;
         ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
@@ -481,6 +483,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingReasoningProvider(effectiveConvId).notifier).state =
             '';
         ref
+            .read(streamingReasoningAppendProvider(effectiveConvId).notifier)
+            .state = null;
+        ref
             .read(streamingReasoningSectionsProvider(effectiveConvId).notifier)
             .state = [];
         ref.read(streamingToolCallsProvider(effectiveConvId).notifier).state =
@@ -599,7 +604,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (convId == null) return;
 
     final segments = buildAgentChainSegments(
-      reasoningSections: ref.read(streamingReasoningSectionsProvider(convId)),
+      reasoningSections: _reasoningContents[msgId] ??
+          ref.read(streamingReasoningSectionsProvider(convId)),
       textChunks: ref.read(streamingTextSectionsProvider(convId)),
       toolCalls: ref.read(streamingToolCallsProvider(convId)),
       isLastReasoningStreaming: !(_isReasoningCompletedForMsg[msgId] ?? false),
@@ -677,6 +683,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingFullReplyProvider(convId).notifier).state = '';
         ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
         ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningAppendProvider(convId).notifier).state =
+            null;
         ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
