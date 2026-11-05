@@ -552,6 +552,21 @@ const kPinnedVertexModels = <String>[
   'gemini-3.8-flash',
 ];
 
+/// Source-backed Vertex Model Garden partner models. These are fallback choices
+/// only; projects should prefer the publisher catalog returned by discovery.
+const kPinnedVertexPartnerModels = <String>[
+  'deepseek-ai/deepseek-v3.2-maas',
+  'deepseek-ai/deepseek-v3.1-maas',
+  'qwen/qwen3-next-80b-a3b-instruct-maas',
+  'zai-org/glm-5-maas',
+  'xai/grok-4.6',
+  'xai/grok-4.3',
+  'claude-sonnet-4-5',
+  'claude-sonnet-4-5-v2',
+  'claude-opus-4-5',
+  'claude-haiku-4-5',
+];
+
 const kPinnedDevinModels = <String>[
   'devin/swe-2',
   'devin/claude-fable-5-1',

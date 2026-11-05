@@ -2496,6 +2496,16 @@ void main() {
         LlmConnectorRegistry.find('vertex')!.authTypes,
         isNot(contains('oauth')),
       );
+      final partner = LlmConnectorRegistry.find('vertex-partner')!;
+      expect(partner.displayName, 'Vertex AI Partners');
+      expect(partner.authTypes, {'api_key', 'service_account'});
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('vertex-partner'),
+        'openai',
+        reason: 'Partner models must be routable through Chat and Task Flow',
+      );
+      expect(partner.modelCatalog, contains('deepseek-ai/deepseek-v3.2-maas'));
+      expect(partner.modelCatalog, contains('claude-sonnet-4-5'));
     });
 
     test('pinned Vertex catalog excludes embedding and rerank models', () {
@@ -4700,6 +4710,89 @@ void main() {
         expect(models.single.capabilities, {'chat': true, 'streaming': true});
       },
     );
+
+    test('discovers Vertex partner publishers with target formats', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          final publisher = Uri.parse(options.uri.toString()).pathSegments[2];
+          final models = switch (publisher) {
+            'anthropic' => [
+                {
+                  'name': 'publishers/anthropic/models/claude-sonnet-4-5',
+                  'displayName': 'Claude Sonnet 4.5',
+                  'supportedActions': ['viewRestApi'],
+                },
+                {
+                  'name': 'publishers/anthropic/models/claude-ocr-helper',
+                  'supportedActions': ['viewRestApi'],
+                },
+              ],
+            'deepseek-ai' => [
+                {
+                  'name': 'publishers/deepseek-ai/models/deepseek-v3.2-maas',
+                  'displayName': 'DeepSeek V3.2',
+                  'supportedActions': ['viewRestApi'],
+                },
+                {
+                  'name': 'publishers/deepseek-ai/models/deepseek-embed-1',
+                  'supportedActions': ['embedContent'],
+                },
+              ],
+            _ => <Map<String, Object>>[],
+          };
+          return ResponseBody.fromString(
+            jsonEncode({'publisherModels': models}),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        LlmAccount(
+          id: 'vertex-partner-discovery',
+          connectorType: 'vertex-partner',
+          authType: 'service_account',
+          displayName: 'Vertex AI Partners',
+          endpointConfig: const {'projectId': 'my-project'},
+        ),
+        secret: jsonEncode({
+          'access_token': 'vertex-partner-token',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+          'service_account': {
+            ...kVertexTestServiceAccount,
+            'project_id': 'my-project',
+          },
+        }),
+      );
+
+      final models = await discoveryService.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(
+        models.map((model) => model.upstreamModelId).toSet(),
+        {'claude-sonnet-4-5', 'deepseek-ai/deepseek-v3.2-maas'},
+      );
+      final claude = models.singleWhere(
+        (model) => model.upstreamModelId == 'claude-sonnet-4-5',
+      );
+      expect(claude.config['targetFormat'], 'claude');
+      expect(claude.config['apiProtocolOverride'], 'anthropic.messages');
+      expect(
+        claude.capabilities['supportedApiProtocols'],
+        ['anthropic.messages'],
+      );
+    });
 
     test('discovers Vertex Imagen models that support prediction', () async {
       final dio = Dio()
@@ -8174,6 +8267,77 @@ void main() {
       expect(request.uri.path, contains('/locations/europe-west4/'));
     });
 
+    test('routes Vertex MaaS partners globally with project scoped key auth',
+        () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'vertex-partner-openai',
+          connectorType: 'vertex-partner',
+          authType: 'api_key',
+          displayName: 'Vertex AI Partners',
+          endpointConfig: const {
+            'projectId': 'my-project',
+            'location': 'us-central1',
+          },
+        ),
+        credential: 'project-bound-key',
+        modelId: 'deepseek-ai/deepseek-v3.2-maas',
+        body: const {'messages': []},
+      );
+
+      expect(request.uri.host, 'aiplatform.googleapis.com');
+      expect(
+        request.uri.path,
+        '/v1/projects/my-project/locations/global/endpoints/openapi/chat/completions',
+      );
+      expect(request.uri.queryParameters['key'], 'project-bound-key');
+      expect(request.headers['x-goog-api-key'], isNull);
+    });
+
+    test('routes streaming Vertex Claude partners through regional rawPredict',
+        () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'vertex-partner-claude',
+          connectorType: 'vertex-partner',
+          authType: 'api_key',
+          displayName: 'Vertex AI Partners',
+          endpointConfig: const {
+            'projectId': 'my-project',
+            'location': 'europe-west4',
+          },
+        ),
+        credential: 'project-bound-key',
+        modelId: 'claude-sonnet-4-5',
+        body: const {'messages': []},
+        stream: true,
+      );
+
+      expect(request.uri.host, 'europe-west4-aiplatform.googleapis.com');
+      expect(
+        request.uri.path,
+        '/v1/projects/my-project/locations/europe-west4/publishers/anthropic/models/claude-sonnet-4-5:rawPredict',
+      );
+      expect(request.uri.queryParameters['key'], 'project-bound-key');
+    });
+
+    test('requires project scope for Vertex partner API keys', () {
+      expect(
+        () => builder.build(
+          account: LlmAccount(
+            id: 'vertex-partner-no-project',
+            connectorType: 'vertex-partner',
+            authType: 'api_key',
+            displayName: 'Vertex AI Partners',
+          ),
+          credential: 'express-key',
+          modelId: 'deepseek-ai/deepseek-v3.2-maas',
+          body: const {'messages': []},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
     test('uses the native Vertex Imagen predict request shape', () {
       const imageBody = {
         'contents': [
@@ -10362,6 +10526,95 @@ void main() {
         );
       },
     );
+
+    test('synthesizes Anthropic SSE for streamed Vertex Claude rawPredict',
+        () async {
+      RequestOptions? modelRequest;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          modelRequest = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'id': 'msg_vertex',
+              'model': 'claude-sonnet-4-5',
+              'content': [
+                {'type': 'text', 'text': 'partner response'},
+                {
+                  'type': 'tool_use',
+                  'id': 'toolu_vertex',
+                  'name': 'lookup',
+                  'input': {'query': 'vertex partners'},
+                },
+              ],
+              'stop_reason': 'end_turn',
+              'usage': {'input_tokens': 2, 'output_tokens': 3},
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'vertex-partner-claude-stream',
+          connectorType: 'vertex-partner',
+          authType: 'service_account',
+          displayName: 'Vertex AI Partners',
+          endpointConfig: const {
+            'projectId': 'my-project',
+            'location': 'europe-west4',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'vertex-partner-access-token',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+          'service_account': {
+            ...kVertexTestServiceAccount,
+            'project_id': 'my-project',
+          },
+        }),
+      );
+      final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
+
+      final response = await client.request(
+        account: account,
+        modelId: 'claude-sonnet-4-5',
+        nativeFormat: 'anthropic',
+        body: const {
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+        },
+        stream: true,
+      );
+      final bytes = await (response.body as Stream<List<int>>)
+          .expand((chunk) => chunk)
+          .toList();
+      final sse = utf8.decode(bytes);
+
+      expect(modelRequest!.uri.path, endsWith(':rawPredict'));
+      expect(modelRequest!.headers['Authorization'],
+          'Bearer vertex-partner-access-token');
+      final requestBody = modelRequest!.data as Map;
+      expect(requestBody['anthropic_version'], 'vertex-2023-10-16');
+      expect(requestBody.containsKey('model'), isFalse);
+      expect(sse, contains('event: message_start'));
+      expect(sse, contains('event: content_block_delta'));
+      expect(sse, contains('"text":"partner response"'));
+      expect(sse, contains('"type":"tool_use"'));
+      expect(sse, contains('"type":"input_json_delta"'));
+      expect(sse, contains(r'\"query\":\"vertex partners\"'));
+      expect(sse, contains('event: message_stop'));
+    });
 
     test(
       'executes Vertex API-key requests in unary and streaming modes',

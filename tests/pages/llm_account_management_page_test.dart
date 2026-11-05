@@ -4060,6 +4060,45 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Vertex AI Partners account form stores project and region securely',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Vertex partners');
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vertex AI Partners').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'us-central1');
+      await tester.enterText(find.byType(TextField).at(3), 'stroom-project');
+      await tester.enterText(find.byType(TextField).at(4), 'partner-key');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'vertex-partner');
+      expect(account.authType, 'api_key');
+      expect(account.endpointConfig['location'], 'us-central1');
+      expect(account.endpointConfig['projectId'], 'stroom-project');
+      expect(credentials.values.values.single, 'partner-key');
+    },
+  );
+
   testWidgets('Vertex generic OAuth is excluded without a public flow', (
     tester,
   ) async {

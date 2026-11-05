@@ -752,6 +752,15 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'vertex-partner',
+      displayName: 'Vertex AI Partners',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'service_account', 'api_key'},
+      modelCatalog: kPinnedVertexPartnerModels,
+      canRefreshCredentials: true,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
       id: 'aihorde',
       displayName: 'AI Horde',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -828,6 +837,7 @@ abstract final class LlmConnectorRegistry {
         'aistudio' => 'google.gemini.generate_content',
         'gemini-interactions' => 'google.gemini.interactions',
         'vertex' => 'google.gemini.generate_content',
+        'vertex-partner' => 'openai',
         'ollama' => 'ollama.chat',
         'devin' => 'devin.connect_rpc',
         'devin-cli-agentic' => 'devin.acp',
@@ -1642,8 +1652,12 @@ class LlmAccountConnectorService {
     if (connector == null || connector.id != account.connectorType) {
       throw const LlmAccountConnectorException();
     }
-    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
+        account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'vertex-partner') {
+      return _discoverVertexPartnerModels(account, refreshRemote);
     }
     if (account.connectorType == 'azure-ai' ||
         account.connectorType == 'azure-openai') {
@@ -2424,7 +2438,7 @@ class LlmAccountConnectorService {
     if (rawCredential == null) throw const LlmAccountConnectorException();
     final bundle = _decodeCredentialBundle(rawCredential);
 
-    if (account.connectorType == 'vertex' &&
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
         account.authType == 'service_account') {
       return _refreshVertexServiceAccount(account, bundle, cancelToken);
     }
@@ -3622,7 +3636,8 @@ class LlmAccountConnectorService {
           ),
       ];
     }
-    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
+        account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
     final isGemini = account.connectorType == 'gemini' ||
@@ -3722,7 +3737,7 @@ class LlmAccountConnectorService {
       'codebuddy-intl' => 'https://www.codebuddy.ai/v2',
       'workbuddy' => 'https://www.workbuddy.ai/v2',
       'kilocode' => 'https://api.kilo.ai/api/openrouter',
-      'vertex' => _vertexBaseUrl(account.endpointConfig),
+      'vertex' || 'vertex-partner' => _vertexBaseUrl(account.endpointConfig),
       'ollama' => null,
       'trae' => TraeSoloConnector.defaultBaseUrl,
       _ => null,
@@ -3752,7 +3767,7 @@ class LlmAccountConnectorService {
         ? Uri.https('www.workbuddy.ai', '/v3/config')
         : account.connectorType == 'ollama'
             ? _ollamaModelListUri(base)
-            : account.connectorType == 'vertex'
+            : {'vertex', 'vertex-partner'}.contains(account.connectorType)
                 ? _vertexModelListUri(account.endpointConfig, base, secret)
                 : configuredModelsUrl != null
                     ? configuredModelsUri
@@ -3816,6 +3831,9 @@ class LlmAccountConnectorService {
       final key = LlmNativeRequestBuilder._credentialValue(account, secret);
       if (isGemini || account.connectorType == 'vertex') {
         headers['x-goog-api-key'] = key;
+      } else if (account.connectorType == 'vertex-partner') {
+        // Project-bound Vertex API keys are sent as the documented query key.
+        // The URL builder appends it only after requiring project scope.
       } else if (account.connectorType == 'claude') {
         headers['x-api-key'] = key;
         headers['anthropic-version'] = '2023-06-01';
@@ -3828,7 +3846,7 @@ class LlmAccountConnectorService {
       } else {
         headers['Authorization'] = 'Bearer $key';
       }
-    } else if (account.connectorType == 'vertex' &&
+    } else if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
         account.authType == 'service_account') {
       if (secret == null || secret.isEmpty) {
         throw const LlmAccountConnectorException();
@@ -4696,6 +4714,167 @@ class LlmAccountConnectorService {
     return Uri.parse(base).replace(path: '/v1/$parent/models');
   }
 
+  Future<List<LlmUpstreamModel>> _discoverVertexPartnerModels(
+    LlmAccount account,
+    bool refreshRemote,
+  ) async {
+    final fallback = [
+      for (final (index, id)
+          in LlmConnectorRegistry.find('vertex-partner')!.modelCatalog.indexed)
+        LlmUpstreamModel(
+          id: '${account.id}:catalog:$index',
+          upstreamModelId: id,
+          displayName: id,
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'supportedApiProtocols': [
+              id.startsWith('claude-')
+                  ? 'anthropic.messages'
+                  : 'openai.chat_completions',
+            ],
+          },
+          config: {
+            'catalogSource': 'pinned-vertex-partner-registry',
+            'targetFormat': id.startsWith('claude-') ? 'claude' : 'openai',
+            if (id.startsWith('claude-')) ...{
+              'apiProtocolOverride': 'anthropic.messages',
+              'apiProtocolOverrideSource': 'provider-preset-default',
+            },
+          },
+        ),
+    ];
+    final configuredProject = LlmNativeRequestBuilder._configString(
+      account.endpointConfig,
+      'projectId',
+    );
+    if (account.authType == 'api_key') {
+      if (configuredProject == null ||
+          !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+              .hasMatch(configuredProject)) {
+        throw const LlmAccountConnectorException();
+      }
+      return List.unmodifiable(_mergeModelMappings(fallback, account.models));
+    }
+    if (account.credentialRef == null) {
+      throw const LlmAccountConnectorException();
+    }
+    var secret = await _readSecureValue(account.credentialRef!);
+    if (secret == null || secret.isEmpty) {
+      throw const LlmAccountConnectorException();
+    }
+    final project = configuredProject ??
+        LlmNativeRequestBuilder._projectIdFromCredential(secret);
+    if (project == null ||
+        !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$').hasMatch(project)) {
+      throw const LlmAccountConnectorException();
+    }
+    if (!refreshRemote) {
+      return List.unmodifiable(_mergeModelMappings(fallback, account.models));
+    }
+    if (_vertexServiceAccountTokenNeedsRefresh(secret)) {
+      final bundle = _decodeCredentialBundle(secret);
+      await _refreshVertexServiceAccount(account, bundle, null);
+      secret = await _readSecureValue(account.credentialRef!);
+    }
+    final token = LlmNativeRequestBuilder._credentialBundleString(
+      secret,
+      const ['access_token', 'accessToken'],
+    );
+    if (token == null) {
+      throw const LlmAccountConnectorException();
+    }
+    const publishers = [
+      'anthropic',
+      'deepseek-ai',
+      'meta',
+      'mistralai',
+      'qwen',
+      'xai',
+      'zai-org',
+    ];
+    final discovered = <LlmUpstreamModel>[];
+    var successfulPublisherResponse = false;
+    for (final publisher in publishers) {
+      final uri = Uri.https(
+        'aiplatform.googleapis.com',
+        '/v1beta1/publishers/$publisher/models',
+        {'pageSize': '300'},
+      );
+      try {
+        final response = await _dio.getUri<Object?>(
+          uri,
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+        successfulPublisherResponse = true;
+        final data = _asJsonMap(response.data);
+        final models = data?['publisherModels'] ?? data?['models'];
+        if (models is! List) continue;
+        for (final value in models) {
+          if (value is! Map) continue;
+          final model = Map<String, dynamic>.from(value);
+          final name = model['name'] ?? model['id'];
+          if (name is! String || name.isEmpty) continue;
+          final rawId = name.split('/').last;
+          final id = publisher == 'anthropic' ? rawId : '$publisher/$rawId';
+          final actions = model['supportedActions'];
+          if (actions is List &&
+              actions.isNotEmpty &&
+              !actions.any((action) =>
+                  action is String &&
+                  {
+                    'viewRestApi',
+                    'openGenerationAiStudio',
+                    'openGenie',
+                    'requestAccess',
+                  }.contains(action))) {
+            continue;
+          }
+          if (RegExp(r'(?:^|[-/])ocr(?:-|$)', caseSensitive: false)
+              .hasMatch(id)) {
+            continue;
+          }
+          final claude = publisher == 'anthropic';
+          discovered.add(
+            LlmUpstreamModel(
+              id: '${account.id}:discovered:${Uri.encodeComponent(id)}',
+              upstreamModelId: id,
+              displayName: model['displayName'] is String
+                  ? model['displayName'] as String
+                  : id,
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'supportedApiProtocols': [
+                  claude ? 'anthropic.messages' : 'openai.chat_completions',
+                ],
+              },
+              config: {
+                'catalogSource': 'vertex-publisher-catalog',
+                'targetFormat': claude ? 'claude' : 'openai',
+                if (claude) ...{
+                  'apiProtocolOverride': 'anthropic.messages',
+                  'apiProtocolOverrideSource': 'provider-preset-default',
+                },
+              },
+            ),
+          );
+        }
+      } on DioException {
+        // Entitlement is project scoped; partial publisher responses remain useful.
+      }
+    }
+    if (discovered.isEmpty) {
+      if (!successfulPublisherResponse) {
+        throw const LlmAccountConnectorException();
+      }
+      return List.unmodifiable(_mergeModelMappings(fallback, account.models));
+    }
+    return List.unmodifiable(
+      _mergeModelMappings(discovered, account.models),
+    );
+  }
+
   static String _vertexBaseUrl(Map<String, dynamic> config) {
     final location =
         LlmNativeRequestBuilder._vertexLocation(config) ?? 'us-central1';
@@ -5444,7 +5623,8 @@ class LlmAccountConnectorService {
         !connector.authTypes.contains(account.authType)) {
       throw const LlmAccountConnectorException();
     }
-    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
+        account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
     }
     if (account.connectorType == 'qoder' && account.authType == 'oauth') {
@@ -5492,13 +5672,22 @@ class LlmAccountConnectorService {
         throw const LlmAccountConnectorException();
       }
     }
-    if (account.connectorType == 'vertex') {
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType)) {
       final location = account.endpointConfig['location'] ??
           account.endpointConfig['region'];
       if (location != null &&
           (location is! String ||
               !RegExp(r'^(global|[a-z0-9-]+)$').hasMatch(location))) {
         throw const LlmAccountConnectorException();
+      }
+      if (account.connectorType == 'vertex-partner') {
+        final projectId = account.endpointConfig['projectId'];
+        if (projectId != null &&
+            (projectId is! String ||
+                !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+                    .hasMatch(projectId.trim()))) {
+          throw const LlmAccountConnectorException();
+        }
       }
     }
     for (final model in account.models) {
@@ -5533,7 +5722,7 @@ class LlmAccountConnectorService {
       }
       return;
     }
-    if (account.connectorType != 'vertex' ||
+    if (!{'vertex', 'vertex-partner'}.contains(account.connectorType) ||
         account.authType != 'service_account') {
       return;
     }
@@ -5901,7 +6090,8 @@ class LlmNativeRequestBuilder {
         (stream &&
             account.connectorType == 'devin' &&
             account.authType != 'oauth') ||
-        (account.connectorType == 'vertex' && account.authType == 'oauth') ||
+        ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
+            account.authType == 'oauth') ||
         (stream &&
             _isVertexImagen(
               account,
@@ -6154,12 +6344,14 @@ class LlmNativeRequestBuilder {
           headers['x-goog-api-key'] = secret;
         }
         break;
-      case 'vertex':
+      case 'vertex' || 'vertex-partner':
         if (_usesVertexInteractions(config, nativeFormat)) {
           headers.putIfAbsent('Api-Revision', () => '2026-05-20');
         }
         if (account.authType == 'api_key') {
-          headers['x-goog-api-key'] = secret;
+          if (account.connectorType == 'vertex') {
+            headers['x-goog-api-key'] = secret;
+          }
         } else if (account.authType == 'service_account') {
           headers['Authorization'] = 'Bearer $secret';
         }
@@ -6305,7 +6497,13 @@ class LlmNativeRequestBuilder {
 
     final connectorBody = account.connectorType == 'cloudflare-ai'
         ? CloudflareWorkersAiConnector.normalizeRequestBody(body)
-        : body;
+        : account.connectorType == 'vertex-partner' &&
+                modelId.toLowerCase().startsWith('claude-') &&
+                body is Map
+            ? (Map<String, dynamic>.from(body)
+              ..remove('model')
+              ..['anthropic_version'] = 'vertex-2023-10-16')
+            : body;
     final baseRequestBody = account.connectorType == 'devin' &&
             account.authType == 'oauth'
         ? DevinConnectRpc.encodeChatRequest(
@@ -7046,6 +7244,42 @@ class LlmNativeRequestBuilder {
       case 'ollama':
         baseUrl = _baseUrl(config, '');
         path = '/api/chat';
+      case 'vertex-partner':
+        final projectId = _configString(config, 'projectId') ??
+            _projectIdFromCredential(credential);
+        if (projectId == null ||
+            !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$').hasMatch(projectId)) {
+          throw const LlmAccountConnectorException();
+        }
+        final location = _vertexLocation(config) ?? 'us-central1';
+        if (!RegExp(r'^[a-z0-9-]+$').hasMatch(location)) {
+          throw const LlmAccountConnectorException();
+        }
+        final encodedProject = Uri.encodeComponent(projectId);
+        final model = Uri.encodeComponent(modelId);
+        if (modelId.toLowerCase().startsWith('claude-')) {
+          baseUrl = _baseUrl(
+            config,
+            location == 'global'
+                ? 'https://aiplatform.googleapis.com'
+                : 'https://$location-aiplatform.googleapis.com',
+          );
+          path = '/v1/projects/$encodedProject/locations/'
+              '${Uri.encodeComponent(location)}/publishers/anthropic/models/'
+              '$model:rawPredict';
+        } else {
+          baseUrl = _baseUrl(config, 'https://aiplatform.googleapis.com');
+          path = '/v1/projects/$encodedProject/locations/global/'
+              'endpoints/openapi/chat/completions';
+        }
+        if (account.authType == 'api_key') {
+          final apiKey = _credentialValue(account, credential ?? '');
+          if (apiKey.isEmpty) throw const LlmAccountConnectorException();
+          final existingQuery = query ?? '';
+          query =
+              '${existingQuery.isEmpty ? '' : '$existingQuery&'}key=${Uri.encodeQueryComponent(apiKey)}';
+        }
+        break;
       case 'vertex':
         if (_usesVertexInteractions(config, nativeFormat)) {
           final projectId = _configString(config, 'projectId') ??
@@ -7307,6 +7541,7 @@ class LlmNativeRequestBuilder {
           'opencode-go',
           'opencode-zen',
           'vertex',
+          'vertex-partner',
         }.contains(account.connectorType);
     if (account.connectorType == 'ollama' && hasCustomBaseUrl) return;
     if (hasCustomBaseUrl && supportsCustomApiKeyEndpoint) return;
@@ -7365,7 +7600,7 @@ class LlmNativeRequestBuilder {
           ) &&
           host ==
               'q.${amazonQRegion ?? _configString(account.endpointConfig, 'region')}.amazonaws.com',
-      'vertex' => host == 'aiplatform.googleapis.com' ||
+      'vertex' || 'vertex-partner' => host == 'aiplatform.googleapis.com' ||
           host == '$location-aiplatform.googleapis.com',
       _ => false,
     };
