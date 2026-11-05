@@ -219,6 +219,264 @@ void main() {
     }
   });
 
+  test('M45 API-key presets match the pinned executable provider registry', () {
+    const endpoints = {
+      'poolside': 'https://inference.poolside.ai/v1/chat/completions',
+      'publicai': 'https://api.publicai.co/v1/chat/completions',
+      'regolo': 'https://api.regolo.ai/v1/chat/completions',
+      'reka': 'https://api.reka.ai/v1/chat/completions',
+      'requesty': 'https://router.requesty.ai/v1/chat/completions',
+      'sambanova': 'https://api.sambanova.ai/v1/chat/completions',
+      'sarvam': 'https://api.sarvam.ai/v1/chat/completions',
+      'scaleway': 'https://api.scaleway.ai/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect(
+      {
+        for (final id in ['poolside', 'regolo', 'requesty'])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'poolside': 'https://inference.poolside.ai/v1/models',
+        'regolo': 'https://api.regolo.ai/v1/models',
+        'requesty': 'https://router.requesty.ai/v1/models',
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('poolside')!.fallbackModels.map((m) => m.id),
+      ['poolside/laguna-xs-2.1', 'poolside/laguna-s-2.1'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'poolside',
+      )!.fallbackModels.first.capabilities,
+      {
+        'toolCalling': true,
+        'reasoning': true,
+        'contextLength': 262144,
+        'maxOutputTokens': 32768,
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('publicai')!.fallbackModels.map((m) => m.id),
+      [
+        'swiss-ai/apertus-70b-instruct',
+        'swiss-ai/Apertus-8B-Instruct-2509',
+        'aisingapore/Qwen-SEA-LION-v4-32B-IT',
+        'aisingapore/Gemma-SEA-LION-v4-27B-IT',
+        'allenai/Olmo-3-32B-Think',
+        'allenai/Olmo-3-7B-Instruct',
+        'utter-project/EuroLLM-22B-Instruct-2512',
+      ],
+    );
+    expect(findLlmOpenAiProviderPreset('regolo')!.fallbackModels, isEmpty);
+    expect(
+      findLlmOpenAiProviderPreset('reka')!.fallbackModels.map((m) => m.id),
+      ['reka-flash-3', 'reka-flash', 'reka-edge-2603'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('reka')!.fallbackModels.first.capabilities,
+      {'reasoning': true, 'alwaysReasons': true, 'maxOutputTokens': 8192},
+    );
+    expect(findLlmOpenAiProviderPreset('requesty')!.fallbackModels, isEmpty);
+    expect(
+      findLlmOpenAiProviderPreset('sambanova')!.fallbackModels.map((m) => m.id),
+      [
+        'MiniMax-M2.7',
+        'DeepSeek-V3.2',
+        'Llama-4-Maverick-17B-128E-Instruct',
+        'Meta-Llama-3.3-70B-Instruct',
+        'gpt-oss-120b',
+        'DeepSeek-V3.1',
+        'gemma-4-31B-it',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('sarvam')!.fallbackModels.map((m) => m.id),
+      ['sarvam-105b', 'sarvam-30b'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'sarvam',
+      )!.fallbackModels.map((m) => m.capabilities['contextLength']),
+      [131072, 65536],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('scaleway')!.fallbackModels.map((m) => m.id),
+      [
+        'qwen3-235b-a22b-instruct-2507',
+        'llama-3.1-70b-instruct',
+        'llama-3.1-8b-instruct',
+        'mistral-small-3.2-24b-instruct-2506',
+        'deepseek-v3-0324',
+        'gpt-oss-120b',
+      ],
+    );
+
+    // These source-backed candidates are intentionally deferred: they require
+    // a provider-specific executor, fixed request header, unsupported default
+    // capability behavior, or lack an executable pinned provider adapter.
+    for (final id in [
+      'pollinations',
+      'predibase',
+      'qiniu',
+      'routeway',
+      'sap',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
+    }
+    // `poolside/...` in the catalog is an upstream model ID, not a preset ID.
+    expect(findLlmOpenAiProviderPreset('poolside'), isNotNull);
+  });
+
+  test(
+    'each M45 preset persists and routes through Chat and Task Flow',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+      );
+      const presetIds = [
+        'poolside',
+        'publicai',
+        'regolo',
+        'reka',
+        'requesty',
+        'sambanova',
+        'sarvam',
+        'scaleway',
+      ];
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final fallback = preset.fallbackModels.firstOrNull;
+        final model = LlmUpstreamModel(
+          id: 'm45-$presetId:${fallback?.id ?? 'user-model'}',
+          upstreamModelId: fallback?.id ?? 'user-model',
+          displayName: fallback?.displayName ?? 'User model',
+          capabilities: fallback?.capabilities ?? const {},
+          config: const {'apiProtocolOverride': 'anthropic.messages'},
+        );
+        final account = LlmAccount(
+          id: 'm45-$presetId',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {
+            'accountOwnedConfig': 'preserved',
+          }),
+          models: [model],
+        );
+        await service.saveAccount(account, secret: 'key-$presetId');
+
+        final restored = (await service.getAccount(account.id))!;
+        expect(
+          restored.connectorType,
+          'openai-compatibility',
+          reason: presetId,
+        );
+        expect(restored.endpointConfig['providerPresetId'], presetId);
+        expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+        expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+        expect(
+          restored.endpointConfig['apiProtocol'],
+          'openai.chat_completions',
+        );
+        expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+        expect(await service.readCredential(account.id), 'key-$presetId');
+        expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+        expect(restored.models.single.capabilities, model.capabilities);
+        expect(
+          restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages',
+        );
+
+        final group = LlmModelGroup(
+          id: 'm45-$presetId-group',
+          displayName: preset.displayName,
+          members: [
+            LlmModelGroupMember(
+              accountId: restored.id,
+              upstreamModelId: restored.models.single.upstreamModelId,
+            ),
+          ],
+        );
+        final configs = buildLlmModelGroupProviderConfigs(
+          accounts: [restored],
+          groups: [group],
+        );
+        expect(configs, hasLength(1));
+        expect(configs.single.apiProtocol, 'openai.chat_completions');
+        expect(
+          configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages',
+        );
+        expect(
+          llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+          contains('openai-compatibility'),
+        );
+      }
+    },
+  );
+
+  test(
+    'M45 live catalogs refresh with the source URL and Bearer key',
+    () async {
+      const presetIds = ['poolside', 'regolo', 'requesty'];
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'm45-model-${requests.length}'},
+              ],
+            }),
+            200,
+            headers: const {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+        dio: dio,
+      );
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'm45-$presetId-discovery',
+            connectorType: 'openai-compatibility',
+            authType: preset.authType,
+            displayName: preset.displayName,
+            endpointConfig: preset.applyToEndpointConfig(const {}),
+          ),
+          secret: 'key-$presetId',
+        );
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+        expect(
+          requests.last.uri.toString(),
+          preset.modelsUrl,
+          reason: presetId,
+        );
+        expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+        expect(models.single.upstreamModelId, 'm45-model-${requests.length}');
+      }
+    },
+  );
+
   test('M43 API-key presets retain audited Chat Completions metadata', () {
     const endpoints = {
       'naga-ai': 'https://api.naga.ac/v1/chat/completions',
@@ -557,6 +815,14 @@ void main() {
       'plamo',
       'poe',
       'poixe-ai',
+      'poolside',
+      'publicai',
+      'regolo',
+      'reka',
+      'requesty',
+      'sambanova',
+      'sarvam',
+      'scaleway',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -681,6 +947,14 @@ void main() {
         'plamo': 'https://api.platform.preferredai.jp/v1/chat/completions',
         'poe': 'https://api.poe.com/v1/chat/completions',
         'poixe-ai': 'https://api.poixe.com/v1/chat/completions',
+        'poolside': 'https://inference.poolside.ai/v1/chat/completions',
+        'publicai': 'https://api.publicai.co/v1/chat/completions',
+        'regolo': 'https://api.regolo.ai/v1/chat/completions',
+        'reka': 'https://api.reka.ai/v1/chat/completions',
+        'requesty': 'https://router.requesty.ai/v1/chat/completions',
+        'sambanova': 'https://api.sambanova.ai/v1/chat/completions',
+        'sarvam': 'https://api.sarvam.ai/v1/chat/completions',
+        'scaleway': 'https://api.scaleway.ai/v1/chat/completions',
       },
     );
     expect(
