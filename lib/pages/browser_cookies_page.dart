@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/browser_cookie_service.dart';
 
 /// Management page for browser cookies and persisted browsing data.
@@ -55,20 +56,21 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Future<void> _clearAllCookies() async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认清除'),
-        content: const Text('确定要清除所有Cookies吗？\n此操作不可撤销。'),
+        title: Text(l10n.browserCookiesConfirmClear),
+        content: Text(l10n.browserCookiesConfirmClearAll),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(l10n.browserCookiesCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('清除'),
+            child: Text(l10n.browserCookiesClear),
           ),
         ],
       ),
@@ -84,7 +86,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ok ? '已清除所有Cookies' : '清除失败，请重试'),
+            content: Text(
+              ok
+                  ? l10n.browserCookiesClearedAll
+                  : l10n.browserCookiesClearFailed,
+            ),
           ),
         );
       }
@@ -96,20 +102,21 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Future<void> _clearDomainCookies(String domain) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认清除'),
-        content: Text('确定要清除 $domain 的所有Cookies吗？'),
+        title: Text(l10n.browserCookiesConfirmClear),
+        content: Text(l10n.browserCookiesClearDomainConfirm(domain)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(l10n.browserCookiesCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('清除'),
+            child: Text(l10n.browserCookiesClear),
           ),
         ],
       ),
@@ -123,7 +130,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? '已清除 $domain 的Cookies' : '清除失败，请重试'),
+          content: Text(
+            ok
+                ? l10n.browserCookiesClearedDomain(domain)
+                : l10n.browserCookiesClearFailed,
+          ),
         ),
       );
     }
@@ -132,10 +143,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('浏览器数据管理'),
+        title: Text(l10n.browserCookiesPageTitle),
         centerTitle: true,
       ),
       body: RefreshIndicator(
@@ -158,6 +170,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Widget _buildRetentionCard(ColorScheme colorScheme) {
+    final l10n = AppLocalizations.of(context)!;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -168,9 +181,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                 ? Colors.orange
                 : colorScheme.onSurfaceVariant,
           ),
-          title: const Text('退出保留Cookies数据'),
+          title: Text(l10n.browserCookiesRetentionTitle),
           subtitle: Text(
-            _retentionEnabled ? '已启用 - 退出时保留Cookies' : '已禁用 - 退出时清除Cookies',
+            _retentionEnabled
+                ? l10n.browserCookiesRetentionOn
+                : l10n.browserCookiesRetentionOff,
           ),
           trailing: Switch(
             value: _retentionEnabled,
@@ -189,8 +204,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: _buildActionTile(
           leading: const Icon(Icons.delete_sweep, color: Colors.red),
-          title: '清除所有Cookies',
-          subtitle: '删除所有已保存的网站Cookies',
+          title: AppLocalizations.of(context)!.browserCookiesClearAllTitle,
+          subtitle:
+              AppLocalizations.of(context)!.browserCookiesClearAllDescription,
           onTap: _isClearing ? null : _clearAllCookies,
           trailing: _isClearing
               ? const SizedBox(
@@ -245,7 +261,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '暂无持久化数据',
+                  AppLocalizations.of(context)!.browserCookiesEmptyTitle,
                   style: TextStyle(
                     fontSize: 16,
                     color: colorScheme.onSurfaceVariant,
@@ -253,7 +269,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '使用内置浏览器并开启Cookies持久化后，\n已保存的数据将在此处显示。',
+                  AppLocalizations.of(context)!.browserCookiesEmptyDescription,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -273,7 +289,10 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
         Padding(
           padding: const EdgeInsets.only(bottom: 8, left: 4),
           child: Text(
-            '已存储的Cookies (${_cookiesByDomain.values.fold<int>(0, (sum, list) => sum + list.length)})',
+            AppLocalizations.of(context)!.browserCookiesStoredCount(
+              _cookiesByDomain.values
+                  .fold<int>(0, (sum, list) => sum + list.length),
+            ),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -306,10 +325,14 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                 domain,
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
-              subtitle: Text('$totalCookies 个Cookie'),
+              subtitle: Text(
+                AppLocalizations.of(context)!
+                    .browserCookiesDomainCount(totalCookies),
+              ),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
-                tooltip: '清除此域名下的所有Cookies',
+                tooltip: AppLocalizations.of(context)!
+                    .browserCookiesClearDomainTooltip,
                 onPressed: () => _clearDomainCookies(domain),
               ),
               contentPadding: EdgeInsets.zero,
@@ -333,7 +356,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            _maskValue(cookie['value'] as String? ?? ''),
+                            _maskValue(
+                              cookie['value'] as String? ?? '',
+                              AppLocalizations.of(context)!
+                                  .browserCookiesEmptyValue,
+                            ),
                             style: TextStyle(
                               fontSize: 12,
                               color: colorScheme.onSurfaceVariant,
@@ -366,7 +393,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           icon: const Icon(Icons.delete_outline, size: 18),
                           padding: EdgeInsets.zero,
                           color: Colors.red.shade300,
-                          tooltip: '删除此Cookie',
+                          tooltip: AppLocalizations.of(context)!
+                              .browserCookiesDeleteOneTooltip,
                           onPressed: () => _deleteSingleCookie(domain, cookie),
                         ),
                       ),
@@ -382,6 +410,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
   Future<void> _deleteSingleCookie(
       String domain, Map<String, dynamic> cookie) async {
+    final l10n = AppLocalizations.of(context)!;
     final name = cookie['name'] as String? ?? '';
     _cookieLoadGeneration++;
     final ok = await BrowserCookieService.deleteCookie(
@@ -393,15 +422,19 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? '已删除Cookie' : '删除失败，请重试'),
+          content: Text(
+            ok
+                ? l10n.browserCookiesDeletedOne
+                : l10n.browserCookiesDeleteFailed,
+          ),
         ),
       );
     }
   }
 
   /// Masks a cookie value for display, showing only first few chars.
-  String _maskValue(String value) {
-    if (value.isEmpty) return '(空值)';
+  String _maskValue(String value, String emptyValue) {
+    if (value.isEmpty) return emptyValue;
     if (value.length <= 6) return value;
     return '${value.substring(0, 3)}...${value.substring(value.length - 3)}';
   }

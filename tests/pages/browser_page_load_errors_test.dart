@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
 
@@ -310,7 +311,11 @@ Future<InAppWebViewController> _startNavigation(
   _BrowserPagePlatform platform,
 ) async {
   await tester.pumpWidget(
-    const MaterialApp(home: BrowserPage(initialUrl: 'https://failed.example/')),
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const BrowserPage(initialUrl: 'https://failed.example/'),
+    ),
   );
   final webView = platform.webView!;
   final controller = webView

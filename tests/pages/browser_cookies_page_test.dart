@@ -4,6 +4,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_cookies_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
 
@@ -72,6 +73,13 @@ class _CookieListRacePlatform implements CookiePlatform {
   Future<bool> deleteAllCookies() async => true;
 }
 
+Widget _chineseApp(Widget home) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -88,13 +96,34 @@ void main() {
   // Page renders basic structure
   // ====================================================================
 
+  testWidgets('uses the selected locale for browser cookie UI', (tester) async {
+    Future<void> pump(Locale locale) => tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const BrowserCookiesPage(),
+          ),
+        );
+
+    await pump(const Locale('en', 'US'));
+    await tester.pumpAndSettle();
+    expect(find.text('Browser data management'), findsOneWidget);
+    expect(find.text('Clear all cookies'), findsOneWidget);
+
+    await pump(const Locale('zh', 'CN'));
+    await tester.pumpAndSettle();
+    expect(find.text('浏览器数据管理'), findsOneWidget);
+    expect(find.text('清除所有 Cookie'), findsOneWidget);
+  });
+
   group('BrowserCookiesPage rendering', () {
     testWidgets('retention toggle is off when the preference is false',
         (tester) async {
       await BrowserCookieService.setRetentionMode(false);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -107,7 +136,7 @@ void main() {
       await BrowserCookieService.setRetentionMode(true);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -118,7 +147,7 @@ void main() {
     testWidgets('toggling the switch updates the stored preference',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -146,7 +175,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -155,13 +184,13 @@ void main() {
       expect(find.text('test.org'), findsOneWidget);
 
       // Should show cookie count
-      expect(find.textContaining('1 个Cookie'), findsAtLeast(1));
+      expect(find.textContaining('1 个 Cookie'), findsAtLeast(1));
     });
 
     testWidgets('shows empty state when no cookies are persisted',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -182,7 +211,7 @@ void main() {
       BrowserCookieService.cookiePlatform = platform;
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pump();
       await platform.initialReadStarted.future;
@@ -208,7 +237,7 @@ void main() {
     testWidgets('cancelling confirmation dialog does not clear cookies',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -237,7 +266,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -280,7 +309,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -322,7 +351,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -359,7 +388,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 
@@ -385,7 +414,7 @@ void main() {
       ]);
 
       await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
+        _chineseApp(const BrowserCookiesPage()),
       );
       await tester.pumpAndSettle();
 

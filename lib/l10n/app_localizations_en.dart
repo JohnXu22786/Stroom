@@ -8265,6 +8265,425 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get textCreateContentHint => 'Enter text content...';
+
+  @override
+  String platformTutorialPlatformSubtitle(Object platform) {
+    return '$platform background optimization tutorial';
+  }
+
+  @override
+  String platformTutorialDetailTitle(Object platform) {
+    return '$platform background running guide';
+  }
+
+  @override
+  String platformTutorialGuideTitle(Object platform) {
+    return '$platform background optimization guide';
+  }
+
+  @override
+  String platformTutorialGuideIntro(Object platform) {
+    return 'These steps can help optimize Stroom’s background experience on $platform devices so tasks can continue running in the background.';
+  }
+
+  @override
+  String get platformTutorialStepsHeading => 'Optimization steps';
+
+  @override
+  String get platformTutorialTipsHeading => 'Tip';
+
+  @override
+  String get platformTutorialTipsDescription =>
+      'After completing these settings, return to the “Background Optimization” page and check that the status has updated. If you still have problems, see another platform’s guide or report the issue on GitHub.';
+
+  @override
+  String get platformTutorialAndroidStep1Title =>
+      'Turn off battery optimization';
+
+  @override
+  String get platformTutorialAndroidStep1Description =>
+      'Open Settings → Apps → Stroom → Battery, then choose “Unrestricted” or “Don’t optimize.” You can also tap “Ignore battery optimization” on this app’s “Background Optimization” page to add Stroom to the system power-saving allowlist. Paths vary by device brand.';
+
+  @override
+  String get platformTutorialAndroidStep2Title => 'Allow background activity';
+
+  @override
+  String get platformTutorialAndroidStep2Description =>
+      'Open Settings → Apps → Stroom and enable “Allow background activity” and “Allow auto-start.” Some phones also require allowing auto-start in Security Center or Phone Manager.';
+
+  @override
+  String get platformTutorialAndroidStep3Title => 'Lock the background process';
+
+  @override
+  String get platformTutorialAndroidStep3Description =>
+      'In the recent-apps view, swipe down on the Stroom card or tap its lock icon to prevent the system from clearing the app.';
+
+  @override
+  String get platformTutorialAndroidStep4Title =>
+      'Allow notifications (Android 13+)';
+
+  @override
+  String get platformTutorialAndroidStep4Description =>
+      'Android 13 and later require notification permission. Without it, the foreground notification for the background service is hidden, though the service still runs. The app requests permission when you first tap “Start service,” or you can enable it in Settings → Apps → Stroom → Notifications.';
+
+  @override
+  String get platformTutorialAndroidStep5Title => 'Ignore battery optimization';
+
+  @override
+  String get platformTutorialAndroidStep5Description =>
+      'When you enable “Task completion notifications” in Stroom, the app requests the related permission. You can also check that Stroom is set to “Don’t optimize” in Settings → Apps → Special app access → Battery optimization.';
+
+  @override
+  String get platformTutorialAndroidStep6Title =>
+      'Auto-start and background management on Android devices';
+
+  @override
+  String get platformTutorialAndroidStep6Description =>
+      'Device manufacturers often add their own background controls:\n• Xiaomi/Redmi (MIUI/HyperOS): Settings → Apps → Permissions → Autostart; allow Stroom. Then open Battery → App battery saver → Stroom → No restrictions.\n• Huawei/Honor (EMUI/HarmonyOS): Settings → Apps → App launch → Stroom → Manage manually; allow auto-launch, secondary launch, and background activity.\n• OPPO/OnePlus/realme (ColorOS): Settings → Battery → App battery management → Stroom; allow full background activity.\n• vivo/iQOO (OriginOS): iManager → App management → Autostart; allow Stroom.';
+
+  @override
+  String get platformTutorialAndroidStep7Title =>
+      'Turn off lock-screen cleanup and power-saving modes';
+
+  @override
+  String get platformTutorialAndroidStep7Description =>
+      'Open Settings → Battery and turn off “Power saving” or “Ultra power saving.” Also set “Clear memory after locking” to “Don’t clear.” Power-saving modes restrict background activity and may affect task completion.';
+
+  @override
+  String get platformTutorialIosStep1Title => 'Enable Background App Refresh';
+
+  @override
+  String get platformTutorialIosStep1Description =>
+      'Open Settings → General → Background App Refresh, find Stroom, and turn it on. Choose “Wi-Fi & Cellular Data” for the best experience.';
+
+  @override
+  String get platformTutorialIosStep2Title => 'Allow notifications';
+
+  @override
+  String get platformTutorialIosStep2Description =>
+      'Open Settings → Notifications → Stroom and turn on “Allow Notifications.” Enable both banners and Notification Center so you can see task updates promptly.';
+
+  @override
+  String get platformTutorialIosStep3Title => 'Turn off Low Power Mode';
+
+  @override
+  String get platformTutorialIosStep3Description =>
+      'Open Settings → Battery and turn off “Low Power Mode.” The system restricts background activity while this mode is on.';
+
+  @override
+  String get platformTutorialIosStep4Title =>
+      'Understand iOS background limits';
+
+  @override
+  String get platformTutorialIosStep4Description =>
+      'Versions before iOS 26 do not allow apps to stay in the background like Android apps. The system gives apps brief execution time only at certain times, such as Background App Refresh, location updates, or audio playback, and may suspend long-running tasks. We recommend:\n• Keep Stroom in the foreground for long-running tasks.\n• Return to the app periodically to refresh its background time.\n• Turn on “Task completion notifications” for important tasks.';
+
+  @override
+  String get platformTutorialIosStep5Title => 'Background tips while tasks run';
+
+  @override
+  String get platformTutorialIosStep5Description =>
+      'iOS 26 and later support persistent background tasks. Tasks usually continue if you switch apps or lock the screen, though the system may stop them when resources are scarce; progress appears on the Lock Screen.\n\nEarlier iOS versions do not support persistent background tasks. Return to the app every few minutes (5–10 minutes is a guideline; the system decides) to refresh background time and prevent suspension.\n\nOn every version, do not swipe Stroom away in the app switcher; doing so immediately stops all running tasks.';
+
+  @override
+  String get platformTutorialIosStep6Title => 'Keep the app in the foreground';
+
+  @override
+  String get platformTutorialIosStep6Description =>
+      'On versions earlier than iOS 26, apps have limited background time. For long-running tasks, keep Stroom in the foreground or return to it periodically to extend that time.';
+
+  @override
+  String get platformTutorialWindowsStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialWindowsStep1Description =>
+      'By default, clicking the window’s close button minimizes Stroom to the system tray (near the clock) so it can keep running. Restore it from the tray icon or “Show main window” menu. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.';
+
+  @override
+  String get platformTutorialWindowsStep2Title => 'Turn off Battery Saver';
+
+  @override
+  String get platformTutorialWindowsStep2Description =>
+      'Open Settings → System → Power & sleep and turn off Battery Saver. Alternatively, configure it to turn on only when the battery falls below a chosen level.';
+
+  @override
+  String get platformTutorialWindowsStep3Title => 'Allow background apps';
+
+  @override
+  String get platformTutorialWindowsStep3Description =>
+      'Open Settings → Privacy & security → Background apps, find Stroom, and make sure it is enabled. On Windows 11, go to Settings → Apps → Installed apps → Stroom → Advanced options → Background app permissions and choose “Always.”';
+
+  @override
+  String get platformTutorialWindowsStep4Title =>
+      'Turn off sleep mode (optional)';
+
+  @override
+  String get platformTutorialWindowsStep4Description =>
+      'To keep Stroom running for long periods, open Settings → System → Power and set “Sleep” to “Never” (when plugged in only).';
+
+  @override
+  String get platformTutorialWindowsStep5Title => 'Add Stroom to startup';
+
+  @override
+  String get platformTutorialWindowsStep5Description =>
+      'Open Task Manager (Ctrl+Shift+Esc) → Startup, find Stroom, and right-click “Enable.” Or open Settings → Apps → Startup and turn on Stroom.';
+
+  @override
+  String get platformTutorialMacosStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialMacosStep1Description =>
+      'By default, closing the window keeps Stroom running in the menu bar (top-right of the screen). Click its menu bar icon or choose “Show main window” to restore it. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the menu bar menu.';
+
+  @override
+  String get platformTutorialMacosStep2Title => 'Allow notifications';
+
+  @override
+  String get platformTutorialMacosStep2Description =>
+      'Open System Settings → Notifications → Stroom and turn on “Allow Notifications.” We recommend enabling both banners and Notification Center.';
+
+  @override
+  String get platformTutorialMacosStep3Title =>
+      'Turn off Low Power Mode (MacBook)';
+
+  @override
+  String get platformTutorialMacosStep3Description =>
+      'Open System Settings → Battery → Power Adapter and turn off “Low Power Mode.” This mode restricts background activity.';
+
+  @override
+  String get platformTutorialMacosStep4Title => 'Keep the app active';
+
+  @override
+  String get platformTutorialMacosStep4Description =>
+      'macOS places few restrictions on background apps. For long-running tasks, leave the Stroom window open. Avoid force-quitting the app; closing the window is enough.';
+
+  @override
+  String get platformTutorialMacosStep5Title => 'Launch at login (optional)';
+
+  @override
+  String get platformTutorialMacosStep5Description =>
+      'Open System Settings → General → Login Items and add Stroom so it starts automatically when your computer starts.';
+
+  @override
+  String get platformTutorialLinuxStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialLinuxStep1Description =>
+      'By default, closing the window hides Stroom in the system tray (requires a desktop environment with StatusNotifierItem support and libayatana-appindicator3-dev at build time). Restore it from the tray menu using “Show main window.” Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.';
+
+  @override
+  String get platformTutorialLinuxStep2Title => 'Desktop environment settings';
+
+  @override
+  String get platformTutorialLinuxStep2Description =>
+      'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), open System Settings → Apps, find Stroom, and make sure background activity is not restricted.';
+
+  @override
+  String get platformTutorialLinuxStep3Title =>
+      'Use a systemd service (optional)';
+
+  @override
+  String get platformTutorialLinuxStep3Description =>
+      'For long-running background work, create a systemd user service. Create a stroom.service file under ~/.config/systemd/user/ and set ExecStart to the Stroom executable.';
+
+  @override
+  String get platformTutorialLinuxStep4Title => 'Disable sleep';
+
+  @override
+  String get platformTutorialLinuxStep4Description =>
+      'For a server or desktop that needs to run for a long time, set HandleLidSwitch=ignore in /etc/systemd/logind.conf to prevent sleep when the lid closes.';
+
+  @override
+  String get platformTutorialLinuxStep5Title => 'Enable autostart';
+
+  @override
+  String get platformTutorialLinuxStep5Description =>
+      'In GNOME, use Tweaks → Startup Applications → Add Stroom. Or create a stroom.desktop file under ~/.config/autostart/.';
+
+  @override
+  String get platformTutorialWebStep1Title => 'Keep the tab open';
+
+  @override
+  String get platformTutorialWebStep1Description =>
+      'Web browsers do not support background services. Keep the Stroom tab open while tasks run; closing the tab or refreshing the page immediately interrupts them.';
+
+  @override
+  String get platformTutorialWebStep2Title =>
+      'Prevent the browser from suspending the tab';
+
+  @override
+  String get platformTutorialWebStep2Description =>
+      'Browsers may freeze inactive background tabs to save resources. Keep the Stroom tab in the foreground while tasks run, or interact with the page periodically to keep it active.';
+
+  @override
+  String get browserNavigationFailed =>
+      'Page navigation failed; address restored';
+
+  @override
+  String get browserAddressHint => 'Enter a web address';
+
+  @override
+  String get browserUserScripts => 'User scripts';
+
+  @override
+  String get browserSwitchToMobile => 'Switch to mobile view';
+
+  @override
+  String get browserSwitchToDesktop => 'Switch to desktop view';
+
+  @override
+  String get browserUaSwitchedDesktop => 'Switched to desktop user agent';
+
+  @override
+  String get browserUaSwitchedMobile => 'Switched to mobile user agent';
+
+  @override
+  String get browserCookieRetentionOnTooltip => 'Cookie persistence (on)';
+
+  @override
+  String get browserCookieRetentionOffTooltip => 'Cookie persistence (off)';
+
+  @override
+  String get browserCookiePersistenceEnabled => 'Cookie persistence enabled';
+
+  @override
+  String get browserCookiePersistenceDisabled => 'Cookie persistence disabled';
+
+  @override
+  String get browserAdd => 'Add';
+
+  @override
+  String get browserNoScripts => 'No scripts yet. Tap “Add” to create one.';
+
+  @override
+  String get browserUnnamedScript => 'Untitled script';
+
+  @override
+  String browserScriptMatchCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matching rules',
+      one: '$count matching rule',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get browserEditScript => 'Edit script';
+
+  @override
+  String get browserScriptName => 'Script name';
+
+  @override
+  String get browserScriptCode => 'Script code (JavaScript)';
+
+  @override
+  String get browserMatchUrls => 'URL patterns (one per line)';
+
+  @override
+  String get browserScriptMatchHint => '*://*.example.com/*';
+
+  @override
+  String get browserCancel => 'Cancel';
+
+  @override
+  String get browserSave => 'Save';
+
+  @override
+  String get browserCookiesConfirmClear => 'Confirm clearing';
+
+  @override
+  String get browserCookiesConfirmClearAll =>
+      'Clear all cookies?\nThis action cannot be undone.';
+
+  @override
+  String get browserCookiesClear => 'Clear';
+
+  @override
+  String get browserCookiesCancel => 'Cancel';
+
+  @override
+  String get browserCookiesClearedAll => 'All cookies cleared';
+
+  @override
+  String get browserCookiesClearFailed => 'Could not clear. Try again.';
+
+  @override
+  String browserCookiesClearedDomain(Object domain) {
+    return 'All cookies for $domain cleared';
+  }
+
+  @override
+  String browserCookiesClearDomainConfirm(Object domain) {
+    return 'Clear all cookies for $domain?';
+  }
+
+  @override
+  String get browserCookiesPageTitle => 'Browser data management';
+
+  @override
+  String get browserCookiesRetentionTitle => 'Keep cookies when exiting';
+
+  @override
+  String get browserCookiesRetentionOn =>
+      'Enabled — cookies are kept when exiting';
+
+  @override
+  String get browserCookiesRetentionOff =>
+      'Disabled — cookies are cleared when exiting';
+
+  @override
+  String get browserCookiesClearAllTitle => 'Clear all cookies';
+
+  @override
+  String get browserCookiesClearAllDescription =>
+      'Delete all saved website cookies';
+
+  @override
+  String get browserCookiesEmptyTitle => 'No persistent data';
+
+  @override
+  String get browserCookiesEmptyDescription =>
+      'Use the built-in browser and enable cookie persistence to see saved data here.';
+
+  @override
+  String browserCookiesStoredCount(Object count) {
+    return 'Stored cookies ($count)';
+  }
+
+  @override
+  String browserCookiesDomainCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cookies',
+      one: '$count cookie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get browserCookiesClearDomainTooltip =>
+      'Clear all cookies for this domain';
+
+  @override
+  String get browserCookiesDeleteOneTooltip => 'Delete this cookie';
+
+  @override
+  String get browserCookiesDeletedOne => 'Cookie deleted';
+
+  @override
+  String get browserCookiesDeleteFailed => 'Could not delete. Try again.';
+
+  @override
+  String get browserCookiesEmptyValue => '(empty value)';
+
+  @override
+  String get platformTutorialPageTitle => 'Platform tutorials';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -16527,4 +16946,423 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get textCreateContentHint => 'Enter text content...';
+
+  @override
+  String platformTutorialPlatformSubtitle(Object platform) {
+    return '$platform background optimization tutorial';
+  }
+
+  @override
+  String platformTutorialDetailTitle(Object platform) {
+    return '$platform background running guide';
+  }
+
+  @override
+  String platformTutorialGuideTitle(Object platform) {
+    return '$platform background optimization guide';
+  }
+
+  @override
+  String platformTutorialGuideIntro(Object platform) {
+    return 'These steps can help optimize Stroom’s background experience on $platform devices so tasks can continue running in the background.';
+  }
+
+  @override
+  String get platformTutorialStepsHeading => 'Optimization steps';
+
+  @override
+  String get platformTutorialTipsHeading => 'Tip';
+
+  @override
+  String get platformTutorialTipsDescription =>
+      'After completing these settings, return to the “Background Optimization” page and check that the status has updated. If you still have problems, see another platform’s guide or report the issue on GitHub.';
+
+  @override
+  String get platformTutorialAndroidStep1Title =>
+      'Turn off battery optimization';
+
+  @override
+  String get platformTutorialAndroidStep1Description =>
+      'Open Settings → Apps → Stroom → Battery, then choose “Unrestricted” or “Don’t optimize.” You can also tap “Ignore battery optimization” on this app’s “Background Optimization” page to add Stroom to the system power-saving allowlist. Paths vary by device brand.';
+
+  @override
+  String get platformTutorialAndroidStep2Title => 'Allow background activity';
+
+  @override
+  String get platformTutorialAndroidStep2Description =>
+      'Open Settings → Apps → Stroom and enable “Allow background activity” and “Allow auto-start.” Some phones also require allowing auto-start in Security Center or Phone Manager.';
+
+  @override
+  String get platformTutorialAndroidStep3Title => 'Lock the background process';
+
+  @override
+  String get platformTutorialAndroidStep3Description =>
+      'In the recent-apps view, swipe down on the Stroom card or tap its lock icon to prevent the system from clearing the app.';
+
+  @override
+  String get platformTutorialAndroidStep4Title =>
+      'Allow notifications (Android 13+)';
+
+  @override
+  String get platformTutorialAndroidStep4Description =>
+      'Android 13 and later require notification permission. Without it, the foreground notification for the background service is hidden, though the service still runs. The app requests permission when you first tap “Start service,” or you can enable it in Settings → Apps → Stroom → Notifications.';
+
+  @override
+  String get platformTutorialAndroidStep5Title => 'Ignore battery optimization';
+
+  @override
+  String get platformTutorialAndroidStep5Description =>
+      'When you enable “Task completion notifications” in Stroom, the app requests the related permission. You can also check that Stroom is set to “Don’t optimize” in Settings → Apps → Special app access → Battery optimization.';
+
+  @override
+  String get platformTutorialAndroidStep6Title =>
+      'Auto-start and background management on Android devices';
+
+  @override
+  String get platformTutorialAndroidStep6Description =>
+      'Device manufacturers often add their own background controls:\n• Xiaomi/Redmi (MIUI/HyperOS): Settings → Apps → Permissions → Autostart; allow Stroom. Then open Battery → App battery saver → Stroom → No restrictions.\n• Huawei/Honor (EMUI/HarmonyOS): Settings → Apps → App launch → Stroom → Manage manually; allow auto-launch, secondary launch, and background activity.\n• OPPO/OnePlus/realme (ColorOS): Settings → Battery → App battery management → Stroom; allow full background activity.\n• vivo/iQOO (OriginOS): iManager → App management → Autostart; allow Stroom.';
+
+  @override
+  String get platformTutorialAndroidStep7Title =>
+      'Turn off lock-screen cleanup and power-saving modes';
+
+  @override
+  String get platformTutorialAndroidStep7Description =>
+      'Open Settings → Battery and turn off “Power saving” or “Ultra power saving.” Also set “Clear memory after locking” to “Don’t clear.” Power-saving modes restrict background activity and may affect task completion.';
+
+  @override
+  String get platformTutorialIosStep1Title => 'Enable Background App Refresh';
+
+  @override
+  String get platformTutorialIosStep1Description =>
+      'Open Settings → General → Background App Refresh, find Stroom, and turn it on. Choose “Wi-Fi & Cellular Data” for the best experience.';
+
+  @override
+  String get platformTutorialIosStep2Title => 'Allow notifications';
+
+  @override
+  String get platformTutorialIosStep2Description =>
+      'Open Settings → Notifications → Stroom and turn on “Allow Notifications.” Enable both banners and Notification Center so you can see task updates promptly.';
+
+  @override
+  String get platformTutorialIosStep3Title => 'Turn off Low Power Mode';
+
+  @override
+  String get platformTutorialIosStep3Description =>
+      'Open Settings → Battery and turn off “Low Power Mode.” The system restricts background activity while this mode is on.';
+
+  @override
+  String get platformTutorialIosStep4Title =>
+      'Understand iOS background limits';
+
+  @override
+  String get platformTutorialIosStep4Description =>
+      'Versions before iOS 26 do not allow apps to stay in the background like Android apps. The system gives apps brief execution time only at certain times, such as Background App Refresh, location updates, or audio playback, and may suspend long-running tasks. We recommend:\n• Keep Stroom in the foreground for long-running tasks.\n• Return to the app periodically to refresh its background time.\n• Turn on “Task completion notifications” for important tasks.';
+
+  @override
+  String get platformTutorialIosStep5Title => 'Background tips while tasks run';
+
+  @override
+  String get platformTutorialIosStep5Description =>
+      'iOS 26 and later support persistent background tasks. Tasks usually continue if you switch apps or lock the screen, though the system may stop them when resources are scarce; progress appears on the Lock Screen.\n\nEarlier iOS versions do not support persistent background tasks. Return to the app every few minutes (5–10 minutes is a guideline; the system decides) to refresh background time and prevent suspension.\n\nOn every version, do not swipe Stroom away in the app switcher; doing so immediately stops all running tasks.';
+
+  @override
+  String get platformTutorialIosStep6Title => 'Keep the app in the foreground';
+
+  @override
+  String get platformTutorialIosStep6Description =>
+      'On versions earlier than iOS 26, apps have limited background time. For long-running tasks, keep Stroom in the foreground or return to it periodically to extend that time.';
+
+  @override
+  String get platformTutorialWindowsStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialWindowsStep1Description =>
+      'By default, clicking the window’s close button minimizes Stroom to the system tray (near the clock) so it can keep running. Restore it from the tray icon or “Show main window” menu. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.';
+
+  @override
+  String get platformTutorialWindowsStep2Title => 'Turn off Battery Saver';
+
+  @override
+  String get platformTutorialWindowsStep2Description =>
+      'Open Settings → System → Power & sleep and turn off Battery Saver. Alternatively, configure it to turn on only when the battery falls below a chosen level.';
+
+  @override
+  String get platformTutorialWindowsStep3Title => 'Allow background apps';
+
+  @override
+  String get platformTutorialWindowsStep3Description =>
+      'Open Settings → Privacy & security → Background apps, find Stroom, and make sure it is enabled. On Windows 11, go to Settings → Apps → Installed apps → Stroom → Advanced options → Background app permissions and choose “Always.”';
+
+  @override
+  String get platformTutorialWindowsStep4Title =>
+      'Turn off sleep mode (optional)';
+
+  @override
+  String get platformTutorialWindowsStep4Description =>
+      'To keep Stroom running for long periods, open Settings → System → Power and set “Sleep” to “Never” (when plugged in only).';
+
+  @override
+  String get platformTutorialWindowsStep5Title => 'Add Stroom to startup';
+
+  @override
+  String get platformTutorialWindowsStep5Description =>
+      'Open Task Manager (Ctrl+Shift+Esc) → Startup, find Stroom, and right-click “Enable.” Or open Settings → Apps → Startup and turn on Stroom.';
+
+  @override
+  String get platformTutorialMacosStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialMacosStep1Description =>
+      'By default, closing the window keeps Stroom running in the menu bar (top-right of the screen). Click its menu bar icon or choose “Show main window” to restore it. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the menu bar menu.';
+
+  @override
+  String get platformTutorialMacosStep2Title => 'Allow notifications';
+
+  @override
+  String get platformTutorialMacosStep2Description =>
+      'Open System Settings → Notifications → Stroom and turn on “Allow Notifications.” We recommend enabling both banners and Notification Center.';
+
+  @override
+  String get platformTutorialMacosStep3Title =>
+      'Turn off Low Power Mode (MacBook)';
+
+  @override
+  String get platformTutorialMacosStep3Description =>
+      'Open System Settings → Battery → Power Adapter and turn off “Low Power Mode.” This mode restricts background activity.';
+
+  @override
+  String get platformTutorialMacosStep4Title => 'Keep the app active';
+
+  @override
+  String get platformTutorialMacosStep4Description =>
+      'macOS places few restrictions on background apps. For long-running tasks, leave the Stroom window open. Avoid force-quitting the app; closing the window is enough.';
+
+  @override
+  String get platformTutorialMacosStep5Title => 'Launch at login (optional)';
+
+  @override
+  String get platformTutorialMacosStep5Description =>
+      'Open System Settings → General → Login Items and add Stroom so it starts automatically when your computer starts.';
+
+  @override
+  String get platformTutorialLinuxStep1Title =>
+      'Minimize when closing the window';
+
+  @override
+  String get platformTutorialLinuxStep1Description =>
+      'By default, closing the window hides Stroom in the system tray (requires a desktop environment with StatusNotifierItem support and libayatana-appindicator3-dev at build time). Restore it from the tray menu using “Show main window.” Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.';
+
+  @override
+  String get platformTutorialLinuxStep2Title => 'Desktop environment settings';
+
+  @override
+  String get platformTutorialLinuxStep2Description =>
+      'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), open System Settings → Apps, find Stroom, and make sure background activity is not restricted.';
+
+  @override
+  String get platformTutorialLinuxStep3Title =>
+      'Use a systemd service (optional)';
+
+  @override
+  String get platformTutorialLinuxStep3Description =>
+      'For long-running background work, create a systemd user service. Create a stroom.service file under ~/.config/systemd/user/ and set ExecStart to the Stroom executable.';
+
+  @override
+  String get platformTutorialLinuxStep4Title => 'Disable sleep';
+
+  @override
+  String get platformTutorialLinuxStep4Description =>
+      'For a server or desktop that needs to run for a long time, set HandleLidSwitch=ignore in /etc/systemd/logind.conf to prevent sleep when the lid closes.';
+
+  @override
+  String get platformTutorialLinuxStep5Title => 'Enable autostart';
+
+  @override
+  String get platformTutorialLinuxStep5Description =>
+      'In GNOME, use Tweaks → Startup Applications → Add Stroom. Or create a stroom.desktop file under ~/.config/autostart/.';
+
+  @override
+  String get platformTutorialWebStep1Title => 'Keep the tab open';
+
+  @override
+  String get platformTutorialWebStep1Description =>
+      'Web browsers do not support background services. Keep the Stroom tab open while tasks run; closing the tab or refreshing the page immediately interrupts them.';
+
+  @override
+  String get platformTutorialWebStep2Title =>
+      'Prevent the browser from suspending the tab';
+
+  @override
+  String get platformTutorialWebStep2Description =>
+      'Browsers may freeze inactive background tabs to save resources. Keep the Stroom tab in the foreground while tasks run, or interact with the page periodically to keep it active.';
+
+  @override
+  String get browserNavigationFailed =>
+      'Page navigation failed; address restored';
+
+  @override
+  String get browserAddressHint => 'Enter a web address';
+
+  @override
+  String get browserUserScripts => 'User scripts';
+
+  @override
+  String get browserSwitchToMobile => 'Switch to mobile view';
+
+  @override
+  String get browserSwitchToDesktop => 'Switch to desktop view';
+
+  @override
+  String get browserUaSwitchedDesktop => 'Switched to desktop user agent';
+
+  @override
+  String get browserUaSwitchedMobile => 'Switched to mobile user agent';
+
+  @override
+  String get browserCookieRetentionOnTooltip => 'Cookie persistence (on)';
+
+  @override
+  String get browserCookieRetentionOffTooltip => 'Cookie persistence (off)';
+
+  @override
+  String get browserCookiePersistenceEnabled => 'Cookie persistence enabled';
+
+  @override
+  String get browserCookiePersistenceDisabled => 'Cookie persistence disabled';
+
+  @override
+  String get browserAdd => 'Add';
+
+  @override
+  String get browserNoScripts => 'No scripts yet. Tap “Add” to create one.';
+
+  @override
+  String get browserUnnamedScript => 'Untitled script';
+
+  @override
+  String browserScriptMatchCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matching rules',
+      one: '$count matching rule',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get browserEditScript => 'Edit script';
+
+  @override
+  String get browserScriptName => 'Script name';
+
+  @override
+  String get browserScriptCode => 'Script code (JavaScript)';
+
+  @override
+  String get browserMatchUrls => 'URL patterns (one per line)';
+
+  @override
+  String get browserScriptMatchHint => '*://*.example.com/*';
+
+  @override
+  String get browserCancel => 'Cancel';
+
+  @override
+  String get browserSave => 'Save';
+
+  @override
+  String get browserCookiesConfirmClear => 'Confirm clearing';
+
+  @override
+  String get browserCookiesConfirmClearAll =>
+      'Clear all cookies?\nThis action cannot be undone.';
+
+  @override
+  String get browserCookiesClear => 'Clear';
+
+  @override
+  String get browserCookiesCancel => 'Cancel';
+
+  @override
+  String get browserCookiesClearedAll => 'All cookies cleared';
+
+  @override
+  String get browserCookiesClearFailed => 'Could not clear. Try again.';
+
+  @override
+  String browserCookiesClearedDomain(Object domain) {
+    return 'All cookies for $domain cleared';
+  }
+
+  @override
+  String browserCookiesClearDomainConfirm(Object domain) {
+    return 'Clear all cookies for $domain?';
+  }
+
+  @override
+  String get browserCookiesPageTitle => 'Browser data management';
+
+  @override
+  String get browserCookiesRetentionTitle => 'Keep cookies when exiting';
+
+  @override
+  String get browserCookiesRetentionOn =>
+      'Enabled — cookies are kept when exiting';
+
+  @override
+  String get browserCookiesRetentionOff =>
+      'Disabled — cookies are cleared when exiting';
+
+  @override
+  String get browserCookiesClearAllTitle => 'Clear all cookies';
+
+  @override
+  String get browserCookiesClearAllDescription =>
+      'Delete all saved website cookies';
+
+  @override
+  String get browserCookiesEmptyTitle => 'No persistent data';
+
+  @override
+  String get browserCookiesEmptyDescription =>
+      'Use the built-in browser and enable cookie persistence to see saved data here.';
+
+  @override
+  String browserCookiesStoredCount(Object count) {
+    return 'Stored cookies ($count)';
+  }
+
+  @override
+  String browserCookiesDomainCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cookies',
+      one: '$count cookie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get browserCookiesClearDomainTooltip =>
+      'Clear all cookies for this domain';
+
+  @override
+  String get browserCookiesDeleteOneTooltip => 'Delete this cookie';
+
+  @override
+  String get browserCookiesDeletedOne => 'Cookie deleted';
+
+  @override
+  String get browserCookiesDeleteFailed => 'Could not delete. Try again.';
+
+  @override
+  String get browserCookiesEmptyValue => '(empty value)';
+
+  @override
+  String get platformTutorialPageTitle => 'Platform tutorials';
 }
