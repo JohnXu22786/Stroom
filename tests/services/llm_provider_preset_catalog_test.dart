@@ -14,6 +14,211 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
+  test('M44 API-key presets retain audited Chat Completions metadata', () {
+    const endpoints = {
+      'onomeo': 'https://onomeo.com/v1/chat/completions',
+      'openadapter': 'https://api.openadapter.in/v1/chat/completions',
+      'openvecta': 'https://api.openvecta.com/v1/chat/completions',
+      'opper': 'https://api.opper.ai/v3/compat/chat/completions',
+      'plamo': 'https://api.platform.preferredai.jp/v1/chat/completions',
+      'poe': 'https://api.poe.com/v1/chat/completions',
+      'poixe-ai': 'https://api.poixe.com/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect({
+      for (final id in ['onomeo', 'openadapter', 'opper', 'poixe-ai'])
+        id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+    }, {
+      'onomeo': 'https://onomeo.com/v1/models',
+      'openadapter': 'https://api.openadapter.in/v1/models',
+      'opper': 'https://api.opper.ai/v3/compat/models',
+      'poixe-ai': 'https://api.poixe.com/v1/models',
+    });
+    expect(findLlmOpenAiProviderPreset('openadapter')!.fallbackModels.single.id,
+        'glm-4.7');
+    expect(
+      findLlmOpenAiProviderPreset('openadapter')!
+          .fallbackModels
+          .single
+          .capabilities,
+      {'contextLength': 128000, 'toolCalling': true},
+    );
+    expect(
+      findLlmOpenAiProviderPreset('openvecta')!.fallbackModels.map((m) => m.id),
+      [
+        'glm-4.7-flash',
+        'claude-sonnet-4.6',
+        'deepseek-v4-flash',
+        'gpt-oss-120b',
+        'gemma-4-31b',
+        'kimi-k2.6',
+        'llama-3.3-70b-instruct',
+        'llama-4-maverick',
+        'nemotron-3-super-120b',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('openvecta')!
+          .fallbackModels
+          .map((m) => m.capabilities['contextLength']),
+      [
+        131072,
+        1000000,
+        131072,
+        131072,
+        262144,
+        200000,
+        131072,
+        1048576,
+        262144
+      ],
+    );
+    expect(findLlmOpenAiProviderPreset('onomeo')!.fallbackModels, isEmpty);
+    expect(findLlmOpenAiProviderPreset('opper')!.fallbackModels, isEmpty);
+    expect(findLlmOpenAiProviderPreset('poixe-ai')!.fallbackModels, isEmpty);
+    expect(
+        findLlmOpenAiProviderPreset('plamo')!
+            .fallbackModels
+            .single
+            .capabilities,
+        {'contextLength': 262144, 'maxOutputTokens': 20000});
+    expect(findLlmOpenAiProviderPreset('poe')!.fallbackModels.map((m) => m.id),
+        ['gpt-5.2', 'gemini-3.0-pro']);
+
+    // These pinned modes need an executor translation, fixed provider headers,
+    // optional/no-auth semantics, or a non-Bearer key contract.
+    for (final id in [
+      'oneminai',
+      'openrouter',
+      'orcarouter',
+      'ovhcloud',
+      'perplexity',
+      'pioneer',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
+    }
+  });
+
+  test('each M44 preset persists and routes through Chat and Task Flow',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+    );
+    const presetIds = [
+      'onomeo',
+      'openadapter',
+      'openvecta',
+      'opper',
+      'plamo',
+      'poe',
+      'poixe-ai',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallback = preset.fallbackModels.firstOrNull;
+      final model = LlmUpstreamModel(
+        id: 'm44-$presetId:${fallback?.id ?? 'user-model'}',
+        upstreamModelId: fallback?.id ?? 'user-model',
+        displayName: fallback?.displayName ?? 'User model',
+        capabilities: fallback?.capabilities ?? const {},
+        config: const {'apiProtocolOverride': 'anthropic.messages'},
+      );
+      final account = LlmAccount(
+        id: 'm44-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {
+          'accountOwnedConfig': 'preserved',
+        }),
+        models: [model],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility', reason: presetId);
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+      expect(restored.models.single.capabilities, model.capabilities);
+      expect(restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages');
+
+      final group = LlmModelGroup(
+        id: 'm44-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+    }
+  });
+
+  test('M44 discovery presets refresh from audited URLs with bearer auth',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-${requests.length}'}
+            ]
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json']
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = ['onomeo', 'openadapter', 'opper', 'poixe-ai'];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm44-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+      final models = await service.discoverModels(account, refreshRemote: true);
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(models.single.upstreamModelId, 'discovered-${requests.length}');
+    }
+  });
+
   test('M43 API-key presets retain audited Chat Completions metadata', () {
     const endpoints = {
       'naga-ai': 'https://api.naga.ac/v1/chat/completions',
@@ -345,6 +550,13 @@ void main() {
       'oci',
       'ofoxai',
       'ollama-cloud',
+      'onomeo',
+      'openadapter',
+      'openvecta',
+      'opper',
+      'plamo',
+      'poe',
+      'poixe-ai',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -462,6 +674,13 @@ void main() {
             'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/chat/completions',
         'ofoxai': 'https://api.ofox.ai/v1/chat/completions',
         'ollama-cloud': 'https://ollama.com/v1/chat/completions',
+        'onomeo': 'https://onomeo.com/v1/chat/completions',
+        'openadapter': 'https://api.openadapter.in/v1/chat/completions',
+        'openvecta': 'https://api.openvecta.com/v1/chat/completions',
+        'opper': 'https://api.opper.ai/v3/compat/chat/completions',
+        'plamo': 'https://api.platform.preferredai.jp/v1/chat/completions',
+        'poe': 'https://api.poe.com/v1/chat/completions',
+        'poixe-ai': 'https://api.poixe.com/v1/chat/completions',
       },
     );
     expect(
