@@ -1401,10 +1401,9 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
     // A common word can be a masked key prefix; only bridge a newline when
     // the following token also has substantial alphabetic and numeric runs.
     return r'(?:[\r\n]+[ \t]*'
-        r'(?=[a-zA-Z0-9]{10,}'
-        r'(?=[a-zA-Z0-9]*[a-zA-Z]{4,})'
-        r'(?=[a-zA-Z0-9]*[0-9]{4,})'
-        r'(?=$|[^a-zA-Z0-9])))?';
+        r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
+        r'(?=(?:[a-zA-Z]*[0-9]){4})'
+        r'[a-zA-Z0-9]{10,}(?=$|[^a-zA-Z0-9])))?';
   }
   return '';
 }
