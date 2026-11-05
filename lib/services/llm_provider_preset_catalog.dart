@@ -1944,6 +1944,60 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     baseUrl: 'https://api.llmgateway.io/v1/chat/completions',
     modelsUrl: 'https://api.llmgateway.io/v1/models',
   ),
+  // Registry audit pinned at OmniRoute d1ba822: the generic OpenAI executor
+  // builds this endpoint and /models route from the provider base.
+  LlmProviderPreset(
+    id: 'logfare',
+    displayName: 'Logfare',
+    baseUrl: 'https://logfare.ai/v1/chat/completions',
+    modelsUrl: 'https://logfare.ai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: OpenAI Chat Completions with
+  // bearer auth and a static LongCat-2.0 fallback model.
+  LlmProviderPreset(
+    id: 'longcat',
+    displayName: 'LongCat AI',
+    baseUrl: 'https://api.longcat.chat/openai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'LongCat-2.0',
+        displayName: 'LongCat 2.0 (10M tok free 🆓)',
+        capabilities: {'contextLength': 1048576},
+      ),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: the generic OpenAI executor
+  // builds this endpoint and /models route from the provider base.
+  LlmProviderPreset(
+    id: 'lyceum',
+    displayName: 'Lyceum',
+    baseUrl: 'https://api.lyceum.technology/openai/v1/chat/completions',
+    modelsUrl: 'https://api.lyceum.technology/openai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: the generic OpenAI executor
+  // builds this endpoint and /models route from the provider base.
+  LlmProviderPreset(
+    id: 'meganova-ai',
+    displayName: 'MegaNova AI',
+    baseUrl: 'https://api.meganova.ai/v1/chat/completions',
+    modelsUrl: 'https://api.meganova.ai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: the generic OpenAI executor
+  // builds this endpoint and /models route from the provider base.
+  LlmProviderPreset(
+    id: 'mixlayer',
+    displayName: 'Mixlayer',
+    baseUrl: 'https://models.mixlayer.ai/v1/chat/completions',
+    modelsUrl: 'https://models.mixlayer.ai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: the generic OpenAI executor
+  // builds this endpoint and /models route from the provider base.
+  LlmProviderPreset(
+    id: 'mnn-ai',
+    displayName: 'MNN AI',
+    baseUrl: 'https://api.mnnai.ru/v1/chat/completions',
+    modelsUrl: 'https://api.mnnai.ru/v1/models',
+  ),
 ];
 
 const _stepfunFallbackModels = <LlmProviderPresetModel>[
