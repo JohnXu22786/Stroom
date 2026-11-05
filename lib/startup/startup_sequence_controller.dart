@@ -156,7 +156,7 @@ class StartupSequenceController {
           '检查数据格式版本失败',
           error,
         );
-        migrationResult = const MigrationResult(needsMigration: false);
+        rethrow;
       }
 
       final postMigrationStatus = await DataSafetyManager.loadStatus();
@@ -202,7 +202,7 @@ class StartupSequenceController {
           '验证数据格式失败',
           error,
         );
-        formatIssues = <StartupIssue>[];
+        rethrow;
       }
       await Future<void>.delayed(
         const Duration(milliseconds: _statusVisibilityDelayMs),
@@ -230,7 +230,7 @@ class StartupSequenceController {
           '检查数据完整性失败',
           error,
         );
-        integrityIssues = <StartupIssue>[];
+        rethrow;
       }
       await Future<void>.delayed(
         const Duration(milliseconds: _statusVisibilityDelayMs),
@@ -303,8 +303,11 @@ class StartupSequenceController {
         return StartupCheckOutcome(blockedMessage: blocked);
       }
       final message = '启动检查失败: ${error.toString()}';
-      _publish(message, '', isWorking: false);
-      return StartupCheckOutcome(failure: error.toString());
+      _publish(message, '', isWorking: false, blockedMessage: message);
+      return StartupCheckOutcome(
+        failure: error.toString(),
+        blockedMessage: message,
+      );
     }
   }
 }
