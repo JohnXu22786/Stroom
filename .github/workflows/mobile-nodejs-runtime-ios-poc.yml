@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/mobile-nodejs-runtime-ios-poc.yml
       - .github/ci/mobile-runtime-ios/**
+      - tools/mobile-runtime-poc/**
 
 permissions:
   contents: read
