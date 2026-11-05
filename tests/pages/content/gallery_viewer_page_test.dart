@@ -48,16 +48,16 @@ Future<Uint8List> _createEnginePng() async {
 }
 
 Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
-  locale: const Locale('zh', 'CN'),
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   setUp(() {
@@ -68,7 +68,8 @@ void main() {
   });
 
   group('GalleryViewerPage - loading with real image files', () {
-    testWidgets('renders pages from disk and preloads/swipes to the next '
+    testWidgets(
+        'renders pages from disk and preloads/swipes to the next '
         'page without crashing', (tester) async {
       // 预加载/字节缓存/占位符路径需要真实的文件存在（无文件时只会
       // 走到错误占位，覆盖不到新逻辑）
@@ -114,7 +115,8 @@ void main() {
       expect(find.text('second.png'), findsOneWidget);
     });
 
-    testWidgets('shows a loading spinner, not the cached thumbnail, while the '
+    testWidgets(
+        'shows a loading spinner, not the cached thumbnail, while the '
         'full image is still loading', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final record = _makeRecord(

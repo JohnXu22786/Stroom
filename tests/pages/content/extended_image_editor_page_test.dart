@@ -115,16 +115,16 @@ Uint8List _createSmallJpeg() {
 }
 
 Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
-  locale: const Locale('zh', 'CN'),
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   group('ExtendedImageEditorPage', () {
@@ -175,7 +175,8 @@ void main() {
     group(
       'in-place processing: the page stays open until the image is done',
       () {
-        testWidgets('tapping 保存 keeps the page alive with a processing overlay '
+        testWidgets(
+            'tapping 保存 keeps the page alive with a processing overlay '
             'while processing, then pops with the edited bytes', (
           tester,
         ) async {
@@ -271,7 +272,8 @@ void main() {
           expect(find.byType(ExtendedImageEditorPage), findsNothing);
         });
 
-        testWidgets('invalid image data shows an error snackbar and the page '
+        testWidgets(
+            'invalid image data shows an error snackbar and the page '
             'stays on screen', (tester) async {
           // Invalid image data — the editor image never loads, so the
           // editor state is never created and confirming reports an error
@@ -358,7 +360,8 @@ void main() {
           );
         });
 
-        testWidgets('double-tapping close cannot pop the page below the '
+        testWidgets(
+            'double-tapping close cannot pop the page below the '
             'editor', (tester) async {
           final png = await tester.runAsync(createTestImage);
           Uint8List? popResult;

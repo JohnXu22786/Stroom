@@ -561,9 +561,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(imageFolderListProvider)
-                  .where(
+              ...ref.read(imageFolderListProvider).where(
                     (folder) => names.any(
                       (name) => folder == name || folder.startsWith('$name/'),
                     ),
@@ -602,9 +600,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref
-            .read(imageFolderListProvider)
-            .where(
+        ...ref.read(imageFolderListProvider).where(
               (folder) => names.any(
                 (name) => folder == name || folder.startsWith('$name/'),
               ),

@@ -5,16 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/image_editor_page.dart';
 
 Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
-  locale: const Locale('zh', 'CN'),
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   // ====================================================================

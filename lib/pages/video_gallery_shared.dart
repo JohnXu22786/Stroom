@@ -100,8 +100,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                 ],
               )
             : _initialized && _chewieController != null
-            ? Chewie(controller: _chewieController!)
-            : const CircularProgressIndicator(color: Colors.white),
+                ? Chewie(controller: _chewieController!)
+                : const CircularProgressIndicator(color: Colors.white),
       ),
     );
   }

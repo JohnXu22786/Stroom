@@ -643,9 +643,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(videoFolderListProvider)
-                  .where(
+              ...ref.read(videoFolderListProvider).where(
                     (folder) => names.any(
                       (name) => folder == name || folder.startsWith('$name/'),
                     ),
@@ -684,9 +682,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref
-            .read(videoFolderListProvider)
-            .where(
+        ...ref.read(videoFolderListProvider).where(
               (folder) => names.any(
                 (name) => folder == name || folder.startsWith('$name/'),
               ),
