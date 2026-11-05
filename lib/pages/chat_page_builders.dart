@@ -373,9 +373,8 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // render it as regular text instead of a spinner.
     // Read the latest reply when this message item is rebuilt. The active
     // bubble's notifier triggers that rebuild without rebuilding the page.
-    final streamingFullReply = activeId == null
-        ? ''
-        : ref.read(streamingFullReplyProvider(activeId));
+    final streamingFullReply =
+        activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
     if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
