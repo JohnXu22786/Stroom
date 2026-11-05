@@ -1099,6 +1099,7 @@ void main() {
       'charm-hyper',
       'chat-oripe',
       'chatanywhere',
+      'chenzk',
       'cheaperinference',
       'chutes',
       'cloudcode-one',
@@ -1263,6 +1264,7 @@ void main() {
         'charm-hyper': 'https://hyper.charm.land/v1/chat/completions',
         'chat-oripe': 'https://api.oriper.com/v1/chat/completions',
         'chatanywhere': 'https://api.chatanywhere.org/v1/chat/completions',
+        'chenzk': 'https://chenzk.top/v1/chat/completions',
         'cheaperinference':
             'https://api.cheaperinference.com/v1/chat/completions',
         'cloudcode-one': 'https://api.cloudcode.one/v1/chat/completions',
