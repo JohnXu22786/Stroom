@@ -22,6 +22,8 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'chat_retry_policy.dart'
+    show kAutoContinuationMessage, shouldAutoContinueStream;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -482,21 +484,22 @@ class ChatStreamManager {
     // await-for loop subscribes below.
     //
     // requestHistory 已在上方上下文管理块计算（有摘要时 = 尾部快照起）。
-    final stream = state.cancelledByUser
-        ? const Stream<ChatEvent>.empty()
-        : _adapter.sendStreamWithTools(
-            text,
-            history: requestHistory,
-            reasoning: reasoning,
-            reasoningEffort: reasoningEffort,
-            reasoningParamValues: reasoningParamValues,
-            customParamValues: customParamValues,
-            tools: tools,
-            convId: convId,
-            assistant: assistant,
-            entriesState:
-                entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-          );
+    Stream<ChatEvent> createStream(List<ChatMessage> streamHistory) =>
+        state.cancelledByUser
+            ? const Stream<ChatEvent>.empty()
+            : _adapter.sendStreamWithTools(
+                text,
+                history: streamHistory,
+                reasoning: reasoning,
+                reasoningEffort: reasoningEffort,
+                reasoningParamValues: reasoningParamValues,
+                customParamValues: customParamValues,
+                tools: tools,
+                convId: convId,
+                assistant: assistant,
+                entriesState: entriesStateOverride ??
+                    _ref?.read(providerEntriesProvider),
+              );
 
     // Now safe to yield to event loop — all state is established and the
     // provider stream is already created.
@@ -512,10 +515,40 @@ class ChatStreamManager {
         // 永不被消费，回复丢失）
       }
 
-      await for (final event in stream) {
-        if (state.cancelledByUser) break;
+      var streamHistory = List<ChatMessage>.from(requestHistory);
+      var continuedAfterNetworkFailure = false;
+      while (true) {
+        try {
+          await for (final event in createStream(streamHistory)) {
+            if (state.cancelledByUser) break;
+            _handleStreamEvent(event, state, convId);
+          }
+          break;
+        } catch (e) {
+          if (continuedAfterNetworkFailure ||
+              state.cancelledByUser ||
+              !shouldAutoContinueStream(
+                error: e,
+                hasPartialOutput: state.fullReply.isNotEmpty,
+              )) {
+            rethrow;
+          }
 
-        _handleStreamEvent(event, state, convId);
+          continuedAfterNetworkFailure = true;
+          final continuation = ChatMessage(
+            role: 'user',
+            content: kAutoContinuationMessage,
+          );
+          state.history.add(continuation);
+          state.historyOnSuccess?.add(continuation);
+          streamHistory = [
+            ...streamHistory,
+            ChatMessage(role: 'assistant', content: state.fullReply),
+            continuation,
+          ];
+          debugPrint(
+              '[ChatStreamManager] network stream interrupted; continuing once, convId=$convId');
+        }
       }
     } catch (e, s) {
       streamError = e;

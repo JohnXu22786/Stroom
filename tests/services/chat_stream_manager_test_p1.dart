@@ -43,6 +43,35 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('network interruption after partial output adds a user continuation',
+        () async {
+      final manager = ChatStreamManager();
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('partial answer')],
+      ])..errorAfterYield = networkFailure;
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-network-continue',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 2);
+      expect(result.history.map((message) => message.role),
+          ['user', 'user', 'assistant']);
+      expect(result.history[1].content, 'Continue if not finished.');
+      expect(result.fullReply, 'partial answerFinal response');
+      final resentMessages = provider.capturedMessages.last;
+      expect(resentMessages.last['role'], 'user');
+      expect(resentMessages.last['content'], 'Continue if not finished.');
+      manager.dispose();
+    });
+
     test('isStreamingFor returns true during streaming', () async {
       final manager = ChatStreamManager();
       final completer = Completer<void>();
