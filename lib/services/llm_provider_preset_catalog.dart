@@ -3017,6 +3017,391 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
       LlmProviderPresetModel('deepseek-ai/DeepSeek-V3.1'),
     ],
   ),
+  // M48 audit: the pinned OmniRoute d1ba822 runtime has no per-ID watsonx
+  // executor/registry entry, so its matrix card alone cannot supply a preset.
+  // x5lab and ZenMux declare defaultContextLength: 128000 for dynamic models,
+  // which this catalog cannot preserve on discovered models (registry/x5lab/
+  // index.ts:10; registry/zenmux/index.ts:12). Both remain deferred.
+  // Xiaomi MiMo Token Plan is also deferred: its keys are cluster-bound across
+  // CN/SGP/AMS and the shared account flow cannot select/persist a region
+  // (shared/constants/xiaomiTokenPlanRegions.ts:4-22).
+  // The remaining entries use the pinned OpenAI Chat Completions default
+  // executor, API-key/Bearer auth, and provider-declared static or /models
+  // catalogs. M33 audit rows 294-306 provide the source cross-check.
+  LlmProviderPreset(
+    id: 'writer',
+    displayName: 'Writer',
+    baseUrl: 'https://api.writer.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'palmyra-x5',
+        displayName: 'Palmyra X5',
+        capabilities: {'contextLength': 1048576},
+      ),
+      LlmProviderPresetModel(
+        'palmyra-x4',
+        displayName: 'Palmyra X4',
+        capabilities: {'contextLength': 131072},
+      ),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'xiaomi-mimo',
+    displayName: 'Xiaomi MiMo',
+    baseUrl: 'https://api.xiaomimimo.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'mimo-v2.5-pro',
+        displayName: 'MiMo-V2.5-Pro',
+        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
+      ),
+      LlmProviderPresetModel(
+        'mimo-v2.5',
+        displayName: 'MiMo-V2.5',
+        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
+      ),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'xkiro',
+    displayName: 'xKiro',
+    baseUrl: 'https://api.xkiro.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'qwen/qwen3-vl-plus:free',
+        displayName: 'Qwen3 VL Plus',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'sensenova/sensenova-6.8-flash-lite',
+        displayName: 'SenseNova 6.8 Flash-Lite',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.7:free',
+        displayName: 'MiniMax M2.7',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.7-highspeed:free',
+        displayName: 'MiniMax M2.7 Highspeed',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.5:free',
+        displayName: 'MiniMax M2.5',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m3:free',
+        displayName: 'MiniMax M3',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.1-highspeed:free',
+        displayName: 'MiniMax M2.1 Highspeed',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.5-highspeed:free',
+        displayName: 'MiniMax M2.5 Highspeed',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2.1:free',
+        displayName: 'MiniMax M2.1',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'minimax/minimax-m2:free',
+        displayName: 'MiniMax M2',
+        capabilities: {'contextLength': 204800, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.5-flash:free',
+        displayName: 'Qwen3.5 Flash',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.6-plus:free',
+        displayName: 'Qwen3.6 Plus',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.5-397b-a17b:free',
+        displayName: 'Qwen3.5 397B A17B',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.5-omni-flash:free',
+        displayName: 'Qwen3.5 Omni Flash',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/mistral-large-2512',
+        displayName: 'Mistral Large 3',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/mistral-medium-3.5',
+        displayName: 'Mistral Medium 3.5',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/mistral-small-2603',
+        displayName: 'Mistral Small 4',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/codestral-2508',
+        displayName: 'Codestral',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/devstral-medium',
+        displayName: 'Devstral 2',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/ministral-8b',
+        displayName: 'Ministral 3 8B',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/ministral-3b',
+        displayName: 'Ministral 3 3B',
+        capabilities: {
+          'contextLength': 128000,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'deepseek/deepseek-v4-pro',
+        displayName: 'DeepSeek V4 Pro',
+        capabilities: {'contextLength': 1048576, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'deepseek/deepseek-v3.2',
+        displayName: 'DeepSeek V3.2',
+        capabilities: {'contextLength': 131072, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'deepseek/deepseek-chat-v3.1',
+        displayName: 'DeepSeek V3.1',
+        capabilities: {'contextLength': 163840, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.7-plus:free',
+        displayName: 'Qwen3.7 Plus',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistralai/ministral-14b',
+        displayName: 'Ministral 3 14B',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': false,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.6-max-preview:free',
+        displayName: 'Qwen3.6 Max Preview',
+        capabilities: {'contextLength': 262144, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.5-plus:free',
+        displayName: 'Qwen3.5 Plus',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.5-omni-plus:free',
+        displayName: 'Qwen3.5 Omni Plus',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'deepseek/deepseek-v4-flash',
+        displayName: 'DeepSeek V4 Flash',
+        capabilities: {'contextLength': 1048576, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'sensenova/sensenova-6.7-flash-lite',
+        displayName: 'SenseNova 6.7 Flash-Lite',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.8-max:free',
+        displayName: 'Qwen3.8 Max',
+        capabilities: {
+          'contextLength': 1000000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.7-max:free',
+        displayName: 'Qwen3.7 Max',
+        capabilities: {'contextLength': 1000000, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.6-27b:free',
+        displayName: 'Qwen3.6 27B',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3.6-35b-a3b:free',
+        displayName: 'Qwen3.6 35B A3B',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3-max:free',
+        displayName: 'Qwen3 Max',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3-coder-plus:free',
+        displayName: 'Qwen3 Coder Plus',
+        capabilities: {
+          'contextLength': 1048576,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen-plus-2025-07-28:free',
+        displayName: 'Qwen Plus 0728',
+        capabilities: {
+          'contextLength': 131072,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen/qwen3-omni-flash:free',
+        displayName: 'Qwen3 Omni Flash',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'y-api',
+    displayName: 'Y-API',
+    baseUrl: 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
+    modelsUrl: 'https://api.y-api.bestvirtualgoods.com/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'yolo-auto',
+    displayName: 'Yolo-Auto',
+    baseUrl: 'https://yolo-auto.com/v1/chat/completions',
+    modelsUrl: 'https://yolo-auto.com/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'qwen3.6-35b-a3b',
+        displayName: 'Qwen 3.6 35B A3B',
+      ),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'zerolimitai',
+    displayName: 'ZeroLimitAI',
+    baseUrl: 'https://www.zerolimitai.com/api/v1/chat/completions',
+    modelsUrl: 'https://www.zerolimitai.com/api/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'zylo-api',
+    displayName: 'Zylo API',
+    baseUrl: 'https://api.zyloai.net/v1/chat/completions',
+    modelsUrl: 'https://api.zyloai.net/v1/models',
+  ),
 ];
 
 const _stepfunFallbackModels = <LlmProviderPresetModel>[

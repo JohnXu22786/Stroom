@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_connector_service.dart';
@@ -401,6 +402,14 @@ void main() {
           restored.models.single.config['apiProtocolOverride'],
           'anthropic.messages',
         );
+        final chatProvider = createChatProviderFromConfig(
+          providerName: restored.displayName,
+          baseUrl: restored.endpointConfig['baseUrl'] as String,
+          apiKey: 'key-$presetId',
+          endpointType: restored.endpointConfig['apiProtocol'] as String,
+        ) as OpenAICompatibleChatProvider;
+        // ignore: invalid_use_of_visible_for_testing_member
+        expect(chatProvider.requestUrlForTesting, preset.baseUrl);
 
         final group = LlmModelGroup(
           id: 'm45-$presetId-group',
@@ -848,6 +857,13 @@ void main() {
       'volcengine-agent-plan',
       'volcengine-coding-plan',
       'wandb',
+      'writer',
+      'xiaomi-mimo',
+      'xkiro',
+      'y-api',
+      'yolo-auto',
+      'zerolimitai',
+      'zylo-api',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -1003,6 +1019,13 @@ void main() {
         'volcengine-coding-plan':
             'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
         'wandb': 'https://api.inference.wandb.ai/v1/chat/completions',
+        'writer': 'https://api.writer.com/v1/chat/completions',
+        'xiaomi-mimo': 'https://api.xiaomimimo.com/v1/chat/completions',
+        'xkiro': 'https://api.xkiro.com/v1/chat/completions',
+        'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
+        'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
+        'zerolimitai': 'https://www.zerolimitai.com/api/v1/chat/completions',
+        'zylo-api': 'https://api.zyloai.net/v1/chat/completions',
       },
     );
     expect(
@@ -3534,6 +3557,211 @@ void main() {
       expect(models.single.upstreamModelId, 'discovered-${requests.length}');
     }
   });
+  test('M48 catalog uses audited routes and preserves the Yi M35 entry', () {
+    const endpoints = {
+      'writer': 'https://api.writer.com/v1/chat/completions',
+      'xiaomi-mimo': 'https://api.xiaomimimo.com/v1/chat/completions',
+      'xkiro': 'https://api.xkiro.com/v1/chat/completions',
+      'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
+      'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
+      'zerolimitai': 'https://www.zerolimitai.com/api/v1/chat/completions',
+      'zylo-api': 'https://api.zyloai.net/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect(findLlmOpenAiProviderPreset('watsonx'), isNull);
+    expect(findLlmOpenAiProviderPreset('x5lab'), isNull);
+    expect(findLlmOpenAiProviderPreset('zenmux'), isNull);
+    expect(findLlmOpenAiProviderPreset('xiaomi-mimo-token-plan'), isNull);
+    expect(findLlmOpenAiProviderPreset('yi'), isNotNull);
+    expect(
+      llmOpenAiProviderPresets.where((preset) => preset.id == 'yi'),
+      hasLength(1),
+    );
+    expect(
+      {
+        for (final id in [
+          'y-api',
+          'yolo-auto',
+          'zerolimitai',
+          'zylo-api',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/models',
+        'yolo-auto': 'https://yolo-auto.com/v1/models',
+        'zerolimitai': 'https://www.zerolimitai.com/api/v1/models',
+        'zylo-api': 'https://api.zyloai.net/v1/models',
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'writer',
+      )!
+          .fallbackModels
+          .map((model) => model.id),
+      ['palmyra-x5', 'palmyra-x4'],
+    );
+    expect(findLlmOpenAiProviderPreset('xkiro')!.fallbackModels, hasLength(39));
+    expect(
+      findLlmOpenAiProviderPreset('xkiro')!.fallbackModels.first.capabilities,
+      {'contextLength': 262144, 'toolCalling': true, 'vision': true},
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'xiaomi-mimo',
+      )!
+          .fallbackModels
+          .first
+          .capabilities,
+      {'contextLength': 1048576, 'maxOutputTokens': 131072},
+    );
+  });
+
+  test(
+    'M48 presets save and route through shared Chat and Task Flow',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+      );
+      const presetIds = [
+        'writer',
+        'xiaomi-mimo',
+        'xkiro',
+        'y-api',
+        'yolo-auto',
+        'zerolimitai',
+        'zylo-api',
+      ];
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final fallback = preset.fallbackModels.firstOrNull;
+        final model = LlmUpstreamModel(
+          id: 'm48-$presetId:${fallback?.id ?? 'user-model'}',
+          upstreamModelId: fallback?.id ?? 'user-model',
+          displayName: fallback?.displayName ?? 'User model',
+          capabilities: fallback?.capabilities ?? const {},
+          config: const {'apiProtocolOverride': 'anthropic.messages'},
+        );
+        final account = LlmAccount(
+          id: 'm48-$presetId',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {
+            'accountOwnedConfig': 'preserved',
+          }),
+          models: [model],
+        );
+        await service.saveAccount(account, secret: 'key-$presetId');
+        final restored = (await service.getAccount(account.id))!;
+        expect(restored.endpointConfig['providerPresetId'], presetId);
+        expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+        expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+        expect(
+          restored.endpointConfig['apiProtocol'],
+          'openai.chat_completions',
+        );
+        expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+        expect(await service.readCredential(account.id), 'key-$presetId');
+        expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+        expect(
+          restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages',
+        );
+
+        final group = LlmModelGroup(
+          id: 'm48-$presetId-group',
+          displayName: preset.displayName,
+          members: [
+            LlmModelGroupMember(
+              accountId: restored.id,
+              upstreamModelId: restored.models.single.upstreamModelId,
+            ),
+          ],
+        );
+        final configs = buildLlmModelGroupProviderConfigs(
+          accounts: [restored],
+          groups: [group],
+        );
+        expect(configs, hasLength(1));
+        expect(configs.single.apiProtocol, 'openai.chat_completions');
+        expect(
+          configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages',
+        );
+        expect(
+          llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+          contains('openai-compatibility'),
+        );
+      }
+    },
+  );
+
+  test(
+    'M48 dynamic catalogs refresh from audited endpoints with bearer auth',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'discovered-${requests.length}'},
+              ],
+            }),
+            200,
+            headers: const {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+        dio: dio,
+      );
+      const presetIds = [
+        'y-api',
+        'yolo-auto',
+        'zerolimitai',
+        'zylo-api',
+      ];
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'm48-$presetId-discovery',
+            connectorType: 'openai-compatibility',
+            authType: preset.authType,
+            displayName: preset.displayName,
+            endpointConfig: preset.applyToEndpointConfig(const {}),
+          ),
+          secret: 'key-$presetId',
+        );
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
+        expect(
+          requests.last.uri.toString(),
+          preset.modelsUrl,
+          reason: presetId,
+        );
+        expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+        expect(models.single.upstreamModelId, 'discovered-${requests.length}');
+      }
+    },
+  );
 }
 
 class _MemoryLlmAccountPreferences implements LlmAccountPreferences {
