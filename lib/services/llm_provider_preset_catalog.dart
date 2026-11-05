@@ -47,13 +47,27 @@ class LlmProviderPreset {
   });
 
   /// Applies only preset-owned settings, retaining unrelated account settings.
-  Map<String, dynamic> applyToEndpointConfig(Map<String, dynamic> existing) => {
-        ...existing,
-        'providerPresetId': id,
-        'baseUrl': baseUrl,
-        if (modelsUrl != null) 'modelsUrl': modelsUrl,
-        'apiProtocol': defaultApiProtocol,
-      };
+  Map<String, dynamic> applyToEndpointConfig(Map<String, dynamic> existing) {
+    final endpointConfig = {
+      ...existing,
+      'providerPresetId': id,
+      'baseUrl': baseUrl,
+      'apiProtocol': defaultApiProtocol,
+    };
+    if (modelsUrl != null) {
+      endpointConfig['modelsUrl'] = modelsUrl!;
+    } else {
+      final previousPresetId = existing['providerPresetId'];
+      final previousPreset = findLlmOpenAiProviderPreset(
+        previousPresetId is String ? previousPresetId : null,
+      );
+      if (previousPreset?.modelsUrl != null &&
+          existing['modelsUrl'] == previousPreset!.modelsUrl) {
+        endpointConfig.remove('modelsUrl');
+      }
+    }
+    return endpointConfig;
+  }
 }
 
 const llmOpenAiProviderPresets = <LlmProviderPreset>[
@@ -1998,6 +2012,279 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     baseUrl: 'https://api.mnnai.ru/v1/chat/completions',
     modelsUrl: 'https://api.mnnai.ru/v1/models',
   ),
+  // Registry audit pinned at OmniRoute d1ba822: Naga.ai requires an API key;
+  // the separate Naga.ac entry accepts optional authentication despite sharing
+  // this chat and model endpoint.
+  LlmProviderPreset(
+    id: 'naga-ai',
+    displayName: 'Naga AI',
+    baseUrl: 'https://api.naga.ac/v1/chat/completions',
+    modelsUrl: 'https://api.naga.ac/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: key-gated discovery and these
+  // eight models are declared by the NaN.Builders OpenAI-compatible registry.
+  LlmProviderPreset(
+    id: 'nan',
+    displayName: 'NaN.Builders',
+    baseUrl: 'https://api.nan.builders/v1/chat/completions',
+    modelsUrl: 'https://api.nan.builders/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'deepseek-v4-flash',
+        displayName: 'DeepSeek V4 Flash',
+      ),
+      LlmProviderPresetModel('mimo-v2.5', displayName: 'MiMo V2.5'),
+      LlmProviderPresetModel('mimo-v2.6-flash', displayName: 'MiMo V2.6 Flash'),
+      LlmProviderPresetModel('qwen3.8-flash', displayName: 'Qwen3.8 Flash'),
+      LlmProviderPresetModel('qwen3.6', displayName: 'Qwen3.6'),
+      LlmProviderPresetModel('glm5.3', displayName: 'GLM 5.3'),
+      LlmProviderPresetModel('glm5.3-flash', displayName: 'GLM 5.3 Flash'),
+      LlmProviderPresetModel('gemma4', displayName: 'Gemma 4'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: NanoGPT has an API-key bearer
+  // mode, live /models discovery, and this small offline seed catalog.
+  LlmProviderPreset(
+    id: 'nanogpt',
+    displayName: 'NanoGPT',
+    baseUrl: 'https://nano-gpt.com/api/v1/chat/completions',
+    modelsUrl: 'https://nano-gpt.com/api/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('chatgpt-4o-latest'),
+      LlmProviderPresetModel('claude-3.5-sonnet'),
+      LlmProviderPresetModel('gpt-4o-mini'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: NaraRouter uses API-key
+  // bearer auth and these registry-declared fallback models, with no /models
+  // discovery endpoint.
+  LlmProviderPreset(
+    id: 'nara',
+    displayName: 'NaraRouter',
+    baseUrl: 'https://router.bynara.id/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'agnes-2.0-flash',
+        displayName: 'Agnes 2.0 Flash',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'agnes-2.5-flash',
+        displayName: 'Agnes 2.5 Flash',
+        capabilities: {
+          'contextLength': 524288,
+          'toolCalling': true,
+          'vision': true,
+          'reasoning': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'laguna-s-2.1',
+        displayName: 'Laguna S 2.1',
+        capabilities: {
+          'contextLength': 262144,
+          'toolCalling': true,
+          'reasoning': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'minimax-m3-free',
+        displayName: 'MiniMax M3 (free)',
+        capabilities: {
+          'contextLength': 1000000,
+          'vision': true,
+          'reasoning': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'mistral-large',
+        displayName: 'Mistral Large',
+        capabilities: {'contextLength': 252000, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'mistral-medium-3-5',
+        displayName: 'Mistral Medium 3.5',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'qwen3.8-27b',
+        displayName: 'Qwen3.8 27B',
+        capabilities: {'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'stepfun-3.7-flash',
+        displayName: 'StepFun 3.7 Flash',
+        capabilities: {'contextLength': 262144, 'toolCalling': true},
+      ),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Nebius API-key bearer mode
+  // declares one offline fallback and no model-list endpoint.
+  LlmProviderPreset(
+    id: 'nebius',
+    displayName: 'Nebius AI',
+    baseUrl: 'https://api.tokenfactory.nebius.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'meta-llama/Llama-3.3-70B-Instruct',
+        displayName: 'Llama 3.3 70B Instruct',
+      ),
+    ],
+  ),
+  // Deferred from M43: NLP Cloud's audited executor sends to /v1/gpu, while
+  // this shared connector appends /chat/completions to the configured path.
+  // The resulting /v1/gpu/chat/completions URL is not the audited endpoint.
+  // Registry evidence: OmniRoute d1ba822 open-sse/config/providers/registry/
+  // nlpcloud/index.ts:4-12.
+  //
+  // Registry audit pinned at OmniRoute d1ba822: Nous Research declares two
+  // API-key bearer fallback models and no model-list endpoint.
+  LlmProviderPreset(
+    id: 'nous-research',
+    displayName: 'Nous Research',
+    baseUrl: 'https://inference-api.nousresearch.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'Hermes-4-405B',
+        displayName: 'Hermes 4 405B (Nous Research)',
+      ),
+      LlmProviderPresetModel(
+        'Hermes-4-70B',
+        displayName: 'Hermes 4 70B (Nous Research)',
+      ),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: nScale declares these static
+  // models with API-key bearer auth and no /models discovery endpoint.
+  LlmProviderPreset(
+    id: 'nscale',
+    displayName: 'nScale',
+    baseUrl: 'https://inference.api.nscale.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('moonshotai/Kimi-K2.5'),
+      LlmProviderPresetModel('Qwen/Qwen3-235B-A22B-Instruct-2507'),
+      LlmProviderPresetModel('openai/gpt-oss-120b'),
+      LlmProviderPresetModel('openai/gpt-oss-20b'),
+      LlmProviderPresetModel('meta-llama/Llama-4-Scout-17B-16E-Instruct'),
+      LlmProviderPresetModel('meta-llama/Llama-3.3-70B-Instruct'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Nube's key-gated /models
+  // endpoint is authoritative; passthrough is enabled and no fallback list is
+  // declared.
+  LlmProviderPreset(
+    id: 'nube',
+    displayName: 'Nube.sh',
+    baseUrl: 'https://ai.nube.sh/api/v1/chat/completions',
+    modelsUrl: 'https://ai.nube.sh/api/v1/models',
+  ),
+  // The OCI API-key account path is a standard bearer key for Chat Completions.
+  // These exact default-region routes come from the OCI URL builders at
+  // OmniRoute d1ba822 open-sse/config/oci.ts:3-40; the optional project header
+  // is documented for Responses and agentic use, outside this chat preset.
+  LlmProviderPreset(
+    id: 'oci',
+    displayName: 'OCI Generative AI',
+    baseUrl:
+        'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/chat/completions',
+    modelsUrl:
+        'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: OfoxAI is bearer-authenticated
+  // and exposes live /models discovery with no fallback list.
+  LlmProviderPreset(
+    id: 'ofoxai',
+    displayName: 'OfoxAI',
+    baseUrl: 'https://api.ofox.ai/v1/chat/completions',
+    modelsUrl: 'https://api.ofox.ai/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Ollama Cloud uses bearer auth,
+  // /api/tags discovery, passthrough models, and these reasoning-aware seeds.
+  LlmProviderPreset(
+    id: 'ollama-cloud',
+    displayName: 'Ollama Cloud',
+    baseUrl: 'https://ollama.com/v1/chat/completions',
+    modelsUrl: 'https://ollama.com/api/tags',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'gpt-oss:20b',
+        displayName: 'GPT-OSS 20B',
+        capabilities: {
+          'reasoning': true,
+          'supportedThinkingEfforts': ['low', 'medium', 'high'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'gpt-oss:120b',
+        displayName: 'GPT-OSS 120B',
+        capabilities: {
+          'reasoning': true,
+          'supportedThinkingEfforts': ['low', 'medium', 'high'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'deepseek-v4-pro',
+        displayName: 'DeepSeek V4 Pro',
+        capabilities: {
+          'reasoning': true,
+          'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'deepseek-v4-flash',
+        displayName: 'DeepSeek V4 Flash',
+        capabilities: {
+          'reasoning': true,
+          'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max'],
+        },
+      ),
+      LlmProviderPresetModel('kimi-k2.6', displayName: 'Kimi K2.6'),
+      LlmProviderPresetModel(
+        'glm-5.1',
+        displayName: 'GLM 5.1',
+        capabilities: {
+          'reasoning': true,
+          'supportsXHighEffort': false,
+          'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'glm-5.2',
+        displayName: 'GLM 5.2',
+        capabilities: {
+          'reasoning': true,
+          'supportsXHighEffort': false,
+          'supportedThinkingEfforts': ['none', 'low', 'medium', 'high', 'max'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'minimax-m3',
+        displayName: 'MiniMax M3',
+        capabilities: {'contextLength': 1048576, 'vision': true},
+      ),
+      LlmProviderPresetModel('minimax-m2.7', displayName: 'MiniMax M2.7'),
+      LlmProviderPresetModel('gemma4:31b', displayName: 'Gemma 4 31B'),
+      LlmProviderPresetModel(
+        'nemotron-3-super',
+        displayName: 'NVIDIA Nemotron 3 Super',
+      ),
+      LlmProviderPresetModel('qwen3.5:397b', displayName: 'Qwen 3.5 397B'),
+    ],
+  ),
+  // Deferred from M43: the audited Navy registry adds User-Agent: OmniRoute/1.0
+  // because its upstream rejects requests without that header. This preset
+  // contract only emits standard bearer auth and cannot express that header.
+  // Registry evidence: OmniRoute d1ba822 open-sse/config/providers/registry/
+  // navy/index.ts:17-20,22.
 ];
 
 const _stepfunFallbackModels = <LlmProviderPresetModel>[

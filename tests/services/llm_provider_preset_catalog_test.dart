@@ -14,6 +14,176 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
+  test('M43 API-key presets retain audited Chat Completions metadata', () {
+    const endpoints = {
+      'naga-ai': 'https://api.naga.ac/v1/chat/completions',
+      'nan': 'https://api.nan.builders/v1/chat/completions',
+      'nanogpt': 'https://nano-gpt.com/api/v1/chat/completions',
+      'nara': 'https://router.bynara.id/v1/chat/completions',
+      'nebius': 'https://api.tokenfactory.nebius.com/v1/chat/completions',
+      'nous-research':
+          'https://inference-api.nousresearch.com/v1/chat/completions',
+      'nscale': 'https://inference.api.nscale.com/v1/chat/completions',
+      'nube': 'https://ai.nube.sh/api/v1/chat/completions',
+      'oci':
+          'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/chat/completions',
+      'ofoxai': 'https://api.ofox.ai/v1/chat/completions',
+      'ollama-cloud': 'https://ollama.com/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(
+        preset.defaultApiProtocol,
+        'openai.chat_completions',
+        reason: entry.key,
+      );
+    }
+    expect(
+      {
+        for (final id in [
+          'naga-ai',
+          'nan',
+          'nanogpt',
+          'nube',
+          'oci',
+          'ofoxai',
+          'ollama-cloud',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'naga-ai': 'https://api.naga.ac/v1/models',
+        'nan': 'https://api.nan.builders/v1/models',
+        'nanogpt': 'https://nano-gpt.com/api/v1/models',
+        'nube': 'https://ai.nube.sh/api/v1/models',
+        'oci':
+            'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/models',
+        'ofoxai': 'https://api.ofox.ai/v1/models',
+        'ollama-cloud': 'https://ollama.com/api/tags',
+      },
+    );
+    expect(findLlmOpenAiProviderPreset('naga-ai')!.fallbackModels, isEmpty);
+    expect(
+      findLlmOpenAiProviderPreset(
+        'nan',
+      )!
+          .fallbackModels
+          .map((model) => model.id),
+      [
+        'deepseek-v4-flash',
+        'mimo-v2.5',
+        'mimo-v2.6-flash',
+        'qwen3.8-flash',
+        'qwen3.6',
+        'glm5.3',
+        'glm5.3-flash',
+        'gemma4',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'nanogpt',
+      )!
+          .fallbackModels
+          .map((model) => model.id),
+      ['chatgpt-4o-latest', 'claude-3.5-sonnet', 'gpt-4o-mini'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('nara')!.fallbackModels.first.capabilities,
+      {
+        'contextLength': 262144,
+        'toolCalling': true,
+        'vision': true,
+        'reasoning': true,
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('nebius')!.fallbackModels.single.id,
+      'meta-llama/Llama-3.3-70B-Instruct',
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'nous-research',
+      )!
+          .fallbackModels
+          .map((model) => model.id),
+      ['Hermes-4-405B', 'Hermes-4-70B'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset(
+        'nscale',
+      )!
+          .fallbackModels
+          .map((model) => model.id),
+      [
+        'moonshotai/Kimi-K2.5',
+        'Qwen/Qwen3-235B-A22B-Instruct-2507',
+        'openai/gpt-oss-120b',
+        'openai/gpt-oss-20b',
+        'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+        'meta-llama/Llama-3.3-70B-Instruct',
+      ],
+    );
+    expect(findLlmOpenAiProviderPreset('nube')!.fallbackModels, isEmpty);
+    expect(findLlmOpenAiProviderPreset('oci')!.fallbackModels, isEmpty);
+    expect(findLlmOpenAiProviderPreset('ofoxai')!.fallbackModels, isEmpty);
+    final ollamaCloud = findLlmOpenAiProviderPreset('ollama-cloud')!;
+    expect(ollamaCloud.fallbackModels.map((model) => model.id), [
+      'gpt-oss:20b',
+      'gpt-oss:120b',
+      'deepseek-v4-pro',
+      'deepseek-v4-flash',
+      'kimi-k2.6',
+      'glm-5.1',
+      'glm-5.2',
+      'minimax-m3',
+      'minimax-m2.7',
+      'gemma4:31b',
+      'nemotron-3-super',
+      'qwen3.5:397b',
+    ]);
+    expect(ollamaCloud.fallbackModels.first.capabilities, {
+      'reasoning': true,
+      'supportedThinkingEfforts': ['low', 'medium', 'high'],
+    });
+
+    // Navy needs a provider-specific User-Agent header, and NLP Cloud's
+    // `/v1/gpu` registry URL cannot be represented by this connector, which
+    // appends `/chat/completions` to the configured endpoint.
+    expect(findLlmOpenAiProviderPreset('navy'), isNull);
+    expect(findLlmOpenAiProviderPreset('nlpcloud'), isNull);
+    // Naga.ai requires an API key; the similarly named Naga.ac registry entry
+    // permits anonymous requests and is not the same account mode.
+    expect(findLlmOpenAiProviderPreset('naga-ac'), isNull);
+  });
+
+  test('M43 fallback-only preset selection clears prior preset discovery URL',
+      () {
+    final nara = findLlmOpenAiProviderPreset('nara')!;
+    final priorModelsUrl = findLlmOpenAiProviderPreset('fireworks')!.modelsUrl;
+    final selected = nara.applyToEndpointConfig({
+      'providerPresetId': 'fireworks',
+      'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+      'modelsUrl': priorModelsUrl,
+      'accountOwnedConfig': 'preserved',
+    });
+
+    expect(selected['providerPresetId'], 'nara');
+    expect(selected['baseUrl'], nara.baseUrl);
+    expect(selected.containsKey('modelsUrl'), isFalse);
+    expect(selected['accountOwnedConfig'], 'preserved');
+
+    final customModelsUrl = nara.applyToEndpointConfig({
+      'providerPresetId': 'fireworks',
+      'modelsUrl': 'https://user.example/models',
+    });
+    expect(customModelsUrl['modelsUrl'], 'https://user.example/models');
+  });
+
   test('M42 API-key presets retain audited endpoints and model discovery', () {
     const endpoints = {
       'logfare': 'https://logfare.ai/v1/chat/completions',
@@ -164,6 +334,17 @@ void main() {
       'meganova-ai',
       'mixlayer',
       'mnn-ai',
+      'naga-ai',
+      'nan',
+      'nanogpt',
+      'nara',
+      'nebius',
+      'nous-research',
+      'nscale',
+      'nube',
+      'oci',
+      'ofoxai',
+      'ollama-cloud',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -268,6 +449,19 @@ void main() {
         'meganova-ai': 'https://api.meganova.ai/v1/chat/completions',
         'mixlayer': 'https://models.mixlayer.ai/v1/chat/completions',
         'mnn-ai': 'https://api.mnnai.ru/v1/chat/completions',
+        'naga-ai': 'https://api.naga.ac/v1/chat/completions',
+        'nan': 'https://api.nan.builders/v1/chat/completions',
+        'nanogpt': 'https://nano-gpt.com/api/v1/chat/completions',
+        'nara': 'https://router.bynara.id/v1/chat/completions',
+        'nebius': 'https://api.tokenfactory.nebius.com/v1/chat/completions',
+        'nous-research':
+            'https://inference-api.nousresearch.com/v1/chat/completions',
+        'nscale': 'https://inference.api.nscale.com/v1/chat/completions',
+        'nube': 'https://ai.nube.sh/api/v1/chat/completions',
+        'oci':
+            'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1/chat/completions',
+        'ofoxai': 'https://api.ofox.ai/v1/chat/completions',
+        'ollama-cloud': 'https://ollama.com/v1/chat/completions',
       },
     );
     expect(
@@ -1989,6 +2183,166 @@ void main() {
       expect(configs.single.apiProtocol, 'openai.chat_completions');
       expect(configs.single.models.single.apiProtocolOverride,
           'anthropic.messages');
+    }
+  });
+
+  test(
+    'each M43 preset persists and routes through Chat and Task Flow',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+      );
+      const presetIds = [
+        'naga-ai',
+        'nan',
+        'nanogpt',
+        'nara',
+        'nebius',
+        'nous-research',
+        'nscale',
+        'nube',
+        'oci',
+        'ofoxai',
+        'ollama-cloud',
+      ];
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final model = preset.fallbackModels.isEmpty
+            ? LlmUpstreamModel(
+                id: 'm43-$presetId:user-model',
+                upstreamModelId: 'user-model',
+                displayName: 'User model',
+                config: const {'apiProtocolOverride': 'anthropic.messages'},
+              )
+            : LlmUpstreamModel(
+                id: 'm43-$presetId:${preset.fallbackModels.first.id}',
+                upstreamModelId: preset.fallbackModels.first.id,
+                displayName: preset.fallbackModels.first.displayName,
+                capabilities: preset.fallbackModels.first.capabilities,
+                config: const {'apiProtocolOverride': 'anthropic.messages'},
+              );
+        final account = LlmAccount(
+          id: 'm43-$presetId',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {
+            'accountOwnedConfig': 'preserved',
+          }),
+          models: [model],
+        );
+        await service.saveAccount(account, secret: 'key-$presetId');
+
+        final restored = (await service.getAccount(account.id))!;
+        expect(
+          restored.connectorType,
+          'openai-compatibility',
+          reason: presetId,
+        );
+        expect(restored.endpointConfig['providerPresetId'], presetId);
+        expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+        if (preset.modelsUrl == null) {
+          expect(restored.endpointConfig.containsKey('modelsUrl'), isFalse);
+        } else {
+          expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+        }
+        expect(
+          restored.endpointConfig['apiProtocol'],
+          'openai.chat_completions',
+        );
+        expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+        expect(await service.readCredential(account.id), 'key-$presetId');
+        expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+        expect(restored.models.single.capabilities, model.capabilities);
+        expect(
+          restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages',
+        );
+
+        final group = LlmModelGroup(
+          id: 'm43-$presetId-group',
+          displayName: preset.displayName,
+          members: [
+            LlmModelGroupMember(
+              accountId: restored.id,
+              upstreamModelId: restored.models.single.upstreamModelId,
+            ),
+          ],
+        );
+        final configs = buildLlmModelGroupProviderConfigs(
+          accounts: [restored],
+          groups: [group],
+        );
+        expect(configs, hasLength(1));
+        expect(configs.single.apiProtocol, 'openai.chat_completions');
+        expect(
+          configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages',
+        );
+      }
+    },
+  );
+
+  test('M43 discovery URLs refresh with bearer keys', () async {
+    const presetIds = [
+      'naga-ai',
+      'nan',
+      'nanogpt',
+      'nube',
+      'oci',
+      'ofoxai',
+      'ollama-cloud',
+    ];
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        final id = presetIds[requests.length - 1];
+        final payload = id == 'ollama-cloud'
+            ? {
+                'models': [
+                  {'name': 'qwen-test'},
+                ],
+              }
+            : {
+                'data': [
+                  {'id': '$id-model'},
+                ],
+              };
+        return ResponseBody.fromString(
+          jsonEncode(payload),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm43-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(
+        models.single.upstreamModelId,
+        presetId == 'ollama-cloud' ? 'qwen-test' : '$presetId-model',
+      );
     }
   });
 
