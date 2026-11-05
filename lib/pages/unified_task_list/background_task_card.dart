@@ -693,6 +693,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             builder: (_) => OcrPage(
               retryData: task.retryData,
               retryTaskId: task.id,
+              retryTaskGeneration: task,
               retryPageOutcomes: task.ocrPageOutcomes,
             ),
           ),

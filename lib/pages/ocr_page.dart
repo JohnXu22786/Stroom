@@ -149,6 +149,7 @@ class OcrPage extends ConsumerStatefulWidget {
     this.testImages,
     this.retryData,
     this.retryTaskId,
+    this.retryTaskGeneration,
     this.testCameraPicker,
     this.testGalleryPicker,
     this.testImagePayloadPreparer,
@@ -197,6 +198,9 @@ class OcrPage extends ConsumerStatefulWidget {
 
   /// Source task ID, used to migrate legacy inline retry images in place.
   final String? retryTaskId;
+
+  /// Source task generation captured by the caller that supplied [retryData].
+  final BackgroundTask? retryTaskGeneration;
   final List<OcrPageOutcome> retryPageOutcomes;
 
   @override
@@ -410,6 +414,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _applyRetryData() async {
     final data = widget.retryData;
     if (data == null) return;
+    final retryTaskId = widget.retryTaskId;
+    final retryTaskGeneration = widget.retryTaskGeneration;
     final snapshot = OcrRetrySnapshot.fromMap(data);
     _retryRequestSizeBudgetBytes = snapshot.requestSizeBudgetBytes;
     _retryRequestSizeBudgetHasStableModelReference =
@@ -503,7 +509,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         snapshot.needsMigration) {
       unawaited(
         _migrateRetrySnapshot(
-          widget.retryTaskId!,
+          retryTaskId!,
+          retryTaskGeneration,
           snapshot,
           ref.read(backgroundTasksProvider.notifier),
         ),
@@ -513,6 +520,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   Future<void> _migrateRetrySnapshot(
     String taskId,
+    BackgroundTask? taskGeneration,
     OcrRetrySnapshot snapshot,
     BackgroundTaskNotifier notifier,
   ) async {
@@ -527,8 +535,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               snapshot: snapshot,
             ));
         if (notifier.mounted &&
-            notifier.state.any((task) => task.id == taskId)) {
-          notifier.setRetryData(taskId, retryData);
+            taskGeneration != null &&
+            notifier.state.any(
+              (task) =>
+                  task.id == taskId && task.hasSameGenerationAs(taskGeneration),
+            )) {
+          await notifier.setRetryDataAndWaitForGeneration(
+            taskId,
+            taskGeneration,
+            retryData,
+          );
           return;
         }
         final referenced =
