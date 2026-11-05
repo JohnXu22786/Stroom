@@ -828,6 +828,14 @@ void main() {
       'sambanova',
       'sarvam',
       'scaleway',
+      'sealion',
+      'seekai',
+      'sensenova',
+      'sparkdesk',
+      'speka',
+      'synthetic',
+      'tokenmarket',
+      'tokenreply',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -960,6 +968,14 @@ void main() {
         'sambanova': 'https://api.sambanova.ai/v1/chat/completions',
         'sarvam': 'https://api.sarvam.ai/v1/chat/completions',
         'scaleway': 'https://api.scaleway.ai/v1/chat/completions',
+        'sealion': 'https://api.sea-lion.ai/v1/chat/completions',
+        'seekai': 'https://seekai.cc/v1/chat/completions',
+        'sensenova': 'https://token.sensenova.cn/v1/chat/completions',
+        'sparkdesk': 'https://spark-api-open.xf-yun.com/v1/chat/completions',
+        'speka': 'https://speka.me/v1/chat/completions',
+        'synthetic': 'https://api.synthetic.new/openai/v1/chat/completions',
+        'tokenmarket': 'https://api.tokensmarket.ai/v1/chat/completions',
+        'tokenreply': 'https://api.tokenreply.com/v1/chat/completions',
       },
     );
     expect(
