@@ -222,24 +222,6 @@ class _CapturingOcrAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-class _FailingOcrAdapter implements HttpClientAdapter {
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async => ResponseBody.fromString(
-    '{"error":{"message":"provider request failed"}}',
-    500,
-    headers: {
-      Headers.contentTypeHeader: ['application/json'],
-    },
-  );
-
-  @override
-  void close({bool force = false}) {}
-}
-
 // ============================================================================
 // Helper: Create a sample OCR provider entry with models
 // ============================================================================
@@ -1405,15 +1387,13 @@ void main() {
         ..state = ProviderEntriesState(
           entries: [_createOcrEntry(withModels: true)],
         );
-      final adapter = _FailingOcrAdapter();
       await tester.pumpWidget(
         _buildTestApp(
           testProviderEntriesNotifier: providerNotifier,
-          testImages: [_createValidOcrTestImage()],
-          testOcrServiceFactory: (config) => OcrService(
-            config: config,
-            dio: Dio()..httpClientAdapter = adapter,
-          ),
+          testImages: [_createTestImage()],
+          testImagePayloadPreparer: (_) async {
+            throw StateError('request preparation failed');
+          },
         ),
       );
       await tester.pumpAndSettle();
@@ -1430,7 +1410,7 @@ void main() {
       await tester.tap(find.text('开始识别'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('配置'), findsWidgets);
+      expect(find.text('请先在设置中配置 OCR 供应商和模型'), findsOneWidget);
       expect(find.text('查看详细错误'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
