@@ -196,13 +196,15 @@ class _ConversationStreamState {
   }
 
   bool _containsMarkdownSyntax(String text) =>
-      RegExp(r'(?m)^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)')
+      RegExp(r'^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)', multiLine: true)
           .hasMatch(text) ||
-      RegExp(r'(?m)^(?: {4,}|\t)\S').hasMatch(text) ||
-      RegExp(r'(?m)^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$')
+      RegExp(r'^(?: {4,}|\t)\S', multiLine: true).hasMatch(text) ||
+      RegExp(r'^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$',
+              multiLine: true)
           .hasMatch(text) ||
-      RegExp(r'(?m)^\s{0,3}=+\s*$').hasMatch(text) ||
-      RegExp(r'(?m)^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$')
+      RegExp(r'^\s{0,3}=+\s*$', multiLine: true).hasMatch(text) ||
+      RegExp(r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$',
+              multiLine: true)
           .hasMatch(text) ||
       RegExp(r'\|\s*:?-{3,}:?\s*\|').hasMatch(text) ||
       RegExp(r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})')
