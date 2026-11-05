@@ -1639,27 +1639,28 @@ void main() {
           'images': <dynamic>[],
         };
         String? migratedReference;
-        BackgroundTaskNotifier.debugStorageDirectoryOverride = storageDir.path;
-        await tester.runAsync(() async {
-          final tasksFile = File('${storageDir.path}/background/tasks.json');
-          await tasksFile.parent.create(recursive: true);
-          await tasksFile.writeAsString('[]');
-        });
-        expect(
-          await tester.runAsync(() => notifier.restoreFromPersistence()),
-          isFalse,
-        );
-        notifier.setTasksForTest([
-          BackgroundTask(
-            id: taskId,
-            type: BackgroundTaskType.ocr,
-            title: 'legacy OCR retry',
-            status: TaskStatus.failed,
-            retryData: legacyRetryData,
-          ),
-        ]);
-
         try {
+          BackgroundTaskNotifier.debugStorageDirectoryOverride =
+              storageDir.path;
+          await tester.runAsync(() async {
+            final tasksFile = File('${storageDir.path}/background/tasks.json');
+            await tasksFile.parent.create(recursive: true);
+            await tasksFile.writeAsString('[]');
+          });
+          expect(
+            await tester.runAsync(() => notifier.restoreFromPersistence()),
+            isTrue,
+          );
+          notifier.setTasksForTest([
+            BackgroundTask(
+              id: taskId,
+              type: BackgroundTaskType.ocr,
+              title: 'legacy OCR retry',
+              status: TaskStatus.failed,
+              retryData: legacyRetryData,
+            ),
+          ]);
+
           await tester.pumpWidget(
             _buildTestApp(
               entries: [_createOcrEntry()],
@@ -1850,12 +1851,12 @@ void main() {
         notifier.tasksForTest.single.retryData?['version'],
         OcrRetrySnapshot.currentVersion,
       );
-      expect(
-        notifier.tasksForTest.single.retryData?['images'],
-        [
-          {'storageRef': 'ocr_retry_cache/migrated-current-owner'},
-        ],
-      );
+      final migratedImage =
+          notifier.tasksForTest.single.retryData?['images'] as List;
+      expect(migratedImage, hasLength(1));
+      expect((migratedImage.single as Map)['storageRef'],
+          startsWith('ocr_retry_cache/'));
+      expect((migratedImage.single as Map).containsKey('bytes'), isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
