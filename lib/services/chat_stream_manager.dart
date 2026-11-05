@@ -209,6 +209,7 @@ class ChatStreamManager {
     ref.read(streamingReasoningProvider(convId).notifier).state = '';
     ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
     ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+    ref.read(streamingTextAppendProvider(convId).notifier).state = null;
     ref.read(streamingToolCallsProvider(convId).notifier).state = [];
     ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state = [];
   }
@@ -237,7 +238,7 @@ class ChatStreamManager {
 
   /// Text chunks for a specific conversation.
   List<String> textChunksFor(String convId) =>
-      List.unmodifiable(_streams[convId]?.textChunks ?? []);
+      _streams[convId]?.textChunks ?? const [];
 
   /// Tool call round starts for a specific conversation.
   List<int> toolCallRoundStartsFor(String convId) =>

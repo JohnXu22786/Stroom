@@ -1,5 +1,19 @@
 part of 'chat_page.dart';
 
+class _CachedStreamingMarkdown {
+  final String text;
+  final bool isDark;
+  final bool isStreaming;
+  final Widget widget;
+
+  const _CachedStreamingMarkdown({
+    required this.text,
+    required this.isDark,
+    required this.isStreaming,
+    required this.widget,
+  });
+}
+
 extension _ChatPageBubblesExt on _ChatPageState {
   /// Error bubble for failed AI messages with status code, response body
   /// and original error text.
@@ -169,52 +183,94 @@ extension _ChatPageBubblesExt on _ChatPageState {
         ? _searchMatches.indexWhere((m) => m.messageId == messageId)
         : 0;
     var occurrenceOffset = 0;
+    final streamingConvId = isStreaming && messageId == _streamingMsgId
+        ? ref.read(activeConversationIdProvider)
+        : null;
+    final liveTextChunkCount = streamingConvId == null
+        ? 0
+        : ref.read(streamingTextSectionsProvider(streamingConvId)).length;
     for (final seg in mergeConsecutiveTextSegments(segments)) {
       switch (seg) {
         case TextSegment s:
-          widgets.add(Padding(
-            padding: const EdgeInsets.only(
-              bottom: 4,
-            ),
-            child: hasSearchMatch
-                ? MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
+          if (s.liveTextFragments != null) {
+            widgets.add(Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: SelectableText.rich(
+                TextSpan(
+                  children: s.liveTextFragments!
+                      .map((fragment) => TextSpan(text: fragment))
+                      .toList(growable: false),
+                ),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ));
+            continue;
+          }
+          final canReuseSealedText = !hasSearchMatch &&
+              streamingConvId != null &&
+              s.chunkIndex != null &&
+              s.chunkIndex! < liveTextChunkCount - 1;
+          final cacheKey =
+              canReuseSealedText ? '$messageId:${s.chunkIndex}' : null;
+          final cached =
+              cacheKey == null ? null : _streamingMarkdownCache[cacheKey];
+          if (cached != null &&
+              identical(cached.text, s.text) &&
+              cached.isDark == isDark &&
+              cached.isStreaming == isStreaming) {
+            widgets.add(cached.widget);
+          } else {
+            final textWidget = Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: hasSearchMatch
+                  ? MarkdownWidget(
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: buildSearchMarkdownGenerator(
+                        query: _searchQuery,
+                        messageFirstMatchIndex: messageFirstMatchIndex,
+                        occurrenceOffset: occurrenceOffset,
+                        currentMatchIndex: _currentMatchIndex,
+                      ),
+                    )
+                  : MarkdownWidget(
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      // Per-segment streaming config: each segment
+                      // is parsed by its OWN MarkdownWidget, so the
+                      // fence-completion check must run against that
+                      // segment's text.
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: markdownGenerator,
                     ),
-                    markdownGenerator: buildSearchMarkdownGenerator(
-                      query: _searchQuery,
-                      messageFirstMatchIndex: messageFirstMatchIndex,
-                      occurrenceOffset: occurrenceOffset,
-                      currentMatchIndex: _currentMatchIndex,
-                    ),
-                  )
-                : MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    // Per-segment streaming config: each segment
-                    // is parsed by its OWN MarkdownWidget, so the
-                    // fence-completion check must run against that
-                    // segment's text.
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
-                    ),
-                    markdownGenerator: markdownGenerator,
-                  ),
-          ));
+            );
+            widgets.add(textWidget);
+            if (cacheKey != null) {
+              _streamingMarkdownCache[cacheKey] = _CachedStreamingMarkdown(
+                text: s.text,
+                isDark: isDark,
+                isStreaming: isStreaming,
+                widget: textWidget,
+              );
+            }
+          }
           // Count occurrences the highlight generator can actually paint
           // (matches inside code/math render as dedicated widgets and never
           // become highlightable text), so the offset stays aligned with the

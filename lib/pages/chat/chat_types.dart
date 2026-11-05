@@ -9,7 +9,16 @@ sealed class MessageSegment {}
 
 class TextSegment extends MessageSegment {
   final String text;
-  TextSegment(this.text);
+
+  /// Index of this text section in the live stream, when available.
+  /// Completed sections keep this identity across live segment rebuilds.
+  final int? chunkIndex;
+
+  /// Immutable deltas used for live plain-text rendering. Keeping the pieces
+  /// separate avoids joining and reparsing the entire growing section.
+  final List<String>? liveTextFragments;
+
+  TextSegment(this.text, {this.chunkIndex, this.liveTextFragments});
 }
 
 class ErrorSegment extends MessageSegment {
@@ -70,7 +79,10 @@ List<MessageSegment> mergeConsecutiveTextSegments(
   for (final seg in segments) {
     if (seg is TextSegment && merged.isNotEmpty && merged.last is TextSegment) {
       final last = merged.last as TextSegment;
-      merged[merged.length - 1] = TextSegment(last.text + seg.text);
+      merged[merged.length - 1] = TextSegment(
+        last.text + seg.text,
+        chunkIndex: last.chunkIndex,
+      );
     } else {
       merged.add(seg);
     }
@@ -153,7 +165,7 @@ List<MessageSegment> _buildWithRounds(
 
     // Text before this round's tool calls
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
 
     // All tool calls in this round (grouped together)
@@ -176,7 +188,7 @@ List<MessageSegment> _buildWithRounds(
       ));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
   }
 
@@ -212,7 +224,7 @@ List<MessageSegment> _buildLegacy(
     }
 
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
 
     if (i < toolCalls.length) {

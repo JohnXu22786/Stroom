@@ -23,6 +23,7 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     // and must read the fresh round boundary.
     _setProvider(streamingTextSectionsProvider(s.convId),
         List<String>.from(s.textChunks));
+    _setProvider(streamingTextAppendProvider(s.convId), null);
     _setProvider(streamingToolCallRoundStartsProvider(s.convId),
         List<int>.from(s.toolCallRoundStarts));
     _setProvider(streamingToolCallsProvider(s.convId),
@@ -44,6 +45,7 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     _setProvider(streamingReasoningSectionsProvider(convId), []);
     _setProvider(streamingToolCallsProvider(convId), []);
     _setProvider(streamingTextSectionsProvider(convId), ['']);
+    _setProvider(streamingTextAppendProvider(convId), null);
     _setProvider(streamingToolCallRoundStartsProvider(convId), []);
   }
 

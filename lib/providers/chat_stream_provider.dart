@@ -1,6 +1,27 @@
 import 'package:flutter_riverpod/legacy.dart';
 import '../models/tool_call.dart';
 
+/// Appended text for the current live text section. Plain text can render from
+/// these immutable deltas without materializing the accumulated section.
+class StreamingTextAppend {
+  final int sequence;
+  final int chunkIndex;
+  final String text;
+  final bool hasMarkdownSyntax;
+
+  const StreamingTextAppend({
+    required this.sequence,
+    required this.chunkIndex,
+    required this.text,
+    required this.hasMarkdownSyntax,
+  });
+}
+
+final streamingTextAppendProvider =
+    StateProvider.family<StreamingTextAppend?, String>(
+  (ref, conversationId) => null,
+);
+
 /// The ID of the message currently being streamed. Survives page disposal
 /// so the page can reconnect to the active stream when navigated back to.
 final streamingMsgIdProvider =

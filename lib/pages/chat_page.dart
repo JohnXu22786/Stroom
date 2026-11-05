@@ -208,6 +208,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
+  /// Widget trees for sealed streaming text sections. Reusing the exact
+  /// widget instance lets unchanged Markdown sections keep their parsed tree
+  /// while the final section continues to grow.
+  final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
+  final Map<String, List<String>> _livePlainTextFragments = {};
+
   String? _streamingMsgId;
   final Object _streamPageOwner = Object();
   ChatStreamManager? _attachedStreamManager;
