@@ -3841,5 +3841,204 @@
   "chatRequest": "请求 (Request)",
   "chatResponse": "响应 (Response)",
   "chatNoErrorDetails": "无详细数据",
-  "ttsInstructionDescription": "通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格"
+  "ttsInstructionDescription": "通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格",
+  "audioPlayerSourceTextSource": "选择源文本来源",
+  "audioPlayerChooseInAppText": "从应用内文本选择",
+  "audioPlayerChooseSavedTextSubtitle": "从应用内已保存的文本文件中选择",
+  "audioPlayerChooseSystemText": "从系统文本文件选择",
+  "audioPlayerChooseDeviceTextSubtitle": "从设备文件中选择文本文件",
+  "audioPlayerSelectInAppText": "选择应用内文本",
+  "audioPlayerNoTextFiles": "暂无文本文件",
+  "audioPlayerCharacterCount": "{count}字",
+  "@audioPlayerCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioPlayerSelectTextFailure": "选择文本失败: {error}",
+  "@audioPlayerSelectTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerCannotReadTextFile": "无法读取文本文件",
+  "audioPlayerUploadTextFailure": "上传源文本失败: {error}",
+  "@audioPlayerUploadTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerTextContentEmpty": "文本内容为空",
+  "audioPlayerSaveTextFailure": "保存源文本失败: {error}",
+  "@audioPlayerSaveTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerSourceTextUploaded": "源文本已上传",
+  "audioPlayerSourceTextUpdated": "源文本已更新",
+  "audioPlayerConfigureTtsProvider": "请先配置TTS供应商",
+  "audioPlayerNoStreamingModels": "没有支持流式播放的模型",
+  "audioPlayerSelectStreamingModel": "选择流式播放模型",
+  "audioPlayerProviderFallback": "供应商",
+  "audioPlayerStartStreaming": "开始流式播放: {model}",
+  "@audioPlayerStartStreaming": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerFileNotFound": "无法找到音频文件: {path}",
+  "@audioPlayerFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerUnableToLoadAudio": "无法加载音频数据",
+  "audioPlayerSourceText": "源文本",
+  "audioPlayerNoSourceText": "（无源文本）",
+  "audioPlayerUploadSourceText": "上传源文本",
+  "audioPlayerEditSourceText": "修改源文本",
+  "audioPlayerCompanionTextMissing": "未找到伴生文本文件",
+  "audioPlayerPlaySelection": "播放选中",
+  "audioPlayerGenerateSelection": "生成选中",
+  "audioPlayerPlaying": "正在播放...",
+  "audioPlayerPaused": "已暂停",
+  "audioPlayerPlaybackSpeed": "播放速度",
+  "audioPlayerFailed": "播放失败",
+  "audioPlayerRetry": "重试",
+  "audioPlayerLoading": "正在加载音频...",
+  "audioPlayerClose": "关闭",
+  "audioRecordingBrowserUnsupportedShort": "浏览器暂不支持录音功能，请使用 App 版本",
+  "audioRecordingMicrophonePermissionRequired": "需要麦克风权限才能录音",
+  "audioRecordingStartFailure": "开始录音失败: {error}",
+  "@audioRecordingStartFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingPauseFailure": "暂停录音失败: {error}",
+  "@audioRecordingPauseFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingResumeFailure": "恢复录音失败: {error}",
+  "@audioRecordingResumeFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingInvalidFile": "录音文件无效，请重新录制",
+  "audioRecordingStopFailure": "停止录音失败: {error}",
+  "@audioRecordingStopFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingFileNotFound": "录音文件不存在",
+  "audioRecordingFileEmpty": "录音文件为空",
+  "audioRecordingSaved": "录音已保存: {name}",
+  "@audioRecordingSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingSaveFailure": "保存录音失败: {error}",
+  "@audioRecordingSaveFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingTitle": "录音",
+  "audioRecordingBrowserUnsupported": "浏览器暂不支持录音功能",
+  "audioRecordingUseApp": "请使用 App 版本进行录音",
+  "audioRecordingDraftRecoveryHint": "检测到未保存的录音草稿，可保存到音频库。",
+  "audioRecordingRecording": "录制中 ●",
+  "audioRecordingPaused": "已暂停 ||",
+  "audioRecordingPreparing": "准备中...",
+  "audioRecordingStart": "开始录音",
+  "audioRecordingPause": "暂停",
+  "audioRecordingStopping": "停止中...",
+  "audioRecordingStop": "停止",
+  "audioRecordingResume": "恢复",
+  "audioRecordingSaving": "保存中...",
+  "audioRecordingSave": "保存录音",
+  "audioRecordingRecordAgain": "重新录制",
+  "audioRecordingWaveformPaused": "暂停录制，波形已冻结",
+  "audioRecordingWaveformLive": "音量波形实时显示",
+  "audioSeparationTitle": "视频音频分离",
+  "audioSeparationChooseVideoSource": "选择视频来源",
+  "audioSeparationChooseAppAlbum": "从应用相册选择",
+  "audioSeparationChooseSavedVideoSubtitle": "从应用内已保存的视频中选择",
+  "audioSeparationChooseSystemAlbum": "从系统相册选择",
+  "audioSeparationChooseDeviceVideoSubtitle": "从设备存储中选择视频文件",
+  "audioSeparationChooseVideoFailure": "选择视频失败: {error}",
+  "@audioSeparationChooseVideoFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineMissing": "未检测到音频分离引擎",
+  "audioSeparationEngineMissingHelp": "请重启应用或检查应用资源完整性。",
+  "audioSeparationNoVideoSelected": "暂未选择视频文件",
+  "audioSeparationSupportedFormatsHint": "支持 mp4、mov、m4v、3gp 格式",
+  "audioSeparationSuccess": "音频已成功提取并保存到音频库",
+  "audioSeparationView": "查看",
+  "audioSeparationSelectedVideoCount": "{count, plural, one{已选 {count} 个视频} other{已选 {count} 个视频}}",
+  "@audioSeparationSelectedVideoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioSeparationExtracting": "提取中...",
+  "audioSeparationExtractAudio": "提取音频",
+  "audioSeparationSaveTo": "保存至",
+  "audioSeparationChooseSaveFolder": "选择保存文件夹",
+  "audioSeparationCannotReadVideoFile": "无法读取视频文件",
+  "audioSeparationChooseVideoFileFailure": "选择视频文件失败: {error}",
+  "@audioSeparationChooseVideoFileFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationUnknownFormat": "未知",
+  "audioSeparationUnsupportedFormats": "暂不支持 {formats} 格式，仅支持 MP4、MOV、M4V、3GP。",
+  "@audioSeparationUnsupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineUnavailable": "音频分离引擎不可用。"
 }

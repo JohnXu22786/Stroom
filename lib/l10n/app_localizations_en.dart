@@ -7052,6 +7052,323 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ttsInstructionDescription =>
       'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.';
+
+  @override
+  String get audioPlayerSourceTextSource => 'Choose source text';
+
+  @override
+  String get audioPlayerChooseInAppText => 'Choose in app text';
+
+  @override
+  String get audioPlayerChooseSavedTextSubtitle =>
+      'Choose a saved text file from the app';
+
+  @override
+  String get audioPlayerChooseSystemText => 'Choose system text file';
+
+  @override
+  String get audioPlayerChooseDeviceTextSubtitle =>
+      'Choose a text file from device storage';
+
+  @override
+  String get audioPlayerSelectInAppText => 'Choose in app text';
+
+  @override
+  String get audioPlayerNoTextFiles => 'No text files yet';
+
+  @override
+  String audioPlayerCharacterCount(int count) {
+    return '$count characters';
+  }
+
+  @override
+  String audioPlayerSelectTextFailure(String error) {
+    return 'Failed to select text: $error';
+  }
+
+  @override
+  String get audioPlayerCannotReadTextFile => 'Unable to read text file';
+
+  @override
+  String audioPlayerUploadTextFailure(String error) {
+    return 'Failed to upload source text: $error';
+  }
+
+  @override
+  String get audioPlayerTextContentEmpty => 'Text is empty';
+
+  @override
+  String audioPlayerSaveTextFailure(String error) {
+    return 'Failed to save source text: $error';
+  }
+
+  @override
+  String get audioPlayerSourceTextUploaded => 'Source text uploaded';
+
+  @override
+  String get audioPlayerSourceTextUpdated => 'Source text updated';
+
+  @override
+  String get audioPlayerConfigureTtsProvider =>
+      'Configure a TTS provider first';
+
+  @override
+  String get audioPlayerNoStreamingModels =>
+      'No model supports streaming playback';
+
+  @override
+  String get audioPlayerSelectStreamingModel =>
+      'Select a streaming playback model';
+
+  @override
+  String get audioPlayerProviderFallback => 'Provider';
+
+  @override
+  String audioPlayerStartStreaming(String model) {
+    return 'Starting streaming playback: $model';
+  }
+
+  @override
+  String audioPlayerFileNotFound(String path) {
+    return 'Audio file not found: $path';
+  }
+
+  @override
+  String get audioPlayerUnableToLoadAudio => 'Unable to load audio data';
+
+  @override
+  String get audioPlayerSourceText => 'Source text';
+
+  @override
+  String get audioPlayerNoSourceText => '(No source text)';
+
+  @override
+  String get audioPlayerUploadSourceText => 'Upload source text';
+
+  @override
+  String get audioPlayerEditSourceText => 'Edit source text';
+
+  @override
+  String get audioPlayerCompanionTextMissing => 'No companion text file found';
+
+  @override
+  String get audioPlayerPlaySelection => 'Play selection';
+
+  @override
+  String get audioPlayerGenerateSelection => 'Generate selection';
+
+  @override
+  String get audioPlayerPlaying => 'Playing...';
+
+  @override
+  String get audioPlayerPaused => 'Paused';
+
+  @override
+  String get audioPlayerPlaybackSpeed => 'Playback speed';
+
+  @override
+  String get audioPlayerFailed => 'Playback failed';
+
+  @override
+  String get audioPlayerRetry => 'Retry';
+
+  @override
+  String get audioPlayerLoading => 'Loading audio...';
+
+  @override
+  String get audioPlayerClose => 'Close';
+
+  @override
+  String get audioRecordingBrowserUnsupportedShort =>
+      'Recording is not supported in the browser. Use the app version.';
+
+  @override
+  String get audioRecordingMicrophonePermissionRequired =>
+      'Microphone permission is required to record';
+
+  @override
+  String audioRecordingStartFailure(String error) {
+    return 'Failed to start recording: $error';
+  }
+
+  @override
+  String audioRecordingPauseFailure(String error) {
+    return 'Failed to pause recording: $error';
+  }
+
+  @override
+  String audioRecordingResumeFailure(String error) {
+    return 'Failed to resume recording: $error';
+  }
+
+  @override
+  String get audioRecordingInvalidFile =>
+      'Recording file is invalid. Record again.';
+
+  @override
+  String audioRecordingStopFailure(String error) {
+    return 'Failed to stop recording: $error';
+  }
+
+  @override
+  String get audioRecordingFileNotFound => 'Recording file not found';
+
+  @override
+  String get audioRecordingFileEmpty => 'Recording file is empty';
+
+  @override
+  String audioRecordingSaved(String name) {
+    return 'Recording saved: $name';
+  }
+
+  @override
+  String audioRecordingSaveFailure(String error) {
+    return 'Failed to save recording: $error';
+  }
+
+  @override
+  String get audioRecordingTitle => 'Recording';
+
+  @override
+  String get audioRecordingBrowserUnsupported =>
+      'Recording is not supported in the browser';
+
+  @override
+  String get audioRecordingUseApp => 'Use the app version to record';
+
+  @override
+  String get audioRecordingDraftRecoveryHint =>
+      'An unsaved recording draft was found. You can save it to the audio library.';
+
+  @override
+  String get audioRecordingRecording => 'Recording ●';
+
+  @override
+  String get audioRecordingPaused => 'Paused ||';
+
+  @override
+  String get audioRecordingPreparing => 'Preparing...';
+
+  @override
+  String get audioRecordingStart => 'Start recording';
+
+  @override
+  String get audioRecordingPause => 'Pause';
+
+  @override
+  String get audioRecordingStopping => 'Stopping...';
+
+  @override
+  String get audioRecordingStop => 'Stop';
+
+  @override
+  String get audioRecordingResume => 'Resume';
+
+  @override
+  String get audioRecordingSaving => 'Saving...';
+
+  @override
+  String get audioRecordingSave => 'Save recording';
+
+  @override
+  String get audioRecordingRecordAgain => 'Record again';
+
+  @override
+  String get audioRecordingWaveformPaused =>
+      'Recording paused; waveform is frozen';
+
+  @override
+  String get audioRecordingWaveformLive => 'Live audio waveform';
+
+  @override
+  String get audioSeparationTitle => 'Video audio separation';
+
+  @override
+  String get audioSeparationChooseVideoSource => 'Choose video source';
+
+  @override
+  String get audioSeparationChooseAppAlbum => 'Choose from app library';
+
+  @override
+  String get audioSeparationChooseSavedVideoSubtitle =>
+      'Choose a saved video from the app';
+
+  @override
+  String get audioSeparationChooseSystemAlbum => 'Choose from system storage';
+
+  @override
+  String get audioSeparationChooseDeviceVideoSubtitle =>
+      'Choose a video file from device storage';
+
+  @override
+  String audioSeparationChooseVideoFailure(String error) {
+    return 'Failed to choose video: $error';
+  }
+
+  @override
+  String get audioSeparationEngineMissing =>
+      'Audio separation engine not detected';
+
+  @override
+  String get audioSeparationEngineMissingHelp =>
+      'Restart the app or check that its resources are complete.';
+
+  @override
+  String get audioSeparationNoVideoSelected => 'No video selected';
+
+  @override
+  String get audioSeparationSupportedFormatsHint =>
+      'Supported formats: mp4, mov, m4v, 3gp';
+
+  @override
+  String get audioSeparationSuccess =>
+      'Audio extracted and saved to the audio library';
+
+  @override
+  String get audioSeparationView => 'View';
+
+  @override
+  String audioSeparationSelectedVideoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Selected $count videos',
+      one: 'Selected $count video',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get audioSeparationExtracting => 'Extracting...';
+
+  @override
+  String get audioSeparationExtractAudio => 'Extract audio';
+
+  @override
+  String get audioSeparationSaveTo => 'Save to';
+
+  @override
+  String get audioSeparationChooseSaveFolder => 'Choose save folder';
+
+  @override
+  String get audioSeparationCannotReadVideoFile => 'Unable to read video file';
+
+  @override
+  String audioSeparationChooseVideoFileFailure(String error) {
+    return 'Failed to select video file: $error';
+  }
+
+  @override
+  String get audioSeparationUnknownFormat => 'Unknown';
+
+  @override
+  String audioSeparationUnsupportedFormats(String formats) {
+    return 'Unsupported formats: $formats. Supported formats: MP4, MOV, M4V, 3GP.';
+  }
+
+  @override
+  String get audioSeparationEngineUnavailable =>
+      'Audio separation engine is unavailable.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -14101,4 +14418,321 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ttsInstructionDescription =>
       'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.';
+
+  @override
+  String get audioPlayerSourceTextSource => 'Choose source text';
+
+  @override
+  String get audioPlayerChooseInAppText => 'Choose in app text';
+
+  @override
+  String get audioPlayerChooseSavedTextSubtitle =>
+      'Choose a saved text file from the app';
+
+  @override
+  String get audioPlayerChooseSystemText => 'Choose system text file';
+
+  @override
+  String get audioPlayerChooseDeviceTextSubtitle =>
+      'Choose a text file from device storage';
+
+  @override
+  String get audioPlayerSelectInAppText => 'Choose in app text';
+
+  @override
+  String get audioPlayerNoTextFiles => 'No text files yet';
+
+  @override
+  String audioPlayerCharacterCount(int count) {
+    return '$count characters';
+  }
+
+  @override
+  String audioPlayerSelectTextFailure(String error) {
+    return 'Failed to select text: $error';
+  }
+
+  @override
+  String get audioPlayerCannotReadTextFile => 'Unable to read text file';
+
+  @override
+  String audioPlayerUploadTextFailure(String error) {
+    return 'Failed to upload source text: $error';
+  }
+
+  @override
+  String get audioPlayerTextContentEmpty => 'Text is empty';
+
+  @override
+  String audioPlayerSaveTextFailure(String error) {
+    return 'Failed to save source text: $error';
+  }
+
+  @override
+  String get audioPlayerSourceTextUploaded => 'Source text uploaded';
+
+  @override
+  String get audioPlayerSourceTextUpdated => 'Source text updated';
+
+  @override
+  String get audioPlayerConfigureTtsProvider =>
+      'Configure a TTS provider first';
+
+  @override
+  String get audioPlayerNoStreamingModels =>
+      'No model supports streaming playback';
+
+  @override
+  String get audioPlayerSelectStreamingModel =>
+      'Select a streaming playback model';
+
+  @override
+  String get audioPlayerProviderFallback => 'Provider';
+
+  @override
+  String audioPlayerStartStreaming(String model) {
+    return 'Starting streaming playback: $model';
+  }
+
+  @override
+  String audioPlayerFileNotFound(String path) {
+    return 'Audio file not found: $path';
+  }
+
+  @override
+  String get audioPlayerUnableToLoadAudio => 'Unable to load audio data';
+
+  @override
+  String get audioPlayerSourceText => 'Source text';
+
+  @override
+  String get audioPlayerNoSourceText => '(No source text)';
+
+  @override
+  String get audioPlayerUploadSourceText => 'Upload source text';
+
+  @override
+  String get audioPlayerEditSourceText => 'Edit source text';
+
+  @override
+  String get audioPlayerCompanionTextMissing => 'No companion text file found';
+
+  @override
+  String get audioPlayerPlaySelection => 'Play selection';
+
+  @override
+  String get audioPlayerGenerateSelection => 'Generate selection';
+
+  @override
+  String get audioPlayerPlaying => 'Playing...';
+
+  @override
+  String get audioPlayerPaused => 'Paused';
+
+  @override
+  String get audioPlayerPlaybackSpeed => 'Playback speed';
+
+  @override
+  String get audioPlayerFailed => 'Playback failed';
+
+  @override
+  String get audioPlayerRetry => 'Retry';
+
+  @override
+  String get audioPlayerLoading => 'Loading audio...';
+
+  @override
+  String get audioPlayerClose => 'Close';
+
+  @override
+  String get audioRecordingBrowserUnsupportedShort =>
+      'Recording is not supported in the browser. Use the app version.';
+
+  @override
+  String get audioRecordingMicrophonePermissionRequired =>
+      'Microphone permission is required to record';
+
+  @override
+  String audioRecordingStartFailure(String error) {
+    return 'Failed to start recording: $error';
+  }
+
+  @override
+  String audioRecordingPauseFailure(String error) {
+    return 'Failed to pause recording: $error';
+  }
+
+  @override
+  String audioRecordingResumeFailure(String error) {
+    return 'Failed to resume recording: $error';
+  }
+
+  @override
+  String get audioRecordingInvalidFile =>
+      'Recording file is invalid. Record again.';
+
+  @override
+  String audioRecordingStopFailure(String error) {
+    return 'Failed to stop recording: $error';
+  }
+
+  @override
+  String get audioRecordingFileNotFound => 'Recording file not found';
+
+  @override
+  String get audioRecordingFileEmpty => 'Recording file is empty';
+
+  @override
+  String audioRecordingSaved(String name) {
+    return 'Recording saved: $name';
+  }
+
+  @override
+  String audioRecordingSaveFailure(String error) {
+    return 'Failed to save recording: $error';
+  }
+
+  @override
+  String get audioRecordingTitle => 'Recording';
+
+  @override
+  String get audioRecordingBrowserUnsupported =>
+      'Recording is not supported in the browser';
+
+  @override
+  String get audioRecordingUseApp => 'Use the app version to record';
+
+  @override
+  String get audioRecordingDraftRecoveryHint =>
+      'An unsaved recording draft was found. You can save it to the audio library.';
+
+  @override
+  String get audioRecordingRecording => 'Recording ●';
+
+  @override
+  String get audioRecordingPaused => 'Paused ||';
+
+  @override
+  String get audioRecordingPreparing => 'Preparing...';
+
+  @override
+  String get audioRecordingStart => 'Start recording';
+
+  @override
+  String get audioRecordingPause => 'Pause';
+
+  @override
+  String get audioRecordingStopping => 'Stopping...';
+
+  @override
+  String get audioRecordingStop => 'Stop';
+
+  @override
+  String get audioRecordingResume => 'Resume';
+
+  @override
+  String get audioRecordingSaving => 'Saving...';
+
+  @override
+  String get audioRecordingSave => 'Save recording';
+
+  @override
+  String get audioRecordingRecordAgain => 'Record again';
+
+  @override
+  String get audioRecordingWaveformPaused =>
+      'Recording paused; waveform is frozen';
+
+  @override
+  String get audioRecordingWaveformLive => 'Live audio waveform';
+
+  @override
+  String get audioSeparationTitle => 'Video audio separation';
+
+  @override
+  String get audioSeparationChooseVideoSource => 'Choose video source';
+
+  @override
+  String get audioSeparationChooseAppAlbum => 'Choose from app library';
+
+  @override
+  String get audioSeparationChooseSavedVideoSubtitle =>
+      'Choose a saved video from the app';
+
+  @override
+  String get audioSeparationChooseSystemAlbum => 'Choose from system storage';
+
+  @override
+  String get audioSeparationChooseDeviceVideoSubtitle =>
+      'Choose a video file from device storage';
+
+  @override
+  String audioSeparationChooseVideoFailure(String error) {
+    return 'Failed to choose video: $error';
+  }
+
+  @override
+  String get audioSeparationEngineMissing =>
+      'Audio separation engine not detected';
+
+  @override
+  String get audioSeparationEngineMissingHelp =>
+      'Restart the app or check that its resources are complete.';
+
+  @override
+  String get audioSeparationNoVideoSelected => 'No video selected';
+
+  @override
+  String get audioSeparationSupportedFormatsHint =>
+      'Supported formats: mp4, mov, m4v, 3gp';
+
+  @override
+  String get audioSeparationSuccess =>
+      'Audio extracted and saved to the audio library';
+
+  @override
+  String get audioSeparationView => 'View';
+
+  @override
+  String audioSeparationSelectedVideoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Selected $count videos',
+      one: 'Selected $count video',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get audioSeparationExtracting => 'Extracting...';
+
+  @override
+  String get audioSeparationExtractAudio => 'Extract audio';
+
+  @override
+  String get audioSeparationSaveTo => 'Save to';
+
+  @override
+  String get audioSeparationChooseSaveFolder => 'Choose save folder';
+
+  @override
+  String get audioSeparationCannotReadVideoFile => 'Unable to read video file';
+
+  @override
+  String audioSeparationChooseVideoFileFailure(String error) {
+    return 'Failed to select video file: $error';
+  }
+
+  @override
+  String get audioSeparationUnknownFormat => 'Unknown';
+
+  @override
+  String audioSeparationUnsupportedFormats(String formats) {
+    return 'Unsupported formats: $formats. Supported formats: MP4, MOV, M4V, 3GP.';
+  }
+
+  @override
+  String get audioSeparationEngineUnavailable =>
+      'Audio separation engine is unavailable.';
 }

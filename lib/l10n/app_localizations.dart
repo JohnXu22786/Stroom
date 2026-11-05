@@ -11925,6 +11925,528 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.'**
   String get ttsInstructionDescription;
+
+  /// No description provided for @audioPlayerSourceTextSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose source text'**
+  String get audioPlayerSourceTextSource;
+
+  /// No description provided for @audioPlayerChooseInAppText.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose in app text'**
+  String get audioPlayerChooseInAppText;
+
+  /// No description provided for @audioPlayerChooseSavedTextSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a saved text file from the app'**
+  String get audioPlayerChooseSavedTextSubtitle;
+
+  /// No description provided for @audioPlayerChooseSystemText.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose system text file'**
+  String get audioPlayerChooseSystemText;
+
+  /// No description provided for @audioPlayerChooseDeviceTextSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a text file from device storage'**
+  String get audioPlayerChooseDeviceTextSubtitle;
+
+  /// No description provided for @audioPlayerSelectInAppText.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose in app text'**
+  String get audioPlayerSelectInAppText;
+
+  /// No description provided for @audioPlayerNoTextFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No text files yet'**
+  String get audioPlayerNoTextFiles;
+
+  /// No description provided for @audioPlayerCharacterCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} characters'**
+  String audioPlayerCharacterCount(int count);
+
+  /// No description provided for @audioPlayerSelectTextFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to select text: {error}'**
+  String audioPlayerSelectTextFailure(String error);
+
+  /// No description provided for @audioPlayerCannotReadTextFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read text file'**
+  String get audioPlayerCannotReadTextFile;
+
+  /// No description provided for @audioPlayerUploadTextFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload source text: {error}'**
+  String audioPlayerUploadTextFailure(String error);
+
+  /// No description provided for @audioPlayerTextContentEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Text is empty'**
+  String get audioPlayerTextContentEmpty;
+
+  /// No description provided for @audioPlayerSaveTextFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save source text: {error}'**
+  String audioPlayerSaveTextFailure(String error);
+
+  /// No description provided for @audioPlayerSourceTextUploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text uploaded'**
+  String get audioPlayerSourceTextUploaded;
+
+  /// No description provided for @audioPlayerSourceTextUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text updated'**
+  String get audioPlayerSourceTextUpdated;
+
+  /// No description provided for @audioPlayerConfigureTtsProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure a TTS provider first'**
+  String get audioPlayerConfigureTtsProvider;
+
+  /// No description provided for @audioPlayerNoStreamingModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No model supports streaming playback'**
+  String get audioPlayerNoStreamingModels;
+
+  /// No description provided for @audioPlayerSelectStreamingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a streaming playback model'**
+  String get audioPlayerSelectStreamingModel;
+
+  /// No description provided for @audioPlayerProviderFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider'**
+  String get audioPlayerProviderFallback;
+
+  /// No description provided for @audioPlayerStartStreaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting streaming playback: {model}'**
+  String audioPlayerStartStreaming(String model);
+
+  /// No description provided for @audioPlayerFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file not found: {path}'**
+  String audioPlayerFileNotFound(String path);
+
+  /// No description provided for @audioPlayerUnableToLoadAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load audio data'**
+  String get audioPlayerUnableToLoadAudio;
+
+  /// No description provided for @audioPlayerSourceText.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text'**
+  String get audioPlayerSourceText;
+
+  /// No description provided for @audioPlayerNoSourceText.
+  ///
+  /// In en, this message translates to:
+  /// **'(No source text)'**
+  String get audioPlayerNoSourceText;
+
+  /// No description provided for @audioPlayerUploadSourceText.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload source text'**
+  String get audioPlayerUploadSourceText;
+
+  /// No description provided for @audioPlayerEditSourceText.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit source text'**
+  String get audioPlayerEditSourceText;
+
+  /// No description provided for @audioPlayerCompanionTextMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'No companion text file found'**
+  String get audioPlayerCompanionTextMissing;
+
+  /// No description provided for @audioPlayerPlaySelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Play selection'**
+  String get audioPlayerPlaySelection;
+
+  /// No description provided for @audioPlayerGenerateSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate selection'**
+  String get audioPlayerGenerateSelection;
+
+  /// No description provided for @audioPlayerPlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing...'**
+  String get audioPlayerPlaying;
+
+  /// No description provided for @audioPlayerPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get audioPlayerPaused;
+
+  /// No description provided for @audioPlayerPlaybackSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get audioPlayerPlaybackSpeed;
+
+  /// No description provided for @audioPlayerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback failed'**
+  String get audioPlayerFailed;
+
+  /// No description provided for @audioPlayerRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get audioPlayerRetry;
+
+  /// No description provided for @audioPlayerLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading audio...'**
+  String get audioPlayerLoading;
+
+  /// No description provided for @audioPlayerClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get audioPlayerClose;
+
+  /// No description provided for @audioRecordingBrowserUnsupportedShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording is not supported in the browser. Use the app version.'**
+  String get audioRecordingBrowserUnsupportedShort;
+
+  /// No description provided for @audioRecordingMicrophonePermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission is required to record'**
+  String get audioRecordingMicrophonePermissionRequired;
+
+  /// No description provided for @audioRecordingStartFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start recording: {error}'**
+  String audioRecordingStartFailure(String error);
+
+  /// No description provided for @audioRecordingPauseFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to pause recording: {error}'**
+  String audioRecordingPauseFailure(String error);
+
+  /// No description provided for @audioRecordingResumeFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to resume recording: {error}'**
+  String audioRecordingResumeFailure(String error);
+
+  /// No description provided for @audioRecordingInvalidFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording file is invalid. Record again.'**
+  String get audioRecordingInvalidFile;
+
+  /// No description provided for @audioRecordingStopFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to stop recording: {error}'**
+  String audioRecordingStopFailure(String error);
+
+  /// No description provided for @audioRecordingFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording file not found'**
+  String get audioRecordingFileNotFound;
+
+  /// No description provided for @audioRecordingFileEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording file is empty'**
+  String get audioRecordingFileEmpty;
+
+  /// No description provided for @audioRecordingSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording saved: {name}'**
+  String audioRecordingSaved(String name);
+
+  /// No description provided for @audioRecordingSaveFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save recording: {error}'**
+  String audioRecordingSaveFailure(String error);
+
+  /// No description provided for @audioRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get audioRecordingTitle;
+
+  /// No description provided for @audioRecordingBrowserUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording is not supported in the browser'**
+  String get audioRecordingBrowserUnsupported;
+
+  /// No description provided for @audioRecordingUseApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the app version to record'**
+  String get audioRecordingUseApp;
+
+  /// No description provided for @audioRecordingDraftRecoveryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'An unsaved recording draft was found. You can save it to the audio library.'**
+  String get audioRecordingDraftRecoveryHint;
+
+  /// No description provided for @audioRecordingRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording ●'**
+  String get audioRecordingRecording;
+
+  /// No description provided for @audioRecordingPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused ||'**
+  String get audioRecordingPaused;
+
+  /// No description provided for @audioRecordingPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing...'**
+  String get audioRecordingPreparing;
+
+  /// No description provided for @audioRecordingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start recording'**
+  String get audioRecordingStart;
+
+  /// No description provided for @audioRecordingPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get audioRecordingPause;
+
+  /// No description provided for @audioRecordingStopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping...'**
+  String get audioRecordingStopping;
+
+  /// No description provided for @audioRecordingStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get audioRecordingStop;
+
+  /// No description provided for @audioRecordingResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get audioRecordingResume;
+
+  /// No description provided for @audioRecordingSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving...'**
+  String get audioRecordingSaving;
+
+  /// No description provided for @audioRecordingSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save recording'**
+  String get audioRecordingSave;
+
+  /// No description provided for @audioRecordingRecordAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Record again'**
+  String get audioRecordingRecordAgain;
+
+  /// No description provided for @audioRecordingWaveformPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording paused; waveform is frozen'**
+  String get audioRecordingWaveformPaused;
+
+  /// No description provided for @audioRecordingWaveformLive.
+  ///
+  /// In en, this message translates to:
+  /// **'Live audio waveform'**
+  String get audioRecordingWaveformLive;
+
+  /// No description provided for @audioSeparationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Video audio separation'**
+  String get audioSeparationTitle;
+
+  /// No description provided for @audioSeparationChooseVideoSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose video source'**
+  String get audioSeparationChooseVideoSource;
+
+  /// No description provided for @audioSeparationChooseAppAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from app library'**
+  String get audioSeparationChooseAppAlbum;
+
+  /// No description provided for @audioSeparationChooseSavedVideoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a saved video from the app'**
+  String get audioSeparationChooseSavedVideoSubtitle;
+
+  /// No description provided for @audioSeparationChooseSystemAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from system storage'**
+  String get audioSeparationChooseSystemAlbum;
+
+  /// No description provided for @audioSeparationChooseDeviceVideoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a video file from device storage'**
+  String get audioSeparationChooseDeviceVideoSubtitle;
+
+  /// No description provided for @audioSeparationChooseVideoFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to choose video: {error}'**
+  String audioSeparationChooseVideoFailure(String error);
+
+  /// No description provided for @audioSeparationEngineMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio separation engine not detected'**
+  String get audioSeparationEngineMissing;
+
+  /// No description provided for @audioSeparationEngineMissingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart the app or check that its resources are complete.'**
+  String get audioSeparationEngineMissingHelp;
+
+  /// No description provided for @audioSeparationNoVideoSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No video selected'**
+  String get audioSeparationNoVideoSelected;
+
+  /// No description provided for @audioSeparationSupportedFormatsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Supported formats: mp4, mov, m4v, 3gp'**
+  String get audioSeparationSupportedFormatsHint;
+
+  /// No description provided for @audioSeparationSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio extracted and saved to the audio library'**
+  String get audioSeparationSuccess;
+
+  /// No description provided for @audioSeparationView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get audioSeparationView;
+
+  /// No description provided for @audioSeparationSelectedVideoCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Selected {count} video} other{Selected {count} videos}}'**
+  String audioSeparationSelectedVideoCount(int count);
+
+  /// No description provided for @audioSeparationExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting...'**
+  String get audioSeparationExtracting;
+
+  /// No description provided for @audioSeparationExtractAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract audio'**
+  String get audioSeparationExtractAudio;
+
+  /// No description provided for @audioSeparationSaveTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to'**
+  String get audioSeparationSaveTo;
+
+  /// No description provided for @audioSeparationChooseSaveFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose save folder'**
+  String get audioSeparationChooseSaveFolder;
+
+  /// No description provided for @audioSeparationCannotReadVideoFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read video file'**
+  String get audioSeparationCannotReadVideoFile;
+
+  /// No description provided for @audioSeparationChooseVideoFileFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to select video file: {error}'**
+  String audioSeparationChooseVideoFileFailure(String error);
+
+  /// No description provided for @audioSeparationUnknownFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get audioSeparationUnknownFormat;
+
+  /// No description provided for @audioSeparationUnsupportedFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported formats: {formats}. Supported formats: MP4, MOV, M4V, 3GP.'**
+  String audioSeparationUnsupportedFormats(String formats);
+
+  /// No description provided for @audioSeparationEngineUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio separation engine is unavailable.'**
+  String get audioSeparationEngineUnavailable;
 }
 
 class _AppLocalizationsDelegate
