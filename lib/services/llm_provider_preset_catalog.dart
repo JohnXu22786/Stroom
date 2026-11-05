@@ -2280,6 +2280,117 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
       LlmProviderPresetModel('qwen3.5:397b', displayName: 'Qwen 3.5 397B'),
     ],
   ),
+  // Registry audit pinned at OmniRoute d1ba822: onomeo uses the standard
+  // bearer API-key executor, explicit Chat Completions and models endpoints,
+  // and passthrough model IDs without an offline seed list.
+  LlmProviderPreset(
+    id: 'onomeo',
+    displayName: 'onomeo',
+    baseUrl: 'https://onomeo.com/v1/chat/completions',
+    modelsUrl: 'https://onomeo.com/v1/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: OpenAdapter uses bearer auth,
+  // live /v1/models discovery and one fallback model with its declared tool
+  // calling and context capabilities.
+  LlmProviderPreset(
+    id: 'openadapter',
+    displayName: 'OpenAdapter',
+    baseUrl: 'https://api.openadapter.in/v1/chat/completions',
+    modelsUrl: 'https://api.openadapter.in/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'glm-4.7',
+        displayName: 'GLM 4.7 (OpenAdapter)',
+        capabilities: {'contextLength': 128000, 'toolCalling': true},
+      ),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: OpenVecta uses bearer auth
+  // and these nine source-declared offline model seeds. Its registry leaves
+  // modelsUrl undefined, so the shared connector derives /v1/models from baseUrl.
+  LlmProviderPreset(
+    id: 'openvecta',
+    displayName: 'OpenVecta',
+    baseUrl: 'https://api.openvecta.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('glm-4.7-flash',
+          displayName: 'GLM 4.7 Flash',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('claude-sonnet-4.6',
+          displayName: 'Claude Sonnet 4.6',
+          capabilities: {'contextLength': 1000000}),
+      LlmProviderPresetModel('deepseek-v4-flash',
+          displayName: 'DeepSeek V4 Flash',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('gpt-oss-120b',
+          displayName: 'GPT OSS 120B', capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('gemma-4-31b',
+          displayName: 'Gemma 4 31B', capabilities: {'contextLength': 262144}),
+      LlmProviderPresetModel('kimi-k2.6',
+          displayName: 'Kimi K2.6', capabilities: {'contextLength': 200000}),
+      LlmProviderPresetModel('llama-3.3-70b-instruct',
+          displayName: 'Llama 3.3 70B Instruct',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('llama-4-maverick',
+          displayName: 'Llama 4 Maverick',
+          capabilities: {'contextLength': 1048576}),
+      LlmProviderPresetModel('nemotron-3-super-120b',
+          displayName: 'Nemotron 3 Super 120B',
+          capabilities: {'contextLength': 262144}),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Opper uses bearer auth,
+  // live model discovery, and passthrough model IDs with no static seeds.
+  LlmProviderPreset(
+    id: 'opper',
+    displayName: 'Opper',
+    baseUrl: 'https://api.opper.ai/v3/compat/chat/completions',
+    modelsUrl: 'https://api.opper.ai/v3/compat/models',
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: PLaMo uses bearer auth and
+  // declares one offline model with context and output-token limits.
+  LlmProviderPreset(
+    id: 'plamo',
+    displayName: 'PLaMo',
+    baseUrl: 'https://api.platform.preferredai.jp/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('plamo-3.0-prime',
+          displayName: 'PLaMo 3.0 Prime',
+          capabilities: {'contextLength': 262144, 'maxOutputTokens': 20000}),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Poe's API-key mode defaults
+  // to Chat Completions with bearer auth. This preset includes only models
+  // whose registry target is Chat Completions; Poe's Responses and Claude-only
+  // Anthropic Messages routing remains deferred to protocol-aware catalog work.
+  LlmProviderPreset(
+    id: 'poe',
+    displayName: 'Poe',
+    baseUrl: 'https://api.poe.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('gpt-5.2', displayName: 'GPT-5.2'),
+      LlmProviderPresetModel('gemini-3.0-pro', displayName: 'Gemini 3.0 Pro'),
+    ],
+  ),
+  // Registry audit pinned at OmniRoute d1ba822: Poixe AI uses bearer auth,
+  // live /v1/models discovery and passthrough model IDs without static seeds.
+  LlmProviderPreset(
+    id: 'poixe-ai',
+    displayName: 'Poixe AI',
+    baseUrl: 'https://api.poixe.com/v1/chat/completions',
+    modelsUrl: 'https://api.poixe.com/v1/models',
+  ),
+  // Deferred from M44: the pinned 1min.ai executor translates OpenAI messages
+  // to its promptObject/SSE API and authenticates with `API-KEY`; see registry
+  // oneminai/index.ts:3-28 and executors/index.ts:68-69.
+  // OpenRouter, OrcaRouter and Perplexity declare fixed provider request
+  // headers not represented by a preset: registry openrouter/index.ts:17-20,
+  // orcarouter/index.ts:18-21 and perplexity/index.ts:13-15. OpenRouter and
+  // Perplexity also need distinct authenticated key-check URLs.
+  // OVHcloud's registry uses optional/no-auth semantics beyond this preset's
+  // required API-key account mode: registry ovhcloud/index.ts:7-23.
+  // Pioneer uses `X-API-Key` and filtered `/base-models` discovery; current
+  // shared connector auth is Bearer: registry pioneer/index.ts:13-27.
   // Deferred from M43: the audited Navy registry adds User-Agent: OmniRoute/1.0
   // because its upstream rejects requests without that header. This preset
   // contract only emits standard bearer auth and cannot express that header.
