@@ -129,6 +129,7 @@ void main() {
         'bigmodel',
         'bazaarlink',
         'beatapi',
+        'chenzk',
         'cheaperinference',
         'byteplus',
         'cerebras',

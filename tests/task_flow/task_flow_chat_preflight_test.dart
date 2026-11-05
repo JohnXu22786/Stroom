@@ -12,6 +12,8 @@ import 'package:stroom/services/llm_model_group_provider.dart'
         kLlmModelGroupConfigField,
         kLlmModelGroupMayUseAnthropicConfigField,
         kLlmModelCapabilitiesConfigField;
+import 'package:stroom/services/llm_provider_preset_catalog.dart'
+    show findLlmOpenAiProviderPreset;
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -620,6 +622,67 @@ void main() {
       );
     },
   );
+
+  test('Chenzk preset model is eligible for Task Flow chat', () async {
+    final preset = findLlmOpenAiProviderPreset('chenzk')!;
+    final account = LlmAccount(
+      id: 'chenzk-task-flow',
+      connectorType: 'openai-compatibility',
+      authType: preset.authType,
+      displayName: preset.displayName,
+      status: LlmAccountStatus.ready,
+      endpointConfig: preset.applyToEndpointConfig(const {}),
+      models: const [
+        LlmUpstreamModel(
+          id: 'chenzk-task-flow-model',
+          upstreamModelId: 'chenzk-model',
+          displayName: 'Chenzk model',
+          // Supply model-level streaming metadata explicitly; the provider
+          // preset itself makes no model capability claim.
+          capabilities: {'streaming': true},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'chenzk-task-flow-group',
+      displayName: 'Chenzk',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'chenzk-task-flow',
+          localModelId: 'chenzk-task-flow-model',
+          upstreamModelId: 'chenzk-model',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Chenzk assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(config.apiProtocol, 'openai.chat_completions');
+    expect(
+      flowChatEndpointType(assistant, providers),
+      'openai.chat_completions',
+    );
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'Summarize this paragraph.')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
 
   test('Grok Build and xAI API OAuth are selectable in Task Flow', () async {
     for (final connectorType in ['grok-cli', 'xai-oauth']) {

@@ -2421,14 +2421,11 @@ void main() {
       );
       // Deferred: registry/blackbox/index.ts:4,6,7,14-18 documents 404s for
       // both audited URLs and an account-gated enterprise host;
-      // registry/chenzk/index.ts:4,6-11,13-14
-      // sets defaultContextLength for runtime-discovered models, which this
-      // catalog cannot represent; registry/cloudflare-ai/index.ts:4,6,7,9-11,17
+      // registry/cloudflare-ai/index.ts:4,6,7,9-11,17
       // and executors/cloudflare-ai.ts:17-56 require an account ID in the URL
       // and a provider-specific executor.
       for (final id in [
         'blackbox',
-        'chenzk',
         'cloudflare-ai',
       ]) {
         expect(findLlmOpenAiProviderPreset(id), isNull);
@@ -4116,6 +4113,110 @@ void main() {
         expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
         expect(models.single.upstreamModelId, 'discovered-${requests.length}');
       }
+    },
+  );
+
+  test('M53 Chenzk preset matches the pinned provider contract', () {
+    final preset = findLlmOpenAiProviderPreset('chenzk')!;
+
+    expect(preset.displayName, 'Chenzk');
+    expect(preset.baseUrl, 'https://chenzk.top/v1/chat/completions');
+    expect(preset.modelsUrl, 'https://chenzk.top/v1/models');
+    expect(preset.authType, 'api_key');
+    expect(preset.authorizationHeader, 'Authorization');
+    expect(preset.authorizationScheme, 'Bearer');
+    expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(preset.fallbackModels, isEmpty);
+  });
+
+  test(
+    'M53 Chenzk account stores its key securely, discovers models, and routes',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'chenzk-discovered-model'},
+              ],
+            }),
+            200,
+            headers: const {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final credentials = _MemoryLlmCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final preset = findLlmOpenAiProviderPreset('chenzk')!;
+      final saved = await service.saveAccount(
+        LlmAccount(
+          id: 'm53-chenzk',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+          models: const [
+            LlmUpstreamModel(
+              id: 'm53-chenzk-override',
+              upstreamModelId: 'chenzk-discovered-model',
+              displayName: 'Chenzk discovered model',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
+            ),
+          ],
+        ),
+        secret: 'chenzk-secret',
+      );
+
+      expect(await service.readCredential('m53-chenzk'), 'chenzk-secret');
+      expect(saved.endpointConfig['providerPresetId'], 'chenzk');
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(saved.endpointConfig.toString(), isNot(contains('chenzk-secret')));
+
+      final discovered = await service.discoverModels(
+        saved,
+        refreshRemote: true,
+      );
+      expect(requests.single.uri.toString(), 'https://chenzk.top/v1/models');
+      expect(requests.single.headers['Authorization'], 'Bearer chenzk-secret');
+      expect(discovered.single.upstreamModelId, 'chenzk-discovered-model');
+
+      final restored = (await service.getAccount(saved.id))!;
+      expect(await service.readCredential(restored.id), 'chenzk-secret');
+      expect(
+        restored.models.single.config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+      final group = LlmModelGroup(
+        id: 'm53-chenzk-group',
+        displayName: 'Chenzk',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'm53-chenzk',
+            upstreamModelId: 'chenzk-discovered-model',
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(
+        configs.single.models.single.apiProtocolOverride,
+        'openai.chat_completions',
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains('openai-compatibility'),
+      );
     },
   );
 }
