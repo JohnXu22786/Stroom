@@ -14,13 +14,17 @@ const cases = {
   'async-exit-default': {
     marker: null,
     logMarker: 'MOBILE_LIFECYCLE_ASYNC_EXIT_DEFAULT',
+    forbiddenLogMarker: 'MOBILE_LIFECYCLE_ASYNC_EXIT_CONTINUED',
     accepted: false,
-    diagnostic: 'MOBILE_LIFECYCLE_ASYNC_EXIT_DEFAULT',
+    exitCode: 17,
+    diagnostic: 'lifecycle JS entry failed',
+    exitCodeDiagnostic: 'npm error code 17',
   },
   'async-failure': {
     marker: null,
+    logMarker: 'MOBILE_LIFECYCLE_ASYNC_FAILURE_STARTED',
     accepted: false,
-    diagnostic: 'MOBILE_LIFECYCLE_ASYNC_FAILURE',
+    diagnostic: 'MOBILE_LIFECYCLE_ASYNC_FAILURE_THROWN',
   },
   'sync-exit': {
     marker: null,
@@ -63,8 +67,10 @@ const bridge = path.join(__dirname, 'npm-lifecycle-bridge.cjs')
 const sucrase = path.join(__dirname, 'npm-fixture/node_modules/sucrase')
 const diagnostics = []
 const lifecycleOutput = []
+const stderrOutput = []
 const originalConsoleError = console.error
 const originalConsoleLog = console.log
+const originalStderrWrite = process.stderr.write
 console.error = (...args) => {
   diagnostics.push(args.map(String).join(' '))
   originalConsoleError(...args)
@@ -72,6 +78,10 @@ console.error = (...args) => {
 console.log = (...args) => {
   lifecycleOutput.push(args.map(String).join(' '))
   originalConsoleLog(...args)
+}
+process.stderr.write = function (chunk, ...args) {
+  stderrOutput.push(String(chunk))
+  return originalStderrWrite.call(this, chunk, ...args)
 }
 
 // Bootstrap the UTF-8 shim before reading the bridge or npm's modules.
@@ -99,7 +109,14 @@ process.on('exit', () => {
   const statusMatches = expected.accepted
     ? Number(process.exitCode || 0) === 0 && packageInstalled && markerMatches
     : Number(process.exitCode || 0) !== 0 &&
-      diagnostics.some((entry) => entry.indexOf(expected.diagnostic) === 0)
+      (expected.exitCode === undefined || Number(process.exitCode) === expected.exitCode) &&
+      (!expected.logMarker || markerMatches) &&
+      (!expected.forbiddenLogMarker || !lifecycleOutput.some((line) =>
+        line.indexOf(expected.forbiddenLogMarker) !== -1)) &&
+      (!expected.diagnostic || diagnostics.concat(stderrOutput).some((entry) =>
+        entry.indexOf(expected.diagnostic) !== -1)) &&
+      (!expected.exitCodeDiagnostic || stderrOutput.some((entry) =>
+        entry.indexOf(expected.exitCodeDiagnostic) !== -1))
   console.log(
     statusMatches
       ? 'MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS ' + caseName
@@ -107,5 +124,6 @@ process.on('exit', () => {
         ' exit=' + String(Number(process.exitCode || 0)),
   )
   console.log(statusMatches ? 'RESULT:PASS' : 'RESULT:FAIL')
+  process.stderr.write = originalStderrWrite
 })
 module.exports = require(npmCli)

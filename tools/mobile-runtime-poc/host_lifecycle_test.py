@@ -28,7 +28,7 @@ cases = {
     "async-javascript": (True, "MOBILE_LIFECYCLE_ASYNC_JS_PASS", "Async JS lifecycle ran in Node Mobile"),
     "async-exit": (True, "MOBILE_LIFECYCLE_ASYNC_EXIT_PASS", None),
     "async-exit-default": (False, "MOBILE_LIFECYCLE_ASYNC_EXIT_DEFAULT", None),
-    "async-failure": (False, "MOBILE_LIFECYCLE_ASYNC_FAILURE", None),
+    "async-failure": (False, "MOBILE_LIFECYCLE_ASYNC_FAILURE_STARTED", None),
     "sync-exit": (True, "MOBILE_LIFECYCLE_SYNC_EXIT_PASS", None),
     "async-timeout": (False, "npm lifecycle JavaScript did not become idle within", None),
     "inline-js": (True, "MOBILE_LIFECYCLE_INLINE_JS_PASS", "Inline JS lifecycle ran in Node Mobile"),
@@ -75,6 +75,16 @@ with tempfile.TemporaryDirectory(prefix="stroom-mobile-lifecycle-") as temp:
         should_pass = result.returncode == 0
         if should_pass != accepted or output_marker not in result.stdout:
             raise SystemExit("Unexpected result for fixture: " + case)
+        expected_rejection = {
+            "async-exit-default": ("npm error lifecycle JS entry failed", "npm error code 17"),
+            "async-failure": ("npm error MOBILE_LIFECYCLE_ASYNC_FAILURE_THROWN",),
+        }.get(case)
+        if expected_rejection is not None:
+            for diagnostic in expected_rejection:
+                if diagnostic not in result.stdout:
+                    raise SystemExit("Missing expected lifecycle rejection for fixture: " + case)
+        if case == "async-exit-default" and "MOBILE_LIFECYCLE_ASYNC_EXIT_CONTINUED" in result.stdout:
+            raise SystemExit("Async lifecycle continued after process.exit")
         if accepted:
             if file_marker is not None:
                 marker_file = target / "bridge-marker.txt"
