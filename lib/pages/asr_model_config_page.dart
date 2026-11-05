@@ -7,6 +7,7 @@ import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 /// ASR 模型配置编辑页面
 /// 包含基本设置和 ASR 专有参数（language、response_format 等）
@@ -543,7 +544,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                         (t) => DropdownMenuItem(
                                           value: t.value,
                                           child: Text(
-                                            t.label,
+                                            localizedParamTypeLabel(
+                                                AppLocalizations.of(context)!,
+                                                t),
                                             style: const TextStyle(
                                               fontSize: 13,
                                             ),
@@ -594,7 +597,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                 decoration: InputDecoration(
                                   labelText: AppLocalizations.of(context)!
                                       .modelParamDefaultValue,
-                                  hintText: param.paramType.defaultValueHint,
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -628,7 +633,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                 showJsonValueEditorDialog(
                                   context,
                                   initialValue: param.defaultValue,
-                                  hintText: param.paramType.defaultValueHint,
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   type: param.type,
                                   onSave: (result) {
                                     param.defaultValue = result;

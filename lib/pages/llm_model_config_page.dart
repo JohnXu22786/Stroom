@@ -8,6 +8,7 @@ import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
 part 'llm_model_config_page_reasoning.dart';

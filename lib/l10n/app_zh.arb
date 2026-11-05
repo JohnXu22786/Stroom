@@ -3241,5 +3241,37 @@
         "type": "String"
       }
     }
+  },
+  "paramTypeStringLabel": "字符串",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "数字",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "布尔",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "例如: cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "例如: 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "例如: true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "例如: ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
   }
 }

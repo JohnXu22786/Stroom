@@ -1192,7 +1192,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                         (t) => DropdownMenuItem(
                                           value: t.value,
                                           child: Text(
-                                            t.label,
+                                            localizedParamTypeLabel(
+                                                AppLocalizations.of(context)!,
+                                                t),
                                             style: const TextStyle(
                                               fontSize: 13,
                                             ),
@@ -1227,7 +1229,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           decoration: InputDecoration(
                             labelText: AppLocalizations.of(context)!
                                 .modelParamDefaultValue,
-                            hintText: param.paramType.defaultValueHint,
+                            hintText: localizedParamTypeDefaultValueHint(
+                                AppLocalizations.of(context)!, param.paramType),
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),

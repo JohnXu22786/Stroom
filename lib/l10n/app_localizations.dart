@@ -10314,6 +10314,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Original error: {error}'**
   String modelOriginalError(String error);
+
+  /// No description provided for @paramTypeStringLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'String'**
+  String get paramTypeStringLabel;
+
+  /// No description provided for @paramTypeNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Number'**
+  String get paramTypeNumberLabel;
+
+  /// No description provided for @paramTypeBooleanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Boolean'**
+  String get paramTypeBooleanLabel;
+
+  /// No description provided for @paramTypeJsonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON'**
+  String get paramTypeJsonLabel;
+
+  /// No description provided for @paramTypeStringHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. cheerful'**
+  String get paramTypeStringHint;
+
+  /// No description provided for @paramTypeNumberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 0.8'**
+  String get paramTypeNumberHint;
+
+  /// No description provided for @paramTypeBooleanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. true'**
+  String get paramTypeBooleanHint;
+
+  /// No description provided for @paramTypeJsonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. '**
+  String get paramTypeJsonHint;
 }
 
 class _AppLocalizationsDelegate

@@ -248,7 +248,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                                   (t) => DropdownMenuItem(
                                     value: t.value,
                                     child: Text(
-                                      t.label,
+                                      localizedParamTypeLabel(
+                                          AppLocalizations.of(context)!, t),
                                       style: const TextStyle(fontSize: 13),
                                     ),
                                   ),
@@ -310,7 +311,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             decoration: InputDecoration(
                               labelText: AppLocalizations.of(context)!
                                   .providerParamDefaultValueLabel,
-                              hintText: param.paramType.defaultValueHint,
+                              hintText: localizedParamTypeDefaultValueHint(
+                                  AppLocalizations.of(context)!,
+                                  param.paramType),
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
@@ -342,7 +345,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             showJsonValueEditorDialog(
                               context,
                               initialValue: param.defaultValue,
-                              hintText: param.paramType.defaultValueHint,
+                              hintText: localizedParamTypeDefaultValueHint(
+                                  AppLocalizations.of(context)!,
+                                  param.paramType),
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;

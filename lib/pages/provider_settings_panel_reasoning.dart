@@ -674,7 +674,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(t.label, style: const TextStyle(fontSize: 12)),
+                  child: Text(
+                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                      style: const TextStyle(fontSize: 12)),
                 ),
               )
               .toList(),

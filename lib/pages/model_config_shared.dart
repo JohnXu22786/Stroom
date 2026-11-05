@@ -5,6 +5,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tts_models.dart';
 import '../providers/tts_config.dart';
 
+/// Localized presentation for custom-parameter types; persisted values stay
+/// in [ParamType.value].
+String localizedParamTypeLabel(AppLocalizations l10n, ParamType type) {
+  return switch (type) {
+    ParamType.string => l10n.paramTypeStringLabel,
+    ParamType.number => l10n.paramTypeNumberLabel,
+    ParamType.boolean => l10n.paramTypeBooleanLabel,
+    ParamType.json => l10n.paramTypeJsonLabel,
+    _ => l10n.paramTypeStringLabel,
+  };
+}
+
+/// Localized examples for the custom-parameter value field.
+String localizedParamTypeDefaultValueHint(
+  AppLocalizations l10n,
+  ParamType type,
+) {
+  return switch (type) {
+    ParamType.string => l10n.paramTypeStringHint,
+    ParamType.number => l10n.paramTypeNumberHint,
+    ParamType.boolean => l10n.paramTypeBooleanHint,
+    ParamType.json => '${l10n.paramTypeJsonHint}{"key": "value"}',
+    _ => '',
+  };
+}
+
 // ============================================================================
 // ToggleButton — reusable toggle button with selected/unselected styling
 // ============================================================================

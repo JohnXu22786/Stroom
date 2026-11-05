@@ -59,7 +59,10 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
 }
 
 Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
-  final field = find.byType(TextField).at(2);
+  final field = find.byWidgetPredicate(
+    (widget) =>
+        widget is TextField && widget.decoration?.hintText == '可选，例如 4096',
+  );
   await tester.enterText(field, text);
   await tester.pump();
 }

@@ -5,6 +5,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../providers/provider_config.dart';
+import 'model_config_shared.dart';
 
 /// 简洁模型配置编辑页面（适用于 OCR、ASR 等不需要 TTS 特有字段的类型）
 /// 包含：模型名称（可选）、模型ID（必填）、自定义参数（可选）
@@ -282,7 +283,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                                       (t) => DropdownMenuItem(
                                         value: t.value,
                                         child: Text(
-                                          t.label,
+                                          localizedParamTypeLabel(
+                                              AppLocalizations.of(context)!, t),
                                           style: const TextStyle(fontSize: 13),
                                         ),
                                       ),
@@ -315,7 +317,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                         decoration: InputDecoration(
                           labelText: AppLocalizations.of(context)!
                               .modelParamDefaultValue,
-                          hintText: param.paramType.defaultValueHint,
+                          hintText: localizedParamTypeDefaultValueHint(
+                              AppLocalizations.of(context)!, param.paramType),
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),

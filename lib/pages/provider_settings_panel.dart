@@ -10,6 +10,7 @@ import '../services/asr_service.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 part 'provider_settings_panel_custom_params.dart';
 part 'provider_settings_panel_reasoning.dart';

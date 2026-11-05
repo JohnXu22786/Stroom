@@ -5782,6 +5782,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String modelOriginalError(String error) {
     return '原始错误：$error';
   }
+
+  @override
+  String get paramTypeStringLabel => '字符串';
+
+  @override
+  String get paramTypeNumberLabel => '数字';
+
+  @override
+  String get paramTypeBooleanLabel => '布尔';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => '例如: cheerful';
+
+  @override
+  String get paramTypeNumberHint => '例如: 0.8';
+
+  @override
+  String get paramTypeBooleanHint => '例如: true';
+
+  @override
+  String get paramTypeJsonHint => '例如: ';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -11561,4 +11585,28 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String modelOriginalError(String error) {
     return '原始错误：$error';
   }
+
+  @override
+  String get paramTypeStringLabel => '字符串';
+
+  @override
+  String get paramTypeNumberLabel => '数字';
+
+  @override
+  String get paramTypeBooleanLabel => '布尔';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => '例如: cheerful';
+
+  @override
+  String get paramTypeNumberHint => '例如: 0.8';
+
+  @override
+  String get paramTypeBooleanHint => '例如: true';
+
+  @override
+  String get paramTypeJsonHint => '例如: ';
 }

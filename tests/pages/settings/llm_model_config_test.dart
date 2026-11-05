@@ -471,12 +471,12 @@ void main() {
 
       // The effort card should show helper text since toggle is not complete
       await tester.scrollUntilVisible(
-        find.text('请先完整填写推理开关，其他推理参数才能生效。'),
+        find.text('请先完整填写推理开关，再配置推理力度。'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-      expect(find.text('请先完整填写推理开关，其他推理参数才能生效。'), findsOneWidget);
+      expect(find.text('请先完整填写推理开关，再配置推理力度。'), findsOneWidget);
       // The effort card header "推理力度" should use blue (primary) color, not gray
       final effortHeader = find.text('推理力度');
       expect(effortHeader, findsOneWidget);

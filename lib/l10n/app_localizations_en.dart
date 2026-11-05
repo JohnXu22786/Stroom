@@ -6063,6 +6063,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String modelOriginalError(String error) {
     return 'Original error: $error';
   }
+
+  @override
+  String get paramTypeStringLabel => 'String';
+
+  @override
+  String get paramTypeNumberLabel => 'Number';
+
+  @override
+  String get paramTypeBooleanLabel => 'Boolean';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => 'e.g. cheerful';
+
+  @override
+  String get paramTypeNumberHint => 'e.g. 0.8';
+
+  @override
+  String get paramTypeBooleanHint => 'e.g. true';
+
+  @override
+  String get paramTypeJsonHint => 'e.g. ';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -12123,4 +12147,28 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String modelOriginalError(String error) {
     return 'Original error: $error';
   }
+
+  @override
+  String get paramTypeStringLabel => 'String';
+
+  @override
+  String get paramTypeNumberLabel => 'Number';
+
+  @override
+  String get paramTypeBooleanLabel => 'Boolean';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => 'e.g. cheerful';
+
+  @override
+  String get paramTypeNumberHint => 'e.g. 0.8';
+
+  @override
+  String get paramTypeBooleanHint => 'e.g. true';
+
+  @override
+  String get paramTypeJsonHint => 'e.g. ';
 }

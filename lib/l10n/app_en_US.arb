@@ -3241,5 +3241,37 @@
         "type": "String"
       }
     }
+  },
+  "paramTypeStringLabel": "String",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "Number",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "Boolean",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "e.g. cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "e.g. 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "e.g. true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "e.g. ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
   }
 }

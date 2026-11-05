@@ -416,7 +416,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                                   (t) => DropdownMenuItem(
                                     value: t.value,
                                     child: Text(
-                                      t.label,
+                                      localizedParamTypeLabel(
+                                          AppLocalizations.of(context)!, t),
                                       style: const TextStyle(fontSize: 13),
                                     ),
                                   ),
@@ -492,7 +493,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             decoration: InputDecoration(
                               labelText: AppLocalizations.of(context)!
                                   .modelParamDefaultValue,
-                              hintText: param.paramType.defaultValueHint,
+                              hintText: localizedParamTypeDefaultValueHint(
+                                  AppLocalizations.of(context)!,
+                                  param.paramType),
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
@@ -525,7 +528,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             showJsonValueEditorDialog(
                               context,
                               initialValue: param.defaultValue,
-                              hintText: param.paramType.defaultValueHint,
+                              hintText: localizedParamTypeDefaultValueHint(
+                                  AppLocalizations.of(context)!,
+                                  param.paramType),
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;
