@@ -7,12 +7,16 @@
 //   tests/model_config_reasoning_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 
 Widget _buildSimpleTestApp({ModelConfig? initialModel}) {
   return MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: SimpleModelConfigPage(model: initialModel),
   );
 }
@@ -34,6 +38,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -85,6 +92,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -120,6 +130,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -146,6 +159,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -217,6 +233,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(model: model),
         ),
       );
@@ -259,6 +278,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(model: model),
         ),
       );
@@ -294,6 +316,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(model: model),
         ),
       );
@@ -349,6 +374,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(model: model),
         ),
       );
@@ -371,7 +399,10 @@ void main() {
 
     testWidgets('save validation still works correctly', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -396,7 +427,10 @@ void main() {
     testWidgets('effort card shows disabled state until toggle is complete',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -436,7 +470,10 @@ void main() {
         '"添加推理力度" button always visible, becomes enabled after toggle added',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -472,7 +509,10 @@ void main() {
     testWidgets('after adding effort via "添加推理力度", button hides and card shows',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -512,7 +552,10 @@ void main() {
         'effort card cannot be deleted; a switch replaces the delete button',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -565,7 +608,10 @@ void main() {
         'toggle card cannot be deleted; a switch replaces the delete button',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -606,7 +652,10 @@ void main() {
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -653,7 +702,10 @@ void main() {
     testWidgets('"添加推理参数" button is enabled when toggle exists',
         (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: LlmModelConfigPage(),
         ),
       );
@@ -732,6 +784,9 @@ void main() {
         (tester) async {
       ModelConfig? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -780,6 +835,9 @@ void main() {
         (tester) async {
       ModelConfig? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -820,6 +878,9 @@ void main() {
     testWidgets('supports custom params with types', (tester) async {
       ModelConfig? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -911,6 +972,9 @@ void main() {
       );
 
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {

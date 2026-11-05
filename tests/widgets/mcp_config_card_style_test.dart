@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/mcp.dart';
+import 'package:stroom/pages/provider_config_tool_dialogs.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -97,6 +99,9 @@ void main() {
           }),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
@@ -416,6 +421,7 @@ void main() {
     await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
+    expect(find.byType(HttpToolConfigDialog), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();

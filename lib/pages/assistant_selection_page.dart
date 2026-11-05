@@ -175,8 +175,8 @@ class AssistantSelectionPage extends ConsumerWidget {
               onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
               autofocusName: true,
               nameHint: AppLocalizations.of(context)!.assistantNewNameHint,
-              descriptionHint: AppLocalizations.of(context)!
-                  .assistantNewDescriptionHint,
+              descriptionHint:
+                  AppLocalizations.of(context)!.assistantNewDescriptionHint,
             ),
           ),
           actions: [
@@ -191,9 +191,7 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref
-                    .read(assistantProvider.notifier)
-                    .createAssistant(
+                ref.read(assistantProvider.notifier).createAssistant(
                       name: name,
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,

@@ -3,6 +3,7 @@
 // the user can select one or type freely, and the popup never blocks input.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -17,7 +18,11 @@ Future<void> pumpPage(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(MaterialApp(home: LlmModelConfigPage(model: model)));
+  await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: LlmModelConfigPage(model: model)));
   await tester.pump();
 }
 
@@ -242,7 +247,11 @@ void main() {
       (tester) async {
     // Default 800x600 test surface — the field sits low enough that 280px
     // of popup would not fit below it.
-    await tester.pumpWidget(const MaterialApp(home: LlmModelConfigPage()));
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: LlmModelConfigPage()));
     await tester.pump();
 
     await tester.tap(contextField);
@@ -286,7 +295,11 @@ void main() {
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const MaterialApp(home: LlmModelConfigPage()));
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: LlmModelConfigPage()));
     await tester.pump();
 
     await tester.tap(contextField);

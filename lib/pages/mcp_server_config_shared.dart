@@ -61,7 +61,7 @@ class ReadOnlyField extends StatelessWidget {
                 Text(
                   value.isNotEmpty
                       ? value
-                      : AppLocalizations.of(context)!.providerNotConfigured,
+                      : AppLocalizations.of(context)!.providerValueNotSet,
                   style: TextStyle(
                     fontSize: 15,
                     color: value.isNotEmpty

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mcp_server_config_shared.dart' as mcp_shared;
+import 'package:stroom/pages/mcp_server_config_page.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
@@ -145,6 +146,30 @@ Future<void> _openCustomMcpConfig(
 }
 
 void main() {
+  testWidgets('MCP server dialog uses localized creation labels', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(SettingsPage));
+    final strings = AppLocalizations.of(context)!;
+    final dialog = showMcpServerConfigDialog(
+      context: context,
+      entryId: 'missing-entry',
+      configIndex: -1,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(strings.mcpCreateServerTitle), findsOneWidget);
+    expect(find.text(strings.mcpServerName), findsOneWidget);
+
+    Navigator.of(context, rootNavigator: true).pop();
+    await tester.pumpAndSettle();
+    await dialog;
+  });
+
   group('SettingsPage - MCP section', () {
     setUp(() {
       registerBuiltinProviderTypes();

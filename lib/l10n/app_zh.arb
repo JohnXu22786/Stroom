@@ -2265,7 +2265,7 @@
   "assistantCancel": "取消",
   "assistantSave": "保存",
   "assistantParamOverrideHelp": "启用时助手参数会覆盖模型参数；关闭时使用模型参数。",
-  "assistantTemperature": "温度",
+  "assistantTemperature": "温度 (Temperature)",
   "assistantMaxTokens": "最大 Token 数",
   "assistantMaxToolCalls": "工具调用上限",
   "assistantRounds": "{count} 轮",
@@ -2648,7 +2648,7 @@
     }
   },
   "ttsEditTrimTitle": "编辑自定义裁切",
-  "ttsVoicesCount": "音色（{count}）",
+  "ttsVoicesCount": "音色 ({count})",
   "@ttsVoicesCount": {
     "placeholders": {
       "count": {

@@ -206,9 +206,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     // 注意从**配置**推导（而非 adapter 的占位列表）：总开关关闭时 adapter
     // 已清空占位工具；内置搜索工具名则由常量保留。
     final validMcpToolNames = <String>{};
-    final mcpEntry = entriesState.entries
-        .where((e) => e.type == 'mcp')
-        .firstOrNull;
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     validMcpToolNames.addAll(
       mcpPlaceholderToolNamesByConfigId(
         mcpEntry?.configs ?? const <ProviderConfigItem>[],
@@ -289,9 +288,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 } else {
                   // 把完整模型（含绝对身份）传给对话框，保存时同时
                   // 记录显示名与模型ID+供应商名。
-                  final model = models
-                      .where((m) => m.displayName == value)
-                      .firstOrNull;
+                  final model =
+                      models.where((m) => m.displayName == value).firstOrNull;
                   widget.onDefaultModelChanged(model);
                 }
               },
@@ -451,8 +449,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           _SectionCard(
             icon: Icons.content_cut_outlined,
             title: AppLocalizations.of(context)!.assistantTruncateToolOutput,
-            subtitle: AppLocalizations.of(context)!
-                .assistantTruncateToolOutputHelp,
+            subtitle:
+                AppLocalizations.of(context)!.assistantTruncateToolOutputHelp,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -490,32 +488,33 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         // 明确"字符"单位：避免用户按 token/字节理解。
                         helperText: _lengthError == null
                             ? AppLocalizations.of(context)!
-                                  .assistantCharactersNotTokens
+                                .assistantCharactersNotTokens
                             : null,
                         errorText: _lengthError,
                         hintText: AppLocalizations.of(context)!
                             .assistantDefaultCharacterCount(
-                              kToolOutputMaxChars.toString(),
-                            ),
+                          kToolOutputMaxChars.toString(),
+                        ),
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
                       onChanged: (v) {
                         final n = int.tryParse(v);
-                        final inRange =
-                            n != null &&
+                        final inRange = n != null &&
                             n >= ChatService.kToolOutputMaxCharsMin &&
                             n <= ChatService.kToolOutputMaxCharsMax;
                         setState(() {
                           // 长度 < 3 的输入（如 "1"、"12"）可能是合法值的
                           // 中间态（合法值至少 3 位，如 "120"），不报错；
                           // 完整输入越界时就地提示有效范围。
-                          _lengthError =
-                              (v.isNotEmpty && !inRange && v.length >= 3)
+                          _lengthError = (v.isNotEmpty &&
+                                  !inRange &&
+                                  v.length >= 3)
                               ? AppLocalizations.of(
                                   context,
-                                )!.assistantCharacterRange(
+                                )!
+                                  .assistantCharacterRange(
                                   ChatService.kToolOutputMaxCharsMin.toString(),
                                   ChatService.kToolOutputMaxCharsMax.toString(),
                                 )
@@ -572,8 +571,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   const SizedBox(height: 8),
                   _SummaryRow(
                     label: AppLocalizations.of(context)!.ocrModelLabel,
-                    value:
-                        effectiveModelName ??
+                    value: effectiveModelName ??
                         AppLocalizations.of(context)!.assistantNoDefault,
                   ),
                   const SizedBox(height: 6),
@@ -582,18 +580,18 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     value: tools.isEmpty
                         ? AppLocalizations.of(context)!.chatNoToolsAvailable
                         : isToolsConfigured
-                        // 只统计当前仍存在的工具，避免已失效的工具名
-                        // 使摘要数量与上方开关不一致。
-                        ? AppLocalizations.of(context)!
-                              .assistantEnabledToolCount(
+                            // 只统计当前仍存在的工具，避免已失效的工具名
+                            // 使摘要数量与上方开关不一致。
+                            ? AppLocalizations.of(context)!
+                                .assistantEnabledToolCount(
                                 effectiveToolNames
                                     .intersection(allToolNames)
                                     .length
                                     .toString(),
                                 tools.length.toString(),
                               )
-                        : AppLocalizations.of(context)!
-                              .assistantAllToolsAutoEnabled,
+                            : AppLocalizations.of(context)!
+                                .assistantAllToolsAutoEnabled,
                   ),
                 ],
               ),

@@ -99,7 +99,9 @@ Widget _buildEditParamsTab({
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.tertiaryContainer
+              color: Theme.of(context)
+                  .colorScheme
+                  .tertiaryContainer
                   .withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -287,8 +289,8 @@ Widget _buildEditParamsTab({
             child: TextField(
               decoration: InputDecoration(
                 labelText: AppLocalizations.of(context)!.assistantSeedValue,
-                hintText: AppLocalizations.of(context)!
-                    .assistantIntegerSeedHint,
+                hintText:
+                    AppLocalizations.of(context)!.assistantIntegerSeedHint,
                 border: OutlineInputBorder(),
                 isDense: true,
               ),

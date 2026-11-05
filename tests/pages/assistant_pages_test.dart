@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
+import 'package:stroom/pages/assistant/assistant_defaults_tab.dart';
+import 'package:stroom/pages/assistant/assistant_shared.dart'
+    as assistant_shared;
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
@@ -394,7 +397,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final cardRect = tester.getRect(find.byType(AssistantCard));
+      final cardRect =
+          tester.getRect(find.byType(assistant_shared.AssistantCard));
       final avatarRect = tester.getRect(find.byType(AssistantAvatar));
       expect(
         (avatarRect.center.dx - cardRect.center.dx).abs(),
@@ -936,6 +940,7 @@ void main() {
       // Switch to 默认设置 tab
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
+      expect(find.byType(AssistantDefaultsTab), findsOneWidget);
 
       // Model section + empty state (no LLM config in test env) — the
       // not-set option is still shown and is the effective selection

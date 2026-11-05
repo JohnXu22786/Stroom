@@ -4722,7 +4722,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get assistantParamOverrideHelp => '启用时助手参数会覆盖模型参数；关闭时使用模型参数。';
 
   @override
-  String get assistantTemperature => '温度';
+  String get assistantTemperature => '温度 (Temperature)';
 
   @override
   String get assistantMaxTokens => '最大 Token 数';
@@ -5348,7 +5348,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String ttsVoicesCount(String count) {
-    return '音色（$count）';
+    return '音色 ($count)';
   }
 
   @override
@@ -10498,7 +10498,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get assistantParamOverrideHelp => '启用时助手参数会覆盖模型参数；关闭时使用模型参数。';
 
   @override
-  String get assistantTemperature => '温度';
+  String get assistantTemperature => '温度 (Temperature)';
 
   @override
   String get assistantMaxTokens => '最大 Token 数';
@@ -11124,7 +11124,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String ttsVoicesCount(String count) {
-    return '音色（$count）';
+    return '音色 ($count)';
   }
 
   @override

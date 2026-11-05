@@ -259,8 +259,8 @@ class TrimSection extends ConsumerWidget {
                             await onDeletePreset(preset);
                           }
                         },
-                        tooltip: AppLocalizations.of(context)!
-                            .fileManagerDelete,
+                        tooltip:
+                            AppLocalizations.of(context)!.fileManagerDelete,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
                           minWidth: 32,

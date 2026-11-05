@@ -124,6 +124,12 @@ jobs:
               lib/utils/file_picker_utils.dart)
                 test_f="tests/utils/file_picker_utils_test.dart"
                 ;;
+              lib/pages/model_config_shared.dart)
+                test_f="tests/pages/settings/provider_config_detail_page_test.dart"
+                ;;
+              lib/pages/provider_config_tool_dialogs.dart)
+                test_f="tests/widgets/mcp_config_card_style_test.dart"
+                ;;
               lib/widgets/version_info_dialog.dart)
                 test_f="tests/pages/settings/settings_page_test.dart"
                 ;;

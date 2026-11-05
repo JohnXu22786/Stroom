@@ -145,8 +145,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-              ? widget.model!.name
-              : AppLocalizations.of(context)!.modelEditTitle)
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
 
     return Scaffold(
@@ -231,8 +231,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
             ...List.generate(_customParams.length, (i) {
               final param = _customParams[i];
               final name = param.paramName.trim();
-              final isDuplicate =
-                  name.isNotEmpty &&
+              final isDuplicate = name.isNotEmpty &&
                   _customParams.indexWhere((p) => p.paramName.trim() == name) !=
                       i;
               return Card(
@@ -253,7 +252,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                                 isDense: true,
                                 errorText: isDuplicate
                                     ? AppLocalizations.of(context)!
-                                          .modelParamExists
+                                        .modelParamExists
                                     : null,
                                 errorStyle: const TextStyle(fontSize: 11),
                               ),
@@ -305,8 +304,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                               size: 20,
                             ),
                             onPressed: () => _removeCustomParam(i),
-                            tooltip: AppLocalizations.of(context)!
-                                .modelParamDelete,
+                            tooltip:
+                                AppLocalizations.of(context)!.modelParamDelete,
                           ),
                         ],
                       ),

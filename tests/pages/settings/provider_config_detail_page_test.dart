@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/pages/provider_config_detail_page.dart';
@@ -10,6 +11,7 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/pages/ocr_model_config_page.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/model_config_page.dart';
+import 'package:stroom/pages/model_config_shared.dart';
 
 /// Helper to create a test ProviderEntry with one config
 ProviderEntry _createTestEntry({
@@ -87,6 +89,9 @@ extension on WidgetTester {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: ProviderConfigDetailPage(
             entryId: 'test_entry_id',
             configIndex: configIndex,
@@ -297,6 +302,7 @@ void main() {
 
       // Should navigate to ModelConfigPage
       expect(find.byType(ModelConfigPage), findsOneWidget);
+      expect(find.byType(TrimSection), findsOneWidget);
       expect(find.byType(SimpleModelConfigPage), findsNothing);
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });
@@ -379,6 +385,9 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: const ProviderConfigDetailPage(
               entryId: 'test_entry_id',
               configIndex: 0,
