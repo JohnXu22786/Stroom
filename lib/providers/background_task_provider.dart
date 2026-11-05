@@ -1583,16 +1583,26 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
 
 String _legacyOcrOpenMaskPrefixPattern(String prefix) {
   final escapedPrefix = RegExp.escape(prefix);
-  if (!_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
-      !RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
+  if (!_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix)) {
     return escapedPrefix;
   }
 
-  final delimiter = prefix.substring(prefix.length - 1);
-  final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
-  return '(?:$escapedPrefix|${RegExp.escape(prefixWithoutDelimiter)}'
+  final variants = <String>[escapedPrefix];
+  if (RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prefix)) {
+    variants.add(
+      prefix.split('').map(RegExp.escape).join(r'(?:[\r\n]+[ \t]*)?'),
+    );
+  }
+  if (RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
+    final delimiter = prefix.substring(prefix.length - 1);
+    final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
+    variants.add(
+      '${RegExp.escape(prefixWithoutDelimiter)}'
       r'[\r\n]+[ \t]*'
-      '${RegExp.escape(delimiter)})';
+      '${RegExp.escape(delimiter)}',
+    );
+  }
+  return '(?:${variants.join('|')})';
 }
 
 String _legacyOcrNormalizeNulsWithinMaskedPrefixes(
