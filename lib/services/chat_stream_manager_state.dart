@@ -108,12 +108,15 @@ class _ConversationStreamState {
   }
 
   final StringBuffer _reasoningBuffer = StringBuffer();
-  String get reasoningBuffer => _reasoningBuffer.toString();
+  String? _reasoningBufferSnapshot;
+  String get _reasoningSnapshot =>
+      _reasoningBufferSnapshot ??= _reasoningBuffer.toString();
+  String get reasoningBuffer => _reasoningSnapshot;
   List<String> _reasoningSections = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
         ..._reasoningSections,
-        if (_reasoningSectionActive) _reasoningBuffer.toString(),
+        if (_reasoningSectionActive) _reasoningSnapshot,
       ];
 
   void appendReasoning(String text) {
@@ -123,12 +126,14 @@ class _ConversationStreamState {
       _reasoningSections.removeLast();
     }
     _reasoningBuffer.write(text);
+    _reasoningBufferSnapshot = null;
     _reasoningSectionActive = true;
   }
 
   void endReasoningSection() {
     _reasoningSections = reasoningSections..add('');
     _reasoningBuffer.clear();
+    _reasoningBufferSnapshot = null;
     _reasoningSectionActive = false;
   }
 
