@@ -7156,6 +7156,53 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a credential with a newline inside its plain open mask prefix',
+      () {
+        const apiKey = 'myprojectQmXvPs87';
+        const instruction =
+            'Please use mypro\njectQmXvPs87 to process this image.';
+        const sanitizedInstruction =
+            'Please use [redacted] to process this image.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-internal-newline-open-mask-prefix-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer myproject…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, sanitizedInstruction);
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains('QmXvPs87')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a numeric opaque prefix echo split after its prefix',
       () {
         const apiKey = 'Qwrty12345';
