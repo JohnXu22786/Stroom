@@ -550,6 +550,7 @@ String? unclosedFenceTail(String text) {
 typedef _MermaidFenceInfo = ({
   String? tail,
   String? tailSource,
+  String? normalizedTailSource,
   bool isCached,
   bool hasUnfencedIndentedCode,
   int? openFenceIndex,
@@ -791,6 +792,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
     return (
       tail: null,
       tailSource: null,
+      normalizedTailSource: null,
       isCached: !includeTail,
       hasUnfencedIndentedCode: hasUnfencedIndentedCode,
       openFenceIndex: null,
@@ -819,6 +821,9 @@ _MermaidFenceInfo _unclosedFenceInfo(
   return (
     tail: tail,
     tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
+    normalizedTailSource: !includeTail && hasUnfencedIndentedCode
+        ? normalized.substring(tailStart)
+        : null,
     isCached: !includeTail,
     hasUnfencedIndentedCode: hasUnfencedIndentedCode,
     openFenceIndex: openFenceIndex,
@@ -994,6 +999,9 @@ class StreamingFenceInfoCache {
     final updated = (
       tail: null,
       tailSource: cached.hasUnfencedIndentedCode ? text : null,
+      normalizedTailSource: cached.hasUnfencedIndentedCode
+          ? '${cached.normalizedTailSource ?? ''}$normalizedAppended'
+          : null,
       isCached: true,
       hasUnfencedIndentedCode: cached.hasUnfencedIndentedCode,
       openFenceIndex: cached.openFenceIndex,
@@ -1176,12 +1184,7 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
-      var tail = fenceInfo.tailSourceStart >= tailSource.length
-          ? ''
-          : tailSource
-              .substring(fenceInfo.tailSourceStart)
-              .replaceAll('\r\n', '\n')
-              .replaceAll('\r', '\n');
+      var tail = fenceInfo.normalizedTailSource ?? '';
       if (mermaidFenceIndex != null &&
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex) {
         tail = _stripFenceContainerPrefix(
