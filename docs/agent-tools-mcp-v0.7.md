@@ -1,7 +1,7 @@
 # In-App Agent Tools for v0.7
 
-**Status:** v0.7 implementation plan; integrations are being delivered in separate changes
-**Baseline reviewed:** `v0.7` at `0d57bfac1ad28e48eae0109e64f16e3e86c33641` (2026-11-05)
+**Status:** v0.7 implementation record; delivery status is tracked per PR
+**Baseline reviewed:** `v0.7` at `6f8834c50c6d51b1a89dc44093b408756465faea` (2026-11-05)
 
 ## Goal
 
@@ -15,15 +15,13 @@ Reuse the services and data models that already implement these features. The to
 
 Stroom currently acts as an **MCP client**. `McpClient` discovers and calls tools on configured external servers; the chat adapter publishes those tools to the model when enabled. The implementation handles remote Streamable HTTP and legacy SSE, plus stdio on desktop platforms. See `lib/models/mcp.dart`, `lib/services/mcp_client.dart`, and `lib/services/chat_adapter_mcp.dart`.
 
-Stroom does not currently host an MCP server. The in-app chat also has a separate local tool registry: `ChatService.registerTool` is used for built-in tools such as web search and `todowrite`, and for direct HTTP search tools. See `lib/services/chat_service_tools.dart` and `lib/services/chat_adapter_http_tools.dart`.
-
-The existing `todowrite` tool is a useful starting point, but its list is held in a static in-memory collection, shared by the running app, and writes replace the whole list. It is not persisted per conversation. See `lib/services/todo_tool_service.dart`.
+Stroom does not currently host an MCP server. The in-app chat also has a separate local tool registry: `ChatService.registerTool` is used for built-in tools such as web search and first-party tools, and for direct HTTP search tools. See `lib/services/chat_service_tools.dart` and `lib/services/chat_adapter_http_tools.dart`.
 
 ### Delivery status
 
-- Text Storage tools (`stroom_space_list`, `stroom_space_search`, `stroom_space_read`, and `stroom_space_write`) are implemented in draft PR #1395; check that PR for the current CI status. They are not considered delivered until that PR is merged.
-- The current `todowrite` remains an in-memory, app-wide list. Conversation-scoped persistence is still required.
-- OCR, ASR, TTS, and saved task-flow tools are not yet connected to the in-app assistant. Their existing user-facing services and flows remain the source of truth for later integrations.
+- PR #1436 is merged to `v0.7` as `1ab1fc82a992b2ab79d15641dbe9f71dfb6fb65a`. It adds persisted, conversation-scoped `todowrite`; `stroom_media_list`, `stroom_ocr`, and `stroom_asr`; `stroom_tts`; and `stroom_taskflow_list`, `stroom_taskflow_run`, `stroom_taskflow_status`, and `stroom_taskflow_control`.
+- Text Storage tools (`stroom_space_list`, `stroom_space_search`, `stroom_space_read`, and `stroom_space_write`) were merged in PR #1395 as `6f8834c50c6d51b1a89dc44093b408756465faea`. CI run [42086514364](https://github.com/JohnXu22786/Stroom/actions/runs/42086514364) passed all checks, including the six platform message-view smoke tests and Text Storage service tests.
+- Stroom remains an MCP client for configured external servers. These in-app tools do not add a local MCP server endpoint or promise arbitrary npm package compatibility.
 
 ### Reusable application capabilities
 
@@ -37,26 +35,23 @@ Relevant sources include `lib/services/ocr_service.dart`, `lib/services/asr_serv
 
 ## v0.7 implementation plan
 
-### One local capability registry
+### Local capability registry
 
-Add a first-party tool registry with validated JSON Schema definitions and handlers that call existing Stroom services directly. Connect it to the current chat tool-call loop alongside the existing built-ins.
+First-party tools use validated JSON Schema definitions and handlers that call existing Stroom services directly through the current chat tool-call loop alongside other built-ins.
 
 Do not route an in-app tool call out through Stroom's remote MCP client and back over a loopback server. That adds a transport hop without adding value, complicates mobile and web support, and can make local data handling less reliable. Keep the current MCP client for user-configured external servers.
 
-The first-party tool definitions should use stable, namespaced names such as `stroom_ocr` and be easy to wrap in a true MCP server adapter later. That adapter is a separate capability: it would let *external MCP clients* call Stroom. It is not implied by making tools available to the assistant inside Stroom.
+The first-party tool definitions use stable names such as `stroom_ocr` and can be wrapped in a true MCP server adapter later. That adapter is a separate capability: it would let *external MCP clients* call Stroom. It is not implied by making tools available to the assistant inside Stroom.
 
-### Proposed first-party tools
+### First-party tools
 
-| Group | Proposed tools | v0.7 behavior |
+| Group | Tool names | Delivered behavior |
 |---|---|---|
-| Todo | Existing `todowrite`, revised | Keep the familiar tool concept, but make state conversation-scoped and persisted. Support read and validated item updates without allowing one conversation to overwrite another's list. Preserve existing status and priority fields. |
-| OCR | `stroom_ocr` | Recognize one or more image attachments selected for the current conversation. Return extracted text; optionally save the result to Text Storage when requested. |
-| ASR | `stroom_asr` | Transcribe audio attached to the current conversation or explicitly selected from Stroom's audio library. Reuse configured ASR model and supported upload settings. Return text and available timestamps. |
-| TTS | `stroom_tts` | Synthesize user-requested text with an already configured TTS provider. Save output through the existing audio storage path and return an app file record ID and playback metadata, not raw audio bytes. |
-| Task flows | `stroom_task_flow_list`, `stroom_task_flow_run`, `stroom_task_flow_status`, `stroom_task_flow_control` | List saved flows, run a selected flow with an explicit input, inspect execution progress, and pause, resume, or cancel an execution. Keep flow creation and editing in the existing builder UI for the first release. |
-| Text Storage | `stroom_space_list`, `stroom_space_search`, `stroom_space_read`, `stroom_space_write` | List, search, read, and write user-visible text documents in Stroom Text Storage (`txt`, `md`, `mmd`) using manifest record IDs and app-relative folders. |
-
-Tool names are proposals; verify provider naming limits and resolve collisions with external MCP tools during implementation.
+| Todo | `todowrite` | Read or replace a persisted list scoped to the current conversation. |
+| Media and recognition | `stroom_media_list`, `stroom_ocr`, `stroom_asr` | List bounded image/audio metadata from Stroom's library and recognize an image or transcribe audio from a current-conversation attachment or an explicitly selected library record. |
+| Speech | `stroom_tts` | Synthesize text with a configured TTS provider and save the result through the existing audio library. |
+| Task flows | `stroom_taskflow_list`, `stroom_taskflow_run`, `stroom_taskflow_status`, `stroom_taskflow_control` | List saved flows, run supported text or attachment inputs, inspect execution status, and pause, resume, or cancel execution. Keep flow creation and editing in the existing builder UI. |
+| Text Storage | `stroom_space_list`, `stroom_space_search`, `stroom_space_read`, `stroom_space_write` | List, search, read, create, and explicitly replace user-visible `txt`, `md`, and `mmd` documents using Stroom manifest IDs and app-relative folders. The first-party tool set does not include deletion. |
 
 ### Tool inputs and results
 
@@ -80,27 +75,26 @@ The existing web file store uses IndexedDB and does not provide a general raw-fi
 ## Availability and permissions
 
 - Expose only tools whose required provider or capability is configured and enabled.
-- Add a per-conversation tool control surface for first-party tool groups, separate from the external MCP server groups.
+- Per-conversation controls enable first-party tool groups separately from external MCP server groups.
 - Treat reading as available within the selected Stroom area. Writing creates a new document by default; replacing an existing document requires an explicit user request and a matching file ID.
 - Running a task flow can start background work and may create or modify files. The assistant should identify the selected flow and its input in the tool call; it must not silently create or edit flow definitions.
 - Keep tool execution scoped to the conversation that invoked it. Tool results must not reveal another conversation's attachments or TODO state.
 
 ## Implementation order
 
-1. Keep the existing local tool registry and external MCP routing intact; add only the common validation, result handling, and per-conversation settings needed by first-party tools.
-2. Complete the Text Storage tools through the current manifest APIs (in progress in PR #1395), then persist TODO state per conversation.
-3. Add OCR, ASR, and TTS handlers that delegate to their existing services and return Stroom file references where applicable.
-4. Add saved task-flow list/run/status/control tools using the existing execution service and background task tracking.
-5. Verify behavior on web, Android, iOS, Linux, Windows, and macOS. The web path must use manifests and IndexedDB; native paths must stay inside app-managed storage.
+1. Keep the existing local tool registry and external MCP routing intact; share the current validation, result handling, and per-conversation settings with first-party tools.
+2. Persist TODO state per conversation and add OCR, ASR, TTS, media-list, and task-flow tools through the existing services (merged in PR #1436).
+3. Complete Text Storage tools through the current manifest APIs (merged in PR #1395).
+4. Verify the tools on Web, Android, iOS, Linux, Windows, and macOS. The Web path uses manifests and IndexedDB; native paths stay inside app-managed storage.
 
 ## v0.7 acceptance criteria
 
 - The in-app assistant can discover and call enabled first-party tools without configuring an external MCP server.
 - Existing external MCP servers and HTTP tools continue to work and name collisions are handled predictably.
-- TODO state is persisted and isolated per conversation.
-- OCR and ASR operate only on current-conversation attachments or explicitly selected Stroom files; TTS output appears in the existing audio library.
-- Saved task flows can be run and their progress inspected or controlled without bypassing the existing scheduler and persistence.
-- Text Storage tools can safely list, search, read, create, and explicitly replace supported text formats on all platforms.
+- TODO state is persisted and isolated per conversation (merged in PR #1436).
+- OCR and ASR operate only on current-conversation attachments or explicitly selected Stroom files; TTS output appears in the existing audio library (merged in PR #1436).
+- Saved task flows can be run and their progress inspected or controlled without bypassing the existing scheduler and persistence (merged in PR #1436).
+- Text Storage tools can safely list, search, read, create, and explicitly replace supported text formats on all platforms (merged in PR #1395).
 - No tool can access arbitrary OS paths, provider secrets, or another conversation's private data.
 
 ## Deferred
@@ -108,4 +102,5 @@ The existing web file store uses IndexedDB and does not provide a general raw-fi
 - A standalone MCP server endpoint for other applications to connect to Stroom.
 - Arbitrary device filesystem access, shell execution, hidden settings access, and tool-driven flow editing.
 - Additional app capabilities (for example, image/video generation or browser control) until their user-facing scope and permission model are defined.
+- Running arbitrary user-installed npm MCP packages on mobile is a separate runtime feasibility effort; this first-party tool plan does not claim that capability.
 
