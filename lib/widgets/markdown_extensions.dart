@@ -547,10 +547,104 @@ String? unclosedFenceTail(String text) {
   return _unclosedFenceInfo(text).tail;
 }
 
+class _NormalizedContainerTailSource {
+  _NormalizedContainerTailSource(
+    String initialText,
+    this.quoteDepth,
+    this.listIndent,
+    this.innerQuoteDepth,
+    this.fenceIndent,
+  ) {
+    append(initialText);
+  }
+
+  final int quoteDepth;
+  final int listIndent;
+  final int innerQuoteDepth;
+  final int fenceIndent;
+  final List<String> _completeLines = [];
+  final List<String> _pendingLine = [];
+
+  Iterable<String> get segments sync* {
+    yield* _completeLines;
+    yield* _pendingSegments();
+  }
+
+  void append(String text) {
+    var start = 0;
+    while (start < text.length) {
+      final newline = text.indexOf('\n', start);
+      if (newline == -1) {
+        _pendingLine.add(text.substring(start));
+        return;
+      }
+      if (newline > start) _pendingLine.add(text.substring(start, newline));
+      _completeLines.add(_stripPendingContainerPrefix());
+      _completeLines.add('\n');
+      _pendingLine.clear();
+      start = newline + 1;
+    }
+  }
+
+  Iterable<String> _pendingSegments() sync* {
+    if (_pendingLine.every(
+      (chunk) => chunk.codeUnits.every(_isTrimWhitespace),
+    )) {
+      return;
+    }
+    final prefix = StringBuffer();
+    for (var chunkIndex = 0; chunkIndex < _pendingLine.length; chunkIndex++) {
+      final chunk = _pendingLine[chunkIndex];
+      for (var offset = 0; offset < chunk.length; offset++) {
+        final codeUnit = chunk.codeUnitAt(offset);
+        prefix.writeCharCode(codeUnit);
+        if (_isTrimWhitespace(codeUnit)) continue;
+        final transformed = _stripFenceContainerPrefix(
+          prefix.toString(),
+          quoteDepth,
+          listIndent,
+          innerQuoteDepth,
+          fenceIndent,
+        );
+        if (transformed.codeUnits.any((unit) => !_isTrimWhitespace(unit))) {
+          yield transformed;
+          if (offset + 1 < chunk.length) {
+            yield chunk.substring(offset + 1);
+          }
+          for (var rest = chunkIndex + 1;
+              rest < _pendingLine.length;
+              rest++) {
+            yield _pendingLine[rest];
+          }
+          return;
+        }
+      }
+    }
+    if (prefix.length > 0) {
+      yield _stripFenceContainerPrefix(
+        prefix.toString(),
+        quoteDepth,
+        listIndent,
+        innerQuoteDepth,
+        fenceIndent,
+      );
+    }
+  }
+
+  String _stripPendingContainerPrefix() => _stripFenceContainerPrefix(
+        _pendingLine.join(),
+        quoteDepth,
+        listIndent,
+        innerQuoteDepth,
+        fenceIndent,
+      );
+}
+
 typedef _MermaidFenceInfo = ({
   String? tail,
   String? tailSource,
-  String? normalizedTailSource,
+  List<String>? normalizedTailSource,
+  _NormalizedContainerTailSource? normalizedContainerTailSource,
   bool isCached,
   bool hasUnfencedIndentedCode,
   int? openFenceIndex,
@@ -793,6 +887,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
       tail: null,
       tailSource: null,
       normalizedTailSource: null,
+      normalizedContainerTailSource: null,
       isCached: !includeTail,
       hasUnfencedIndentedCode: hasUnfencedIndentedCode,
       openFenceIndex: null,
@@ -813,19 +908,37 @@ _MermaidFenceInfo _unclosedFenceInfo(
       mermaidFenceIndent: 0,
     );
   }
-  final tail = !includeTail
-      ? null
-      : tailStart >= normalized.length
+  final shouldCacheTail = !includeTail && hasUnfencedIndentedCode;
+  final needsContainerTransform =
+      openMermaidFenceIndex != null &&
+      (openMermaidFenceQuoteDepth != 0 ||
+          openMermaidFenceListIndent != 0 ||
+          openMermaidFenceInnerQuoteDepth != 0 ||
+          openMermaidFenceIndent != 0);
+  final normalizedTail = includeTail || shouldCacheTail
+      ? tailStart >= normalized.length
           ? ''
-          : normalized.substring(tailStart);
+          : normalized.substring(tailStart)
+      : null;
+  final tail = includeTail ? normalizedTail : null;
+  final normalizedTailSource = shouldCacheTail && !needsContainerTransform
+      ? <String>[normalizedTail!]
+      : null;
+  final normalizedContainerTailSource =
+      shouldCacheTail && needsContainerTransform
+          ? _NormalizedContainerTailSource(
+              normalizedTail!,
+              openMermaidFenceQuoteDepth,
+              openMermaidFenceListIndent,
+              openMermaidFenceInnerQuoteDepth,
+              openMermaidFenceIndent,
+            )
+          : null;
   return (
     tail: tail,
     tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
-    normalizedTailSource: !includeTail && hasUnfencedIndentedCode
-        ? tailStart >= normalized.length
-            ? ''
-            : normalized.substring(tailStart)
-        : null,
+    normalizedTailSource: normalizedTailSource,
+    normalizedContainerTailSource: normalizedContainerTailSource,
     isCached: !includeTail,
     hasUnfencedIndentedCode: hasUnfencedIndentedCode,
     openFenceIndex: openFenceIndex,
@@ -998,12 +1111,18 @@ class StreamingFenceInfoCache {
     _ClosingFencePrefix? pendingClosingPrefix, {
     int? tailSourceStart,
   }) {
+    final normalizedTailSource = cached.normalizedTailSource;
+    if (cached.hasUnfencedIndentedCode && normalizedAppended.isNotEmpty) {
+      normalizedTailSource?.add(normalizedAppended);
+      cached.normalizedContainerTailSource?.append(normalizedAppended);
+    }
     final updated = (
       tail: null,
       tailSource: cached.hasUnfencedIndentedCode ? text : null,
       normalizedTailSource: cached.hasUnfencedIndentedCode
-          ? '${cached.normalizedTailSource ?? ''}$normalizedAppended'
+          ? normalizedTailSource
           : null,
+      normalizedContainerTailSource: cached.normalizedContainerTailSource,
       isCached: true,
       hasUnfencedIndentedCode: cached.hasUnfencedIndentedCode,
       openFenceIndex: cached.openFenceIndex,
@@ -1177,6 +1296,55 @@ bool isStreamingMermaidTail(
   );
 }
 
+bool _matchesTrimmedNormalizedSource(
+  String text,
+  String source,
+  int sourceOffset,
+) {
+  final expected = text.trim();
+  var expectedOffset = 0;
+  var started = false;
+  for (var offset = sourceOffset; offset < source.length; offset++) {
+    var codeUnit = source.codeUnitAt(offset);
+    if (codeUnit == 0x0d) {
+      codeUnit = 0x0a;
+      if (offset + 1 < source.length && source.codeUnitAt(offset + 1) == 0x0a) {
+        offset++;
+      }
+    }
+    if (!started && _isTrimWhitespace(codeUnit)) continue;
+    started = true;
+    if (expectedOffset == expected.length) {
+      if (!_isTrimWhitespace(codeUnit)) return false;
+      continue;
+    }
+    if (codeUnit != expected.codeUnitAt(expectedOffset)) return false;
+    expectedOffset++;
+  }
+  return expectedOffset == expected.length;
+}
+
+bool _matchesTrimmedSegments(String text, Iterable<String> segments) {
+  final expected = text.trim();
+  var expectedOffset = 0;
+  var started = false;
+  for (final segment in segments) {
+    for (var offset = 0; offset < segment.length; offset++) {
+      final codeUnit = segment.codeUnitAt(offset);
+      if (!started && _isTrimWhitespace(codeUnit)) continue;
+      started = true;
+      if (expectedOffset == expected.length) {
+        if (!_isTrimWhitespace(codeUnit)) return false;
+        continue;
+      }
+      if (codeUnit != expected.codeUnitAt(expectedOffset)) return false;
+      expectedOffset++;
+    }
+  }
+  return expectedOffset == expected.length;
+}
+
+
 bool _isStreamingMermaidTailWithInfo(
   String code,
   _MermaidFenceInfo fenceInfo, {
@@ -1186,18 +1354,25 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
-      var tail = fenceInfo.normalizedTailSource ?? '';
-      if (mermaidFenceIndex != null &&
-          mermaidFenceIndex == fenceInfo.mermaidFenceIndex) {
-        tail = _stripFenceContainerPrefix(
-          tail,
-          fenceInfo.mermaidFenceQuoteDepth,
-          fenceInfo.mermaidFenceListIndent,
-          fenceInfo.mermaidFenceInnerQuoteDepth,
-          fenceInfo.mermaidFenceIndent,
-        );
-      }
-      if (code.trim() != tail.trim()) return false;
+      final normalizedTailSource =
+          fenceInfo.normalizedTailSource ?? const <String>[];
+      final hasMermaidFenceIndex =
+          mermaidFenceIndex != null &&
+          mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
+      final matchesTail = hasMermaidFenceIndex &&
+              fenceInfo.normalizedContainerTailSource != null
+          ? _matchesTrimmedSegments(
+              code,
+              fenceInfo.normalizedContainerTailSource!.segments,
+            )
+          : fenceInfo.normalizedTailSource != null
+              ? _matchesTrimmedSegments(code, normalizedTailSource)
+              : _matchesTrimmedNormalizedSource(
+                  code,
+                  tailSource,
+                  fenceInfo.tailSourceStart,
+                );
+      if (!matchesTail) return false;
       return mermaidFenceIndex == null ||
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
     }
