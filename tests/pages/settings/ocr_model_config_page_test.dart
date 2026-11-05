@@ -72,29 +72,32 @@ Future<void> _simulateSystemBack(WidgetTester tester) async {
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
     testWidgets(
-        'system Back prompts after a text edit and cancel keeps the edit',
-        (tester) async {
-      final model = ModelConfig(
-        name: 'Original OCR model',
-        modelId: 'qwen-vl-ocr',
-      );
-      await _pumpConfigPage(tester, model: model);
+      'system Back prompts after a text edit and cancel keeps the edit',
+      (tester) async {
+        final model = ModelConfig(
+          name: 'Original OCR model',
+          modelId: 'qwen-vl-ocr',
+        );
+        await _pumpConfigPage(tester, model: model);
 
-      await _enterField(tester, 0, 'Edited OCR model');
-      await _simulateSystemBack(tester);
+        await _enterField(tester, 0, 'Edited OCR model');
+        await _simulateSystemBack(tester);
 
-      expect(find.text('放弃修改？'), findsOneWidget);
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
+        expect(find.text('放弃修改？'), findsOneWidget);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('放弃修改？'), findsNothing);
-      expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        'Edited OCR model',
-      );
-    });
-    testWidgets(
-        'renders 3 universal params; instruction section and '
+        expect(find.text('放弃修改？'), findsNothing);
+        expect(
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
+          'Edited OCR model',
+        );
+      },
+    );
+    testWidgets('renders 3 universal params; instruction section and '
         'removed params absent', (tester) async {
       await _pumpConfigPage(tester);
 
@@ -118,8 +121,9 @@ void main() {
       expect(find.text('频率惩罚 (Frequency Penalty)'), findsNothing);
     });
 
-    testWidgets('saving without instructions excludes userInstructions key',
-        (tester) async {
+    testWidgets('saving without instructions excludes userInstructions key', (
+      tester,
+    ) async {
       ModelConfig? saved;
       await _pumpConfigPage(tester, onSaved: (m) => saved = m);
 
@@ -133,77 +137,78 @@ void main() {
     });
 
     testWidgets(
-        'saving an existing model preserves legacy instruction keys until '
-        'the generic-store migration consumes them', (tester) async {
-      ModelConfig? saved;
-      final model = ModelConfig(
-        name: 'OCR模型',
-        modelId: 'qwen-vl-ocr',
-        typeConfig: {
-          'userInstructions': [
-            {'name': '发票', 'content': '提取发票号码和金额'},
-          ],
-        },
-      );
-      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      'saving an existing model preserves legacy instruction keys until '
+      'the generic-store migration consumes them',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {
+            'userInstructions': [
+              {'name': '发票', 'content': '提取发票号码和金额'},
+            ],
+          },
+        );
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
 
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
 
-      // The legacy keys survive the save — the OCR page migration may not
-      // have run yet, and dropping them here would lose the instructions.
-      expect(saved, isNotNull);
-      expect(saved!.typeConfig['userInstructions'], [
-        {'name': '发票', 'content': '提取发票号码和金额'},
-      ]);
-    });
+        // The legacy keys survive the save — the OCR page migration may not
+        // have run yet, and dropping them here would lose the instructions.
+        expect(saved, isNotNull);
+        expect(saved!.typeConfig['userInstructions'], [
+          {'name': '发票', 'content': '提取发票号码和金额'},
+        ]);
+      },
+    );
   });
 
   group('OcrModelConfigPage unsaved custom params', () {
     testWidgets(
-        'system Back prompts when a blank-name param default is edited and '
-        'cancel keeps the edit', (tester) async {
-      await _pumpConfigPage(tester);
+      'system Back prompts when a blank-name param default is edited and '
+      'cancel keeps the edit',
+      (tester) async {
+        await _pumpConfigPage(tester);
 
-      await _scrollTo(tester, find.text('添加参数'));
-      await tester.tap(find.text('添加参数'));
-      await tester.pumpAndSettle();
+        await _scrollTo(tester, find.text('添加参数'));
+        await tester.tap(find.text('添加参数'));
+        await tester.pumpAndSettle();
 
-      final defaultField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == '默认参数值',
-      );
-      await _scrollTo(tester, defaultField);
-      await tester.enterText(defaultField, 'edited default');
-      await tester.pump();
+        final defaultField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '默认参数值',
+        );
+        await _scrollTo(tester, defaultField);
+        await tester.enterText(defaultField, 'edited default');
+        await tester.pump();
 
-      await _simulateSystemBack(tester);
+        await _simulateSystemBack(tester);
 
-      expect(find.text('放弃修改？'), findsOneWidget);
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
+        expect(find.text('放弃修改？'), findsOneWidget);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('放弃修改？'), findsNothing);
-      expect(
-        tester.widget<TextField>(defaultField).controller!.text,
-        'edited default',
-      );
-    });
+        expect(find.text('放弃修改？'), findsNothing);
+        expect(
+          tester.widget<TextField>(defaultField).controller!.text,
+          'edited default',
+        );
+      },
+    );
   });
 
   group('OcrModelConfigPage custom parameter validation', () {
-    testWidgets('rejects an invalid numeric default when saving',
-        (tester) async {
+    testWidgets('rejects an invalid numeric default when saving', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
         modelId: 'qwen-vl-ocr',
         customParams: [
-          CustomParam(
-            paramName: 'scale',
-            type: 'number',
-            defaultValue: 'abc',
-          ),
+          CustomParam(paramName: 'scale', type: 'number', defaultValue: 'abc'),
         ],
       );
 
@@ -215,8 +220,9 @@ void main() {
       expect(find.text('参数“scale”的默认参数值必须是有限数字：abc'), findsOneWidget);
     });
 
-    testWidgets('rejects an invalid boolean default when saving',
-        (tester) async {
+    testWidgets('rejects an invalid boolean default when saving', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
@@ -235,48 +241,47 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNull);
-      expect(
-        find.text('参数“enabled”的值必须是 true 或 false：yes'),
-        findsOneWidget,
-      );
+      expect(find.text('参数“enabled”的值必须是 true 或 false：yes'), findsOneWidget);
     });
 
     testWidgets(
-        'saves valid number and boolean options despite invalid fallbacks',
-        (tester) async {
-      ModelConfig? saved;
-      final model = ModelConfig(
-        name: 'OCR模型',
-        modelId: 'qwen-vl-ocr',
-        customParams: [
-          CustomParam(
-            paramName: 'scale',
-            type: 'number',
-            defaultValue: 'abc',
-            options: ['1.25'],
-          ),
-          CustomParam(
-            paramName: 'enabled',
-            type: 'boolean',
-            defaultValue: 'yes',
-            options: ['TRUE'],
-          ),
-        ],
-      );
+      'saves valid number and boolean options despite invalid fallbacks',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [
+            CustomParam(
+              paramName: 'scale',
+              type: 'number',
+              defaultValue: 'abc',
+              options: ['1.25'],
+            ),
+            CustomParam(
+              paramName: 'enabled',
+              type: 'boolean',
+              defaultValue: 'yes',
+              options: ['TRUE'],
+            ),
+          ],
+        );
 
-      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
 
-      expect(saved, isNotNull);
-      expect(saved!.customParams.map((param) => param.options.first), [
-        '1.25',
-        'TRUE',
-      ]);
-    });
+        expect(saved, isNotNull);
+        expect(saved!.customParams.map((param) => param.options.first), [
+          '1.25',
+          'TRUE',
+        ]);
+      },
+    );
 
-    testWidgets('saves valid number and boolean options without fallbacks',
-        (tester) async {
+    testWidgets('saves valid number and boolean options without fallbacks', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
@@ -308,8 +313,9 @@ void main() {
       ]);
     });
 
-    testWidgets('rejects an invalid numeric option when saving',
-        (tester) async {
+    testWidgets('rejects an invalid numeric option when saving', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
@@ -332,8 +338,9 @@ void main() {
       expect(find.text('参数“scale”的默认参数值必须是有限数字：abc'), findsOneWidget);
     });
 
-    testWidgets('rejects an invalid boolean option when saving',
-        (tester) async {
+    testWidgets('rejects an invalid boolean option when saving', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
@@ -356,18 +363,15 @@ void main() {
       expect(find.text('参数“enabled”的值必须是 true 或 false：yes'), findsOneWidget);
     });
 
-    testWidgets('saves valid numeric, boolean, and JSON defaults',
-        (tester) async {
+    testWidgets('saves valid numeric, boolean, and JSON defaults', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
         modelId: 'qwen-vl-ocr',
         customParams: [
-          CustomParam(
-            paramName: 'scale',
-            type: 'number',
-            defaultValue: '1.25',
-          ),
+          CustomParam(paramName: 'scale', type: 'number', defaultValue: '1.25'),
           CustomParam(
             paramName: 'enabled',
             type: 'boolean',
@@ -395,8 +399,9 @@ void main() {
   });
 
   group('OcrModelConfigPage max token validation', () {
-    testWidgets('disabled invalid max tokens do not block saving other edits',
-        (tester) async {
+    testWidgets('disabled invalid max tokens do not block saving other edits', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',
@@ -419,8 +424,9 @@ void main() {
       expect(saved!.typeConfig.containsKey('maxTokens'), isFalse);
     });
 
-    testWidgets('enabled invalid max tokens still block saving',
-        (tester) async {
+    testWidgets('enabled invalid max tokens still block saving', (
+      tester,
+    ) async {
       ModelConfig? saved;
       final model = ModelConfig(
         name: 'OCR模型',

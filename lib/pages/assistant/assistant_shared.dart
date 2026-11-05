@@ -212,17 +212,17 @@ class AssistantEditorFields extends StatelessWidget {
   static const double minFillWindowHeight = 540;
 
   Widget _promptField(AppLocalizations strings) => TextField(
-        controller: promptController,
-        decoration: InputDecoration(
-          labelText: strings.builtInPromptSystemPromptHeading,
-          border: OutlineInputBorder(),
-          alignLabelWithHint: true,
-        ),
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        keyboardType: TextInputType.multiline,
-      );
+    controller: promptController,
+    decoration: InputDecoration(
+      labelText: strings.builtInPromptSystemPromptHeading,
+      border: OutlineInputBorder(),
+      alignLabelWithHint: true,
+    ),
+    maxLines: null,
+    expands: true,
+    textAlignVertical: TextAlignVertical.top,
+    keyboardType: TextInputType.multiline,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -339,11 +339,11 @@ class CategorizedEmojiPicker extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 4),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 8,
-                          mainAxisSpacing: 2,
-                          crossAxisSpacing: 2,
-                          childAspectRatio: 1,
-                        ),
+                              crossAxisCount: 8,
+                              mainAxisSpacing: 2,
+                              crossAxisSpacing: 2,
+                              childAspectRatio: 1,
+                            ),
                         itemCount: cat.emojis.length,
                         itemBuilder: (ctx, index) {
                           final e = cat.emojis[index];

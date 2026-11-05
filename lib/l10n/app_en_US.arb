@@ -2386,6 +2386,7 @@
   "asrTimestampWord": "word – Word level",
   "asrWordTimestampHelp": "Word-level timestamps may be less accurate than segment-level timestamps.",
   "reasoningAddOptionValue": "Add option value",
+  "reasoningEditOptionValue": "Edit option value",
   "reasoningOptionExample": "e.g. low, medium, high",
   "reasoningOptionSelectionHelp": "Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.",
   "reasoningAddOption": "Add option",

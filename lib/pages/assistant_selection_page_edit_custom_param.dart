@@ -52,14 +52,14 @@ void showEditCustomParameterDialog(
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.assistantParameterName,
-                  hintText:
-                      AppLocalizations.of(context)!.assistantParameterNameHint,
+                  labelText: AppLocalizations.of(context)!
+                      .assistantParameterName,
+                  hintText: AppLocalizations.of(context)!
+                      .assistantParameterNameHint,
                   border: const OutlineInputBorder(),
                   errorText: hasInvalidName
                       ? AppLocalizations.of(context)!
-                          .assistantParameterNameInvalid
+                            .assistantParameterNameInvalid
                       : null,
                 ),
                 onChanged: (_) => setDlgState(() {}),
@@ -136,15 +136,13 @@ void showEditCustomParameterDialog(
                         labelText: AppLocalizations.of(context)!.assistantValue,
                         hintText: type == 'boolean'
                             ? AppLocalizations.of(context)!
-                                .assistantTrueFalseHint
+                                  .assistantTrueFalseHint
                             : type == 'number'
-                                ? AppLocalizations.of(context)!
-                                    .assistantNumberHint
-                                : type == 'json'
-                                    ? AppLocalizations.of(context)!
-                                        .assistantJsonHint('{"key": "value"}')
-                                    : AppLocalizations.of(context)!
-                                        .assistantValueHint,
+                            ? AppLocalizations.of(context)!.assistantNumberHint
+                            : type == 'json'
+                            ? AppLocalizations.of(context)!
+                                  .assistantJsonHint('{"key": "value"}')
+                            : AppLocalizations.of(context)!.assistantValueHint,
                         border: const OutlineInputBorder(),
                         errorText: jsonError,
                         errorMaxLines: 3,
@@ -166,23 +164,21 @@ void showEditCustomParameterDialog(
                         initialValue: valueController.text,
                         hintText: type == 'boolean'
                             ? AppLocalizations.of(context)!
-                                .assistantTrueFalseHint
+                                  .assistantTrueFalseHint
                             : type == 'number'
-                                ? AppLocalizations.of(context)!
-                                    .assistantNumberHint
-                                : type == 'json'
-                                    ? AppLocalizations.of(context)!
-                                        .assistantJsonHint('{"key": "value"}')
-                                    : AppLocalizations.of(context)!
-                                        .assistantValueHint,
+                            ? AppLocalizations.of(context)!.assistantNumberHint
+                            : type == 'json'
+                            ? AppLocalizations.of(context)!
+                                  .assistantJsonHint('{"key": "value"}')
+                            : AppLocalizations.of(context)!.assistantValueHint,
                         type: type,
                         onSave: (text) {
                           setDlgState(() {
                             valueController.text = text;
                             valueController.selection =
                                 TextSelection.fromPosition(
-                              TextPosition(offset: text.length),
-                            );
+                                  TextPosition(offset: text.length),
+                                );
                             validateJsonValue();
                           });
                         },

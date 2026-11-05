@@ -2386,6 +2386,7 @@
   "asrTimestampWord": "word – 单词级",
   "asrWordTimestampHelp": "单词级时间戳的准确性可能低于段落级。",
   "reasoningAddOptionValue": "添加选项值",
+  "reasoningEditOptionValue": "编辑选项值",
   "reasoningOptionExample": "例如 low、medium、high",
   "reasoningOptionSelectionHelp": "点按选项块可选中或取消。选中的值会发送；拖动可排序。供应商提供的值不能删除，但可以取消选中来隐藏。",
   "reasoningAddOption": "添加选项",

@@ -58,11 +58,12 @@ extension _SaveExt on _LlmModelConfigPageState {
       final param = _customParams[i];
       final name = param.paramName.trim();
       // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
-      final hasValue = param.type == 'boolean' ||
+      final hasValue =
+          param.type == 'boolean' ||
           (param.type == 'json'
               ? param.defaultValue.trim().isNotEmpty
               : param.options.any((o) => o.trim().isNotEmpty) ||
-                  param.defaultValue.trim().isNotEmpty);
+                    param.defaultValue.trim().isNotEmpty);
       if (name.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -99,8 +100,9 @@ extension _SaveExt on _LlmModelConfigPageState {
         return;
       }
       if (param.type == 'number') {
-        final values =
-            param.options.isNotEmpty ? param.options : [param.defaultValue];
+        final values = param.options.isNotEmpty
+            ? param.options
+            : [param.defaultValue];
         final valueLabel = param.options.isNotEmpty
             ? AppLocalizations.of(context)!.assistantValue
             : AppLocalizations.of(context)!.modelParamDefaultValue;

@@ -55,41 +55,40 @@ class _BlockingProviderEntriesNotifier extends ProviderEntriesNotifier {
 }
 
 Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
-    );
+  (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
+);
 
 Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
-      (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
-    );
+  (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
+);
 
 Finder _descriptionFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
-    );
+  (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
+);
 
 Finder _commandFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '例如：npx',
-    );
+  (w) => w is TextField && w.decoration?.hintText == '例如：npx',
+);
 
 Finder _argsFieldFinder() => find.byWidgetPredicate(
-      (w) =>
-          w is TextField &&
-          w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
-    );
+  (w) =>
+      w is TextField && w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
+);
 
 Finder _urlFieldFinder() => find.byWidgetPredicate(
-      (w) =>
-          w is TextField &&
-          w.decoration?.hintText == '例如: http://localhost:3001/sse',
-    );
+  (w) =>
+      w is TextField &&
+      w.decoration?.hintText == '例如: http://localhost:3001/sse',
+);
 
 Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
-      (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
-    );
+  (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
+);
 
 Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
-      of: _readOnlyDescriptionFinder(),
-      matching: find.text(value),
-    );
+  of: _readOnlyDescriptionFinder(),
+  matching: find.text(value),
+);
 
 Future<void> _openCustomMcpConfig(
   WidgetTester tester, {
@@ -220,32 +219,28 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['apiKey'], 'sk-new');
-        expect(
-          typeConfig['headers'],
-          {
-            'X-Mode': 'keep-this-header ',
-            'X-Optional': '',
-            'X-Debug-Text': 'Bearer diagnostic',
-            'Authorization': 'bearer sk-new',
-            'X-Api-Key': 'sk-new',
-          },
-        );
-        expect(
-          typeConfig['env'],
-          {
-            'REFRESH_TOKEN': 'sk-current',
-            'CUSTOM_SETTING': 'keep-this-value',
-            'CUSTOM_API_KEY': 'sk-new',
-            'PATH': '/custom/bin',
-            'UNRELATED_EMPTY': '',
-          },
-        );
+        expect(typeConfig['headers'], {
+          'X-Mode': 'keep-this-header ',
+          'X-Optional': '',
+          'X-Debug-Text': 'Bearer diagnostic',
+          'Authorization': 'bearer sk-new',
+          'X-Api-Key': 'sk-new',
+        });
+        expect(typeConfig['env'], {
+          'REFRESH_TOKEN': 'sk-current',
+          'CUSTOM_SETTING': 'keep-this-value',
+          'CUSTOM_API_KEY': 'sk-new',
+          'PATH': '/custom/bin',
+          'UNRELATED_EMPTY': '',
+        });
         expect(find.text('••••••••'), findsOneWidget);
 
         await tester.tap(find.text('编辑'));
@@ -290,21 +285,20 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(
-          typeConfig['env'],
-          {
-            'API_KEY': 'sk-new',
-            'CUSTOM_APIKEY': 'sk-new',
-            'REFRESH_TOKEN': '',
-            'UNRELATED_EMPTY': '',
-            'KEYBOARD_LAYOUT': 'us',
-          },
-        );
+        expect(typeConfig['env'], {
+          'API_KEY': 'sk-new',
+          'CUSTOM_APIKEY': 'sk-new',
+          'REFRESH_TOKEN': '',
+          'UNRELATED_EMPTY': '',
+          'KEYBOARD_LAYOUT': 'us',
+        });
         expect(find.text('••••••••'), findsOneWidget);
       },
     );
@@ -342,10 +336,12 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['headers'], {'X-Mode': 'keep-this-header'});
         expect(
@@ -401,19 +397,18 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(
-          typeConfig['env'],
-          {
-            'KEYBOARD_LAYOUT': 'us',
-            'CUSTOM_SETTING': 'keep-this-value',
-            'PATH': '/custom/bin',
-          },
-        );
+        expect(typeConfig['env'], {
+          'KEYBOARD_LAYOUT': 'us',
+          'CUSTOM_SETTING': 'keep-this-value',
+          'PATH': '/custom/bin',
+        });
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),
@@ -466,18 +461,17 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(
-          typeConfig['env'],
-          {
-            'REFRESH_TOKEN': 'refresh-secret',
-            'PATH': '/custom/bin',
-          },
-        );
+        expect(typeConfig['env'], {
+          'REFRESH_TOKEN': 'refresh-secret',
+          'PATH': '/custom/bin',
+        });
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),
@@ -530,102 +524,17 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(
-          typeConfig['env'],
-          {
-            'SESSION_TOKEN': 'session-secret',
-            'CSRF_TOKEN': 'csrf-secret',
-          },
-        );
-        expect(
-          find.descendant(
-            of: _readOnlyApiKeyFinder(),
-            matching: find.text('（未设置）'),
-          ),
-          findsOneWidget,
-        );
-
-        await tester.tap(find.text('编辑'));
-        await tester.pumpAndSettle();
-        expect(
-          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
-          isEmpty,
-        );
-      },
-    );
-
-    testWidgets(
-      'clearing a saved API key stays unset after persistence',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
+        expect(typeConfig['env'], {
+          'SESSION_TOKEN': 'session-secret',
+          'CSRF_TOKEN': 'csrf-secret',
         });
-        await _openCustomMcpConfig(
-          tester,
-          apiKey: 'sk-123',
-          headers: {
-            'X-Mode': 'keep-this-header',
-            'X-Debug-Text': 'Bearer diagnostic',
-            'Authorization': 'Bearer stale-header-key',
-          },
-          env: {
-            'REFRESH_TOKEN': 'sk-123',
-            'SESSION_TOKEN': 'session-secret',
-            'CSRF_TOKEN': 'csrf-secret',
-            'MCP_TOKEN': 'stale-token',
-            'CUSTOM_SETTING': 'keep-this-value',
-            'CUSTOM_API_KEY': 'stale-env-key',
-            'PATH': '/custom/bin',
-          },
-        );
-
-        await tester.tap(find.text('编辑'));
-        await tester.pumpAndSettle();
-        expect(
-          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
-          'sk-123',
-        );
-        await tester.enterText(_apiKeyFieldFinder(), '');
-        await tester.tap(find.text('保存'));
-        await tester.pumpAndSettle();
-
-        final preferences = await SharedPreferences.getInstance();
-        final entries =
-            jsonDecode(preferences.getString('provider_entries')!) as List;
-        final entry = entries.singleWhere(
-          (item) => item['id'] == 'builtin_mcp',
-        ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
-        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(typeConfig, isNot(contains('apiKey')));
-        expect(
-          typeConfig['headers'],
-          {
-            'X-Mode': 'keep-this-header',
-            'X-Debug-Text': 'Bearer diagnostic',
-          },
-        );
-        expect(
-          typeConfig['env'],
-          {
-            'REFRESH_TOKEN': 'sk-123',
-            'SESSION_TOKEN': 'session-secret',
-            'CSRF_TOKEN': 'csrf-secret',
-            'CUSTOM_SETTING': 'keep-this-value',
-            'PATH': '/custom/bin',
-          },
-        );
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),
@@ -633,7 +542,6 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(find.text('••••••••'), findsNothing);
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
@@ -643,6 +551,86 @@ void main() {
         );
       },
     );
+
+    testWidgets('clearing a saved API key stays unset after persistence', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await _openCustomMcpConfig(
+        tester,
+        apiKey: 'sk-123',
+        headers: {
+          'X-Mode': 'keep-this-header',
+          'X-Debug-Text': 'Bearer diagnostic',
+          'Authorization': 'Bearer stale-header-key',
+        },
+        env: {
+          'REFRESH_TOKEN': 'sk-123',
+          'SESSION_TOKEN': 'session-secret',
+          'CSRF_TOKEN': 'csrf-secret',
+          'MCP_TOKEN': 'stale-token',
+          'CUSTOM_SETTING': 'keep-this-value',
+          'CUSTOM_API_KEY': 'stale-env-key',
+          'PATH': '/custom/bin',
+        },
+      );
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+        'sk-123',
+      );
+      await tester.enterText(_apiKeyFieldFinder(), '');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final preferences = await SharedPreferences.getInstance();
+      final entries =
+          jsonDecode(preferences.getString('provider_entries')!) as List;
+      final entry = entries.singleWhere(
+        (item) => item['id'] == 'builtin_mcp',
+      ) as Map<String, dynamic>;
+      final config = (entry['configs'] as List)
+          .cast<Map<String, dynamic>>()
+          .first;
+      final model = (config['models'] as List)
+          .cast<Map<String, dynamic>>()
+          .first;
+      final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+      expect(typeConfig, isNot(contains('apiKey')));
+      expect(typeConfig['headers'], {
+        'X-Mode': 'keep-this-header',
+        'X-Debug-Text': 'Bearer diagnostic',
+      });
+      expect(typeConfig['env'], {
+        'REFRESH_TOKEN': 'sk-123',
+        'SESSION_TOKEN': 'session-secret',
+        'CSRF_TOKEN': 'csrf-secret',
+        'CUSTOM_SETTING': 'keep-this-value',
+        'PATH': '/custom/bin',
+      });
+      expect(
+        find.descendant(
+          of: _readOnlyApiKeyFinder(),
+          matching: find.text('（未设置）'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('••••••••'), findsNothing);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+        isEmpty,
+      );
+    });
 
     testWidgets(
       'saving a transport switch clears fields omitted from persisted config',
@@ -657,8 +645,10 @@ void main() {
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
-        expect(tester.widget<TextField>(_commandFieldFinder()).controller!.text,
-            'npx');
+        expect(
+          tester.widget<TextField>(_commandFieldFinder()).controller!.text,
+          'npx',
+        );
         expect(
           tester.widget<TextField>(_argsFieldFinder()).controller!.text,
           '-y, example-server',
@@ -679,10 +669,12 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['transport'], 'sse');
         expect(typeConfig, isNot(contains('command')));
@@ -705,8 +697,7 @@ void main() {
       },
     );
 
-    testWidgets(
-        'built-in MCP details keep the "Bearer " placeholder unset and expose '
+    testWidgets('built-in MCP details keep the "Bearer " placeholder unset and expose '
         'an empty key field only after entering edit mode', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -788,7 +779,8 @@ void main() {
           matching: find.text('（未设置）'),
         ),
         findsOneWidget,
-        reason: 'the "Bearer " placeholder must remain unset, not become a '
+        reason:
+            'the "Bearer " placeholder must remain unset, not become a '
             'fake API key',
       );
 
@@ -800,7 +792,8 @@ void main() {
       expect(
         apiKeyField.controller!.text,
         isEmpty,
-        reason: 'the "Bearer " header placeholder must not be auto-filled '
+        reason:
+            'the "Bearer " header placeholder must not be auto-filled '
             'as the API key',
       );
 
@@ -899,7 +892,8 @@ void main() {
         expect(
           apiKeyField.controller!.text,
           'sk-123',
-          reason: 'edit mode must expose the actual key from the '
+          reason:
+              'edit mode must expose the actual key from the '
               'Authorization header',
         );
         expect(
@@ -1026,14 +1020,12 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config =
-            (entry['configs'] as List).cast<Map<String, dynamic>>().firstWhere(
-                  (item) => item['providerName'] == 'Custom MCP',
-                );
-        final model =
-            (config['models'] as List).cast<Map<String, dynamic>>().firstWhere(
-                  (item) => item['name'] == 'Custom MCP',
-                );
+        final config = (entry['configs'] as List)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((item) => item['providerName'] == 'Custom MCP');
+        final model = (config['models'] as List)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((item) => item['name'] == 'Custom MCP');
         expect(
           (model['typeConfig'] as Map<String, dynamic>)['description'],
           'Saved description',
@@ -1048,59 +1040,59 @@ void main() {
       },
     );
 
-    testWidgets(
-      'custom MCP fields are disabled while a save is pending',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('custom MCP fields are disabled while a save is pending', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final updateGate = Completer<void>();
-        await _openCustomMcpConfig(tester, updateGate: updateGate.future);
-        await tester.tap(find.text('编辑'));
-        await tester.pumpAndSettle();
-        await tester.enterText(_descriptionFieldFinder(), 'Saved description');
-        await tester.tap(find.text('保存'));
-        await tester.pump();
+      final updateGate = Completer<void>();
+      await _openCustomMcpConfig(tester, updateGate: updateGate.future);
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_descriptionFieldFinder(), 'Saved description');
+      await tester.tap(find.text('保存'));
+      await tester.pump();
 
-        final dialogFields = tester.widgetList<TextField>(
-          find.descendant(
-            of: find.byType(Dialog),
-            matching: find.byType(TextField),
-          ),
-        );
-        final allFieldsDisabled = dialogFields.isNotEmpty &&
-            dialogFields.every((field) => field.enabled == false);
+      final dialogFields = tester.widgetList<TextField>(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextField),
+        ),
+      );
+      final allFieldsDisabled =
+          dialogFields.isNotEmpty &&
+          dialogFields.every((field) => field.enabled == false);
 
-        try {
-          if (!allFieldsDisabled) {
-            await tester.enterText(
-              _descriptionFieldFinder(),
-              'Changed while save was pending',
-            );
-          }
-        } finally {
-          updateGate.complete();
+      try {
+        if (!allFieldsDisabled) {
+          await tester.enterText(
+            _descriptionFieldFinder(),
+            'Changed while save was pending',
+          );
         }
-        await tester.pumpAndSettle();
+      } finally {
+        updateGate.complete();
+      }
+      await tester.pumpAndSettle();
 
-        expect(
-          allFieldsDisabled,
-          isTrue,
-          reason: 'form fields must not accept edits during persistence',
-        );
-        expect(
-          _readOnlyDescriptionValueFinder('Saved description'),
-          findsOneWidget,
-        );
-        expect(
-          _readOnlyDescriptionValueFinder('Changed while save was pending'),
-          findsNothing,
-        );
-      },
-    );
+      expect(
+        allFieldsDisabled,
+        isTrue,
+        reason: 'form fields must not accept edits during persistence',
+      );
+      expect(
+        _readOnlyDescriptionValueFinder('Saved description'),
+        findsOneWidget,
+      );
+      expect(
+        _readOnlyDescriptionValueFinder('Changed while save was pending'),
+        findsNothing,
+      );
+    });
   });
 }

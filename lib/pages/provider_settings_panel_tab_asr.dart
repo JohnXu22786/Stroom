@@ -176,10 +176,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         _compression == 'adpcm'
             ? AppLocalizations.of(context)!.providerCompressionAdpcmDescription
             : _compression == 'flac'
-                ? AppLocalizations.of(context)!
-                    .providerCompressionFlacDescription
-                : AppLocalizations.of(context)!
-                    .providerCompressionWavDescription,
+            ? AppLocalizations.of(context)!.providerCompressionFlacDescription
+            : AppLocalizations.of(context)!.providerCompressionWavDescription,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),

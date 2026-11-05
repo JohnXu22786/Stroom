@@ -101,9 +101,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final originalRequestBudget = m.typeConfig['requestSizeBudgetBytes'];
     final originalRequestBudgetText = originalRequestBudget is num
         ? (originalRequestBudget / (1024 * 1024)).toString().replaceFirst(
-              RegExp(r'\.0$'),
-              '',
-            )
+            RegExp(r'\.0$'),
+            '',
+          )
         : '';
     if (originalRequestBudgetText != _requestSizeBudgetController.text) {
       return true;
@@ -142,9 +142,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _requestSizeBudgetController = TextEditingController(
       text: requestSizeBudgetBytes is num
           ? (requestSizeBudgetBytes / (1024 * 1024)).toString().replaceFirst(
-                RegExp(r'\.0$'),
-                '',
-              )
+              RegExp(r'\.0$'),
+              '',
+            )
           : '',
     )..addListener(_handleControllerChanged);
 
@@ -425,8 +425,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-            ? widget.model!.name
-            : AppLocalizations.of(context)!.modelEditTitle)
+              ? widget.model!.name
+              : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
@@ -619,7 +619,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
                 final name = param.paramName.trim();
-                final isDuplicate = name.isNotEmpty &&
+                final isDuplicate =
+                    name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -643,7 +644,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                          .modelParamExists
+                                            .modelParamExists
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),

@@ -22,7 +22,7 @@ class ModelConfigPage extends ConsumerStatefulWidget {
   final int configIndex;
   final int modelIndex; // -1 for new model
   final ModelConfig?
-      initialModel; // for editing pending models (configIndex == -1)
+  initialModel; // for editing pending models (configIndex == -1)
 
   const ModelConfigPage({
     super.key,
@@ -129,14 +129,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _nameController.text = model.name;
         _modelIdController.text = model.modelId;
         _voices = model.voices.map((v) => v.copy()).toList();
-        _volumeMinController.text =
-            model.hasVolume ? model.volumeMin.toString() : '';
-        _volumeMaxController.text =
-            model.hasVolume ? model.volumeMax.toString() : '';
-        _speedMinController.text =
-            model.hasSpeed ? model.speedMin.toString() : '';
-        _speedMaxController.text =
-            model.hasSpeed ? model.speedMax.toString() : '';
+        _volumeMinController.text = model.hasVolume
+            ? model.volumeMin.toString()
+            : '';
+        _volumeMaxController.text = model.hasVolume
+            ? model.volumeMax.toString()
+            : '';
+        _speedMinController.text = model.hasSpeed
+            ? model.speedMin.toString()
+            : '';
+        _speedMaxController.text = model.hasSpeed
+            ? model.speedMax.toString()
+            : '';
         _maxWordsController.text = model.maxWordsPerRequest > 0
             ? model.maxWordsPerRequest.toString()
             : '';
@@ -174,14 +178,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       _nameController.text = model.name;
       _modelIdController.text = model.modelId;
       _voices = model.voices.map((v) => v.copy()).toList();
-      _volumeMinController.text =
-          model.hasVolume ? model.volumeMin.toString() : '';
-      _volumeMaxController.text =
-          model.hasVolume ? model.volumeMax.toString() : '';
-      _speedMinController.text =
-          model.hasSpeed ? model.speedMin.toString() : '';
-      _speedMaxController.text =
-          model.hasSpeed ? model.speedMax.toString() : '';
+      _volumeMinController.text = model.hasVolume
+          ? model.volumeMin.toString()
+          : '';
+      _volumeMaxController.text = model.hasVolume
+          ? model.volumeMax.toString()
+          : '';
+      _speedMinController.text = model.hasSpeed
+          ? model.speedMin.toString()
+          : '';
+      _speedMaxController.text = model.hasSpeed
+          ? model.speedMax.toString()
+          : '';
       _maxWordsController.text = model.maxWordsPerRequest > 0
           ? model.maxWordsPerRequest.toString()
           : '';
@@ -524,7 +532,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       // 检查响应 Content-Type，若不是音频则按错误处理
       // 同时检查响应体是否以 { 或 [ 开头（JSON 错误响应）
       final contentType = response.headers.value('content-type') ?? '';
-      final isJsonBody = response.data.isNotEmpty &&
+      final isJsonBody =
+          response.data.isNotEmpty &&
           (response.data[0] == 0x7b || response.data[0] == 0x5b);
 
       if (isJsonBody ||
@@ -585,8 +594,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       }
     } on DioException catch (e) {
       final String origMsg = e.message ?? '';
-      final String extra =
-          origMsg.isNotEmpty ? '\n${strings.modelOriginalError(origMsg)}' : '';
+      final String extra = origMsg.isNotEmpty
+          ? '\n${strings.modelOriginalError(origMsg)}'
+          : '';
       String errorMsg;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
@@ -776,9 +786,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       name = modelId;
     }
 
-    final hasVolume = _volumeMinController.text.trim().isNotEmpty ||
+    final hasVolume =
+        _volumeMinController.text.trim().isNotEmpty ||
         _volumeMaxController.text.trim().isNotEmpty;
-    final hasSpeed = _speedMinController.text.trim().isNotEmpty ||
+    final hasSpeed =
+        _speedMinController.text.trim().isNotEmpty ||
         _speedMaxController.text.trim().isNotEmpty;
 
     final modelConfig = ModelConfig(
@@ -858,8 +870,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (_nameController.text.isNotEmpty
-            ? _nameController.text
-            : AppLocalizations.of(context)!.modelEditTitle)
+              ? _nameController.text
+              : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
 
     return PopScope(
@@ -1076,7 +1088,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   _voices.isEmpty
                       ? AppLocalizations.of(context)!.ttsNoVoices
                       : _voices.take(3).map((v) => v.name).join('、') +
-                          (_voices.length > 3 ? '…' : ''),
+                            (_voices.length > 3 ? '…' : ''),
                   style: const TextStyle(fontSize: 12),
                 ),
                 trailing: const Icon(Icons.chevron_right),
@@ -1133,7 +1145,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 final param = _customParams[i];
                 // 检查当前参数名是否与其他参数重复
                 final name = param.paramName.trim();
-                final isDuplicate = name.isNotEmpty &&
+                final isDuplicate =
+                    name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -1156,9 +1169,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                          .modelParamDuplicate(
-                                          param.paramName.trim(),
-                                        )
+                                            .modelParamDuplicate(
+                                              param.paramName.trim(),
+                                            )
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
@@ -1239,13 +1252,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           child: Text(
                             param.paramType.needsQuotes
                                 ? AppLocalizations.of(context)!
-                                    .ttsRequestFormatExample(
-                                    '"{{${param.paramName}}}"',
-                                  )
+                                      .ttsRequestFormatExample(
+                                        '"{{${param.paramName}}}"',
+                                      )
                                 : AppLocalizations.of(context)!
-                                    .ttsRequestFormatExample(
-                                    '{{${param.paramName}}}',
-                                  ),
+                                      .ttsRequestFormatExample(
+                                        '{{${param.paramName}}}',
+                                      ),
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey[500],
@@ -1286,9 +1299,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           ),
                           Text(
                             AppLocalizations.of(context)!.ttsInstructionHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: Colors.grey),
                           ),
                         ],
@@ -1338,9 +1349,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           ),
                           Text(
                             AppLocalizations.of(context)!.ttsStreamHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: Colors.grey),
                           ),
                         ],

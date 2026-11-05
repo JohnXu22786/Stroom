@@ -146,8 +146,7 @@ void main() {
       expect(find.byType(TextField), findsNWidgets(3));
     });
 
-    testWidgets(
-        'saving a new config stays on the model list page instead of '
+    testWidgets('saving a new config stays on the model list page instead of '
         'popping back to the provider list', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
@@ -185,8 +184,7 @@ void main() {
       expect(state.entries.single.configs.first.key, 'new-key');
     });
 
-    testWidgets(
-        'models added after saving a new config are persisted into the '
+    testWidgets('models added after saving a new config are persisted into the '
         'newly created config (not dropped or routed to the old config)', (
       tester,
     ) async {
@@ -307,8 +305,9 @@ void main() {
   });
 
   group('LLM model drag-sort sync with chat order', () {
-    testWidgets('llm model list is reorderable and follows the saved order',
-        (tester) async {
+    testWidgets('llm model list is reorderable and follows the saved order', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });
@@ -326,8 +325,9 @@ void main() {
       expect(modelTileTitles(tester), ['model-2', 'model-1']);
     });
 
-    testWidgets('non-llm pages keep the plain non-reorderable model list',
-        (tester) async {
+    testWidgets('non-llm pages keep the plain non-reorderable model list', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(
         entryType: 'tts',
         entryName: 'TTS供应商',
@@ -339,8 +339,7 @@ void main() {
       expect(find.text('voice-1'), findsOneWidget);
     });
 
-    testWidgets(
-        'dragging a model updates the combined order, keeping other '
+    testWidgets('dragging a model updates the combined order, keeping other '
         'providers in place', (tester) async {
       SharedPreferences.setMockInitialValues({
         'model_order': [
@@ -419,8 +418,9 @@ void main() {
       ]);
     });
 
-    testWidgets('delete after reorder removes the right stored model',
-        (tester) async {
+    testWidgets('delete after reorder removes the right stored model', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });

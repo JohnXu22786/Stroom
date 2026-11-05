@@ -5199,6 +5199,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasoningAddOptionValue => 'Add option value';
 
   @override
+  String get reasoningEditOptionValue => 'Edit option value';
+
+  @override
   String get reasoningOptionExample => 'e.g. low, medium, high';
 
   @override
@@ -11254,6 +11257,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get reasoningAddOptionValue => 'Add option value';
+
+  @override
+  String get reasoningEditOptionValue => 'Edit option value';
 
   @override
   String get reasoningOptionExample => 'e.g. low, medium, high';

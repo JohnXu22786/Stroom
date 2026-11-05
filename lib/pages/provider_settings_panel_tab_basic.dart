@@ -58,8 +58,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               initialValue: _endpointType,
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
+                labelText: AppLocalizations.of(context)!
+                    .providerEndpointTypeLabel,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
@@ -109,8 +109,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerRequestJsonDefault,
+                labelText: AppLocalizations.of(context)!
+                    .providerRequestJsonDefault,
                 hintText: AppLocalizations.of(context)!.providerUseAppDefault,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -244,8 +244,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _uploadMethod == AudioUploadMethod.multipart
             ? AppLocalizations.of(context)!.providerUploadMultipartHelp
             : _uploadMethod == AudioUploadMethod.base64Json
-                ? AppLocalizations.of(context)!.providerUploadBase64Help
-                : AppLocalizations.of(context)!.providerUploadUrlHelp,
+            ? AppLocalizations.of(context)!.providerUploadBase64Help
+            : AppLocalizations.of(context)!.providerUploadUrlHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -396,10 +396,10 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _fallbackMethod == 'specific'
             ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
             : _fallbackMethod == 'generic'
-                ? AppLocalizations.of(context)!.providerFallbackGenericHelp
-                : _fallbackMethod == 'all'
-                    ? AppLocalizations.of(context)!.providerFallbackAllHelp
-                    : AppLocalizations.of(context)!.providerFallbackRejectHelp,
+            ? AppLocalizations.of(context)!.providerFallbackGenericHelp
+            : _fallbackMethod == 'all'
+            ? AppLocalizations.of(context)!.providerFallbackAllHelp
+            : AppLocalizations.of(context)!.providerFallbackRejectHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),

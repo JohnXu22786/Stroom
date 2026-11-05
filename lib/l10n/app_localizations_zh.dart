@@ -4960,6 +4960,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasoningAddOptionValue => '添加选项值';
 
   @override
+  String get reasoningEditOptionValue => '编辑选项值';
+
+  @override
   String get reasoningOptionExample => '例如 low、medium、high';
 
   @override
@@ -10734,6 +10737,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get reasoningAddOptionValue => '添加选项值';
+
+  @override
+  String get reasoningEditOptionValue => '编辑选项值';
 
   @override
   String get reasoningOptionExample => '例如 low、medium、high';

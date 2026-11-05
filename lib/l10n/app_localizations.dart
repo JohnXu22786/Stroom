@@ -8848,6 +8848,12 @@ abstract class AppLocalizations {
   /// **'Add option value'**
   String get reasoningAddOptionValue;
 
+  /// No description provided for @reasoningEditOptionValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit option value'**
+  String get reasoningEditOptionValue;
+
   /// No description provided for @reasoningOptionExample.
   ///
   /// In en, this message translates to:

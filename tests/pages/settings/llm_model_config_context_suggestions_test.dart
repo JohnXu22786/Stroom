@@ -18,11 +18,14 @@ Future<void> pumpPage(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(MaterialApp(
+  await tester.pumpWidget(
+    MaterialApp(
       locale: const Locale('zh', 'CN'),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      home: LlmModelConfigPage(model: model)));
+      home: LlmModelConfigPage(model: model),
+    ),
+  );
   await tester.pump();
 }
 
@@ -44,8 +47,9 @@ List<String> popupValues(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('tapping the 上下文长度 field shows all suggestion values',
-      (tester) async {
+  testWidgets('tapping the 上下文长度 field shows all suggestion values', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     await tester.tap(contextField);
@@ -69,8 +73,9 @@ void main() {
     expect(popupValues(tester), kExpectedSuggestions);
   });
 
-  testWidgets('selecting a suggestion fills the field and closes the popup',
-      (tester) async {
+  testWidgets('selecting a suggestion fills the field and closes the popup', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     await tester.tap(contextField);
@@ -114,8 +119,7 @@ void main() {
     expect(popupValues(tester), kExpectedSuggestions);
   });
 
-  testWidgets(
-      'after a no-match filter, re-tapping the field reopens the '
+  testWidgets('after a no-match filter, re-tapping the field reopens the '
       'full list', (tester) async {
     await pumpPage(tester);
 
@@ -129,14 +133,12 @@ void main() {
     await tester.pump();
     expect(popupValues(tester), kExpectedSuggestions);
     // The non-matching input must survive.
-    expect(
-      tester.widget<TextField>(contextField).controller?.text,
-      '99999',
-    );
+    expect(tester.widget<TextField>(contextField).controller?.text, '99999');
   });
 
-  testWidgets('direct typing still works while the popup is open',
-      (tester) async {
+  testWidgets('direct typing still works while the popup is open', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     await tester.tap(contextField);
@@ -165,8 +167,9 @@ void main() {
     expect(find.text('65536'), findsNothing);
   });
 
-  testWidgets('focus loss closes the popup; other fields have no suggestions',
-      (tester) async {
+  testWidgets('focus loss closes the popup; other fields have no suggestions', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     // Open the popup on the context field.
@@ -186,23 +189,24 @@ void main() {
   });
 
   testWidgets(
-      'editing an existing model: tapping the filled field shows all values',
-      (tester) async {
-    final model = ModelConfig(
-      name: 'test-model',
-      modelId: 'test-model',
-      typeConfig: {'context': 4096},
-    );
-    await pumpPage(tester, model: model);
+    'editing an existing model: tapping the filled field shows all values',
+    (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+      );
+      await pumpPage(tester, model: model);
 
-    await tester.tap(contextField);
-    await tester.pump();
+      await tester.tap(contextField);
+      await tester.pump();
 
-    // All suggestions offered; '4096' also present in the field text.
-    expect(popupValues(tester), kExpectedSuggestions);
-    expect(find.text('4096'), findsNWidgets(2));
-    expect(find.text('8192'), findsOneWidget);
-  });
+      // All suggestions offered; '4096' also present in the field text.
+      expect(popupValues(tester), kExpectedSuggestions);
+      expect(find.text('4096'), findsNWidgets(2));
+      expect(find.text('8192'), findsOneWidget);
+    },
+  );
 
   testWidgets('re-tapping the field reopens a dismissed popup', (tester) async {
     await pumpPage(tester);
@@ -223,8 +227,7 @@ void main() {
     expect(find.text('65536'), findsOneWidget);
   });
 
-  testWidgets(
-      'field keeps focus after selecting a suggestion, so typing '
+  testWidgets('field keeps focus after selecting a suggestion, so typing '
       'continues to work', (tester) async {
     await pumpPage(tester);
 
@@ -243,15 +246,19 @@ void main() {
     expect(field.controller?.text, '6553600');
   });
 
-  testWidgets('popup flips above the field when there is no room below',
-      (tester) async {
+  testWidgets('popup flips above the field when there is no room below', (
+    tester,
+  ) async {
     // Default 800x600 test surface — the field sits low enough that 280px
     // of popup would not fit below it.
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(
+      MaterialApp(
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: LlmModelConfigPage()));
+        home: LlmModelConfigPage(),
+      ),
+    );
     await tester.pump();
 
     await tester.tap(contextField);
@@ -288,18 +295,22 @@ void main() {
     );
   });
 
-  testWidgets('flip measurement converts physical viewInsets (DPR != 1)',
-      (tester) async {
+  testWidgets('flip measurement converts physical viewInsets (DPR != 1)', (
+    tester,
+  ) async {
     // Logical 800x1400 at DPR 2 (physical 1600x2800).
     tester.view.physicalSize = const Size(1600, 2800);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(
+      MaterialApp(
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: LlmModelConfigPage()));
+        home: LlmModelConfigPage(),
+      ),
+    );
     await tester.pump();
 
     await tester.tap(contextField);
@@ -331,8 +342,9 @@ void main() {
     );
   });
 
-  testWidgets('disposing the page while the popup is open does not throw',
-      (tester) async {
+  testWidgets('disposing the page while the popup is open does not throw', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     await tester.tap(contextField);
