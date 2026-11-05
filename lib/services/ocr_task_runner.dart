@@ -205,6 +205,8 @@ class OcrTaskRunner {
         return '第 ${entry.key + 1}/${_images.length} 张图片 $percent%';
       }).join('，');
       steps[1] = steps[1].copyWith(label: '上传' + progress);
+    } else {
+      steps[1] = steps[1].copyWith(label: '上传图片');
     }
     notifier.setSteps(taskId, steps);
   }
