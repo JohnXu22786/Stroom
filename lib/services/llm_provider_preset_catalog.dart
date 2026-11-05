@@ -3048,7 +3048,7 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
   LlmProviderPreset(
     id: 'xiaomi-mimo',
     displayName: 'Xiaomi MiMo',
-    baseUrl: 'https://api.xiaomimimo.com/v1',
+    baseUrl: 'https://api.xiaomimimo.com/v1/chat/completions',
     fallbackModels: [
       LlmProviderPresetModel(
         'mimo-v2.5-pro',

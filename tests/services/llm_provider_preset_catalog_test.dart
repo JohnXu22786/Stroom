@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_connector_service.dart';
@@ -401,6 +402,14 @@ void main() {
           restored.models.single.config['apiProtocolOverride'],
           'anthropic.messages',
         );
+        final chatProvider = createChatProviderFromConfig(
+          providerName: restored.displayName,
+          baseUrl: restored.endpointConfig['baseUrl'] as String,
+          apiKey: 'key-$presetId',
+          endpointType: restored.endpointConfig['apiProtocol'] as String,
+        ) as OpenAICompatibleChatProvider;
+        // ignore: invalid_use_of_visible_for_testing_member
+        expect(chatProvider.requestUrlForTesting, preset.baseUrl);
 
         final group = LlmModelGroup(
           id: 'm45-$presetId-group',
@@ -1011,7 +1020,7 @@ void main() {
             'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
         'wandb': 'https://api.inference.wandb.ai/v1/chat/completions',
         'writer': 'https://api.writer.com/v1/chat/completions',
-        'xiaomi-mimo': 'https://api.xiaomimimo.com/v1',
+        'xiaomi-mimo': 'https://api.xiaomimimo.com/v1/chat/completions',
         'xkiro': 'https://api.xkiro.com/v1/chat/completions',
         'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
         'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
@@ -3551,7 +3560,7 @@ void main() {
   test('M48 catalog uses audited routes and preserves the Yi M35 entry', () {
     const endpoints = {
       'writer': 'https://api.writer.com/v1/chat/completions',
-      'xiaomi-mimo': 'https://api.xiaomimimo.com/v1',
+      'xiaomi-mimo': 'https://api.xiaomimimo.com/v1/chat/completions',
       'xkiro': 'https://api.xkiro.com/v1/chat/completions',
       'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
       'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
