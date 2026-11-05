@@ -3022,6 +3022,9 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
   // x5lab and ZenMux declare defaultContextLength: 128000 for dynamic models,
   // which this catalog cannot preserve on discovered models (registry/x5lab/
   // index.ts:10; registry/zenmux/index.ts:12). Both remain deferred.
+  // Xiaomi MiMo Token Plan is also deferred: its keys are cluster-bound across
+  // CN/SGP/AMS and the shared account flow cannot select/persist a region
+  // (shared/constants/xiaomiTokenPlanRegions.ts:4-22).
   // The remaining entries use the pinned OpenAI Chat Completions default
   // executor, API-key/Bearer auth, and provider-declared static or /models
   // catalogs. M33 audit rows 294-306 provide the source cross-check.
@@ -3047,34 +3050,6 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     displayName: 'Xiaomi MiMo',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     fallbackModels: [
-      LlmProviderPresetModel(
-        'mimo-v2.5-pro',
-        displayName: 'MiMo-V2.5-Pro',
-        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
-      ),
-      LlmProviderPresetModel(
-        'mimo-v2.5',
-        displayName: 'MiMo-V2.5',
-        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
-      ),
-    ],
-  ),
-  LlmProviderPreset(
-    id: 'xiaomi-mimo-token-plan',
-    displayName: 'Xiaomi MiMo Token Plan',
-    baseUrl: 'https://token-plan-sgp.xiaomimimo.com/v1',
-    modelsUrl: 'https://token-plan-sgp.xiaomimimo.com/v1/models',
-    fallbackModels: [
-      LlmProviderPresetModel(
-        'mimo-v2.6-pro',
-        displayName: 'MiMo-V2.6-Pro',
-        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
-      ),
-      LlmProviderPresetModel(
-        'mimo-v2.6-flash',
-        displayName: 'MiMo-V2.6-Flash',
-        capabilities: {'contextLength': 1048576, 'maxOutputTokens': 131072},
-      ),
       LlmProviderPresetModel(
         'mimo-v2.5-pro',
         displayName: 'MiMo-V2.5-Pro',

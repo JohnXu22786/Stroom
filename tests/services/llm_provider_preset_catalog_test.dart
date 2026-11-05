@@ -3538,7 +3538,6 @@ void main() {
     const endpoints = {
       'writer': 'https://api.writer.com/v1/chat/completions',
       'xiaomi-mimo': 'https://api.xiaomimimo.com/v1',
-      'xiaomi-mimo-token-plan': 'https://token-plan-sgp.xiaomimimo.com/v1',
       'xkiro': 'https://api.xkiro.com/v1/chat/completions',
       'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
       'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
@@ -3556,6 +3555,7 @@ void main() {
     expect(findLlmOpenAiProviderPreset('watsonx'), isNull);
     expect(findLlmOpenAiProviderPreset('x5lab'), isNull);
     expect(findLlmOpenAiProviderPreset('zenmux'), isNull);
+    expect(findLlmOpenAiProviderPreset('xiaomi-mimo-token-plan'), isNull);
     expect(findLlmOpenAiProviderPreset('yi'), isNotNull);
     expect(
       llmOpenAiProviderPresets.where((preset) => preset.id == 'yi'),
@@ -3564,7 +3564,6 @@ void main() {
     expect(
       {
         for (final id in [
-          'xiaomi-mimo-token-plan',
           'y-api',
           'yolo-auto',
           'zerolimitai',
@@ -3573,8 +3572,6 @@ void main() {
           id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
       },
       {
-        'xiaomi-mimo-token-plan':
-            'https://token-plan-sgp.xiaomimimo.com/v1/models',
         'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/models',
         'yolo-auto': 'https://yolo-auto.com/v1/models',
         'zerolimitai': 'https://www.zerolimitai.com/api/v1/models',
@@ -3588,14 +3585,6 @@ void main() {
           .fallbackModels
           .map((model) => model.id),
       ['palmyra-x5', 'palmyra-x4'],
-    );
-    expect(
-      findLlmOpenAiProviderPreset(
-        'xiaomi-mimo-token-plan',
-      )!
-          .fallbackModels
-          .map((model) => model.id),
-      ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.5-pro', 'mimo-v2.5'],
     );
     expect(findLlmOpenAiProviderPreset('xkiro')!.fallbackModels, hasLength(39));
     expect(
@@ -3623,7 +3612,6 @@ void main() {
       const presetIds = [
         'writer',
         'xiaomi-mimo',
-        'xiaomi-mimo-token-plan',
         'xkiro',
         'y-api',
         'yolo-auto',
@@ -3720,7 +3708,6 @@ void main() {
         dio: dio,
       );
       const presetIds = [
-        'xiaomi-mimo-token-plan',
         'y-api',
         'yolo-auto',
         'zerolimitai',
