@@ -3841,5 +3841,204 @@
   "chatRequest": "Request",
   "chatResponse": "Response",
   "chatNoErrorDetails": "No details available",
-  "ttsInstructionDescription": "Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly."
+  "ttsInstructionDescription": "Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.",
+  "audioPlayerSourceTextSource": "Choose source text",
+  "audioPlayerChooseInAppText": "Choose in app text",
+  "audioPlayerChooseSavedTextSubtitle": "Choose a saved text file from the app",
+  "audioPlayerChooseSystemText": "Choose system text file",
+  "audioPlayerChooseDeviceTextSubtitle": "Choose a text file from device storage",
+  "audioPlayerSelectInAppText": "Choose in app text",
+  "audioPlayerNoTextFiles": "No text files yet",
+  "audioPlayerCharacterCount": "{count} characters",
+  "@audioPlayerCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioPlayerSelectTextFailure": "Failed to select text: {error}",
+  "@audioPlayerSelectTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerCannotReadTextFile": "Unable to read text file",
+  "audioPlayerUploadTextFailure": "Failed to upload source text: {error}",
+  "@audioPlayerUploadTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerTextContentEmpty": "Text is empty",
+  "audioPlayerSaveTextFailure": "Failed to save source text: {error}",
+  "@audioPlayerSaveTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerSourceTextUploaded": "Source text uploaded",
+  "audioPlayerSourceTextUpdated": "Source text updated",
+  "audioPlayerConfigureTtsProvider": "Configure a TTS provider first",
+  "audioPlayerNoStreamingModels": "No model supports streaming playback",
+  "audioPlayerSelectStreamingModel": "Select a streaming playback model",
+  "audioPlayerProviderFallback": "Provider",
+  "audioPlayerStartStreaming": "Starting streaming playback: {model}",
+  "@audioPlayerStartStreaming": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerFileNotFound": "Audio file not found: {path}",
+  "@audioPlayerFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerUnableToLoadAudio": "Unable to load audio data",
+  "audioPlayerSourceText": "Source text",
+  "audioPlayerNoSourceText": "(No source text)",
+  "audioPlayerUploadSourceText": "Upload source text",
+  "audioPlayerEditSourceText": "Edit source text",
+  "audioPlayerCompanionTextMissing": "No companion text file found",
+  "audioPlayerPlaySelection": "Play selection",
+  "audioPlayerGenerateSelection": "Generate selection",
+  "audioPlayerPlaying": "Playing...",
+  "audioPlayerPaused": "Paused",
+  "audioPlayerPlaybackSpeed": "Playback speed",
+  "audioPlayerFailed": "Playback failed",
+  "audioPlayerRetry": "Retry",
+  "audioPlayerLoading": "Loading audio...",
+  "audioPlayerClose": "Close",
+  "audioRecordingBrowserUnsupportedShort": "Recording is not supported in the browser. Use the app version.",
+  "audioRecordingMicrophonePermissionRequired": "Microphone permission is required to record",
+  "audioRecordingStartFailure": "Failed to start recording: {error}",
+  "@audioRecordingStartFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingPauseFailure": "Failed to pause recording: {error}",
+  "@audioRecordingPauseFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingResumeFailure": "Failed to resume recording: {error}",
+  "@audioRecordingResumeFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingInvalidFile": "Recording file is invalid. Record again.",
+  "audioRecordingStopFailure": "Failed to stop recording: {error}",
+  "@audioRecordingStopFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingFileNotFound": "Recording file not found",
+  "audioRecordingFileEmpty": "Recording file is empty",
+  "audioRecordingSaved": "Recording saved: {name}",
+  "@audioRecordingSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingSaveFailure": "Failed to save recording: {error}",
+  "@audioRecordingSaveFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingTitle": "Recording",
+  "audioRecordingBrowserUnsupported": "Recording is not supported in the browser",
+  "audioRecordingUseApp": "Use the app version to record",
+  "audioRecordingDraftRecoveryHint": "An unsaved recording draft was found. You can save it to the audio library.",
+  "audioRecordingRecording": "Recording ●",
+  "audioRecordingPaused": "Paused ||",
+  "audioRecordingPreparing": "Preparing...",
+  "audioRecordingStart": "Start recording",
+  "audioRecordingPause": "Pause",
+  "audioRecordingStopping": "Stopping...",
+  "audioRecordingStop": "Stop",
+  "audioRecordingResume": "Resume",
+  "audioRecordingSaving": "Saving...",
+  "audioRecordingSave": "Save recording",
+  "audioRecordingRecordAgain": "Record again",
+  "audioRecordingWaveformPaused": "Recording paused; waveform is frozen",
+  "audioRecordingWaveformLive": "Live audio waveform",
+  "audioSeparationTitle": "Video audio separation",
+  "audioSeparationChooseVideoSource": "Choose video source",
+  "audioSeparationChooseAppAlbum": "Choose from app library",
+  "audioSeparationChooseSavedVideoSubtitle": "Choose a saved video from the app",
+  "audioSeparationChooseSystemAlbum": "Choose from system storage",
+  "audioSeparationChooseDeviceVideoSubtitle": "Choose a video file from device storage",
+  "audioSeparationChooseVideoFailure": "Failed to choose video: {error}",
+  "@audioSeparationChooseVideoFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineMissing": "Audio separation engine not detected",
+  "audioSeparationEngineMissingHelp": "Restart the app or check that its resources are complete.",
+  "audioSeparationNoVideoSelected": "No video selected",
+  "audioSeparationSupportedFormatsHint": "Supported formats: mp4, mov, m4v, 3gp",
+  "audioSeparationSuccess": "Audio extracted and saved to the audio library",
+  "audioSeparationView": "View",
+  "audioSeparationSelectedVideoCount": "{count, plural, one{Selected {count} video} other{Selected {count} videos}}",
+  "@audioSeparationSelectedVideoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioSeparationExtracting": "Extracting...",
+  "audioSeparationExtractAudio": "Extract audio",
+  "audioSeparationSaveTo": "Save to",
+  "audioSeparationChooseSaveFolder": "Choose save folder",
+  "audioSeparationCannotReadVideoFile": "Unable to read video file",
+  "audioSeparationChooseVideoFileFailure": "Failed to select video file: {error}",
+  "@audioSeparationChooseVideoFileFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationUnknownFormat": "Unknown",
+  "audioSeparationUnsupportedFormats": "Unsupported formats: {formats}. Supported formats: MP4, MOV, M4V, 3GP.",
+  "@audioSeparationUnsupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineUnavailable": "Audio separation engine is unavailable."
 }

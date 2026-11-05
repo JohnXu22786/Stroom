@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 
 // ============================================================================
@@ -37,8 +38,8 @@ class AudioPlayerErrorView extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline, size: 64, color: Colors.red),
           const SizedBox(height: 16),
-          const Text(
-            '播放失败',
+          Text(
+            AppLocalizations.of(context)!.audioPlayerFailed,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -72,7 +73,7 @@ class AudioPlayerErrorView extends StatelessWidget {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: onRetry,
-            child: const Text('重试'),
+            child: Text(AppLocalizations.of(context)!.audioPlayerRetry),
           ),
         ],
       ),
@@ -127,14 +128,14 @@ class AudioPlayerToolbarButton extends StatelessWidget {
 // buildAudioLoadingView — simple loading indicator
 // ============================================================================
 
-Widget buildAudioLoadingView() {
-  return const Center(
+Widget buildAudioLoadingView(BuildContext context) {
+  return Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         CircularProgressIndicator(),
         SizedBox(height: 16),
-        Text('正在加载音频...'),
+        Text(AppLocalizations.of(context)!.audioPlayerLoading),
       ],
     ),
   );

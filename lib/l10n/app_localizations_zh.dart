@@ -6727,6 +6727,305 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';
+
+  @override
+  String get audioPlayerSourceTextSource => '选择源文本来源';
+
+  @override
+  String get audioPlayerChooseInAppText => '从应用内文本选择';
+
+  @override
+  String get audioPlayerChooseSavedTextSubtitle => '从应用内已保存的文本文件中选择';
+
+  @override
+  String get audioPlayerChooseSystemText => '从系统文本文件选择';
+
+  @override
+  String get audioPlayerChooseDeviceTextSubtitle => '从设备文件中选择文本文件';
+
+  @override
+  String get audioPlayerSelectInAppText => '选择应用内文本';
+
+  @override
+  String get audioPlayerNoTextFiles => '暂无文本文件';
+
+  @override
+  String audioPlayerCharacterCount(int count) {
+    return '$count字';
+  }
+
+  @override
+  String audioPlayerSelectTextFailure(String error) {
+    return '选择文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerCannotReadTextFile => '无法读取文本文件';
+
+  @override
+  String audioPlayerUploadTextFailure(String error) {
+    return '上传源文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerTextContentEmpty => '文本内容为空';
+
+  @override
+  String audioPlayerSaveTextFailure(String error) {
+    return '保存源文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerSourceTextUploaded => '源文本已上传';
+
+  @override
+  String get audioPlayerSourceTextUpdated => '源文本已更新';
+
+  @override
+  String get audioPlayerConfigureTtsProvider => '请先配置TTS供应商';
+
+  @override
+  String get audioPlayerNoStreamingModels => '没有支持流式播放的模型';
+
+  @override
+  String get audioPlayerSelectStreamingModel => '选择流式播放模型';
+
+  @override
+  String get audioPlayerProviderFallback => '供应商';
+
+  @override
+  String audioPlayerStartStreaming(String model) {
+    return '开始流式播放: $model';
+  }
+
+  @override
+  String audioPlayerFileNotFound(String path) {
+    return '无法找到音频文件: $path';
+  }
+
+  @override
+  String get audioPlayerUnableToLoadAudio => '无法加载音频数据';
+
+  @override
+  String get audioPlayerSourceText => '源文本';
+
+  @override
+  String get audioPlayerNoSourceText => '（无源文本）';
+
+  @override
+  String get audioPlayerUploadSourceText => '上传源文本';
+
+  @override
+  String get audioPlayerEditSourceText => '修改源文本';
+
+  @override
+  String get audioPlayerCompanionTextMissing => '未找到伴生文本文件';
+
+  @override
+  String get audioPlayerPlaySelection => '播放选中';
+
+  @override
+  String get audioPlayerGenerateSelection => '生成选中';
+
+  @override
+  String get audioPlayerPlaying => '正在播放...';
+
+  @override
+  String get audioPlayerPaused => '已暂停';
+
+  @override
+  String get audioPlayerPlaybackSpeed => '播放速度';
+
+  @override
+  String get audioPlayerFailed => '播放失败';
+
+  @override
+  String get audioPlayerRetry => '重试';
+
+  @override
+  String get audioPlayerLoading => '正在加载音频...';
+
+  @override
+  String get audioPlayerClose => '关闭';
+
+  @override
+  String get audioRecordingBrowserUnsupportedShort => '浏览器暂不支持录音功能，请使用 App 版本';
+
+  @override
+  String get audioRecordingMicrophonePermissionRequired => '需要麦克风权限才能录音';
+
+  @override
+  String audioRecordingStartFailure(String error) {
+    return '开始录音失败: $error';
+  }
+
+  @override
+  String audioRecordingPauseFailure(String error) {
+    return '暂停录音失败: $error';
+  }
+
+  @override
+  String audioRecordingResumeFailure(String error) {
+    return '恢复录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingInvalidFile => '录音文件无效，请重新录制';
+
+  @override
+  String audioRecordingStopFailure(String error) {
+    return '停止录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingFileNotFound => '录音文件不存在';
+
+  @override
+  String get audioRecordingFileEmpty => '录音文件为空';
+
+  @override
+  String audioRecordingSaved(String name) {
+    return '录音已保存: $name';
+  }
+
+  @override
+  String audioRecordingSaveFailure(String error) {
+    return '保存录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingTitle => '录音';
+
+  @override
+  String get audioRecordingBrowserUnsupported => '浏览器暂不支持录音功能';
+
+  @override
+  String get audioRecordingUseApp => '请使用 App 版本进行录音';
+
+  @override
+  String get audioRecordingDraftRecoveryHint => '检测到未保存的录音草稿，可保存到音频库。';
+
+  @override
+  String get audioRecordingRecording => '录制中 ●';
+
+  @override
+  String get audioRecordingPaused => '已暂停 ||';
+
+  @override
+  String get audioRecordingPreparing => '准备中...';
+
+  @override
+  String get audioRecordingStart => '开始录音';
+
+  @override
+  String get audioRecordingPause => '暂停';
+
+  @override
+  String get audioRecordingStopping => '停止中...';
+
+  @override
+  String get audioRecordingStop => '停止';
+
+  @override
+  String get audioRecordingResume => '恢复';
+
+  @override
+  String get audioRecordingSaving => '保存中...';
+
+  @override
+  String get audioRecordingSave => '保存录音';
+
+  @override
+  String get audioRecordingRecordAgain => '重新录制';
+
+  @override
+  String get audioRecordingWaveformPaused => '暂停录制，波形已冻结';
+
+  @override
+  String get audioRecordingWaveformLive => '音量波形实时显示';
+
+  @override
+  String get audioSeparationTitle => '视频音频分离';
+
+  @override
+  String get audioSeparationChooseVideoSource => '选择视频来源';
+
+  @override
+  String get audioSeparationChooseAppAlbum => '从应用相册选择';
+
+  @override
+  String get audioSeparationChooseSavedVideoSubtitle => '从应用内已保存的视频中选择';
+
+  @override
+  String get audioSeparationChooseSystemAlbum => '从系统相册选择';
+
+  @override
+  String get audioSeparationChooseDeviceVideoSubtitle => '从设备存储中选择视频文件';
+
+  @override
+  String audioSeparationChooseVideoFailure(String error) {
+    return '选择视频失败: $error';
+  }
+
+  @override
+  String get audioSeparationEngineMissing => '未检测到音频分离引擎';
+
+  @override
+  String get audioSeparationEngineMissingHelp => '请重启应用或检查应用资源完整性。';
+
+  @override
+  String get audioSeparationNoVideoSelected => '暂未选择视频文件';
+
+  @override
+  String get audioSeparationSupportedFormatsHint => '支持 mp4、mov、m4v、3gp 格式';
+
+  @override
+  String get audioSeparationSuccess => '音频已成功提取并保存到音频库';
+
+  @override
+  String get audioSeparationView => '查看';
+
+  @override
+  String audioSeparationSelectedVideoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 个视频',
+      one: '已选 $count 个视频',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get audioSeparationExtracting => '提取中...';
+
+  @override
+  String get audioSeparationExtractAudio => '提取音频';
+
+  @override
+  String get audioSeparationSaveTo => '保存至';
+
+  @override
+  String get audioSeparationChooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get audioSeparationCannotReadVideoFile => '无法读取视频文件';
+
+  @override
+  String audioSeparationChooseVideoFileFailure(String error) {
+    return '选择视频文件失败: $error';
+  }
+
+  @override
+  String get audioSeparationUnknownFormat => '未知';
+
+  @override
+  String audioSeparationUnsupportedFormats(String formats) {
+    return '暂不支持 $formats 格式，仅支持 MP4、MOV、M4V、3GP。';
+  }
+
+  @override
+  String get audioSeparationEngineUnavailable => '音频分离引擎不可用。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -13451,4 +13750,303 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';
+
+  @override
+  String get audioPlayerSourceTextSource => '选择源文本来源';
+
+  @override
+  String get audioPlayerChooseInAppText => '从应用内文本选择';
+
+  @override
+  String get audioPlayerChooseSavedTextSubtitle => '从应用内已保存的文本文件中选择';
+
+  @override
+  String get audioPlayerChooseSystemText => '从系统文本文件选择';
+
+  @override
+  String get audioPlayerChooseDeviceTextSubtitle => '从设备文件中选择文本文件';
+
+  @override
+  String get audioPlayerSelectInAppText => '选择应用内文本';
+
+  @override
+  String get audioPlayerNoTextFiles => '暂无文本文件';
+
+  @override
+  String audioPlayerCharacterCount(int count) {
+    return '$count字';
+  }
+
+  @override
+  String audioPlayerSelectTextFailure(String error) {
+    return '选择文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerCannotReadTextFile => '无法读取文本文件';
+
+  @override
+  String audioPlayerUploadTextFailure(String error) {
+    return '上传源文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerTextContentEmpty => '文本内容为空';
+
+  @override
+  String audioPlayerSaveTextFailure(String error) {
+    return '保存源文本失败: $error';
+  }
+
+  @override
+  String get audioPlayerSourceTextUploaded => '源文本已上传';
+
+  @override
+  String get audioPlayerSourceTextUpdated => '源文本已更新';
+
+  @override
+  String get audioPlayerConfigureTtsProvider => '请先配置TTS供应商';
+
+  @override
+  String get audioPlayerNoStreamingModels => '没有支持流式播放的模型';
+
+  @override
+  String get audioPlayerSelectStreamingModel => '选择流式播放模型';
+
+  @override
+  String get audioPlayerProviderFallback => '供应商';
+
+  @override
+  String audioPlayerStartStreaming(String model) {
+    return '开始流式播放: $model';
+  }
+
+  @override
+  String audioPlayerFileNotFound(String path) {
+    return '无法找到音频文件: $path';
+  }
+
+  @override
+  String get audioPlayerUnableToLoadAudio => '无法加载音频数据';
+
+  @override
+  String get audioPlayerSourceText => '源文本';
+
+  @override
+  String get audioPlayerNoSourceText => '（无源文本）';
+
+  @override
+  String get audioPlayerUploadSourceText => '上传源文本';
+
+  @override
+  String get audioPlayerEditSourceText => '修改源文本';
+
+  @override
+  String get audioPlayerCompanionTextMissing => '未找到伴生文本文件';
+
+  @override
+  String get audioPlayerPlaySelection => '播放选中';
+
+  @override
+  String get audioPlayerGenerateSelection => '生成选中';
+
+  @override
+  String get audioPlayerPlaying => '正在播放...';
+
+  @override
+  String get audioPlayerPaused => '已暂停';
+
+  @override
+  String get audioPlayerPlaybackSpeed => '播放速度';
+
+  @override
+  String get audioPlayerFailed => '播放失败';
+
+  @override
+  String get audioPlayerRetry => '重试';
+
+  @override
+  String get audioPlayerLoading => '正在加载音频...';
+
+  @override
+  String get audioPlayerClose => '关闭';
+
+  @override
+  String get audioRecordingBrowserUnsupportedShort => '浏览器暂不支持录音功能，请使用 App 版本';
+
+  @override
+  String get audioRecordingMicrophonePermissionRequired => '需要麦克风权限才能录音';
+
+  @override
+  String audioRecordingStartFailure(String error) {
+    return '开始录音失败: $error';
+  }
+
+  @override
+  String audioRecordingPauseFailure(String error) {
+    return '暂停录音失败: $error';
+  }
+
+  @override
+  String audioRecordingResumeFailure(String error) {
+    return '恢复录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingInvalidFile => '录音文件无效，请重新录制';
+
+  @override
+  String audioRecordingStopFailure(String error) {
+    return '停止录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingFileNotFound => '录音文件不存在';
+
+  @override
+  String get audioRecordingFileEmpty => '录音文件为空';
+
+  @override
+  String audioRecordingSaved(String name) {
+    return '录音已保存: $name';
+  }
+
+  @override
+  String audioRecordingSaveFailure(String error) {
+    return '保存录音失败: $error';
+  }
+
+  @override
+  String get audioRecordingTitle => '录音';
+
+  @override
+  String get audioRecordingBrowserUnsupported => '浏览器暂不支持录音功能';
+
+  @override
+  String get audioRecordingUseApp => '请使用 App 版本进行录音';
+
+  @override
+  String get audioRecordingDraftRecoveryHint => '检测到未保存的录音草稿，可保存到音频库。';
+
+  @override
+  String get audioRecordingRecording => '录制中 ●';
+
+  @override
+  String get audioRecordingPaused => '已暂停 ||';
+
+  @override
+  String get audioRecordingPreparing => '准备中...';
+
+  @override
+  String get audioRecordingStart => '开始录音';
+
+  @override
+  String get audioRecordingPause => '暂停';
+
+  @override
+  String get audioRecordingStopping => '停止中...';
+
+  @override
+  String get audioRecordingStop => '停止';
+
+  @override
+  String get audioRecordingResume => '恢复';
+
+  @override
+  String get audioRecordingSaving => '保存中...';
+
+  @override
+  String get audioRecordingSave => '保存录音';
+
+  @override
+  String get audioRecordingRecordAgain => '重新录制';
+
+  @override
+  String get audioRecordingWaveformPaused => '暂停录制，波形已冻结';
+
+  @override
+  String get audioRecordingWaveformLive => '音量波形实时显示';
+
+  @override
+  String get audioSeparationTitle => '视频音频分离';
+
+  @override
+  String get audioSeparationChooseVideoSource => '选择视频来源';
+
+  @override
+  String get audioSeparationChooseAppAlbum => '从应用相册选择';
+
+  @override
+  String get audioSeparationChooseSavedVideoSubtitle => '从应用内已保存的视频中选择';
+
+  @override
+  String get audioSeparationChooseSystemAlbum => '从系统相册选择';
+
+  @override
+  String get audioSeparationChooseDeviceVideoSubtitle => '从设备存储中选择视频文件';
+
+  @override
+  String audioSeparationChooseVideoFailure(String error) {
+    return '选择视频失败: $error';
+  }
+
+  @override
+  String get audioSeparationEngineMissing => '未检测到音频分离引擎';
+
+  @override
+  String get audioSeparationEngineMissingHelp => '请重启应用或检查应用资源完整性。';
+
+  @override
+  String get audioSeparationNoVideoSelected => '暂未选择视频文件';
+
+  @override
+  String get audioSeparationSupportedFormatsHint => '支持 mp4、mov、m4v、3gp 格式';
+
+  @override
+  String get audioSeparationSuccess => '音频已成功提取并保存到音频库';
+
+  @override
+  String get audioSeparationView => '查看';
+
+  @override
+  String audioSeparationSelectedVideoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 个视频',
+      one: '已选 $count 个视频',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get audioSeparationExtracting => '提取中...';
+
+  @override
+  String get audioSeparationExtractAudio => '提取音频';
+
+  @override
+  String get audioSeparationSaveTo => '保存至';
+
+  @override
+  String get audioSeparationChooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get audioSeparationCannotReadVideoFile => '无法读取视频文件';
+
+  @override
+  String audioSeparationChooseVideoFileFailure(String error) {
+    return '选择视频文件失败: $error';
+  }
+
+  @override
+  String get audioSeparationUnknownFormat => '未知';
+
+  @override
+  String audioSeparationUnsupportedFormats(String formats) {
+    return '暂不支持 $formats 格式，仅支持 MP4、MOV、M4V、3GP。';
+  }
+
+  @override
+  String get audioSeparationEngineUnavailable => '音频分离引擎不可用。';
 }
