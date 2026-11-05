@@ -8807,6 +8807,42 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts other credential words after ask',
+      () {
+        const credentialEcho = 'password';
+        const instruction = 'Please ask the password carefully';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-asked-password-credential-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer passwor…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(retryInstruction, 'Please ask the [redacted] carefully');
+        expect(retryInstruction, isNot(contains(credentialEcho)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts credentialed secretary key completion',
       () {
         const echoedCredential = 'secretary';
@@ -12949,6 +12985,57 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves natural word continuations',
+      () {
+        BackgroundTask taskFor(
+          String id,
+          String instruction,
+          String credentialPrefix,
+        ) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {
+                  'Authorization': 'Bearer $credentialPrefix…',
+                },
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+        const prompts = [
+          ('cooperat', 'Please cooperate with the officer.'),
+          ('cooperat', 'Please cooperate fully.'),
+          ('secretar', 'Please ask the secretary.'),
+        ];
+        for (final (credentialPrefix, prompt) in prompts) {
+          final task = taskFor(
+            'legacy-ocr-natural-word-continuation-$credentialPrefix',
+            prompt,
+            credentialPrefix,
+          );
+          expect(
+            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+            prompt,
+          );
+        }
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves prose around long mask echoes',
       () {
         BackgroundTask taskFor(
@@ -13044,7 +13131,7 @@ void main() {
             'Please authenticate the receipt',
             'Please authenticate the receipt',
           ),
-          'cooperat': ('Please cooperate.', 'Please [redacted].'),
+          'cooperat': ('Please cooperate.', 'Please cooperate.'),
           'translat': (
             'Please translate this receipt',
             'Please translate this receipt',
@@ -13071,7 +13158,7 @@ void main() {
           ),
           'secretar': (
             'Please ask the secretary carefully',
-            'Please ask the [redacted] carefully',
+            'Please ask the secretary carefully',
           ),
           'certifica': (
             'Please review the certificate',

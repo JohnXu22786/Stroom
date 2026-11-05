@@ -2911,12 +2911,28 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       ).hasMatch(after);
   final naturalReadCharacterPrompt =
       _legacyOcrIsNaturalReadCharacterPrompt(naturalWord, before);
+  final naturalSecretaryInstructionPrompt =
+      const {'secretary', 'secretaries'}.contains(naturalWord) &&
+          RegExp(
+            r'\b(?:please\s+)?ask(?:\s+(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          (after.isEmpty ||
+              RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after) ||
+              RegExp(r'^[.!?]$', caseSensitive: false).hasMatch(after));
   final naturalNounInstructionPrompt = RegExp(
         r'\b(?:please\s+)?(?:describe|review|examine|include|provide|extract|read\s+about|use)(?:\s+(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
+  final naturalCooperateImperativePrompt = naturalWord == 'cooperate' &&
+      RegExp(r'^(?:please\s*)?$', caseSensitive: false).hasMatch(before) &&
+      (after.isEmpty ||
+          RegExp(
+            r'^(?:[.!?]|[a-z]+(?:\s+[a-z]+)*(?:[.!?])?)$',
+            caseSensitive: false,
+          ).hasMatch(after));
   final naturalSecretPluralKeepPrompt = isNaturalSecretPlural &&
       RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
       (after.isEmpty ||
@@ -2956,7 +2972,9 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readHandwritingInstructionPrompt ||
           readNaturalNounInstructionPrompt ||
           naturalImperativePrompt ||
+          naturalSecretaryInstructionPrompt ||
           naturalNounInstructionPrompt ||
+          naturalCooperateImperativePrompt ||
           naturalSecretPluralPrompt ||
           naturalDefinitionQuestion ||
           naturalNounSentence);
