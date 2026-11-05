@@ -78,6 +78,52 @@ void main() {
     );
   });
 
+  test('g4f.space presets use source URLs, Bearer keys, and model fallbacks',
+      () {
+    const expected = {
+      'g4f-gemini': (
+        'https://g4f.space/api/gemini/v1/chat/completions',
+        'https://g4f.space/api/gemini/v1/models',
+        ['models/gemini-2.5-flash', 'models/gemini-2.5-pro'],
+      ),
+      'g4f-groq': (
+        'https://g4f.space/api/groq/v1/chat/completions',
+        'https://g4f.space/api/groq/v1/models',
+        ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+      ),
+      'g4f-nvidia': (
+        'https://g4f.space/api/nvidia/v1/chat/completions',
+        'https://g4f.space/api/nvidia/v1/models',
+        [
+          'nvidia/nemotron-3-nano-30b-a3b',
+          'z-ai/glm-5.2',
+          'minimaxai/minimax-m2.7'
+        ],
+      ),
+      'g4f-ollama': (
+        'https://g4f.space/api/ollama/v1/chat/completions',
+        'https://g4f.space/api/ollama/v1/models',
+        ['gemma3:4b'],
+      ),
+      'g4f-pollinations': (
+        'https://g4f.space/api/pollinations/v1/chat/completions',
+        'https://g4f.space/api/pollinations/v1/models',
+        ['openai', 'openai-fast'],
+      ),
+    };
+    for (final entry in expected.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value.$1);
+      expect(preset.modelsUrl, entry.value.$2);
+      expect(preset.fallbackModels.map((model) => model.id).toList(),
+          entry.value.$3);
+      expect(preset.authType, 'api_key');
+      expect(preset.authorizationHeader, 'Authorization');
+      expect(preset.authorizationScheme, 'Bearer');
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+  });
+
   test('M49 API-key presets preserve source endpoint and header contracts', () {
     const expected = {
       'api-airforce': (
@@ -1068,6 +1114,11 @@ void main() {
 
   test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
+      'g4f-gemini',
+      'g4f-groq',
+      'g4f-nvidia',
+      'g4f-ollama',
+      'g4f-pollinations',
       'api-airforce',
       'navy',
       'pioneer',
@@ -1235,6 +1286,12 @@ void main() {
           preset.id: preset.baseUrl,
       },
       {
+        'g4f-gemini': 'https://g4f.space/api/gemini/v1/chat/completions',
+        'g4f-groq': 'https://g4f.space/api/groq/v1/chat/completions',
+        'g4f-nvidia': 'https://g4f.space/api/nvidia/v1/chat/completions',
+        'g4f-ollama': 'https://g4f.space/api/ollama/v1/chat/completions',
+        'g4f-pollinations':
+            'https://g4f.space/api/pollinations/v1/chat/completions',
         'ai21': 'https://api.ai21.com/studio/v1/chat/completions',
         'aimlapi': 'https://api.aimlapi.com/v1/chat/completions',
         'ainative': 'https://api.ainative.studio/api/v1/chat/completions',
@@ -4343,6 +4400,128 @@ void main() {
       );
     },
   );
+
+  test('M59 g4f accounts persist securely and route through Chat and Task Flow',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+    );
+    const presetIds = [
+      'g4f-gemini',
+      'g4f-groq',
+      'g4f-nvidia',
+      'g4f-ollama',
+      'g4f-pollinations',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallback = preset.fallbackModels.first;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm59-$presetId',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+          models: [
+            LlmUpstreamModel(
+              id: 'm59-$presetId:${fallback.id}',
+              upstreamModelId: fallback.id,
+              displayName: fallback.displayName,
+              capabilities: fallback.capabilities,
+              config: const {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        ),
+        secret: 'm59-key-$presetId',
+      );
+
+      final restored = (await service.getAccount(account.id))!;
+      expect(await service.readCredential(account.id), 'm59-key-$presetId');
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig.toString(),
+          isNot(contains('m59-key-$presetId')));
+      expect(restored.models.single.upstreamModelId, fallback.id);
+      expect(restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages');
+
+      final group = LlmModelGroup(
+        id: 'm59-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: fallback.id,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1), reason: presetId);
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains('openai-compatibility'),
+      );
+    }
+  });
+
+  test('M59 g4f model discovery uses each source URL and Bearer key', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-${requests.length}'}
+            ]
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = [
+      'g4f-gemini',
+      'g4f-groq',
+      'g4f-nvidia',
+      'g4f-ollama',
+      'g4f-pollinations',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm59-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'm59-discovery-key-$presetId',
+      );
+      final models = await service.discoverModels(account, refreshRemote: true);
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'],
+          'Bearer m59-discovery-key-$presetId');
+      expect(models.single.upstreamModelId, 'discovered-${requests.length}');
+    }
+  });
 }
 
 class _MemoryLlmAccountPreferences implements LlmAccountPreferences {
