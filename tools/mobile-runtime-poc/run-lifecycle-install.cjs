@@ -53,14 +53,14 @@ process.on('exit', () => {
   const markerMatches = expected.marker !== null && fs.existsSync(markerPath) &&
     fs.readFileSync(markerPath, 'utf8') === expected.marker
   const statusMatches = expected.accepted
-    ? process.exitCode === 0 && packageInstalled && markerMatches
-    : process.exitCode !== 0 &&
+    ? Number(process.exitCode || 0) === 0 && packageInstalled && markerMatches
+    : Number(process.exitCode || 0) !== 0 &&
       diagnostics.some((entry) => entry.indexOf(expected.diagnostic) === 0)
   console.log(
     statusMatches
       ? 'MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS ' + caseName
       : 'MOBILE_LIFECYCLE_EXPECTED_RESULT_FAIL ' + caseName +
-        ' exit=' + String(process.exitCode),
+        ' exit=' + String(Number(process.exitCode || 0)),
   )
   console.log(statusMatches ? 'RESULT:PASS' : 'RESULT:FAIL')
 })
