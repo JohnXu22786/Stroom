@@ -1,8 +1,12 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
     show StateProvider, StateProviderFamily;
+import 'package:path/path.dart' as p;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/assistant.dart' show Assistant;
@@ -17,11 +21,34 @@ import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/tts_state_provider.dart' show ttsStateProvider;
+import '../task_flow/models/task_flow_execution.dart' show FlowRunInput;
+import '../task_flow/models/flow_payload.dart' show maxFlowImageInputBytes;
+import '../task_flow/providers/task_flow_execution_provider.dart'
+    show taskFlowExecutionsProvider;
+import '../task_flow/providers/task_flow_provider.dart'
+    show taskFlowListProvider;
+import '../task_flow/services/task_flow_execution_service.dart'
+    show taskFlowExecutionServiceProvider;
+import '../utils/audio_utils.dart' show normalizeAsrUploadFormat;
+import '../utils/file_manifest.dart' show AudioRecord, FileManifest;
+import '../utils/image_manifest.dart' show ImageManifest, ImageRecord;
+import '../utils/provider_models.dart' show flattenProviderModels;
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
-import 'chat_protocol.dart' show rebuildToolResultText;
+import 'chat_protocol.dart'
+    show
+        AttachmentReadStatus,
+        maxAttachmentBytes,
+        readAttachmentBase64,
+        rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'asr_service.dart' show AsrConfig, AsrService, AudioUploadMethod;
+import 'attachment_storage.dart';
+import 'chat_media_tool_service.dart';
+import 'chat_task_flow_tool_service.dart';
+import 'ocr_service.dart' show OcrConfig, OcrService;
 import 'todo_tool_service.dart';
 
 // ============================================================================
@@ -52,6 +79,7 @@ part 'chat_stream_manager_persist.dart';
 part 'chat_stream_manager_compaction.dart';
 part 'chat_stream_manager_title.dart';
 part 'chat_stream_manager_finalize.dart';
+part 'chat_stream_manager_agent_tools.dart';
 
 // ============================================================================
 // ChatStreamManager
@@ -332,10 +360,12 @@ class ChatStreamManager {
     // would cache a global-config service and the send below would
     // silently ignore the assistant binding (putIfAbsent first-writer
     // wins).
+    final toolEntriesState =
+        entriesStateOverride ?? _ref?.read(providerEntriesProvider);
     final snappedChatService = _adapter.getOrCreateService(
       convId,
       assistant: assistant,
-      entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+      entriesState: toolEntriesState,
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
@@ -379,6 +409,11 @@ class ChatStreamManager {
                 .updateTodoItems(convId, todos),
           );
         },
+      );
+      snappedChatService.registerAgentToolHandlers(
+        manager: this,
+        history: state.history,
+        entriesState: toolEntriesState,
       );
     }
     snappedChatService?.setContextSummary(conv?.contextSummary);
