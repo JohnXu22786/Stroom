@@ -686,6 +686,13 @@ def _table_rows(
                 ):
                     continue
             normalized_cells = tuple(cells)
+            if (
+                not has_leading_pipe
+                and not has_trailing_pipe
+                and normalized_cells in (known_prose_rows or set())
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
             is_compact_pipe_row = (
                 allow_compact_pipe_row_without_context
                 and not has_leading_pipe
@@ -846,9 +853,9 @@ def _table_matches(
             if _has_unescaped_trailing_pipe(stripped):
                 raw_cells = raw_cells[:-1]
             if len(raw_cells) > 1:
-                known_prose_rows.add(
-                    tuple(normalize_text(cell) for cell in raw_cells)
-                )
+                prose_row = tuple(normalize_text(cell) for cell in raw_cells)
+                if prose_row not in expected_rows:
+                    known_prose_rows.add(prose_row)
     if formula_text:
         canonical_formula = _canonical_formula(formula_text, output_format)
         strip_markdown_markup = output_format in {"markdown", "table"}

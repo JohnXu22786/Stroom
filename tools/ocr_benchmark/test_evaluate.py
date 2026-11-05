@@ -2331,6 +2331,78 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["table_fidelity"]["value"], 1
                 )
 
+    def test_unannotated_pipe_prose_after_table_does_not_reduce_fidelity(self):
+        table = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-unannotated-pipe-prose",
+                    "gold_text": f"{table}\nThe relation is a | b",
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        for output_format, text in (
+            ("plain_text", f"{table}\nThe relation is a | b"),
+            (
+                "markdown",
+                "| Name | Value |\n"
+                "| --- | --- |\n"
+                "| First | 1 |\n"
+                "The relation is a | b",
+            ),
+            ("table", f"{table}\nThe relation is a | b"),
+        ):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-unannotated-pipe-prose",
+                            "text": text,
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["table_fidelity"]["value"], 1
+                )
+
+    def test_framed_extra_row_matching_unannotated_prose_is_rejected(self):
+        table = "Name | Value\nFirst | 1"
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-framed-extra-prose-row",
+                    "text": (
+                        "| Name | Value |\n"
+                        "| --- | --- |\n"
+                        "| First | 1 |\n"
+                        "| The relation is a | b |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-framed-extra-prose-row",
+                        "gold_text": f"{table}\nThe relation is a | b",
+                        "table_text": table,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
     def test_one_word_label_in_pipe_prose_after_table_does_not_reduce_fidelity(self):
         table = "Code | Count\nP-12 | 3"
         manifest = {
