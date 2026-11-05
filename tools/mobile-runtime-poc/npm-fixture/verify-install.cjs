@@ -9,6 +9,12 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { z } = require('zod');
 
 async function main() {
+  const utf8Buffer = Buffer.from('abc');
+  assert.equal(utf8Buffer.toString('utf8', 1, 2), 'b');
+  assert.equal(utf8Buffer.toLocaleString('utf8', 1, 2), 'b');
+  assert.equal(utf8Buffer.toString('hex', 1, 2), '62');
+  console.log('NODE_MOBILE_UTF8_SLICE_PASS');
+
   const fastUri = require('fast-uri');
   assert.equal(require('fast-uri/package.json').version, '3.1.0');
   assert.equal(typeof fastUri.parse, 'function');

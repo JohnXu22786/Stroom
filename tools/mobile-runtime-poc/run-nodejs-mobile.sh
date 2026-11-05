@@ -142,8 +142,8 @@ verify_args="-p (eval(new/**/TextDecoder().decode(require('node:fs').readFileSyn
 run_node 'Patched package, TypeScript, and MCP API checks' "$verify_args" 'MCP_IN_MEMORY_INITIALIZE_LIST_CALL_PASS' 120
 
 runner="$files/test/mobile-runtime-poc/run-lifecycle-install.cjs"
-for lifecycle_case in javascript typescript child-process native-command; do
-  lifecycle_expression="(()=>{let fs=require('node:fs');eval(new/**/TextDecoder().decode(fs.readFileSync('$shim')));globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case';return/**/require('$runner')})()"
+for lifecycle_case in javascript async-javascript async-exit async-exit-default async-failure sync-exit async-timeout inline-js core-js typescript child-process native-command; do
+  lifecycle_expression="(()=>{let/**/fs=require('node:fs');eval(new/**/TextDecoder().decode(fs.readFileSync('$shim')));globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case';return/**/require('$runner')})()"
   run_node "npm lifecycle bridge: $lifecycle_case" \
     "-p $lifecycle_expression" \
     "MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS $lifecycle_case" 180

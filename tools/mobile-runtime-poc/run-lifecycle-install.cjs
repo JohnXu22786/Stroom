@@ -5,6 +5,35 @@ const path = require('node:path')
 const caseName = global.__STROOM_LIFECYCLE_CASE
 const cases = {
   javascript: { marker: 'JS lifecycle ran in Node Mobile', accepted: true },
+  'async-javascript': { marker: 'Async JS lifecycle ran in Node Mobile', accepted: true },
+  'async-exit': {
+    marker: null,
+    logMarker: 'MOBILE_LIFECYCLE_ASYNC_EXIT_PASS',
+    accepted: true,
+  },
+  'async-exit-default': {
+    marker: null,
+    logMarker: 'MOBILE_LIFECYCLE_ASYNC_EXIT_DEFAULT',
+    accepted: false,
+    diagnostic: 'MOBILE_LIFECYCLE_ASYNC_EXIT_DEFAULT',
+  },
+  'async-failure': {
+    marker: null,
+    accepted: false,
+    diagnostic: 'MOBILE_LIFECYCLE_ASYNC_FAILURE',
+  },
+  'sync-exit': {
+    marker: null,
+    logMarker: 'MOBILE_LIFECYCLE_SYNC_EXIT_PASS',
+    accepted: true,
+  },
+  'async-timeout': {
+    marker: null,
+    accepted: false,
+    diagnostic: 'npm lifecycle JavaScript did not become idle within',
+  },
+  'inline-js': { marker: 'Inline JS lifecycle ran in Node Mobile', accepted: true },
+  'core-js': { marker: null, logMarker: 'Thank you for using core-js', packageName: 'core-js', accepted: true },
   typescript: { marker: 'TypeScript lifecycle ran in Node Mobile', accepted: true },
   'child-process': {
     marker: null,
@@ -23,17 +52,26 @@ if (!expected) throw new Error('Unknown lifecycle fixture: ' + caseName)
 const fixtureRoot = path.join(__dirname, 'lifecycle-fixtures')
 const packagePath = path.join(fixtureRoot, caseName)
 const target = path.join(__dirname, 'lifecycle-install-' + caseName)
+fs.rmSync(target, { recursive: true, force: true })
 const markerPath = path.join(target, 'bridge-marker.txt')
+const tempPath = path.join(target, '.tmp')
+fs.mkdirSync(tempPath, { recursive: true })
 const runtimeFiles = path.resolve(__dirname, '../..')
 const npmCli = path.join(runtimeFiles, 'test/npm/package/bin/npm-cli.js')
 const shim = path.join(__dirname, 'compatibility-shim.cjs')
 const bridge = path.join(__dirname, 'npm-lifecycle-bridge.cjs')
 const sucrase = path.join(__dirname, 'npm-fixture/node_modules/sucrase')
 const diagnostics = []
+const lifecycleOutput = []
 const originalConsoleError = console.error
+const originalConsoleLog = console.log
 console.error = (...args) => {
   diagnostics.push(args.map(String).join(' '))
   originalConsoleError(...args)
+}
+console.log = (...args) => {
+  lifecycleOutput.push(args.map(String).join(' '))
+  originalConsoleLog(...args)
 }
 
 // Bootstrap the UTF-8 shim before reading the bridge or npm's modules.
@@ -41,17 +79,23 @@ eval(new TextDecoder('utf-8').decode(fs.readFileSync(shim)))
 process.env.STROOM_NPM_CLI = npmCli
 process.env.STROOM_SUCRASE_MODULE = sucrase
 process.env.STROOM_LIFECYCLE_MARKER = markerPath
+process.env.TMPDIR = tempPath
+if (caseName === 'async-timeout') process.env.STROOM_LIFECYCLE_TIMEOUT_MS = '100'
 require(bridge)
 process.argv = [
   process.execPath, npmCli, 'install', '--prefix', target, '--foreground-scripts',
-  '--package-lock=false', '--no-audit', '--no-fund', packagePath,
+  '--package-lock=false', '--no-audit', '--no-fund',
+  caseName === 'core-js' ? 'core-js@3.45.1' : packagePath,
 ]
+process.env.CI = ''
 console.log('MOBILE_LIFECYCLE_INSTALL_BEGIN ' + caseName)
 process.on('exit', () => {
-  const installedPath = path.join(target, 'node_modules', require(path.join(packagePath, 'package.json')).name)
+  const packageName = expected.packageName || require(path.join(packagePath, 'package.json')).name
+  const installedPath = path.join(target, 'node_modules', packageName)
   const packageInstalled = fs.existsSync(path.join(installedPath, 'package.json'))
-  const markerMatches = expected.marker !== null && fs.existsSync(markerPath) &&
-    fs.readFileSync(markerPath, 'utf8') === expected.marker
+  const markerMatches = expected.marker !== null
+    ? fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf8') === expected.marker
+    : lifecycleOutput.some((line) => line.indexOf(expected.logMarker) !== -1)
   const statusMatches = expected.accepted
     ? Number(process.exitCode || 0) === 0 && packageInstalled && markerMatches
     : Number(process.exitCode || 0) !== 0 &&

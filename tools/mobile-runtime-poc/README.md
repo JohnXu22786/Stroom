@@ -15,13 +15,21 @@ The Android workflow downloads the official Node Mobile v18.20.4 release, verifi
 
 ## Lifecycle bridge experiment
 
-Both simulator workflows install four local npm packages through npm 10.8.2 while the embedded Node process is running:
+Both simulator workflows install eleven local npm fixtures and core-js 3.45.1 through npm 10.8.2 while the embedded Node process is running:
 
 - node postinstall.cjs must run in-process and write a marker file.
+- An asynchronous timer plus `fs.promises` postinstall must complete before npm reports success.
+- An asynchronous `process.exit(0)` must complete its lifecycle without terminating the npm host.
+- A no-argument asynchronous `process.exit()` preserves the current exit code.
+- An asynchronous lifecycle error must stop its interval and report the original error instead of masking it with a timeout.
+- A synchronous `process.exit(0)` must complete its lifecycle without leaving an interval running.
+- A lifecycle with a persistent interval must time out and cancel its interval instead of hanging npm.
+- A `node -e "try{require('./postinstall')}catch(e){}"` fixture checks the inline JS command form used by core-js 3.45.1.
+- The actual core-js 3.45.1 package must install and run its postinstall hook, confirmed by the hook's output.
 - node postinstall.ts must transpile with the installed Sucrase package, run in-process, and write a marker file.
 - A JS hook calling child_process.execFileSync must fail with an unsupported-external-executable error.
 - node-gyp rebuild must fail with an unsupported-lifecycle-command error.
 
-The prototype intercepts npm's internal @npmcli/promise-spawn implementation. This is not a supported npm extension point and is pinned to npm 10.8.2. The bridge only accepts a direct JS/TS file entry; shell compositions, ESM lifecycle files, native compilers/modules, and unavailable external programs remain unsupported. It is not a security boundary and does not ask an assistant to substitute or invent commands. Passing simulator tests would establish only these fixtures and this npm version, not general package compatibility.
+The prototype intercepts npm's internal @npmcli/promise-spawn implementation. This is not a supported npm extension point and is pinned to npm 10.8.2. The bridge accepts direct CommonJS JS/TS file entries and a simple quoted `node -e` entry, and waits for finite asynchronous work before reporting success. A lifecycle hook that does not become idle within 30 seconds fails. Shell compositions, ESM lifecycle files, native compilers/modules, and unavailable external programs remain unsupported. It is not a security boundary and does not ask an assistant to substitute or invent commands. Passing simulator tests would establish only these fixtures and this npm version, not general package compatibility.
 
 Desktop, production integration, and App Store acceptance are not tested here.
