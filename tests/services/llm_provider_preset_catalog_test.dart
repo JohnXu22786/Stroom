@@ -1099,6 +1099,7 @@ void main() {
       'charm-hyper',
       'chat-oripe',
       'chatanywhere',
+      'cheaperinference',
       'chutes',
       'cloudcode-one',
       'codestral',
@@ -1262,6 +1263,8 @@ void main() {
         'charm-hyper': 'https://hyper.charm.land/v1/chat/completions',
         'chat-oripe': 'https://api.oriper.com/v1/chat/completions',
         'chatanywhere': 'https://api.chatanywhere.org/v1/chat/completions',
+        'cheaperinference':
+            'https://api.cheaperinference.com/v1/chat/completions',
         'cloudcode-one': 'https://api.cloudcode.one/v1/chat/completions',
         'codestral': 'https://codestral.mistral.ai/v1/chat/completions',
         'cohere': 'https://api.cohere.com/compatibility/v1/chat/completions',
@@ -2418,15 +2421,13 @@ void main() {
       );
       // Deferred: registry/blackbox/index.ts:4,6,7,14-18 documents 404s for
       // both audited URLs and an account-gated enterprise host;
-      // registry/cheaperinference/index.ts:240-252 declares Responses-target
-      // models and executor-specific routing; registry/chenzk/index.ts:4,6-11,13-14
+      // registry/chenzk/index.ts:4,6-11,13-14
       // sets defaultContextLength for runtime-discovered models, which this
       // catalog cannot represent; registry/cloudflare-ai/index.ts:4,6,7,9-11,17
       // and executors/cloudflare-ai.ts:17-56 require an account ID in the URL
       // and a provider-specific executor.
       for (final id in [
         'blackbox',
-        'cheaperinference',
         'chenzk',
         'cloudflare-ai',
       ]) {

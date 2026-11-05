@@ -316,6 +316,73 @@ void main() {
   );
 
   test(
+    'CheaperInference Responses model remains selectable in Task Flow',
+    () async {
+      final account = LlmAccount(
+        id: 'cheaperinference-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'CheaperInference',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'providerPresetId': 'cheaperinference',
+          'apiProtocol': 'openai.chat_completions',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'gpt-5.4-local',
+            upstreamModelId: 'gpt-5.4',
+            displayName: 'GPT-5.4',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'tools': true,
+            },
+            config: {'apiProtocolOverride': 'openai.responses'},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'cheaperinference-task-flow-group',
+        displayName: 'CheaperInference',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'cheaperinference-account',
+            localModelId: 'gpt-5.4-local',
+            upstreamModelId: 'gpt-5.4',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'CheaperInference assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
+
+      expect(config.apiProtocol, 'openai.chat_completions');
+      expect(config.models.single.apiProtocolOverride, 'openai.responses');
+      expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
+
+  test(
     'Devin model group preserves Connect-RPC in Task Flow preflight',
     () async {
       final account = LlmAccount(

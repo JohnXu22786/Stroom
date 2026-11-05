@@ -6,11 +6,13 @@ class LlmProviderPresetModel {
   final String id;
   final String displayName;
   final Map<String, dynamic> capabilities;
+  final String? apiProtocolOverride;
 
   const LlmProviderPresetModel(
     this.id, {
     String? displayName,
     this.capabilities = const {},
+    this.apiProtocolOverride,
   }) : displayName = displayName ?? id;
 
   String accountEditorLine({String modelIdPrefix = ''}) => [
@@ -851,6 +853,86 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     displayName: 'ChatAnywhere',
     baseUrl: 'https://api.chatanywhere.org/v1/chat/completions',
     modelsUrl: 'https://api.chatanywhere.org/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'cheaperinference',
+    displayName: 'CheaperInference',
+    baseUrl: 'https://api.cheaperinference.com/v1/chat/completions',
+    modelsUrl: 'https://api.cheaperinference.com/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'gpt-5.4',
+        displayName: 'GPT-5.4',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.4-mini',
+        displayName: 'GPT-5.4 Mini',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.5',
+        displayName: 'GPT-5.5',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.6-luna',
+        displayName: 'GPT-5.6 Luna',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.6-sol',
+        displayName: 'GPT-5.6 Sol',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.6-terra',
+        displayName: 'GPT-5.6 Terra',
+        capabilities: {
+          'chat': true,
+          'streaming': true,
+          'vision': true,
+          'reasoning': true,
+          'tools': true,
+        },
+        apiProtocolOverride: 'openai.responses',
+      ),
+    ],
   ),
   LlmProviderPreset(
     id: 'chutes',
