@@ -89,6 +89,8 @@ class AiGatewayProtocolStreamState {
   final Map<int, String> _anthropicToolIdsByIndex = {};
   final Map<int, String> _openAiToolIdsByIndex = {};
   final Map<String, String> _responseToolIdsByItemId = {};
+  bool clovaTextSeen = false;
+  bool clovaReasoningSeen = false;
 
   String? anthropicToolIdForIndex(int index) => _anthropicToolIdsByIndex[index];
 }
@@ -102,6 +104,99 @@ abstract final class AiGatewayProtocolStreamBridge {
     Map<String, dynamic> event, {
     AiGatewayProtocolStreamState? state,
   }) {
+    if (protocolId == 'clova.studio.chat') {
+      final typeValue = event['_eventType'] ?? event['type'];
+      final type = typeValue is String ? typeValue : '';
+      final raw = Map<String, dynamic>.unmodifiable(event);
+      AiGatewayProtocolStreamEvent make(
+        AiGatewayProtocolStreamEventKind kind, {
+        String? delta,
+        Map<String, dynamic>? usage,
+      }) => AiGatewayProtocolStreamEvent(
+        kind: kind,
+        type: type,
+        raw: raw,
+        delta: delta,
+        usage: usage == null ? null : Map.unmodifiable(usage),
+      );
+      final status = _objectMap(event['status']);
+      if (type == 'error' ||
+          event['error'] is Map ||
+          status['code'] != null &&
+              status['code'].toString() != '20000') {
+        return [make(AiGatewayProtocolStreamEventKind.error)];
+      }
+      if (type == 'token') {
+        final sourceMessage = _objectMap(event['message']);
+        final message = sourceMessage.isEmpty ? event : sourceMessage;
+        final mapped = <AiGatewayProtocolStreamEvent>[];
+        final thinking = message['thinkingContent'] ?? event['thinkingContent'];
+        final text = message['content'] ?? event['content'];
+        if (thinking is String && thinking.isNotEmpty) {
+          state?.clovaReasoningSeen = true;
+          mapped.add(
+            make(
+              AiGatewayProtocolStreamEventKind.reasoningDelta,
+              delta: thinking,
+            ),
+          );
+        }
+        if (text is String && text.isNotEmpty) {
+          state?.clovaTextSeen = true;
+          mapped.add(
+            make(AiGatewayProtocolStreamEventKind.textDelta, delta: text),
+          );
+        }
+        return mapped.isEmpty
+            ? [make(AiGatewayProtocolStreamEventKind.lifecycle)]
+            : mapped;
+      }
+      if (type == 'result' || type == 'stop') {
+        final sourceResult = _objectMap(event['result']);
+        final result = sourceResult.isEmpty ? event : sourceResult;
+        final sourceMessage = _objectMap(result['message']);
+        final message = sourceMessage.isEmpty ? result : sourceMessage;
+        final mapped = <AiGatewayProtocolStreamEvent>[];
+        final text = message['content'] ?? result['content'];
+        if (state?.clovaTextSeen != true && text is String && text.isNotEmpty) {
+          state?.clovaTextSeen = true;
+          mapped.add(
+            make(AiGatewayProtocolStreamEventKind.textDelta, delta: text),
+          );
+        }
+        final thinking = message['thinkingContent'] ?? result['thinkingContent'];
+        if (state?.clovaReasoningSeen != true &&
+            thinking is String &&
+            thinking.isNotEmpty) {
+          state?.clovaReasoningSeen = true;
+          mapped.add(
+            make(
+              AiGatewayProtocolStreamEventKind.reasoningDelta,
+              delta: thinking,
+            ),
+          );
+        }
+        final usage = _objectMap(result['usage']);
+        if (usage.isNotEmpty) {
+          mapped.add(
+            make(
+              AiGatewayProtocolStreamEventKind.usage,
+              usage: {
+                if (usage['promptTokens'] is num)
+                  'input_tokens': usage['promptTokens'],
+                if (usage['completionTokens'] is num)
+                  'output_tokens': usage['completionTokens'],
+                if (usage['totalTokens'] is num)
+                  'total_tokens': usage['totalTokens'],
+              },
+            ),
+          );
+        }
+        mapped.add(make(AiGatewayProtocolStreamEventKind.lifecycle));
+        return mapped;
+      }
+      return [make(AiGatewayProtocolStreamEventKind.lifecycle)];
+    }
     if (protocolId == 'amazon-q.chat') {
       return mapEvents('openai.chat_completions', event, state: state);
     }

@@ -5903,6 +5903,120 @@ void main() {
       );
     },
   );
+  test(
+    'routes CLOVA accounts through native v3 and maps returned reasoning',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: 'clova-account',
+          connectorType: 'clova-studio',
+          authType: 'api_key',
+          displayName: 'CLOVA Studio',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'clova-hcx-007',
+              upstreamModelId: 'HCX-007',
+              displayName: 'HCX-007',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'reasoning': true,
+                'contextLength': 128000,
+                'maxOutputTokens': 32768,
+                'supportedApiProtocols': ['clova.studio.chat'],
+              },
+            ),
+          ],
+        ),
+        secret: 'clova-secret',
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'clova-group',
+          displayName: 'CLOVA',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'clova-account',
+              localModelId: 'clova-model',
+              upstreamModelId: 'HCX-007',
+            ),
+          ],
+        ),
+      );
+      final clovaFrames = <List<int>>[
+        utf8.encode(
+          'event: token\ndata: {"message":{"thinkingContent":"trace","content":"answer"}}\n\n',
+        ),
+        utf8.encode(
+          'event: result\ndata: {"status":{"code":"20000"},"result":{"message":{"content":"answer"},"finishReason":"stop","usage":{"promptTokens":4,"completionTokens":2,"totalTokens":6}}}\n\n',
+        ),
+      ];
+      final connector = _FakeConnectorClient(
+        accounts,
+        streamBodies: [
+          Stream<List<int>>.fromIterable(clovaFrames),
+          Stream<List<int>>.fromIterable(clovaFrames),
+        ],
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: 'clova-group',
+        localModelId: 'clova-model',
+        endpointType: 'openai.chat_completions',
+      );
+
+      const messages = [
+        {'role': 'user', 'content': 'Explain.'},
+      ];
+      final completion = await provider.chat(messages);
+      expect(completion, 'answer');
+      expect(
+        ((provider.lastResponseData?['choices'] as List).first
+            as Map)['message'],
+        containsPair('reasoning_content', 'trace'),
+      );
+      final events = await provider.chatStream(messages).toList();
+
+      expect(connector.requestedAccountIds, ['clova-account', 'clova-account']);
+      expect(connector.requestedModelIds, ['HCX-007', 'HCX-007']);
+      expect(connector.lastNativeFormat, 'clova');
+      expect(connector.requestBody?['stream'], isTrue);
+      expect(connector.requestBody?['messages'], [
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'Explain.'},
+          ],
+        },
+      ]);
+      expect(
+        events.where((event) => event.isReasoning).map((event) => event.text),
+        ['trace'],
+      );
+      expect(
+        events
+            .where((event) => !event.isReasoning && event.text.isNotEmpty)
+            .map((event) => event.text),
+        ['answer'],
+      );
+    },
+  );
 }
 
 class _FakeConnectorClient extends LlmConnectorHttpClient {
