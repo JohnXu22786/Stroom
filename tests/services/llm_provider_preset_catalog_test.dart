@@ -1107,6 +1107,7 @@ void main() {
       'cohere',
       'coze',
       'crof',
+      'dahl',
       'daoxe',
       'demonroute',
       'dgrid',
@@ -1272,6 +1273,7 @@ void main() {
         'cohere': 'https://api.cohere.com/compatibility/v1/chat/completions',
         'coze': 'https://api.coze.com/v1/chat/completions',
         'crof': 'https://crof.ai/v1/chat/completions',
+        'dahl': 'https://inference.dahl.global/v1/chat/completions',
         'daoxe': 'https://api.daoxe.com/v1/chat/completions',
         'demonroute': 'https://api.demonroute.com/v1/chat/completions',
         'dgrid': 'https://api.dgrid.ai/v1/chat/completions',
@@ -4128,6 +4130,13 @@ void main() {
     expect(preset.authorizationHeader, 'Authorization');
     expect(preset.authorizationScheme, 'Bearer');
     expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(
+      preset.applyToEndpointConfig(const {
+        'providerPresetId': 'chenzk',
+        'modelsUrl': 'https://chenzk.top/v1/models',
+      }),
+      isNot(contains('modelsUrl')),
+    );
     expect(preset.fallbackModels, isEmpty);
   });
 
@@ -4214,6 +4223,119 @@ void main() {
       expect(
         configs.single.models.single.apiProtocolOverride,
         'openai.chat_completions',
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains('openai-compatibility'),
+      );
+    },
+  );
+
+  test('M55 Dahl preset matches the pinned provider contract', () {
+    final preset = findLlmOpenAiProviderPreset('dahl')!;
+
+    expect(preset.displayName, 'Dahl');
+    expect(
+      preset.baseUrl,
+      'https://inference.dahl.global/v1/chat/completions',
+    );
+    expect(preset.modelsUrl, isNull);
+    expect(preset.authType, 'api_key');
+    expect(preset.authorizationHeader, 'Authorization');
+    expect(preset.authorizationScheme, 'Bearer');
+    expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(
+      preset.fallbackModels.map((model) => (model.id, model.displayName)),
+      [
+        ('MiniMaxAI/MiniMax-M2.7', 'MiniMax M2.7'),
+        ('moonshotai/Kimi-K2.6', 'Kimi K2.6'),
+      ],
+    );
+    expect(
+      preset.fallbackModels.map((model) => model.capabilities),
+      [
+        {'contextLength': 200000},
+        {'contextLength': 200000},
+      ],
+    );
+  });
+
+  test(
+    'M55 Dahl account stores its key securely and routes through Chat and Task Flow',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+      );
+      final preset = findLlmOpenAiProviderPreset('dahl')!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm55-dahl',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+          models: [
+            for (final model in preset.fallbackModels)
+              LlmUpstreamModel(
+                id: 'm55-dahl:${model.id}',
+                upstreamModelId: model.id,
+                displayName: model.displayName,
+                capabilities: model.capabilities,
+                config: model.id == 'moonshotai/Kimi-K2.6'
+                    ? const {
+                        'apiProtocolOverride': 'openai.chat_completions',
+                      }
+                    : const {},
+              ),
+          ],
+        ),
+        secret: 'dahl-test-key',
+      );
+
+      expect(await service.readCredential(account.id), 'dahl-test-key');
+      expect(account.endpointConfig['providerPresetId'], 'dahl');
+      expect(account.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(account.endpointConfig['modelsUrl'], isNull);
+      expect(account.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(
+        account.endpointConfig.toString(),
+        isNot(contains('dahl-test-key')),
+      );
+
+      final restored = (await service.getAccount(account.id))!;
+      final groups = [
+        for (final model in preset.fallbackModels)
+          LlmModelGroup(
+            id: stableLlmModelGroupId(restored.id, model.id),
+            displayName: model.displayName,
+            members: [
+              LlmModelGroupMember(
+                accountId: restored.id,
+                upstreamModelId: model.id,
+                localModelId: model.id,
+              ),
+            ],
+          ),
+      ];
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: groups,
+      );
+
+      expect(
+        configs.map((config) => config.apiProtocol),
+        everyElement('openai.chat_completions'),
+      );
+      expect(
+        configs.map((config) => config.models.single.modelId),
+        ['MiniMaxAI/MiniMax-M2.7', 'moonshotai/Kimi-K2.6'],
+      );
+      expect(
+        configs.map(
+          (config) => config.models.single.apiProtocolOverride,
+        ),
+        [null, 'openai.chat_completions'],
       );
       expect(
         llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),

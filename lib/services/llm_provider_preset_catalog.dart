@@ -1086,6 +1086,25 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           }),
     ],
   ),
+  // Registry audit pinned at OmniRoute d1ba822: Dahl uses the shared OpenAI
+  // Chat Completions executor, bearer API key, and two static models.
+  LlmProviderPreset(
+    id: 'dahl',
+    displayName: 'Dahl',
+    baseUrl: 'https://inference.dahl.global/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'MiniMaxAI/MiniMax-M2.7',
+        displayName: 'MiniMax M2.7',
+        capabilities: {'contextLength': 200000},
+      ),
+      LlmProviderPresetModel(
+        'moonshotai/Kimi-K2.6',
+        displayName: 'Kimi K2.6',
+        capabilities: {'contextLength': 200000},
+      ),
+    ],
+  ),
   LlmProviderPreset(
     id: 'daoxe',
     displayName: 'DaoXE',
