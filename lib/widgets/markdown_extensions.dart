@@ -611,9 +611,7 @@ class _NormalizedContainerTailSource {
           if (offset + 1 < chunk.length) {
             yield chunk.substring(offset + 1);
           }
-          for (var rest = chunkIndex + 1;
-              rest < _pendingLine.length;
-              rest++) {
+          for (var rest = chunkIndex + 1; rest < _pendingLine.length; rest++) {
             yield _pendingLine[rest];
           }
           return;
@@ -909,8 +907,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
     );
   }
   final shouldCacheTail = !includeTail && hasUnfencedIndentedCode;
-  final needsContainerTransform =
-      openMermaidFenceIndex != null &&
+  final needsContainerTransform = openMermaidFenceIndex != null &&
       (openMermaidFenceQuoteDepth != 0 ||
           openMermaidFenceListIndent != 0 ||
           openMermaidFenceInnerQuoteDepth != 0 ||
@@ -1119,9 +1116,8 @@ class StreamingFenceInfoCache {
     final updated = (
       tail: null,
       tailSource: cached.hasUnfencedIndentedCode ? text : null,
-      normalizedTailSource: cached.hasUnfencedIndentedCode
-          ? normalizedTailSource
-          : null,
+      normalizedTailSource:
+          cached.hasUnfencedIndentedCode ? normalizedTailSource : null,
       normalizedContainerTailSource: cached.normalizedContainerTailSource,
       isCached: true,
       hasUnfencedIndentedCode: cached.hasUnfencedIndentedCode,
@@ -1344,7 +1340,6 @@ bool _matchesTrimmedSegments(String text, Iterable<String> segments) {
   return expectedOffset == expected.length;
 }
 
-
 bool _isStreamingMermaidTailWithInfo(
   String code,
   _MermaidFenceInfo fenceInfo, {
@@ -1356,8 +1351,7 @@ bool _isStreamingMermaidTailWithInfo(
     if (tailSource != null) {
       final normalizedTailSource =
           fenceInfo.normalizedTailSource ?? const <String>[];
-      final hasMermaidFenceIndex =
-          mermaidFenceIndex != null &&
+      final hasMermaidFenceIndex = mermaidFenceIndex != null &&
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
       final matchesTail = hasMermaidFenceIndex &&
               fenceInfo.normalizedContainerTailSource != null
