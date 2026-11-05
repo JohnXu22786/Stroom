@@ -15,6 +15,7 @@ import 'aws_sigv4.dart';
 import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
+import 'cloudflare_workers_ai_connector.dart';
 import 'llm_provider_preset_catalog.dart';
 import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
@@ -602,6 +603,14 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'cloudflare-ai',
+      displayName: 'Cloudflare Workers AI',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      modelCatalog: kCloudflareWorkersAiModelIds,
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
       id: 'azure-ai',
       displayName: 'Azure AI Foundry',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -759,6 +768,7 @@ abstract final class LlmConnectorRegistry {
     final normalized = switch (id.trim().toLowerCase()) {
       'anthropic' => 'claude',
       'openai' => 'openai-compatibility',
+      'cf' => 'cloudflare-ai',
       final value => value,
     };
     for (final connector in all) {
@@ -772,6 +782,7 @@ abstract final class LlmConnectorRegistry {
   static String canonicalId(String id) => switch (id.trim()) {
         'anthropic' => 'claude',
         'openai' => 'openai-compatibility',
+        'cf' => 'cloudflare-ai',
         'glmt' => 'glm',
         final normalized => normalized,
       };
@@ -814,6 +825,7 @@ abstract final class LlmConnectorRegistry {
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
+        'cloudflare-ai' ||
         'azure-ai' ||
         'azure-openai' ||
         'opencode-go' ||
@@ -1684,6 +1696,20 @@ class LlmAccountConnectorService {
           },
         ),
       ];
+    }
+    if (account.connectorType == 'cloudflare-ai') {
+      final accountId = account.endpointConfig['cloudflareAccountId'];
+      if (account.authType != 'api_key' || accountId is! String) {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        CloudflareWorkersAiConnector.buildChatCompletionsUri(accountId);
+      } on ArgumentError {
+        throw const LlmAccountConnectorException();
+      }
+      return List.unmodifiable(
+        cloudflareWorkersAiModelCatalog(account.id),
+      );
     }
     if (account.connectorType == 'amazon-q') {
       if (account.authType != 'oauth' || account.credentialRef == null) {
@@ -5938,6 +5964,14 @@ class LlmNativeRequestBuilder {
         }
       }
     }
+    if (account.connectorType == 'cloudflare-ai' &&
+        (account.authType != 'api_key' ||
+            !kCloudflareWorkersAiModelIds.contains(modelId) ||
+            nativeFormat != null && nativeFormat != 'openai.chat_completions' ||
+            _configString(account.endpointConfig, 'cloudflareAccountId') ==
+                null)) {
+      throw const LlmAccountConnectorException();
+    }
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
@@ -5975,6 +6009,15 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         headers['Authorization'] = 'Bearer $chatKey';
+        break;
+      case 'cloudflare-ai':
+        try {
+          headers.addAll(
+            CloudflareWorkersAiConnector.buildHeaders(secret, stream: stream),
+          );
+        } on ArgumentError {
+          throw const LlmAccountConnectorException();
+        }
         break;
       case 'uncloseai':
         if (account.authType == 'api_key' && secret.trim().isNotEmpty) {
@@ -6233,6 +6276,9 @@ class LlmNativeRequestBuilder {
       headers['Accept'] = 'text/event-stream';
     }
 
+    final connectorBody = account.connectorType == 'cloudflare-ai'
+        ? CloudflareWorkersAiConnector.normalizeRequestBody(body)
+        : body;
     final baseRequestBody = account.connectorType == 'devin' &&
             account.authType == 'oauth'
         ? DevinConnectRpc.encodeChatRequest(
@@ -6265,8 +6311,8 @@ class LlmNativeRequestBuilder {
                             account: account,
                             config: config,
                             body: account.connectorType == 'aihorde'
-                                ? _aiHordeChatBody(body)
-                                : body,
+                                ? _aiHordeChatBody(connectorBody)
+                                : connectorBody,
                             stream: upstreamStream,
                             nativeFormat: nativeFormat,
                           );
@@ -6737,6 +6783,15 @@ class LlmNativeRequestBuilder {
         account.connectorType == 'openai-compatibility' &&
             config['legacyOcrFullEndpoint'] == true &&
             nativeFormat == null;
+    if (account.connectorType == 'cloudflare-ai') {
+      final accountId = _configString(config, 'cloudflareAccountId');
+      if (accountId == null) throw const LlmAccountConnectorException();
+      try {
+        return CloudflareWorkersAiConnector.buildChatCompletionsUri(accountId);
+      } on ArgumentError {
+        throw const LlmAccountConnectorException();
+      }
+    }
     if (account.connectorType == 'azure-ai' ||
         account.connectorType == 'azure-openai') {
       final deploymentId = _configString(config, 'azureDeploymentId');

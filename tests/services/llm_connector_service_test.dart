@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/cloudflare_workers_ai_connector.dart';
 import 'package:stroom/services/llm_connector_model_catalog.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
@@ -1636,6 +1637,40 @@ void main() {
     },
   );
   group('LlmConnectorRegistry', () {
+    test('Cloudflare Workers AI discovery returns its pinned static catalog',
+        () async {
+      var networkRequests = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          networkRequests++;
+          throw StateError('Workers AI has no model-list endpoint.');
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account(
+          'cloudflare-catalog',
+          'cloudflare-ai',
+          endpointConfig: const {'cloudflareAccountId': 'cf-account-id'},
+        ),
+        secret: 'synthetic-token',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(networkRequests, 0);
+      expect(models.map((model) => model.upstreamModelId),
+          kCloudflareWorkersAiModelIds);
+      for (final model in models) {
+        expect(model.capabilities.keys, {'contextLength'});
+        expect(model.capabilities['contextLength'],
+            kCloudflareWorkersAiModelContextLengths[model.upstreamModelId]);
+      }
+    });
+
     test('registers UncloseAI as an optional-key OpenAI chat connector', () {
       final connector = LlmConnectorRegistry.find('uncloseai');
 

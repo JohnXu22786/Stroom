@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
+import 'package:stroom/services/cloudflare_workers_ai_connector.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
@@ -13,6 +14,55 @@ void main() {
     final factory = LlmChatRoutingRuntime.sharedPlatform;
 
     expect(factory, isNotNull);
+  });
+  test(
+      'Cloudflare Workers AI is available to shared Chat and Task Flow routing',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = _accountService(preferences);
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+    );
+    final account = await accounts.saveAccount(
+      LlmAccount(
+        id: 'cloudflare-ai-account',
+        connectorType: 'cloudflare-ai',
+        authType: 'api_key',
+        displayName: 'Workers AI',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'cloudflareAccountId': 'cf-account-id'},
+        models: cloudflareWorkersAiModelCatalog('cloudflare-ai-account'),
+      ),
+      secret: 'synthetic-cloudflare-token',
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'cloudflare-ai-group',
+        displayName: 'Workers AI model group',
+        members: [
+          LlmModelGroupMember(
+            accountId: account.id,
+            localModelId: account.models.first.id,
+            upstreamModelId: account.models.first.upstreamModelId,
+          ),
+        ],
+      ),
+    );
+
+    final models = await runtime.modelDiscovery.discoverGroupModels(
+      groupId: 'cloudflare-ai-group',
+      localModelId: account.models.first.id,
+      requiredCapabilities: const {'chat', 'streaming'},
+    );
+
+    expect(models.map((model) => model.upstreamModelId), [
+      '@cf/mistral/mistral-7b-instruct-v0.2-lora',
+    ]);
   });
   test(
     'platform routing runtime retries initialization after a transient failure',

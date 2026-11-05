@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_connector_service.dart';
 import '../services/llm_connector_model_catalog.dart';
+import '../services/cloudflare_workers_ai_connector.dart';
 import '../services/llm_provider_preset_catalog.dart';
 import '../services/amazon_q_connector.dart';
 import '../services/azure_openai_endpoint.dart';
@@ -1804,6 +1805,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _azureApiVersion;
   late final TextEditingController _region;
   late final TextEditingController _projectId;
+  late final TextEditingController _cloudflareAccountId;
   late final TextEditingController _credential;
   late final TextEditingController _models;
   late final TextEditingController _oauthClientId;
@@ -1901,6 +1903,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _projectId = TextEditingController(
       text: projectId is String ? projectId : '',
     );
+    final cloudflareAccountId = account?.endpointConfig['cloudflareAccountId'];
+    _cloudflareAccountId = TextEditingController(
+      text: cloudflareAccountId is String ? cloudflareAccountId : '',
+    );
     _credential = TextEditingController();
     final copilotClientId = account?.endpointConfig['copilotClientId'] ??
         account?.endpointConfig['clientId'] ??
@@ -1954,6 +1960,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       .join('\n') ??
                   '',
     );
+    if (_connectorType == 'cloudflare-ai') {
+      _models.text = kCloudflareWorkersAiModelIds.join('\n');
+      _discoveredModels = [
+        for (final model
+            in cloudflareWorkersAiModelCatalog(account?.id ?? 'new'))
+          AiGatewayUpstreamModel(
+            id: model.id,
+            upstreamModelId: model.upstreamModelId,
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            config: model.config,
+          ),
+      ];
+    }
     if (_isAzureConnector && _azureDeployment.text.trim().isNotEmpty) {
       _models.text = _azureDeployment.text.trim();
     }
@@ -2054,6 +2074,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _azureApiVersion.dispose();
     _region.dispose();
     _projectId.dispose();
+    _cloudflareAccountId.dispose();
     _credential.dispose();
     _oauthClientId.dispose();
     _oauthClientSecret.dispose();
@@ -2215,6 +2236,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     }
                     if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
+                    } else if (value == 'cloudflare-ai') {
+                      _models.text = kCloudflareWorkersAiModelIds.join('\n');
+                      _discoveredModels = [
+                        for (final model in cloudflareWorkersAiModelCatalog(
+                          widget.account?.id ?? 'new',
+                        ))
+                          AiGatewayUpstreamModel(
+                            id: model.id,
+                            upstreamModelId: model.upstreamModelId,
+                            displayName: model.displayName,
+                            capabilities: model.capabilities,
+                            config: model.config,
+                          ),
+                      ];
                     } else if (value == 'qoder') {
                       _models.text = kPinnedQoderModels.join('\n');
                     } else if (value == 'kimi-coding') {
@@ -2373,6 +2408,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
+              if (_connectorType == 'cloudflare-ai') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _cloudflareAccountId,
+                  decoration: const InputDecoration(
+                    labelText: 'Cloudflare Account ID',
+                    helperText: '在 Cloudflare Dashboard 右侧找到 Account ID。',
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
+                ),
+              ],
               if (_connectorType == 'kilocode')
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
@@ -2577,67 +2623,69 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
                 const SizedBox(height: 8),
               ],
-              TextField(
-                controller: _endpoint,
-                enabled: _connectorType != 'devin-cli-agentic' &&
-                    _connectorType != 'command-code' &&
-                    _connectorType != 'aihorde' &&
-                    _connectorType != 'uncloseai' &&
-                    _connectorType != 'qoder' &&
-                    _connectorType != 'kilocode' &&
-                    _connectorType != 'cline' &&
-                    _connectorType != 'clinepass' &&
-                    _connectorType != 'trae',
-                decoration: InputDecoration(
-                  labelText: _isAzureConnector
-                      ? 'Azure resource / Foundry host'
-                      : _connectorType == 'ghe-copilot'
-                          ? 'GitHub Enterprise instance HTTPS URL'
-                          : _connectorType == 'cline' ||
-                                  _connectorType == 'clinepass'
-                              ? 'Cline 使用固定服务端点'
-                              : _connectorType == 'aihorde'
-                                  ? 'AI Horde 使用固定 HTTPS Chat 端点'
-                                  : _connectorType == 'uncloseai'
-                                      ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
-                                      : _connectorType == 'kilocode'
-                                          ? 'Kilo Code 使用固定服务端点'
-                                          : _connectorType == 'qoder' ||
-                                                  _connectorType == 'trae'
-                                              ? '固定服务端点'
-                                              : '端点地址（连接器需要时填写）',
-                  hintText: _isAzureConnector
-                      ? 'https://resource.openai.azure.com'
-                      : switch (_connectorType) {
-                          'aihorde' => 'https://oai.aihorde.net/v1',
-                          'uncloseai' => 'https://hermes.ai.unturf.com/v1',
-                          'opencode-go' => 'https://opencode.ai/zen/go/v1',
-                          'opencode-zen' => 'https://opencode.ai/zen/v1',
-                          'command-code' => kCommandCodeBaseUrl,
-                          'ghe-copilot' => 'https://github.example.com',
-                          _ => 'https://api.example.com/v1',
-                        },
-                  helperText: _isAzureConnector
-                      ? '输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。'
-                      : switch (_connectorType) {
-                          'opencode-go' ||
-                          'opencode-zen' =>
-                            '留空以使用此账号类型的官方模型目录和 API 端点。',
-                          'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
-                          'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
-                          'cline' ||
-                          'clinepass' =>
-                            '使用 Cline 的固定 HTTPS Chat Completions 端点。',
-                          'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
-                          'aihorde' =>
-                            'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
-                          'trae' =>
-                            'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
-                          _ => null,
-                        },
+              if (_connectorType != 'cloudflare-ai')
+                TextField(
+                  controller: _endpoint,
+                  enabled: _connectorType != 'devin-cli-agentic' &&
+                      _connectorType != 'command-code' &&
+                      _connectorType != 'aihorde' &&
+                      _connectorType != 'uncloseai' &&
+                      _connectorType != 'qoder' &&
+                      _connectorType != 'kilocode' &&
+                      _connectorType != 'cline' &&
+                      _connectorType != 'clinepass' &&
+                      _connectorType != 'trae',
+                  decoration: InputDecoration(
+                    labelText: _isAzureConnector
+                        ? 'Azure resource / Foundry host'
+                        : _connectorType == 'ghe-copilot'
+                            ? 'GitHub Enterprise instance HTTPS URL'
+                            : _connectorType == 'cline' ||
+                                    _connectorType == 'clinepass'
+                                ? 'Cline 使用固定服务端点'
+                                : _connectorType == 'aihorde'
+                                    ? 'AI Horde 使用固定 HTTPS Chat 端点'
+                                    : _connectorType == 'uncloseai'
+                                        ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
+                                        : _connectorType == 'kilocode'
+                                            ? 'Kilo Code 使用固定服务端点'
+                                            : _connectorType == 'qoder' ||
+                                                    _connectorType == 'trae'
+                                                ? '固定服务端点'
+                                                : '端点地址（连接器需要时填写）',
+                    hintText: _isAzureConnector
+                        ? 'https://resource.openai.azure.com'
+                        : switch (_connectorType) {
+                            'aihorde' => 'https://oai.aihorde.net/v1',
+                            'uncloseai' => 'https://hermes.ai.unturf.com/v1',
+                            'opencode-go' => 'https://opencode.ai/zen/go/v1',
+                            'opencode-zen' => 'https://opencode.ai/zen/v1',
+                            'command-code' => kCommandCodeBaseUrl,
+                            'ghe-copilot' => 'https://github.example.com',
+                            _ => 'https://api.example.com/v1',
+                          },
+                    helperText: _isAzureConnector
+                        ? '输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。'
+                        : switch (_connectorType) {
+                            'opencode-go' ||
+                            'opencode-zen' =>
+                              '留空以使用此账号类型的官方模型目录和 API 端点。',
+                            'command-code' =>
+                              '使用 Command Code 的固定 HTTPS API 端点。',
+                            'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
+                            'cline' ||
+                            'clinepass' =>
+                              '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                            'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
+                            'aihorde' =>
+                              'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
+                            'trae' =>
+                              'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
+                            _ => null,
+                          },
+                  ),
+                  onChanged: (_) => setState(() => _draftChanged = true),
                 ),
-                onChanged: (_) => setState(() => _draftChanged = true),
-              ),
               if (_isAzureConnector) ...[
                 const SizedBox(height: 8),
                 TextField(
@@ -2746,6 +2794,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                             ? 'Claude Setup Token'
                                             : _authType == 'api_key'
                                                 ? switch (_connectorType) {
+                                                    'cloudflare-ai' =>
+                                                      'Cloudflare API Token',
                                                     'azure-ai' ||
                                                     'azure-openai' =>
                                                       'Azure API Key',
@@ -2868,7 +2918,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   controller: _models,
                   minLines: 3,
                   maxLines: 7,
-                  readOnly: _connectorType == 'devin-cli-agentic' ||
+                  readOnly: _connectorType == 'cloudflare-ai' ||
+                      _connectorType == 'devin-cli-agentic' ||
                       _connectorType == 'kimi-coding' ||
                       _connectorType == 'kilocode' ||
                       _connectorType == 'grok-cli' ||
@@ -2881,27 +2932,30 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   decoration: InputDecoration(
                     labelText: '上游模型与能力',
                     hintText: '每行一个：模型 ID,streaming,vision,tools',
-                    helperText: _connectorType == 'kilocode'
-                        ? _authType == 'none'
-                            ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
-                            : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
-                        : _connectorType == 'command-code'
-                            ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
-                            : _connectorType == 'devin-cli-agentic'
-                                ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
-                                : _connectorType == 'kimi-coding'
-                                    ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                                    : _connectorType == 'grok-cli'
-                                        ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                                        : _connectorType == 'xai-oauth'
-                                            ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                                            : _connectorType == 'muse-code'
-                                                ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                                : _connectorType == 'cline' ||
-                                                        _connectorType ==
-                                                            'clinepass'
-                                                    ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
-                                                    : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                    helperText: _connectorType == 'cloudflare-ai'
+                        ? '模型 ID 和上下文长度来自固定目录；其他能力保持未知。'
+                        : _connectorType == 'kilocode'
+                            ? _authType == 'none'
+                                ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
+                                : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
+                            : _connectorType == 'command-code'
+                                ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
+                                : _connectorType == 'devin-cli-agentic'
+                                    ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                                    : _connectorType == 'kimi-coding'
+                                        ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                                        : _connectorType == 'grok-cli'
+                                            ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                                            : _connectorType == 'xai-oauth'
+                                                ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                                                : _connectorType == 'muse-code'
+                                                    ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                                    : _connectorType ==
+                                                                'cline' ||
+                                                            _connectorType ==
+                                                                'clinepass'
+                                                        ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
+                                                        : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                   ),
                   onChanged: _connectorType == 'devin-cli-agentic' ||
                           _connectorType == 'kimi-coding' ||
@@ -3200,6 +3254,22 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final parts = line.split(',').map((part) => part.trim()).toList();
       if (parts.isNotEmpty && parts.first.isNotEmpty) modelLines.add(parts);
     }
+    if (_connectorType == 'cloudflare-ai') {
+      try {
+        CloudflareWorkersAiConnector.buildChatCompletionsUri(
+          _cloudflareAccountId.text,
+        );
+      } on ArgumentError {
+        setState(() => _error = '请输入有效的 Cloudflare Account ID。');
+        return;
+      }
+      if (modelLines.any(
+        (parts) => !kCloudflareWorkersAiModelIds.contains(parts.first),
+      )) {
+        setState(() => _error = 'Cloudflare Workers AI 仅提供已验证的固定模型目录。');
+        return;
+      }
+    }
     if (_connectorType == 'kimi-coding' &&
         modelLines.any(
           (parts) => !kPinnedKimiCodeModels.contains(parts.first),
@@ -3357,6 +3427,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final endpointConfig = Map<String, dynamic>.from(
       widget.account?.endpointConfig ?? const <String, dynamic>{},
     );
+    if (_connectorType == 'cloudflare-ai') {
+      endpointConfig
+        ..['cloudflareAccountId'] = _cloudflareAccountId.text.trim()
+        ..remove('baseUrl')
+        ..remove('host')
+        ..remove('apiBase');
+    } else {
+      endpointConfig.remove('cloudflareAccountId');
+    }
     if (_isAzureConnector) {
       endpointConfig
         ..['azureDeploymentId'] = azureDeploymentId
@@ -3476,7 +3555,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
-    } else if (_connectorType == 'trae' || _connectorType == 'uncloseai') {
+    } else if (_connectorType == 'trae' ||
+        _connectorType == 'uncloseai' ||
+        _connectorType == 'cloudflare-ai') {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
