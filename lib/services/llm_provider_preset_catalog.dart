@@ -2743,6 +2743,280 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
   // contract only emits standard bearer auth and cannot express that header.
   // Registry evidence: OmniRoute d1ba822 open-sse/config/providers/registry/
   // navy/index.ts:17-20,22.
+  // M47 adds the source-backed Chat Completions routes below. UC Direct is
+  // deferred: its pinned API requires X-API-Key, while the shared connector
+  // injects API keys as Bearer Authorization and cannot bind the secret to a
+  // provider-specific header (registry/uc-direct/index.ts:25-35).
+  // Typhoon's pin declares one static model and no discovery URL.
+  LlmProviderPreset(
+    id: 'typhoon',
+    displayName: 'Typhoon',
+    baseUrl: 'https://api.opentyphoon.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'typhoon-v2.5-30b-a3b-instruct',
+        displayName: 'Typhoon v2.5 30B A3B Instruct',
+        capabilities: {'contextLength': 131072},
+      ),
+    ],
+  ),
+  // The pinned registries use live OpenAI-compatible model discovery and
+  // bearer auth; their model IDs come from the provider-owned /models lists.
+  LlmProviderPreset(
+    id: 'unifically',
+    displayName: 'Unifically',
+    baseUrl: 'https://api.unifically.com/v1/chat/completions',
+    modelsUrl: 'https://api.unifically.com/v1/models?category=llm',
+  ),
+  LlmProviderPreset(
+    id: 'unorouter',
+    displayName: 'UnoRouter',
+    baseUrl: 'https://api.unorouter.com/v1/chat/completions',
+    modelsUrl: 'https://api.unorouter.com/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'upstage',
+    displayName: 'Upstage',
+    baseUrl: 'https://api.upstage.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('solar-pro3'),
+      LlmProviderPresetModel('solar-mini'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'v0-vercel',
+    displayName: 'v0 (Vercel)',
+    baseUrl: 'https://api.v0.dev/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('v0-1.0-md'),
+      LlmProviderPresetModel('v0-1.5-lg'),
+      LlmProviderPresetModel('v0-1.5-md'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'venice',
+    displayName: 'Venice.ai',
+    baseUrl: 'https://api.venice.ai/api/v1/chat/completions',
+    fallbackModels: [LlmProviderPresetModel('venice-latest')],
+  ),
+  LlmProviderPreset(
+    id: 'vercel-ai-gateway',
+    displayName: 'Vercel AI Gateway',
+    baseUrl: 'https://ai-gateway.vercel.sh/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('openai/gpt-4.1'),
+      LlmProviderPresetModel('anthropic/claude-4-sonnet'),
+      LlmProviderPresetModel('google/gemini-2.5-pro'),
+      LlmProviderPresetModel('moonshotai/kimi-k2'),
+      LlmProviderPresetModel('vercel/v0-1.5-md'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'void-ai',
+    displayName: 'Void AI',
+    baseUrl: 'https://api.voidai.app/v1/chat/completions',
+    modelsUrl: 'https://api.voidai.app/v1/models',
+  ),
+  LlmProviderPreset(
+    id: 'volcengine',
+    displayName: 'Volcengine',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('deepseek-v3-2-251201'),
+      LlmProviderPresetModel('doubao-seed-2-0-pro-260215'),
+      LlmProviderPresetModel('doubao-seed-2-0-code-preview-260215'),
+      LlmProviderPresetModel('kimi-k2-5-260127'),
+      LlmProviderPresetModel('glm-4-7-251222'),
+      LlmProviderPresetModel('DeepSeek-V4-Flash'),
+      LlmProviderPresetModel('DeepSeek-V4-Pro'),
+    ],
+  ),
+  // Agent Plan and Coding Plan are separate products with distinct chat
+  // endpoints and model catalogs. Agent Plan has no /models endpoint; Coding
+  // Plan exposes its catalog under the /api/coding/v3 API root.
+  LlmProviderPreset(
+    id: 'volcengine-agent-plan',
+    displayName: 'Volcengine Ark Agent Plan',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('doubao-seed-evolving',
+          displayName: 'Doubao Seed Evolving (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('doubao-seed-2-1-turbo-260628',
+          displayName: 'Doubao Seed 2.1 Turbo (Agent Plan)',
+          capabilities: {
+            'contextLength': 262144,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('doubao-seed-2-0-lite-260215',
+          displayName: 'Doubao Seed 2.0 Lite (Agent Plan)',
+          capabilities: {
+            'contextLength': 262144,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('doubao-seed-2-0-mini-260215',
+          displayName: 'Doubao Seed 2.0 Mini (Agent Plan)',
+          capabilities: {
+            'contextLength': 262144,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('deepseek-v4-flash-ga-260731',
+          displayName: 'DeepSeek V4 Flash GA (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('kimi-k3',
+          displayName: 'Kimi K3 (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('glm-5-2-260617',
+          displayName: 'GLM 5.2 (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('kimi-k2.7-code',
+          displayName: 'Kimi K2.7 Code (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('minimax-m3',
+          displayName: 'MiniMax M3 (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('deepseek-v4-pro-260425',
+          displayName: 'DeepSeek V4 Pro (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('minimax-m2.7',
+          displayName: 'MiniMax M2.7 (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('kimi-k2.6',
+          displayName: 'Kimi K2.6 (Agent Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'volcengine-coding-plan',
+    displayName: 'Volcengine Ark Coding Plan',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
+    modelsUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3/models',
+    fallbackModels: [
+      LlmProviderPresetModel('doubao-seed-2-1-turbo',
+          displayName: 'Doubao Seed 2.1 Turbo (Coding Plan)',
+          capabilities: {
+            'contextLength': 262144,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('doubao-seed-2.0-lite',
+          displayName: 'Doubao Seed 2.0 Lite (Coding Plan)',
+          capabilities: {
+            'contextLength': 262144,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('deepseek-v4-flash',
+          displayName: 'DeepSeek V4 Flash (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('glm-5.2',
+          displayName: 'GLM 5.2 (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('kimi-k2.7-code',
+          displayName: 'Kimi K2.7 Code (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('minimax-m3',
+          displayName: 'MiniMax M3 (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'vision': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('deepseek-v4-pro',
+          displayName: 'DeepSeek V4 Pro (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('minimax-m2.7',
+          displayName: 'MiniMax M2.7 (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+      LlmProviderPresetModel('kimi-k2.6',
+          displayName: 'Kimi K2.6 (Coding Plan)',
+          capabilities: {
+            'contextLength': 1048576,
+            'toolCalling': true,
+            'reasoning': true
+          }),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'wandb',
+    displayName: 'Weights & Biases Inference',
+    baseUrl: 'https://api.inference.wandb.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('openai/gpt-oss-120b'),
+      LlmProviderPresetModel('Qwen/Qwen3-Coder-480B-A35B-Instruct'),
+      LlmProviderPresetModel('deepseek-ai/DeepSeek-V3.1'),
+    ],
+  ),
 ];
 
 const _stepfunFallbackModels = <LlmProviderPresetModel>[
