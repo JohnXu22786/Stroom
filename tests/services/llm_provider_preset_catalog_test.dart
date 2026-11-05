@@ -848,6 +848,13 @@ void main() {
       'volcengine-agent-plan',
       'volcengine-coding-plan',
       'wandb',
+      'writer',
+      'xiaomi-mimo',
+      'xkiro',
+      'y-api',
+      'yolo-auto',
+      'zerolimitai',
+      'zylo-api',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -1003,6 +1010,13 @@ void main() {
         'volcengine-coding-plan':
             'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
         'wandb': 'https://api.inference.wandb.ai/v1/chat/completions',
+        'writer': 'https://api.writer.com/v1/chat/completions',
+        'xiaomi-mimo': 'https://api.xiaomimimo.com/v1',
+        'xkiro': 'https://api.xkiro.com/v1/chat/completions',
+        'y-api': 'https://api.y-api.bestvirtualgoods.com/v1/chat/completions',
+        'yolo-auto': 'https://yolo-auto.com/v1/chat/completions',
+        'zerolimitai': 'https://www.zerolimitai.com/api/v1/chat/completions',
+        'zylo-api': 'https://api.zyloai.net/v1/chat/completions',
       },
     );
     expect(
