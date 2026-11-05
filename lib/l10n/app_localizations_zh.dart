@@ -7026,6 +7026,681 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioSeparationEngineUnavailable => '音频分离引擎不可用。';
+
+  @override
+  String get backgroundOptimizationTitle => '后台运行优化';
+
+  @override
+  String get backgroundOptimizationEnvironment => '系统环境检测';
+
+  @override
+  String get backgroundOptimizationChecks => '后台优化检测';
+
+  @override
+  String get backgroundOptimizationKeepAliveStrategies => '保活策略';
+
+  @override
+  String get backgroundOptimizationDetecting => '正在检测...';
+
+  @override
+  String get backgroundOptimizationUnsupportedStatus => '当前平台不支持后台服务';
+
+  @override
+  String get backgroundOptimizationServiceRunning => '后台服务运行中';
+
+  @override
+  String get backgroundOptimizationServiceStopped => '后台服务未启动';
+
+  @override
+  String get backgroundOptimizationServiceCheckFailed => '无法检测后台服务状态';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailable =>
+      '桌面端托盘暂不可用，关闭窗口将直接退出';
+
+  @override
+  String get backgroundOptimizationDesktopCloseExits => '桌面端关闭窗口时退出应用';
+
+  @override
+  String get backgroundOptimizationDesktopTrayKeepsAlive => '桌面端使用托盘驻留保活';
+
+  @override
+  String get backgroundOptimizationStartFailed => '启动服务失败';
+
+  @override
+  String get backgroundOptimizationStopFailed => '停止服务失败';
+
+  @override
+  String get backgroundOptimizationRestartFailed => '重启服务失败';
+
+  @override
+  String get backgroundOptimizationStopService => '停止服务';
+
+  @override
+  String get backgroundOptimizationRestartService => '重新启动服务';
+
+  @override
+  String get backgroundOptimizationStartService => '启动服务';
+
+  @override
+  String get backgroundOptimizationRedetect => '重新检测';
+
+  @override
+  String get backgroundOptimizationUnsupportedControl => '当前平台不支持后台服务控制。';
+
+  @override
+  String get backgroundOptimizationCheckingBattery => '正在检测电池优化状态...';
+
+  @override
+  String get backgroundOptimizationBatteryIgnored => '已忽略电池优化';
+
+  @override
+  String get backgroundOptimizationBatteryMayKill => '未忽略电池优化 — 后台可能被杀';
+
+  @override
+  String get backgroundOptimizationIgnoreBattery => '忽略电池优化';
+
+  @override
+  String get backgroundOptimizationExactAlarm => '允许精确闹钟（保活更可靠）';
+
+  @override
+  String get backgroundOptimizationWatchdogTitle => 'AlarmManager 看门狗';
+
+  @override
+  String get backgroundOptimizationWatchdogDetail =>
+      '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
+
+  @override
+  String get backgroundOptimizationSaveWatchdogFailed => '保存失败，看门狗设置未更改';
+
+  @override
+  String get backgroundOptimizationWatchdogActivationFailed =>
+      '看门狗激活失败，后台服务保活状态未确认';
+
+  @override
+  String get backgroundOptimizationColdStartTitle => '冷启动自动恢复';
+
+  @override
+  String get backgroundOptimizationColdStartDetail =>
+      '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。\n\n如果 App 进程被系统或用户手动杀掉，下次打开 App 时后台服务会自动重启，无需手动操作。\n\n适用场景：所有用户都建议开启。\n耗电影响：无（仅在 App 启动时检查一次）。';
+
+  @override
+  String get backgroundOptimizationSaveColdStartFailed => '保存失败，冷启动恢复设置未更改';
+
+  @override
+  String get backgroundOptimizationBatteryReminderTitle => '电池优化提醒';
+
+  @override
+  String get backgroundOptimizationBatteryReminderDetail =>
+      '启用后，本页面会显示电池优化状态卡片。如果检测到 App 未被添加到省电白名单，会提供一键跳转至系统设置进行豁免。\n\n电池优化是安卓系统省电机制（Doze），会限制后台应用的运行。添加到白名单后，系统不会因省电而杀掉本 App。\n\n适用场景：关闭本开关仅隐藏提醒卡片，不影响实际的电池优化豁免状态。';
+
+  @override
+  String get backgroundOptimizationStrategyIntro =>
+      '以下策略可独立开关。默认全部启用以获得最强保活效果。关闭某项仅影响该策略，不会影响后台服务本身的运行。';
+
+  @override
+  String get backgroundOptimizationIosNoteTitle => 'iOS 后台任务提示';
+
+  @override
+  String get backgroundOptimizationIosSupported =>
+      '当前系统（iOS 26 及以上）支持任务常驻后台：任务运行期间切换 App 或锁屏，任务通常会继续执行（系统资源紧张时可能终止），并可在锁屏界面查看进度。';
+
+  @override
+  String get backgroundOptimizationIosUnsupported =>
+      '当前系统（低于 iOS 26）不支持任务常驻后台。任务运行时请每隔几分钟返回一次 App（建议 5–10 分钟，具体由系统决定），刷新后台执行时间，防止任务被系统挂起。';
+
+  @override
+  String get backgroundOptimizationIosWarning =>
+      '注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——划掉会立即终止所有运行中的任务。';
+
+  @override
+  String get backgroundOptimizationDesktopIntro =>
+      '桌面端没有移动系统的进程保活机制，但可以让应用在关闭窗口后继续运行。';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeTitle => '关闭窗口时最小化';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeDetail =>
+      '启用后，点击窗口关闭按钮不会退出应用，而是隐藏到系统托盘继续运行，后台任务不受影响。\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；需要真正退出时，点击下方「完全退出应用」按钮。\n\n适用场景：所有桌面用户都建议开启。';
+
+  @override
+  String get backgroundOptimizationQuitApp => '完全退出应用';
+
+  @override
+  String get backgroundOptimizationGotIt => '知道了';
+
+  @override
+  String get backgroundOptimizationWebNoteTitle => 'Web 后台任务提示';
+
+  @override
+  String get backgroundOptimizationWebNote =>
+      '浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，或浏览器冻结长时间不活跃的后台标签页，都会立即中断运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。';
+
+  @override
+  String get backgroundOptimizationTutorial => '平台教程';
+
+  @override
+  String get backgroundOptimizationTutorialDescription => '查看各个平台的后台运行优化教程';
+
+  @override
+  String get backgroundOptimizationServiceCheckingDescription =>
+      '正在检测后台服务状态...';
+
+  @override
+  String get backgroundOptimizationServiceUnknown => '后台服务状态未知，请重新检测以确认服务是否运行。';
+
+  @override
+  String get backgroundOptimizationServiceRunningDescription =>
+      '后台服务正在运行，任务将在后台正常执行。';
+
+  @override
+  String get backgroundOptimizationWebServiceUnsupported =>
+      'Web 浏览器环境不支持后台服务运行。请保持页面打开以继续任务。';
+
+  @override
+  String get backgroundOptimizationLinuxTrayUnavailable =>
+      '桌面平台托盘暂不可用（Linux 构建需安装 libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailableDescription =>
+      '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+
+  @override
+  String get backgroundOptimizationDesktopExitDescription =>
+      '桌面平台已设置为关闭窗口时退出：关闭窗口后应用会按现有退出确认流程处理并退出，不会在托盘继续运行。';
+
+  @override
+  String get backgroundOptimizationLinuxTrayDescription =>
+      '桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，从托盘菜单选择「显示主窗口」即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+
+  @override
+  String get backgroundOptimizationDesktopTrayDescription =>
+      '桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+
+  @override
+  String get backgroundOptimizationServiceNotRunningDescription =>
+      '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，或查看平台教程了解如何优化后台运行设置。';
+
+  @override
+  String get notificationSettingsPageTitle => '通知权限设置';
+
+  @override
+  String get notificationSettingsWebUnsupported => 'Web 环境不支持通知权限';
+
+  @override
+  String get notificationSettingsChecking => '正在检测...';
+
+  @override
+  String get notificationSettingsPermissionGranted => '通知权限已授权';
+
+  @override
+  String get notificationSettingsPermissionDenied => '通知权限未授予';
+
+  @override
+  String get notificationSettingsPermissionRestricted => '通知权限受限';
+
+  @override
+  String get notificationSettingsPermissionBlocked => '通知权限已被永久屏蔽';
+
+  @override
+  String get notificationSettingsPermissionProvisional => '通知权限为临时授权';
+
+  @override
+  String get notificationSettingsWebGuide => '当前为 Web 环境，不支持系统通知功能。';
+
+  @override
+  String get notificationSettingsCheckingPermission => '正在检测通知权限状态...';
+
+  @override
+  String get notificationSettingsPermissionGrantedGuide =>
+      '通知权限已授予，您可以开启任务完成通知，在任务完成或失败时收到系统通知。';
+
+  @override
+  String get notificationSettingsPermissionDeniedGuide =>
+      '通知权限尚未授予。您可以点击下方按钮请求权限，或在系统设置中手动开启 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsPermissionRestrictedGuide =>
+      '通知权限受系统限制（如家长控制）。请在系统设置中检查 Stroom 的通知权限设置。';
+
+  @override
+  String get notificationSettingsEnvironment => '系统环境检测';
+
+  @override
+  String get notificationSettingsPermissionSection => '通知权限检测';
+
+  @override
+  String get notificationSettingsPlatformGuides => '平台指南';
+
+  @override
+  String get notificationSettingsGuideIntro =>
+      '根据您的操作系统，按照以下步骤开启 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsTaskCompleteTitle => '任务完成通知';
+
+  @override
+  String get notificationSettingsTaskCompleteDescription => '任务完成或失败时发送通知';
+
+  @override
+  String get notificationSettingsCheckAgain => '重新检测';
+
+  @override
+  String get notificationSettingsOpenSystemSettings => '前往系统设置';
+
+  @override
+  String get notificationSettingsRequestPermission => '请求权限';
+
+  @override
+  String get notificationSettingsGuideUnsupported => '当前平台暂不支持通知权限设置指南。';
+
+  @override
+  String get notificationSettingsUsageReason => '用于在任务完成时发送通知';
+
+  @override
+  String get notificationSettingsAndroidEnableTitle => '开启通知权限';
+
+  @override
+  String get notificationSettingsAndroidEnableDescription =>
+      '进入「设置」→「应用」→「Stroom」→「通知管理」，确保已允许通知权限。如果找不到 Stroom，请确认应用已安装。如果权限被禁用，请手动开启。';
+
+  @override
+  String get notificationSettingsAndroidDndTitle => '检查勿扰模式';
+
+  @override
+  String get notificationSettingsAndroidDndDescription =>
+      '进入「设置」→「声音与振动」→「勿扰模式」，确认勿扰模式未开启，或已将在其中允许 Stroom 的通知。';
+
+  @override
+  String get notificationSettingsAndroidPopupTitle => '允许后台弹出通知';
+
+  @override
+  String get notificationSettingsAndroidPopupDescription =>
+      '部分 Android 系统（如 MIUI、EMUI、ColorOS 等）需要额外在应用信息中开启「允许通知」和「允许弹窗」。建议同时关闭该应用的「通知过滤」或「智能通知」功能。';
+
+  @override
+  String get notificationSettingsReturnTitle => '完成后返回此页面';
+
+  @override
+  String get notificationSettingsAndroidReturnDescription =>
+      '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。如果权限已显示为已授权，即可开启任务完成通知开关。';
+
+  @override
+  String get notificationSettingsIosEnableDescription =>
+      '进入「设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」以便及时获知任务状态。';
+
+  @override
+  String get notificationSettingsIosFocusTitle => '关闭专注模式';
+
+  @override
+  String get notificationSettingsIosFocusDescription =>
+      '进入「设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。专注模式可能会屏蔽应用通知。';
+
+  @override
+  String get notificationSettingsIosReturnDescription =>
+      '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。iOS 上通知权限通常需要用户手动在系统设置中开启。';
+
+  @override
+  String get notificationSettingsWindowsEnableTitle => '开启系统通知';
+
+  @override
+  String get notificationSettingsWindowsEnableDescription =>
+      '进入「设置」→「系统」→「通知和操作」，确保「获取来自应用和其他发送者的通知」已开启。在下方应用列表中找到 Stroom 并确保通知已开启。';
+
+  @override
+  String get notificationSettingsWindowsFocusTitle => '开启专注助手排除项';
+
+  @override
+  String get notificationSettingsWindowsFocusDescription =>
+      '进入「设置」→「系统」→「专注助手」，确保 Stroom 已加入「仅优先打断」或「关闭专注助手」。专注助手开启时会屏蔽通知。';
+
+  @override
+  String get notificationSettingsMacEnableTitle => '开启通知权限';
+
+  @override
+  String get notificationSettingsMacEnableDescription =>
+      '进入「系统设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」。';
+
+  @override
+  String get notificationSettingsMacFocusDescription =>
+      '进入「系统设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。';
+
+  @override
+  String get notificationSettingsLinuxDesktopTitle => '检查桌面环境通知设置';
+
+  @override
+  String get notificationSettingsLinuxDesktopDescription =>
+      '根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→「通知」→ 找到 Stroom 并确保通知已开启。';
+
+  @override
+  String get notificationSettingsLinuxDaemonTitle => '检查是否安装了通知守护进程';
+
+  @override
+  String get notificationSettingsLinuxDaemonDescription =>
+      'Linux 桌面环境需要安装通知守护进程（如 notify-osd 或 dunst）来显示系统通知。请确认您的系统中已安装并运行了通知守护进程。';
+
+  @override
+  String get backupRestorePageTitle => '数据备份与恢复';
+
+  @override
+  String get backupRestoreSelectBackupCategory => '请至少选择一项要备份的数据类别';
+
+  @override
+  String get backupRestorePreparingData => '正在准备数据...';
+
+  @override
+  String get backupRestoreExportingBackup => '正在导出备份';
+
+  @override
+  String get backupRestoreCollectingDatabase => '正在收集数据库记录...';
+
+  @override
+  String get backupRestoreProcessingSettings => '正在处理配置数据...';
+
+  @override
+  String get backupRestoreAddingTasks => '正在添加任务文件...';
+
+  @override
+  String get backupRestoreAddingPictures => '正在添加图片文件...';
+
+  @override
+  String get backupRestoreAddingAudio => '正在添加音频文件...';
+
+  @override
+  String get backupRestoreAddingVideo => '正在添加视频文件...';
+
+  @override
+  String get backupRestoreAddingText => '正在添加文本文件...';
+
+  @override
+  String get backupRestoreAddingChat => '正在添加聊天记录和附件...';
+
+  @override
+  String get backupRestoreCompressing => '正在压缩打包...';
+
+  @override
+  String get backupRestoreCompleted => '已完成';
+
+  @override
+  String get backupRestoreSelectRestoreCategory => '请至少选择一项要恢复的数据类别';
+
+  @override
+  String get backupRestoreConfirmRestore => '确认恢复';
+
+  @override
+  String get backupRestoreSelectedCategories => '已勾选的数据类别：';
+
+  @override
+  String get backupRestoreRestoreInfo =>
+      '备份中实际包含的已勾选类别会恢复到本机。除内置浏览器 Cookies 外，其余类别会替换本机对应数据；Cookies 按域名、名称和路径写入，备份中没有的本机 Cookies 保持原样。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。';
+
+  @override
+  String get backupRestoreRestartNotice => '恢复完成后需重启应用才能生效，请确保已保存当前工作。';
+
+  @override
+  String get backupRestoreCancel => '取消';
+
+  @override
+  String get backupRestoreConfirmRestoreButton => '确定恢复';
+
+  @override
+  String get backupRestoreIncompleteTitle => '恢复未完成';
+
+  @override
+  String get backupRestoreIncompleteMessage => '数据未能完整恢复，部分数据可能已被清除。请重启应用后重试。';
+
+  @override
+  String get backupRestoreSelectClearCategory => '请至少选择一项要清除的数据类别';
+
+  @override
+  String get backupRestoreClearingData => '正在清除数据';
+
+  @override
+  String get backupRestoreDeletingCategories => '正在删除所选类别的数据...';
+
+  @override
+  String get backupRestoreClearedTitle => '数据清除完成';
+
+  @override
+  String get backupRestorePartiallyClearedTitle => '部分数据已清除';
+
+  @override
+  String get backupRestoreClearedMessage => '所选数据已清除。请重启应用以生效。';
+
+  @override
+  String get backupRestorePartialClearMessage =>
+      '其他所选数据已清除。当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；未能清除的浏览器数据仍会保留。请重启应用使已清除的数据生效。';
+
+  @override
+  String backupRestoreClearFailed(String error) {
+    return '清除失败: $error';
+  }
+
+  @override
+  String get backupRestoreClearIncompleteTitle => '清除未完成';
+
+  @override
+  String get backupRestoreClearIncompleteMessage => '部分数据未能清除。请重启应用后重试清除操作。';
+
+  @override
+  String backupRestoreAnkiExportSuccess(String path) {
+    return 'Anki闪卡片组已导出到: $path';
+  }
+
+  @override
+  String backupRestoreExportFailed(String error) {
+    return '导出失败: $error';
+  }
+
+  @override
+  String get backupRestoreApkgRequired => '请选择 .apkg 格式的文件';
+
+  @override
+  String backupRestoreImportFailed(String error) {
+    return '导入失败: $error';
+  }
+
+  @override
+  String get backupRestoreRestoreSuccessTitle => '数据恢复成功';
+
+  @override
+  String get backupRestoreRestoredMessage => '数据已从备份中恢复。请重启应用以使用恢复的数据。';
+
+  @override
+  String get backupRestoreExitApp => '退出应用';
+
+  @override
+  String get backupRestoreRestartNow => '立即重启';
+
+  @override
+  String get backupRestoreSkippedTitle => '部分数据已跳过';
+
+  @override
+  String get backupRestoreNothingRestoredTitle => '未恢复任何数据';
+
+  @override
+  String get backupRestoreGotIt => '知道了';
+
+  @override
+  String backupRestoreSkippedCategories(String categories) {
+    return '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；当前数据保持不变：$categories。';
+  }
+
+  @override
+  String get backupRestoreSkippedTasksLegacy =>
+      '如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；为避免覆盖当前任务，任务类别已跳过并保留原数据。';
+
+  @override
+  String get backupRestoreSkippedCookies =>
+      '备份中没有可导入的内置浏览器 Cookies，已跳过；本机现有 Cookies 保持不变。';
+
+  @override
+  String get backupRestoreSkippedWebsiteData =>
+      '旧版备份中的网站存储目录已跳过；备份包若包含 Cookies 且该类别已勾选，仍可单独导入。';
+
+  @override
+  String get backupRestoreApkgTitle => 'Anki闪卡牌组';
+
+  @override
+  String get backupRestoreApkgInfoTitle => 'Anki 闪卡牌组导入/导出';
+
+  @override
+  String get backupRestoreApkgInfoMessage => '只包含卡片信息，不包含媒体内容';
+
+  @override
+  String get backupRestoreApkgDescription => '导入/导出 .apkg 格式的 Anki 牌组';
+
+  @override
+  String get backupRestoreExportingApkg => '导出中...';
+
+  @override
+  String get backupRestoreExportApkg => '导出 .apkg';
+
+  @override
+  String get backupRestoreImportingApkg => '导入中...';
+
+  @override
+  String get backupRestoreImportApkg => '导入 .apkg';
+
+  @override
+  String get backupRestoreCategoryHeading => '选择要备份或恢复的数据类别';
+
+  @override
+  String get backupRestoreExporting => '正在导出...';
+
+  @override
+  String get backupRestoreExportBackup => '导出备份';
+
+  @override
+  String get backupRestoreRestoring => '正在恢复...';
+
+  @override
+  String get backupRestoreChooseBackup => '选择备份文件并恢复';
+
+  @override
+  String get backupRestoreClearSelected => '清除所选数据';
+
+  @override
+  String get backupRestoreClearDescription =>
+      '直接清除当前勾选的数据类别（不需要备份文件）。未勾选的类别将保持原样。此操作不可撤销。';
+
+  @override
+  String get backupRestoreClearing => '正在清除...';
+
+  @override
+  String get backupRestoreCategoryChat => '聊天记录和附件';
+
+  @override
+  String get backupRestoreCategoryChatDescription => '聊天对话记录、消息内容与附件文件';
+
+  @override
+  String get backupRestoreCategorySettings => '设置';
+
+  @override
+  String get backupRestoreCategorySettingsDescription => '应用配置、提供商设置与界面偏好';
+
+  @override
+  String get backupRestoreCategoryPictures => '图片';
+
+  @override
+  String get backupRestoreCategoryPicturesDescription => '照片和缩略图';
+
+  @override
+  String get backupRestoreCategoryAudio => '音频';
+
+  @override
+  String get backupRestoreCategoryAudioDescription => '语音合成和录音';
+
+  @override
+  String get backupRestoreCategoryVideos => '视频';
+
+  @override
+  String get backupRestoreCategoryVideosDescription => '视频文件';
+
+  @override
+  String get backupRestoreCategoryTexts => '文本';
+
+  @override
+  String get backupRestoreCategoryTextsDescription => '文本文档';
+
+  @override
+  String get backupRestoreCategoryTasks => '任务';
+
+  @override
+  String get backupRestoreCategoryTasksDescription => '后台任务记录';
+
+  @override
+  String get backupRestoreCategoryAnki => 'Anki闪卡数据';
+
+  @override
+  String get backupRestoreCategoryAnkiDescription => 'Anki 原始数据库';
+
+  @override
+  String get backupRestoreAnkiDataInfoTitle => 'Anki 闪卡数据';
+
+  @override
+  String get backupRestoreAnkiDataInfoMessage =>
+      '备份和恢复 Anki 闪卡数据时会包含 collection.media 目录中的卡片媒体内容。';
+
+  @override
+  String get backupRestoreAnkiDataInfoTooltip => 'Anki 闪卡数据说明';
+
+  @override
+  String get backupRestoreCategoryBrowser => '内置浏览器数据';
+
+  @override
+  String get backupRestoreCategoryBrowserDescription =>
+      '仅备份与恢复 Cookies；清除时同时清理可支持的网站存储';
+
+  @override
+  String get backupRestoreViewInfo => '查看说明';
+
+  @override
+  String get backupRestoreApkgInfoTooltip => 'Anki 牌组导入导出说明';
+
+  @override
+  String get backupRestoreConfirmClear => '确认清除';
+
+  @override
+  String get backupRestoreClearCategoriesIntro => '将清除以下数据类别（不经过备份文件）：';
+
+  @override
+  String get backupRestoreBrowserClearUnsupported =>
+      '当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；确认后会清除其他所选数据，无法清除的浏览器数据将保留。';
+
+  @override
+  String get backupRestoreUnselectedUnchanged => '未勾选的类别将保持原样，不会被清除。';
+
+  @override
+  String get backupRestoreClearWarning => '此操作不可撤销。清除完成后需重启应用才能生效。';
+
+  @override
+  String backupRestoreConfirmClearCountdown(int seconds) {
+    return '确定清除（$seconds）';
+  }
+
+  @override
+  String get backgroundOptimizationBrowserEnvironment => '浏览器环境';
+
+  @override
+  String get backupRestoreIntro =>
+      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。';
+
+  @override
+  String get backupRestoreOtherSelectedRestored => '其余所选数据已恢复，请重启应用以生效。';
+
+  @override
+  String get notificationSettingsPermissionBlockedGuide =>
+      '通知已被系统屏蔽，请前往系统设置允许 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsPermissionBlockedAndroid =>
+      '通知已被系统屏蔽。请前往系统设置 > 应用 > Stroom > 通知管理，允许通知权限。';
+
+  @override
+  String get notificationSettingsPermissionBlockedIos =>
+      '通知已被系统屏蔽。请前往系统设置 > Stroom > 通知，允许通知权限。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -14049,4 +14724,679 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get audioSeparationEngineUnavailable => '音频分离引擎不可用。';
+
+  @override
+  String get backgroundOptimizationTitle => '后台运行优化';
+
+  @override
+  String get backgroundOptimizationEnvironment => '系统环境检测';
+
+  @override
+  String get backgroundOptimizationChecks => '后台优化检测';
+
+  @override
+  String get backgroundOptimizationKeepAliveStrategies => '保活策略';
+
+  @override
+  String get backgroundOptimizationDetecting => '正在检测...';
+
+  @override
+  String get backgroundOptimizationUnsupportedStatus => '当前平台不支持后台服务';
+
+  @override
+  String get backgroundOptimizationServiceRunning => '后台服务运行中';
+
+  @override
+  String get backgroundOptimizationServiceStopped => '后台服务未启动';
+
+  @override
+  String get backgroundOptimizationServiceCheckFailed => '无法检测后台服务状态';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailable =>
+      '桌面端托盘暂不可用，关闭窗口将直接退出';
+
+  @override
+  String get backgroundOptimizationDesktopCloseExits => '桌面端关闭窗口时退出应用';
+
+  @override
+  String get backgroundOptimizationDesktopTrayKeepsAlive => '桌面端使用托盘驻留保活';
+
+  @override
+  String get backgroundOptimizationStartFailed => '启动服务失败';
+
+  @override
+  String get backgroundOptimizationStopFailed => '停止服务失败';
+
+  @override
+  String get backgroundOptimizationRestartFailed => '重启服务失败';
+
+  @override
+  String get backgroundOptimizationStopService => '停止服务';
+
+  @override
+  String get backgroundOptimizationRestartService => '重新启动服务';
+
+  @override
+  String get backgroundOptimizationStartService => '启动服务';
+
+  @override
+  String get backgroundOptimizationRedetect => '重新检测';
+
+  @override
+  String get backgroundOptimizationUnsupportedControl => '当前平台不支持后台服务控制。';
+
+  @override
+  String get backgroundOptimizationCheckingBattery => '正在检测电池优化状态...';
+
+  @override
+  String get backgroundOptimizationBatteryIgnored => '已忽略电池优化';
+
+  @override
+  String get backgroundOptimizationBatteryMayKill => '未忽略电池优化 — 后台可能被杀';
+
+  @override
+  String get backgroundOptimizationIgnoreBattery => '忽略电池优化';
+
+  @override
+  String get backgroundOptimizationExactAlarm => '允许精确闹钟（保活更可靠）';
+
+  @override
+  String get backgroundOptimizationWatchdogTitle => 'AlarmManager 看门狗';
+
+  @override
+  String get backgroundOptimizationWatchdogDetail =>
+      '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
+
+  @override
+  String get backgroundOptimizationSaveWatchdogFailed => '保存失败，看门狗设置未更改';
+
+  @override
+  String get backgroundOptimizationWatchdogActivationFailed =>
+      '看门狗激活失败，后台服务保活状态未确认';
+
+  @override
+  String get backgroundOptimizationColdStartTitle => '冷启动自动恢复';
+
+  @override
+  String get backgroundOptimizationColdStartDetail =>
+      '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。\n\n如果 App 进程被系统或用户手动杀掉，下次打开 App 时后台服务会自动重启，无需手动操作。\n\n适用场景：所有用户都建议开启。\n耗电影响：无（仅在 App 启动时检查一次）。';
+
+  @override
+  String get backgroundOptimizationSaveColdStartFailed => '保存失败，冷启动恢复设置未更改';
+
+  @override
+  String get backgroundOptimizationBatteryReminderTitle => '电池优化提醒';
+
+  @override
+  String get backgroundOptimizationBatteryReminderDetail =>
+      '启用后，本页面会显示电池优化状态卡片。如果检测到 App 未被添加到省电白名单，会提供一键跳转至系统设置进行豁免。\n\n电池优化是安卓系统省电机制（Doze），会限制后台应用的运行。添加到白名单后，系统不会因省电而杀掉本 App。\n\n适用场景：关闭本开关仅隐藏提醒卡片，不影响实际的电池优化豁免状态。';
+
+  @override
+  String get backgroundOptimizationStrategyIntro =>
+      '以下策略可独立开关。默认全部启用以获得最强保活效果。关闭某项仅影响该策略，不会影响后台服务本身的运行。';
+
+  @override
+  String get backgroundOptimizationIosNoteTitle => 'iOS 后台任务提示';
+
+  @override
+  String get backgroundOptimizationIosSupported =>
+      '当前系统（iOS 26 及以上）支持任务常驻后台：任务运行期间切换 App 或锁屏，任务通常会继续执行（系统资源紧张时可能终止），并可在锁屏界面查看进度。';
+
+  @override
+  String get backgroundOptimizationIosUnsupported =>
+      '当前系统（低于 iOS 26）不支持任务常驻后台。任务运行时请每隔几分钟返回一次 App（建议 5–10 分钟，具体由系统决定），刷新后台执行时间，防止任务被系统挂起。';
+
+  @override
+  String get backgroundOptimizationIosWarning =>
+      '注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——划掉会立即终止所有运行中的任务。';
+
+  @override
+  String get backgroundOptimizationDesktopIntro =>
+      '桌面端没有移动系统的进程保活机制，但可以让应用在关闭窗口后继续运行。';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeTitle => '关闭窗口时最小化';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeDetail =>
+      '启用后，点击窗口关闭按钮不会退出应用，而是隐藏到系统托盘继续运行，后台任务不受影响。\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；需要真正退出时，点击下方「完全退出应用」按钮。\n\n适用场景：所有桌面用户都建议开启。';
+
+  @override
+  String get backgroundOptimizationQuitApp => '完全退出应用';
+
+  @override
+  String get backgroundOptimizationGotIt => '知道了';
+
+  @override
+  String get backgroundOptimizationWebNoteTitle => 'Web 后台任务提示';
+
+  @override
+  String get backgroundOptimizationWebNote =>
+      '浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，或浏览器冻结长时间不活跃的后台标签页，都会立即中断运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。';
+
+  @override
+  String get backgroundOptimizationTutorial => '平台教程';
+
+  @override
+  String get backgroundOptimizationTutorialDescription => '查看各个平台的后台运行优化教程';
+
+  @override
+  String get backgroundOptimizationServiceCheckingDescription =>
+      '正在检测后台服务状态...';
+
+  @override
+  String get backgroundOptimizationServiceUnknown => '后台服务状态未知，请重新检测以确认服务是否运行。';
+
+  @override
+  String get backgroundOptimizationServiceRunningDescription =>
+      '后台服务正在运行，任务将在后台正常执行。';
+
+  @override
+  String get backgroundOptimizationWebServiceUnsupported =>
+      'Web 浏览器环境不支持后台服务运行。请保持页面打开以继续任务。';
+
+  @override
+  String get backgroundOptimizationLinuxTrayUnavailable =>
+      '桌面平台托盘暂不可用（Linux 构建需安装 libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailableDescription =>
+      '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+
+  @override
+  String get backgroundOptimizationDesktopExitDescription =>
+      '桌面平台已设置为关闭窗口时退出：关闭窗口后应用会按现有退出确认流程处理并退出，不会在托盘继续运行。';
+
+  @override
+  String get backgroundOptimizationLinuxTrayDescription =>
+      '桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，从托盘菜单选择「显示主窗口」即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+
+  @override
+  String get backgroundOptimizationDesktopTrayDescription =>
+      '桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+
+  @override
+  String get backgroundOptimizationServiceNotRunningDescription =>
+      '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，或查看平台教程了解如何优化后台运行设置。';
+
+  @override
+  String get notificationSettingsPageTitle => '通知权限设置';
+
+  @override
+  String get notificationSettingsWebUnsupported => 'Web 环境不支持通知权限';
+
+  @override
+  String get notificationSettingsChecking => '正在检测...';
+
+  @override
+  String get notificationSettingsPermissionGranted => '通知权限已授权';
+
+  @override
+  String get notificationSettingsPermissionDenied => '通知权限未授予';
+
+  @override
+  String get notificationSettingsPermissionRestricted => '通知权限受限';
+
+  @override
+  String get notificationSettingsPermissionBlocked => '通知权限已被永久屏蔽';
+
+  @override
+  String get notificationSettingsPermissionProvisional => '通知权限为临时授权';
+
+  @override
+  String get notificationSettingsWebGuide => '当前为 Web 环境，不支持系统通知功能。';
+
+  @override
+  String get notificationSettingsCheckingPermission => '正在检测通知权限状态...';
+
+  @override
+  String get notificationSettingsPermissionGrantedGuide =>
+      '通知权限已授予，您可以开启任务完成通知，在任务完成或失败时收到系统通知。';
+
+  @override
+  String get notificationSettingsPermissionDeniedGuide =>
+      '通知权限尚未授予。您可以点击下方按钮请求权限，或在系统设置中手动开启 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsPermissionRestrictedGuide =>
+      '通知权限受系统限制（如家长控制）。请在系统设置中检查 Stroom 的通知权限设置。';
+
+  @override
+  String get notificationSettingsEnvironment => '系统环境检测';
+
+  @override
+  String get notificationSettingsPermissionSection => '通知权限检测';
+
+  @override
+  String get notificationSettingsPlatformGuides => '平台指南';
+
+  @override
+  String get notificationSettingsGuideIntro =>
+      '根据您的操作系统，按照以下步骤开启 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsTaskCompleteTitle => '任务完成通知';
+
+  @override
+  String get notificationSettingsTaskCompleteDescription => '任务完成或失败时发送通知';
+
+  @override
+  String get notificationSettingsCheckAgain => '重新检测';
+
+  @override
+  String get notificationSettingsOpenSystemSettings => '前往系统设置';
+
+  @override
+  String get notificationSettingsRequestPermission => '请求权限';
+
+  @override
+  String get notificationSettingsGuideUnsupported => '当前平台暂不支持通知权限设置指南。';
+
+  @override
+  String get notificationSettingsUsageReason => '用于在任务完成时发送通知';
+
+  @override
+  String get notificationSettingsAndroidEnableTitle => '开启通知权限';
+
+  @override
+  String get notificationSettingsAndroidEnableDescription =>
+      '进入「设置」→「应用」→「Stroom」→「通知管理」，确保已允许通知权限。如果找不到 Stroom，请确认应用已安装。如果权限被禁用，请手动开启。';
+
+  @override
+  String get notificationSettingsAndroidDndTitle => '检查勿扰模式';
+
+  @override
+  String get notificationSettingsAndroidDndDescription =>
+      '进入「设置」→「声音与振动」→「勿扰模式」，确认勿扰模式未开启，或已将在其中允许 Stroom 的通知。';
+
+  @override
+  String get notificationSettingsAndroidPopupTitle => '允许后台弹出通知';
+
+  @override
+  String get notificationSettingsAndroidPopupDescription =>
+      '部分 Android 系统（如 MIUI、EMUI、ColorOS 等）需要额外在应用信息中开启「允许通知」和「允许弹窗」。建议同时关闭该应用的「通知过滤」或「智能通知」功能。';
+
+  @override
+  String get notificationSettingsReturnTitle => '完成后返回此页面';
+
+  @override
+  String get notificationSettingsAndroidReturnDescription =>
+      '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。如果权限已显示为已授权，即可开启任务完成通知开关。';
+
+  @override
+  String get notificationSettingsIosEnableDescription =>
+      '进入「设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」以便及时获知任务状态。';
+
+  @override
+  String get notificationSettingsIosFocusTitle => '关闭专注模式';
+
+  @override
+  String get notificationSettingsIosFocusDescription =>
+      '进入「设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。专注模式可能会屏蔽应用通知。';
+
+  @override
+  String get notificationSettingsIosReturnDescription =>
+      '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。iOS 上通知权限通常需要用户手动在系统设置中开启。';
+
+  @override
+  String get notificationSettingsWindowsEnableTitle => '开启系统通知';
+
+  @override
+  String get notificationSettingsWindowsEnableDescription =>
+      '进入「设置」→「系统」→「通知和操作」，确保「获取来自应用和其他发送者的通知」已开启。在下方应用列表中找到 Stroom 并确保通知已开启。';
+
+  @override
+  String get notificationSettingsWindowsFocusTitle => '开启专注助手排除项';
+
+  @override
+  String get notificationSettingsWindowsFocusDescription =>
+      '进入「设置」→「系统」→「专注助手」，确保 Stroom 已加入「仅优先打断」或「关闭专注助手」。专注助手开启时会屏蔽通知。';
+
+  @override
+  String get notificationSettingsMacEnableTitle => '开启通知权限';
+
+  @override
+  String get notificationSettingsMacEnableDescription =>
+      '进入「系统设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」。';
+
+  @override
+  String get notificationSettingsMacFocusDescription =>
+      '进入「系统设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。';
+
+  @override
+  String get notificationSettingsLinuxDesktopTitle => '检查桌面环境通知设置';
+
+  @override
+  String get notificationSettingsLinuxDesktopDescription =>
+      '根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→「通知」→ 找到 Stroom 并确保通知已开启。';
+
+  @override
+  String get notificationSettingsLinuxDaemonTitle => '检查是否安装了通知守护进程';
+
+  @override
+  String get notificationSettingsLinuxDaemonDescription =>
+      'Linux 桌面环境需要安装通知守护进程（如 notify-osd 或 dunst）来显示系统通知。请确认您的系统中已安装并运行了通知守护进程。';
+
+  @override
+  String get backupRestorePageTitle => '数据备份与恢复';
+
+  @override
+  String get backupRestoreSelectBackupCategory => '请至少选择一项要备份的数据类别';
+
+  @override
+  String get backupRestorePreparingData => '正在准备数据...';
+
+  @override
+  String get backupRestoreExportingBackup => '正在导出备份';
+
+  @override
+  String get backupRestoreCollectingDatabase => '正在收集数据库记录...';
+
+  @override
+  String get backupRestoreProcessingSettings => '正在处理配置数据...';
+
+  @override
+  String get backupRestoreAddingTasks => '正在添加任务文件...';
+
+  @override
+  String get backupRestoreAddingPictures => '正在添加图片文件...';
+
+  @override
+  String get backupRestoreAddingAudio => '正在添加音频文件...';
+
+  @override
+  String get backupRestoreAddingVideo => '正在添加视频文件...';
+
+  @override
+  String get backupRestoreAddingText => '正在添加文本文件...';
+
+  @override
+  String get backupRestoreAddingChat => '正在添加聊天记录和附件...';
+
+  @override
+  String get backupRestoreCompressing => '正在压缩打包...';
+
+  @override
+  String get backupRestoreCompleted => '已完成';
+
+  @override
+  String get backupRestoreSelectRestoreCategory => '请至少选择一项要恢复的数据类别';
+
+  @override
+  String get backupRestoreConfirmRestore => '确认恢复';
+
+  @override
+  String get backupRestoreSelectedCategories => '已勾选的数据类别：';
+
+  @override
+  String get backupRestoreRestoreInfo =>
+      '备份中实际包含的已勾选类别会恢复到本机。除内置浏览器 Cookies 外，其余类别会替换本机对应数据；Cookies 按域名、名称和路径写入，备份中没有的本机 Cookies 保持原样。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。';
+
+  @override
+  String get backupRestoreRestartNotice => '恢复完成后需重启应用才能生效，请确保已保存当前工作。';
+
+  @override
+  String get backupRestoreCancel => '取消';
+
+  @override
+  String get backupRestoreConfirmRestoreButton => '确定恢复';
+
+  @override
+  String get backupRestoreIncompleteTitle => '恢复未完成';
+
+  @override
+  String get backupRestoreIncompleteMessage => '数据未能完整恢复，部分数据可能已被清除。请重启应用后重试。';
+
+  @override
+  String get backupRestoreSelectClearCategory => '请至少选择一项要清除的数据类别';
+
+  @override
+  String get backupRestoreClearingData => '正在清除数据';
+
+  @override
+  String get backupRestoreDeletingCategories => '正在删除所选类别的数据...';
+
+  @override
+  String get backupRestoreClearedTitle => '数据清除完成';
+
+  @override
+  String get backupRestorePartiallyClearedTitle => '部分数据已清除';
+
+  @override
+  String get backupRestoreClearedMessage => '所选数据已清除。请重启应用以生效。';
+
+  @override
+  String get backupRestorePartialClearMessage =>
+      '其他所选数据已清除。当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；未能清除的浏览器数据仍会保留。请重启应用使已清除的数据生效。';
+
+  @override
+  String backupRestoreClearFailed(String error) {
+    return '清除失败: $error';
+  }
+
+  @override
+  String get backupRestoreClearIncompleteTitle => '清除未完成';
+
+  @override
+  String get backupRestoreClearIncompleteMessage => '部分数据未能清除。请重启应用后重试清除操作。';
+
+  @override
+  String backupRestoreAnkiExportSuccess(String path) {
+    return 'Anki闪卡片组已导出到: $path';
+  }
+
+  @override
+  String backupRestoreExportFailed(String error) {
+    return '导出失败: $error';
+  }
+
+  @override
+  String get backupRestoreApkgRequired => '请选择 .apkg 格式的文件';
+
+  @override
+  String backupRestoreImportFailed(String error) {
+    return '导入失败: $error';
+  }
+
+  @override
+  String get backupRestoreRestoreSuccessTitle => '数据恢复成功';
+
+  @override
+  String get backupRestoreRestoredMessage => '数据已从备份中恢复。请重启应用以使用恢复的数据。';
+
+  @override
+  String get backupRestoreExitApp => '退出应用';
+
+  @override
+  String get backupRestoreRestartNow => '立即重启';
+
+  @override
+  String get backupRestoreSkippedTitle => '部分数据已跳过';
+
+  @override
+  String get backupRestoreNothingRestoredTitle => '未恢复任何数据';
+
+  @override
+  String get backupRestoreGotIt => '知道了';
+
+  @override
+  String backupRestoreSkippedCategories(String categories) {
+    return '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；当前数据保持不变：$categories。';
+  }
+
+  @override
+  String get backupRestoreSkippedTasksLegacy =>
+      '如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；为避免覆盖当前任务，任务类别已跳过并保留原数据。';
+
+  @override
+  String get backupRestoreSkippedCookies =>
+      '备份中没有可导入的内置浏览器 Cookies，已跳过；本机现有 Cookies 保持不变。';
+
+  @override
+  String get backupRestoreSkippedWebsiteData =>
+      '旧版备份中的网站存储目录已跳过；备份包若包含 Cookies 且该类别已勾选，仍可单独导入。';
+
+  @override
+  String get backupRestoreApkgTitle => 'Anki闪卡牌组';
+
+  @override
+  String get backupRestoreApkgInfoTitle => 'Anki 闪卡牌组导入/导出';
+
+  @override
+  String get backupRestoreApkgInfoMessage => '只包含卡片信息，不包含媒体内容';
+
+  @override
+  String get backupRestoreApkgDescription => '导入/导出 .apkg 格式的 Anki 牌组';
+
+  @override
+  String get backupRestoreExportingApkg => '导出中...';
+
+  @override
+  String get backupRestoreExportApkg => '导出 .apkg';
+
+  @override
+  String get backupRestoreImportingApkg => '导入中...';
+
+  @override
+  String get backupRestoreImportApkg => '导入 .apkg';
+
+  @override
+  String get backupRestoreCategoryHeading => '选择要备份或恢复的数据类别';
+
+  @override
+  String get backupRestoreExporting => '正在导出...';
+
+  @override
+  String get backupRestoreExportBackup => '导出备份';
+
+  @override
+  String get backupRestoreRestoring => '正在恢复...';
+
+  @override
+  String get backupRestoreChooseBackup => '选择备份文件并恢复';
+
+  @override
+  String get backupRestoreClearSelected => '清除所选数据';
+
+  @override
+  String get backupRestoreClearDescription =>
+      '直接清除当前勾选的数据类别（不需要备份文件）。未勾选的类别将保持原样。此操作不可撤销。';
+
+  @override
+  String get backupRestoreClearing => '正在清除...';
+
+  @override
+  String get backupRestoreCategoryChat => '聊天记录和附件';
+
+  @override
+  String get backupRestoreCategoryChatDescription => '聊天对话记录、消息内容与附件文件';
+
+  @override
+  String get backupRestoreCategorySettings => '设置';
+
+  @override
+  String get backupRestoreCategorySettingsDescription => '应用配置、提供商设置与界面偏好';
+
+  @override
+  String get backupRestoreCategoryPictures => '图片';
+
+  @override
+  String get backupRestoreCategoryPicturesDescription => '照片和缩略图';
+
+  @override
+  String get backupRestoreCategoryAudio => '音频';
+
+  @override
+  String get backupRestoreCategoryAudioDescription => '语音合成和录音';
+
+  @override
+  String get backupRestoreCategoryVideos => '视频';
+
+  @override
+  String get backupRestoreCategoryVideosDescription => '视频文件';
+
+  @override
+  String get backupRestoreCategoryTexts => '文本';
+
+  @override
+  String get backupRestoreCategoryTextsDescription => '文本文档';
+
+  @override
+  String get backupRestoreCategoryTasks => '任务';
+
+  @override
+  String get backupRestoreCategoryTasksDescription => '后台任务记录';
+
+  @override
+  String get backupRestoreCategoryAnki => 'Anki闪卡数据';
+
+  @override
+  String get backupRestoreCategoryAnkiDescription => 'Anki 原始数据库';
+
+  @override
+  String get backupRestoreAnkiDataInfoTitle => 'Anki 闪卡数据';
+
+  @override
+  String get backupRestoreAnkiDataInfoMessage =>
+      '备份和恢复 Anki 闪卡数据时会包含 collection.media 目录中的卡片媒体内容。';
+
+  @override
+  String get backupRestoreAnkiDataInfoTooltip => 'Anki 闪卡数据说明';
+
+  @override
+  String get backupRestoreCategoryBrowser => '内置浏览器数据';
+
+  @override
+  String get backupRestoreCategoryBrowserDescription =>
+      '仅备份与恢复 Cookies；清除时同时清理可支持的网站存储';
+
+  @override
+  String get backupRestoreViewInfo => '查看说明';
+
+  @override
+  String get backupRestoreApkgInfoTooltip => 'Anki 牌组导入导出说明';
+
+  @override
+  String get backupRestoreConfirmClear => '确认清除';
+
+  @override
+  String get backupRestoreClearCategoriesIntro => '将清除以下数据类别（不经过备份文件）：';
+
+  @override
+  String get backupRestoreBrowserClearUnsupported =>
+      '当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；确认后会清除其他所选数据，无法清除的浏览器数据将保留。';
+
+  @override
+  String get backupRestoreUnselectedUnchanged => '未勾选的类别将保持原样，不会被清除。';
+
+  @override
+  String get backupRestoreClearWarning => '此操作不可撤销。清除完成后需重启应用才能生效。';
+
+  @override
+  String backupRestoreConfirmClearCountdown(int seconds) {
+    return '确定清除（$seconds）';
+  }
+
+  @override
+  String get backgroundOptimizationBrowserEnvironment => '浏览器环境';
+
+  @override
+  String get backupRestoreIntro =>
+      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。';
+
+  @override
+  String get backupRestoreOtherSelectedRestored => '其余所选数据已恢复，请重启应用以生效。';
+
+  @override
+  String get notificationSettingsPermissionBlockedGuide =>
+      '通知已被系统屏蔽，请前往系统设置允许 Stroom 的通知权限。';
+
+  @override
+  String get notificationSettingsPermissionBlockedAndroid =>
+      '通知已被系统屏蔽。请前往系统设置 > 应用 > Stroom > 通知管理，允许通知权限。';
+
+  @override
+  String get notificationSettingsPermissionBlockedIos =>
+      '通知已被系统屏蔽。请前往系统设置 > Stroom > 通知，允许通知权限。';
 }

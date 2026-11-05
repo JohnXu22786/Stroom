@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/notification_provider.dart';
 import '../services/notification_service.dart';
 
@@ -23,6 +24,8 @@ class NotificationSettingsPage extends ConsumerStatefulWidget {
 
 class _NotificationSettingsPageState
     extends ConsumerState<NotificationSettingsPage> {
+  AppLocalizations get _strings => AppLocalizations.of(context)!;
+
   // ── Detection results ────────────────────────────────────────────────
   String _platformName = '';
   IconData _platformIcon = Icons.devices;
@@ -46,7 +49,7 @@ class _NotificationSettingsPageState
       _platformName = 'Web';
       _platformIcon = Icons.web;
       _platformColor = Colors.blue;
-      _platformVersion = '浏览器环境';
+      _platformVersion = '';
       return;
     }
 
@@ -139,7 +142,7 @@ class _NotificationSettingsPageState
   Future<void> _requestPermission() async {
     final service = NotificationService();
     final granted = await service.requestPermission(
-      usageReason: '用于在任务完成时发送通知',
+      usageReason: _strings.notificationSettingsUsageReason,
     );
     await _checkPermission();
     if (granted && mounted) {
@@ -165,20 +168,20 @@ class _NotificationSettingsPageState
   // ── Permission status label ──────────────────────────────────────────
 
   String get _permissionLabel {
-    if (kIsWeb) return 'Web 环境不支持通知权限';
-    if (_isCheckingPermission) return '正在检测...';
+    if (kIsWeb) return _strings.notificationSettingsWebUnsupported;
+    if (_isCheckingPermission) return _strings.notificationSettingsChecking;
     switch (_permissionStatus) {
       case PermissionStatus.granted:
       case PermissionStatus.limited:
-        return '通知权限已授权';
+        return _strings.notificationSettingsPermissionGranted;
       case PermissionStatus.denied:
-        return '通知权限未授予';
+        return _strings.notificationSettingsPermissionDenied;
       case PermissionStatus.restricted:
-        return '通知权限受限';
+        return _strings.notificationSettingsPermissionRestricted;
       case PermissionStatus.permanentlyDenied:
-        return '通知权限已被永久屏蔽';
+        return _strings.notificationSettingsPermissionBlocked;
       case PermissionStatus.provisional:
-        return '通知权限为临时授权';
+        return _strings.notificationSettingsPermissionProvisional;
     }
   }
 
@@ -215,22 +218,26 @@ class _NotificationSettingsPageState
   }
 
   String get _permissionGuide {
-    if (kIsWeb) return '当前为 Web 环境，不支持系统通知功能。';
-    if (_isCheckingPermission) return '正在检测通知权限状态...';
+    if (kIsWeb) return _strings.notificationSettingsWebGuide;
+    if (_isCheckingPermission)
+      return _strings.notificationSettingsCheckingPermission;
     switch (_permissionStatus) {
       case PermissionStatus.granted:
       case PermissionStatus.limited:
       case PermissionStatus.provisional:
-        return '通知权限已授予，您可以开启任务完成通知，'
-            '在任务完成或失败时收到系统通知。';
+        return _strings.notificationSettingsPermissionGrantedGuide;
       case PermissionStatus.denied:
-        return '通知权限尚未授予。您可以点击下方按钮请求权限，'
-            '或在系统设置中手动开启 Stroom 的通知权限。';
+        return _strings.notificationSettingsPermissionDeniedGuide;
       case PermissionStatus.restricted:
-        return '通知权限受系统限制（如家长控制）。'
-            '请在系统设置中检查 Stroom 的通知权限设置。';
+        return _strings.notificationSettingsPermissionRestrictedGuide;
       case PermissionStatus.permanentlyDenied:
-        return NotificationService().blockedGuide;
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          return _strings.notificationSettingsPermissionBlockedAndroid;
+        }
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          return _strings.notificationSettingsPermissionBlockedIos;
+        }
+        return _strings.notificationSettingsPermissionBlockedGuide;
     }
   }
 
@@ -241,26 +248,29 @@ class _NotificationSettingsPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('通知权限设置'),
+        title: Text(_strings.notificationSettingsPageTitle),
         centerTitle: true,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('系统环境检测', theme),
+          _buildSectionHeader(_strings.notificationSettingsEnvironment, theme),
           const SizedBox(height: 8),
           _buildPlatformDetectionCard(theme),
           const SizedBox(height: 24),
-          _buildSectionHeader('通知权限检测', theme),
+          _buildSectionHeader(
+            _strings.notificationSettingsPermissionSection,
+            theme,
+          ),
           const SizedBox(height: 8),
           _buildPermissionStatusCard(theme),
           const SizedBox(height: 24),
-          _buildSectionHeader('平台指南', theme),
-          const SizedBox(height: 8),
-          _buildDescription(
-            '根据您的操作系统，按照以下步骤开启 Stroom 的通知权限。',
+          _buildSectionHeader(
+            _strings.notificationSettingsPlatformGuides,
             theme,
           ),
+          const SizedBox(height: 8),
+          _buildDescription(_strings.notificationSettingsGuideIntro, theme),
           const SizedBox(height: 12),
           _buildPlatformGuideCard(theme),
           const SizedBox(height: 24),
@@ -285,11 +295,7 @@ class _NotificationSettingsPageState
                 borderRadius: BorderRadius.circular(28),
               ),
               alignment: Alignment.center,
-              child: Icon(
-                _platformIcon,
-                size: 32,
-                color: _platformColor,
-              ),
+              child: Icon(_platformIcon, size: 32, color: _platformColor),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -304,7 +310,9 @@ class _NotificationSettingsPageState
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _platformVersion,
+                    kIsWeb
+                        ? _strings.backgroundOptimizationBrowserEnvironment
+                        : _platformVersion,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -312,11 +320,7 @@ class _NotificationSettingsPageState
                 ],
               ),
             ),
-            Icon(
-              Icons.check_circle,
-              color: _platformColor,
-              size: 28,
-            ),
+            Icon(Icons.check_circle, color: _platformColor, size: 28),
           ],
         ),
       ),
@@ -341,11 +345,7 @@ class _NotificationSettingsPageState
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(
-                        _permissionIcon,
-                        color: _permissionColor,
-                        size: 24,
-                      ),
+                    : Icon(_permissionIcon, color: _permissionColor, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -372,8 +372,9 @@ class _NotificationSettingsPageState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.3),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -392,13 +393,13 @@ class _NotificationSettingsPageState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '任务完成通知',
+                          _strings.notificationSettingsTaskCompleteTitle,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
-                          '任务完成或失败时发送通知',
+                          _strings.notificationSettingsTaskCompleteDescription,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -434,7 +435,7 @@ class _NotificationSettingsPageState
                   child: OutlinedButton.icon(
                     onPressed: _isCheckingPermission ? null : _checkPermission,
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('重新检测'),
+                    label: Text(_strings.notificationSettingsCheckAgain),
                   ),
                 ),
                 // Go to system settings button (only when permanently denied)
@@ -445,7 +446,9 @@ class _NotificationSettingsPageState
                     child: FilledButton.tonalIcon(
                       onPressed: _openSystemSettings,
                       icon: const Icon(Icons.settings, size: 18),
-                      label: const Text('前往系统设置'),
+                      label: Text(
+                        _strings.notificationSettingsOpenSystemSettings,
+                      ),
                     ),
                   ),
                 ],
@@ -454,10 +457,13 @@ class _NotificationSettingsPageState
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.tonalIcon(
-                      onPressed:
-                          _isCheckingPermission ? null : _requestPermission,
+                      onPressed: _isCheckingPermission
+                          ? null
+                          : _requestPermission,
                       icon: const Icon(Icons.notifications, size: 18),
-                      label: const Text('请求权限'),
+                      label: Text(
+                        _strings.notificationSettingsRequestPermission,
+                      ),
                     ),
                   ),
                 ],
@@ -478,7 +484,7 @@ class _NotificationSettingsPageState
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Text(
-            '当前平台暂不支持通知权限设置指南。',
+            _strings.notificationSettingsGuideUnsupported,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -553,93 +559,80 @@ class _NotificationSettingsPageState
       case 'Android':
         return [
           _GuideStep(
-            title: '开启通知权限',
-            description: '进入「设置」→「应用」→「Stroom」→「通知管理」，确保已允许通知权限。'
-                '如果找不到 Stroom，请确认应用已安装。如果权限被禁用，请手动开启。',
+            title: _strings.notificationSettingsAndroidEnableTitle,
+            description: _strings.notificationSettingsAndroidEnableDescription,
           ),
           _GuideStep(
-            title: '检查勿扰模式',
-            description: '进入「设置」→「声音与振动」→「勿扰模式」，确认勿扰模式未开启，'
-                '或已将在其中允许 Stroom 的通知。',
+            title: _strings.notificationSettingsAndroidDndTitle,
+            description: _strings.notificationSettingsAndroidDndDescription,
           ),
           _GuideStep(
-            title: '允许后台弹出通知',
-            description: '部分 Android 系统（如 MIUI、EMUI、ColorOS 等）'
-                '需要额外在应用信息中开启「允许通知」和「允许弹窗」。'
-                '建议同时关闭该应用的「通知过滤」或「智能通知」功能。',
+            title: _strings.notificationSettingsAndroidPopupTitle,
+            description: _strings.notificationSettingsAndroidPopupDescription,
           ),
           _GuideStep(
-            title: '完成后返回此页面',
-            description: '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。'
-                '如果权限已显示为已授权，即可开启任务完成通知开关。',
+            title: _strings.notificationSettingsReturnTitle,
+            description: _strings.notificationSettingsAndroidReturnDescription,
           ),
         ];
       case 'iOS':
         return [
           _GuideStep(
-            title: '开启通知权限',
-            description: '进入「设置」→「通知」→「Stroom」，开启「允许通知」。'
-                '建议同时开启「横幅」和「通知中心」以便及时获知任务状态。',
+            title: _strings.notificationSettingsAndroidEnableTitle,
+            description: _strings.notificationSettingsIosEnableDescription,
           ),
           _GuideStep(
-            title: '关闭专注模式',
-            description: '进入「设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。'
-                '专注模式可能会屏蔽应用通知。',
+            title: _strings.notificationSettingsIosFocusTitle,
+            description: _strings.notificationSettingsIosFocusDescription,
           ),
           _GuideStep(
-            title: '完成后返回此页面',
-            description: '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。'
-                'iOS 上通知权限通常需要用户手动在系统设置中开启。',
+            title: _strings.notificationSettingsReturnTitle,
+            description: _strings.notificationSettingsIosReturnDescription,
           ),
         ];
       case 'Windows':
         return [
           _GuideStep(
-            title: '开启系统通知',
-            description: '进入「设置」→「系统」→「通知和操作」，确保「获取来自应用和其他发送者的通知」'
-                '已开启。在下方应用列表中找到 Stroom 并确保通知已开启。',
+            title: _strings.notificationSettingsWindowsEnableTitle,
+            description: _strings.notificationSettingsWindowsEnableDescription,
           ),
           _GuideStep(
-            title: '开启专注助手排除项',
-            description: '进入「设置」→「系统」→「专注助手」，确保 Stroom 已加入'
-                '「仅优先打断」或「关闭专注助手」。专注助手开启时会屏蔽通知。',
+            title: _strings.notificationSettingsWindowsFocusTitle,
+            description: _strings.notificationSettingsWindowsFocusDescription,
           ),
           _GuideStep(
-            title: '完成后返回此页面',
-            description: '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。',
+            title: _strings.notificationSettingsReturnTitle,
+            description: _strings.notificationSettingsAndroidReturnDescription,
           ),
         ];
       case 'macOS':
         return [
           _GuideStep(
-            title: '开启通知权限',
-            description: '进入「系统设置」→「通知」→「Stroom」，开启「允许通知」。'
-                '建议同时开启「横幅」和「通知中心」。',
+            title: _strings.notificationSettingsMacEnableTitle,
+            description: _strings.notificationSettingsMacEnableDescription,
           ),
           _GuideStep(
-            title: '关闭专注模式',
-            description: '进入「系统设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。',
+            title: _strings.notificationSettingsIosFocusTitle,
+            description: _strings.notificationSettingsMacFocusDescription,
           ),
           _GuideStep(
-            title: '完成后返回此页面',
-            description: '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。',
+            title: _strings.notificationSettingsReturnTitle,
+            description: _strings.notificationSettingsAndroidReturnDescription,
           ),
         ];
       case 'Linux':
         return [
           _GuideStep(
-            title: '检查桌面环境通知设置',
-            description: '根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→'
-                '「通知」→ 找到 Stroom 并确保通知已开启。',
+            title: _strings.notificationSettingsLinuxDesktopTitle,
+            description: _strings.notificationSettingsLinuxDesktopDescription,
           ),
           _GuideStep(
-            title: '检查是否安装了通知守护进程',
-            description: 'Linux 桌面环境需要安装通知守护进程（如 notify-osd 或 dunst）'
-                '来显示系统通知。请确认您的系统中已安装并运行了通知守护进程。',
+            title: _strings.notificationSettingsLinuxDaemonTitle,
+            description: _strings.notificationSettingsLinuxDaemonDescription,
           ),
           _GuideStep(
-            title: '完成后返回此页面',
-            description: '完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。',
+            title: _strings.notificationSettingsReturnTitle,
+            description: _strings.notificationSettingsAndroidReturnDescription,
           ),
         ];
       default:

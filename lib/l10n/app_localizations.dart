@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -12447,6 +12447,1230 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio separation engine is unavailable.'**
   String get audioSeparationEngineUnavailable;
+
+  /// No description provided for @backgroundOptimizationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background Optimization'**
+  String get backgroundOptimizationTitle;
+
+  /// No description provided for @backgroundOptimizationEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'System Environment'**
+  String get backgroundOptimizationEnvironment;
+
+  /// No description provided for @backgroundOptimizationChecks.
+  ///
+  /// In en, this message translates to:
+  /// **'Background Service Status'**
+  String get backgroundOptimizationChecks;
+
+  /// No description provided for @backgroundOptimizationKeepAliveStrategies.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep-Alive Strategies'**
+  String get backgroundOptimizationKeepAliveStrategies;
+
+  /// No description provided for @backgroundOptimizationDetecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get backgroundOptimizationDetecting;
+
+  /// No description provided for @backgroundOptimizationUnsupportedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Background services are not supported on this platform'**
+  String get backgroundOptimizationUnsupportedStatus;
+
+  /// No description provided for @backgroundOptimizationServiceRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Background service is running'**
+  String get backgroundOptimizationServiceRunning;
+
+  /// No description provided for @backgroundOptimizationServiceStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Background service is not running'**
+  String get backgroundOptimizationServiceStopped;
+
+  /// No description provided for @backgroundOptimizationServiceCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check background service status'**
+  String get backgroundOptimizationServiceCheckFailed;
+
+  /// No description provided for @backgroundOptimizationDesktopTrayUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray is unavailable. Closing the window will exit the app.'**
+  String get backgroundOptimizationDesktopTrayUnavailable;
+
+  /// No description provided for @backgroundOptimizationDesktopCloseExits.
+  ///
+  /// In en, this message translates to:
+  /// **'The app exits when the desktop window closes'**
+  String get backgroundOptimizationDesktopCloseExits;
+
+  /// No description provided for @backgroundOptimizationDesktopTrayKeepsAlive.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray keeps the app running'**
+  String get backgroundOptimizationDesktopTrayKeepsAlive;
+
+  /// No description provided for @backgroundOptimizationStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the service'**
+  String get backgroundOptimizationStartFailed;
+
+  /// No description provided for @backgroundOptimizationStopFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not stop the service'**
+  String get backgroundOptimizationStopFailed;
+
+  /// No description provided for @backgroundOptimizationRestartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restart the service'**
+  String get backgroundOptimizationRestartFailed;
+
+  /// No description provided for @backgroundOptimizationStopService.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Service'**
+  String get backgroundOptimizationStopService;
+
+  /// No description provided for @backgroundOptimizationRestartService.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Service'**
+  String get backgroundOptimizationRestartService;
+
+  /// No description provided for @backgroundOptimizationStartService.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Service'**
+  String get backgroundOptimizationStartService;
+
+  /// No description provided for @backgroundOptimizationRedetect.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get backgroundOptimizationRedetect;
+
+  /// No description provided for @backgroundOptimizationUnsupportedControl.
+  ///
+  /// In en, this message translates to:
+  /// **'Background service controls are not supported on this platform.'**
+  String get backgroundOptimizationUnsupportedControl;
+
+  /// No description provided for @backgroundOptimizationCheckingBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking battery optimization status…'**
+  String get backgroundOptimizationCheckingBattery;
+
+  /// No description provided for @backgroundOptimizationBatteryIgnored.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimization is disabled for this app'**
+  String get backgroundOptimizationBatteryIgnored;
+
+  /// No description provided for @backgroundOptimizationBatteryMayKill.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimization is enabled — background activity may be stopped'**
+  String get backgroundOptimizationBatteryMayKill;
+
+  /// No description provided for @backgroundOptimizationIgnoreBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable Battery Optimization'**
+  String get backgroundOptimizationIgnoreBattery;
+
+  /// No description provided for @backgroundOptimizationExactAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Exact Alarms (more reliable background activity)'**
+  String get backgroundOptimizationExactAlarm;
+
+  /// No description provided for @backgroundOptimizationWatchdogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AlarmManager Watchdog'**
+  String get backgroundOptimizationWatchdogTitle;
+
+  /// No description provided for @backgroundOptimizationWatchdogDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.'**
+  String get backgroundOptimizationWatchdogDetail;
+
+  /// No description provided for @backgroundOptimizationSaveWatchdogFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the watchdog setting; it was not changed'**
+  String get backgroundOptimizationSaveWatchdogFailed;
+
+  /// No description provided for @backgroundOptimizationWatchdogActivationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not activate the watchdog; background service status is unconfirmed'**
+  String get backgroundOptimizationWatchdogActivationFailed;
+
+  /// No description provided for @backgroundOptimizationColdStartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Service on App Launch'**
+  String get backgroundOptimizationColdStartTitle;
+
+  /// No description provided for @backgroundOptimizationColdStartDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, the app checks for and restores a previously running background service each time it opens.\n\nIf the system or user stops the app process, the background service restarts the next time you open the app.\n\nRecommended for all users.\nBattery impact: none; the app checks only once at launch.'**
+  String get backgroundOptimizationColdStartDetail;
+
+  /// No description provided for @backgroundOptimizationSaveColdStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the launch recovery setting; it was not changed'**
+  String get backgroundOptimizationSaveColdStartFailed;
+
+  /// No description provided for @backgroundOptimizationBatteryReminderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Optimization Reminder'**
+  String get backgroundOptimizationBatteryReminderTitle;
+
+  /// No description provided for @backgroundOptimizationBatteryReminderDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, this page shows the battery optimization status. If the app is not on the battery exemption list, you can open system settings to exempt it.\n\nAndroid battery optimization (Doze) limits background apps. Adding this app to the exemption list prevents the system from stopping it to save power.\n\nTurning this off only hides the reminder card; it does not change the app’s battery exemption.'**
+  String get backgroundOptimizationBatteryReminderDetail;
+
+  /// No description provided for @backgroundOptimizationStrategyIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'These strategies can be enabled independently. They are all on by default for the most reliable background activity. Turning one off affects only that strategy, not the background service itself.'**
+  String get backgroundOptimizationStrategyIntro;
+
+  /// No description provided for @backgroundOptimizationIosNoteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS Background Tasks'**
+  String get backgroundOptimizationIosNoteTitle;
+
+  /// No description provided for @backgroundOptimizationIosSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of iOS (26 or later) supports ongoing background tasks. Tasks usually continue when you switch apps or lock the screen, though the system may stop them when resources are low. You can view progress on the Lock Screen.'**
+  String get backgroundOptimizationIosSupported;
+
+  /// No description provided for @backgroundOptimizationIosUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of iOS (earlier than 26) does not support ongoing background tasks. While a task is running, return to the app every few minutes (about every 5–10 minutes; timing depends on iOS) to refresh its background time and prevent suspension.'**
+  String get backgroundOptimizationIosUnsupported;
+
+  /// No description provided for @backgroundOptimizationIosWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'On every iOS version, do not swipe Stroom away in the app switcher. Doing so immediately stops all running tasks.'**
+  String get backgroundOptimizationIosWarning;
+
+  /// No description provided for @backgroundOptimizationDesktopIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop systems do not have the mobile platforms’ process keep-alive mechanism, but the app can continue running after its window closes.'**
+  String get backgroundOptimizationDesktopIntro;
+
+  /// No description provided for @backgroundOptimizationCloseMinimizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize on Window Close'**
+  String get backgroundOptimizationCloseMinimizeTitle;
+
+  /// No description provided for @backgroundOptimizationCloseMinimizeDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, clicking the window’s close button hides the app in the system tray instead of exiting. Background tasks continue running.\n\nRestore the window from the tray icon or its “Show Main Window” menu item. To exit, use the “Quit App” button below.\n\nRecommended for all desktop users.'**
+  String get backgroundOptimizationCloseMinimizeDetail;
+
+  /// No description provided for @backgroundOptimizationQuitApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit App'**
+  String get backgroundOptimizationQuitApp;
+
+  /// No description provided for @backgroundOptimizationGotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get backgroundOptimizationGotIt;
+
+  /// No description provided for @backgroundOptimizationWebNoteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Background Tasks'**
+  String get backgroundOptimizationWebNoteTitle;
+
+  /// No description provided for @backgroundOptimizationWebNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Browsers cannot keep apps running in the background. Closing or refreshing this tab, or the browser freezing an inactive background tab, immediately stops running tasks. Keep the Stroom tab open and in the foreground while tasks run.'**
+  String get backgroundOptimizationWebNote;
+
+  /// No description provided for @backgroundOptimizationTutorial.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform Guides'**
+  String get backgroundOptimizationTutorial;
+
+  /// No description provided for @backgroundOptimizationTutorialDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'View background optimization guides for each platform'**
+  String get backgroundOptimizationTutorialDescription;
+
+  /// No description provided for @backgroundOptimizationServiceCheckingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking background service status…'**
+  String get backgroundOptimizationServiceCheckingDescription;
+
+  /// No description provided for @backgroundOptimizationServiceUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Background service status is unknown. Check again to confirm whether the service is running.'**
+  String get backgroundOptimizationServiceUnknown;
+
+  /// No description provided for @backgroundOptimizationServiceRunningDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The background service is running. Tasks can continue in the background.'**
+  String get backgroundOptimizationServiceRunningDescription;
+
+  /// No description provided for @backgroundOptimizationWebServiceUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Background services are not supported in web browsers. Keep this page open to continue tasks.'**
+  String get backgroundOptimizationWebServiceUnsupported;
+
+  /// No description provided for @backgroundOptimizationLinuxTrayUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray is unavailable (Linux builds require libayatana-appindicator3-dev). Closing the window will exit the app.'**
+  String get backgroundOptimizationLinuxTrayUnavailable;
+
+  /// No description provided for @backgroundOptimizationDesktopTrayUnavailableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray is unavailable. Closing the window will exit the app.'**
+  String get backgroundOptimizationDesktopTrayUnavailableDescription;
+
+  /// No description provided for @backgroundOptimizationDesktopExitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The app is set to exit when the desktop window closes. It will follow the existing exit confirmation flow and will not continue running in the tray.'**
+  String get backgroundOptimizationDesktopExitDescription;
+
+  /// No description provided for @backgroundOptimizationLinuxTrayDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray is enabled. Closing the window hides the app in the system tray, where it continues running. Select “Show Main Window” in the tray menu to restore it. To exit completely, select “Quit Stroom” from the tray menu.'**
+  String get backgroundOptimizationLinuxTrayDescription;
+
+  /// No description provided for @backgroundOptimizationDesktopTrayDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The desktop tray is enabled. Closing the window minimizes the app to the system tray, where it continues running. Click the tray icon or select “Show Main Window” from its menu to restore the window. To exit completely, select “Quit Stroom” from the tray menu.'**
+  String get backgroundOptimizationDesktopTrayDescription;
+
+  /// No description provided for @backgroundOptimizationServiceNotRunningDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The background service is not running. Select “Start Service” below, or view the platform guides to learn how to optimize background activity.'**
+  String get backgroundOptimizationServiceNotRunningDescription;
+
+  /// No description provided for @notificationSettingsPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification Permission Settings'**
+  String get notificationSettingsPageTitle;
+
+  /// No description provided for @notificationSettingsWebUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are not supported in web browsers'**
+  String get notificationSettingsWebUnsupported;
+
+  /// No description provided for @notificationSettingsChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get notificationSettingsChecking;
+
+  /// No description provided for @notificationSettingsPermissionGranted.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission granted'**
+  String get notificationSettingsPermissionGranted;
+
+  /// No description provided for @notificationSettingsPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission not granted'**
+  String get notificationSettingsPermissionDenied;
+
+  /// No description provided for @notificationSettingsPermissionRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission restricted'**
+  String get notificationSettingsPermissionRestricted;
+
+  /// No description provided for @notificationSettingsPermissionBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission permanently blocked'**
+  String get notificationSettingsPermissionBlocked;
+
+  /// No description provided for @notificationSettingsPermissionProvisional.
+  ///
+  /// In en, this message translates to:
+  /// **'Provisional notification permission'**
+  String get notificationSettingsPermissionProvisional;
+
+  /// No description provided for @notificationSettingsWebGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'System notifications are not supported in web browsers.'**
+  String get notificationSettingsWebGuide;
+
+  /// No description provided for @notificationSettingsCheckingPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking notification permission…'**
+  String get notificationSettingsCheckingPermission;
+
+  /// No description provided for @notificationSettingsPermissionGrantedGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission is granted. You can enable task completion notifications to receive system alerts when a task completes or fails.'**
+  String get notificationSettingsPermissionGrantedGuide;
+
+  /// No description provided for @notificationSettingsPermissionDeniedGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission has not been granted. Select the button below to request permission, or enable notifications for Stroom in system settings.'**
+  String get notificationSettingsPermissionDeniedGuide;
+
+  /// No description provided for @notificationSettingsPermissionRestrictedGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission is restricted by the system, for example by parental controls. Check Stroom’s notification settings in system settings.'**
+  String get notificationSettingsPermissionRestrictedGuide;
+
+  /// No description provided for @notificationSettingsEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'System Environment'**
+  String get notificationSettingsEnvironment;
+
+  /// No description provided for @notificationSettingsPermissionSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification Permission'**
+  String get notificationSettingsPermissionSection;
+
+  /// No description provided for @notificationSettingsPlatformGuides.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform Guide'**
+  String get notificationSettingsPlatformGuides;
+
+  /// No description provided for @notificationSettingsGuideIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow these steps for your operating system to enable notifications for Stroom.'**
+  String get notificationSettingsGuideIntro;
+
+  /// No description provided for @notificationSettingsTaskCompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task Completion Notifications'**
+  String get notificationSettingsTaskCompleteTitle;
+
+  /// No description provided for @notificationSettingsTaskCompleteDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a notification when a task completes or fails'**
+  String get notificationSettingsTaskCompleteDescription;
+
+  /// No description provided for @notificationSettingsCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get notificationSettingsCheckAgain;
+
+  /// No description provided for @notificationSettingsOpenSystemSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings'**
+  String get notificationSettingsOpenSystemSettings;
+
+  /// No description provided for @notificationSettingsRequestPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Permission'**
+  String get notificationSettingsRequestPermission;
+
+  /// No description provided for @notificationSettingsGuideUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification setup guides are not available for this platform.'**
+  String get notificationSettingsGuideUnsupported;
+
+  /// No description provided for @notificationSettingsUsageReason.
+  ///
+  /// In en, this message translates to:
+  /// **'To send notifications when tasks complete'**
+  String get notificationSettingsUsageReason;
+
+  /// No description provided for @notificationSettingsAndroidEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Notifications'**
+  String get notificationSettingsAndroidEnableTitle;
+
+  /// No description provided for @notificationSettingsAndroidEnableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → Apps → Stroom → Notification Management and allow notifications. If you cannot find Stroom, make sure it is installed. If notifications are disabled, turn them on.'**
+  String get notificationSettingsAndroidEnableDescription;
+
+  /// No description provided for @notificationSettingsAndroidDndTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Do Not Disturb'**
+  String get notificationSettingsAndroidDndTitle;
+
+  /// No description provided for @notificationSettingsAndroidDndDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → Sound & Vibration → Do Not Disturb. Make sure it is off or that Stroom notifications are allowed.'**
+  String get notificationSettingsAndroidDndDescription;
+
+  /// No description provided for @notificationSettingsAndroidPopupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Notifications to Pop Up'**
+  String get notificationSettingsAndroidPopupTitle;
+
+  /// No description provided for @notificationSettingsAndroidPopupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Some Android systems, such as MIUI, EMUI, and ColorOS, require “Allow notifications” and “Allow pop-ups” to be enabled in App Info. Also consider turning off “Notification filtering” or “Smart notifications” for the app.'**
+  String get notificationSettingsAndroidPopupDescription;
+
+  /// No description provided for @notificationSettingsReturnTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to This Page'**
+  String get notificationSettingsReturnTitle;
+
+  /// No description provided for @notificationSettingsAndroidReturnDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'After changing these settings, select “Check Again” to confirm the permission status. When permission is granted, you can enable task completion notifications.'**
+  String get notificationSettingsAndroidReturnDescription;
+
+  /// No description provided for @notificationSettingsIosEnableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center to stay up to date on task status.'**
+  String get notificationSettingsIosEnableDescription;
+
+  /// No description provided for @notificationSettingsIosFocusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Off Focus'**
+  String get notificationSettingsIosFocusTitle;
+
+  /// No description provided for @notificationSettingsIosFocusDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps. Focus can silence app notifications.'**
+  String get notificationSettingsIosFocusDescription;
+
+  /// No description provided for @notificationSettingsIosReturnDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'After changing these settings, select “Check Again” to confirm the permission status. On iOS, notification permission usually must be enabled manually in system settings.'**
+  String get notificationSettingsIosReturnDescription;
+
+  /// No description provided for @notificationSettingsWindowsEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable System Notifications'**
+  String get notificationSettingsWindowsEnableTitle;
+
+  /// No description provided for @notificationSettingsWindowsEnableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → System → Notifications & actions and turn on “Get notifications from apps and other senders”. Find Stroom in the app list below and make sure its notifications are on.'**
+  String get notificationSettingsWindowsEnableDescription;
+
+  /// No description provided for @notificationSettingsWindowsFocusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a Focus Assist Exception'**
+  String get notificationSettingsWindowsFocusTitle;
+
+  /// No description provided for @notificationSettingsWindowsFocusDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Settings → System → Focus Assist. Add Stroom to “Priority only” or turn Focus Assist off; Focus Assist can silence notifications.'**
+  String get notificationSettingsWindowsFocusDescription;
+
+  /// No description provided for @notificationSettingsMacEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Notifications'**
+  String get notificationSettingsMacEnableTitle;
+
+  /// No description provided for @notificationSettingsMacEnableDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to System Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center.'**
+  String get notificationSettingsMacEnableDescription;
+
+  /// No description provided for @notificationSettingsMacFocusDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to System Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps.'**
+  String get notificationSettingsMacFocusDescription;
+
+  /// No description provided for @notificationSettingsLinuxDesktopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Desktop Notification Settings'**
+  String get notificationSettingsLinuxDesktopTitle;
+
+  /// No description provided for @notificationSettingsLinuxDesktopDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), go to System Settings → Notifications, find Stroom, and make sure notifications are on.'**
+  String get notificationSettingsLinuxDesktopDescription;
+
+  /// No description provided for @notificationSettingsLinuxDaemonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the Notification Daemon'**
+  String get notificationSettingsLinuxDaemonTitle;
+
+  /// No description provided for @notificationSettingsLinuxDaemonDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Linux desktop environments need a notification daemon, such as notify-osd or dunst, to show system notifications. Make sure one is installed and running.'**
+  String get notificationSettingsLinuxDaemonDescription;
+
+  /// No description provided for @backupRestorePageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup and Restore'**
+  String get backupRestorePageTitle;
+
+  /// No description provided for @backupRestoreSelectBackupCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one data category to back up'**
+  String get backupRestoreSelectBackupCategory;
+
+  /// No description provided for @backupRestorePreparingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing data…'**
+  String get backupRestorePreparingData;
+
+  /// No description provided for @backupRestoreExportingBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting backup'**
+  String get backupRestoreExportingBackup;
+
+  /// No description provided for @backupRestoreCollectingDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting database records…'**
+  String get backupRestoreCollectingDatabase;
+
+  /// No description provided for @backupRestoreProcessingSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing settings…'**
+  String get backupRestoreProcessingSettings;
+
+  /// No description provided for @backupRestoreAddingTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding task files…'**
+  String get backupRestoreAddingTasks;
+
+  /// No description provided for @backupRestoreAddingPictures.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding image files…'**
+  String get backupRestoreAddingPictures;
+
+  /// No description provided for @backupRestoreAddingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding audio files…'**
+  String get backupRestoreAddingAudio;
+
+  /// No description provided for @backupRestoreAddingVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding video files…'**
+  String get backupRestoreAddingVideo;
+
+  /// No description provided for @backupRestoreAddingText.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding text files…'**
+  String get backupRestoreAddingText;
+
+  /// No description provided for @backupRestoreAddingChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding chat history and attachments…'**
+  String get backupRestoreAddingChat;
+
+  /// No description provided for @backupRestoreCompressing.
+  ///
+  /// In en, this message translates to:
+  /// **'Compressing archive…'**
+  String get backupRestoreCompressing;
+
+  /// No description provided for @backupRestoreCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete'**
+  String get backupRestoreCompleted;
+
+  /// No description provided for @backupRestoreSelectRestoreCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one data category to restore'**
+  String get backupRestoreSelectRestoreCategory;
+
+  /// No description provided for @backupRestoreConfirmRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Restore'**
+  String get backupRestoreConfirmRestore;
+
+  /// No description provided for @backupRestoreSelectedCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected data categories:'**
+  String get backupRestoreSelectedCategories;
+
+  /// No description provided for @backupRestoreRestoreInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected categories found in the backup will be restored to this device. All categories except built-in browser cookies replace the corresponding local data. Cookies are written by domain, name, and path; local cookies not included in the backup are preserved. Unselected categories and categories missing from the backup remain unchanged. Missing categories are skipped with a notice.'**
+  String get backupRestoreRestoreInfo;
+
+  /// No description provided for @backupRestoreRestartNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart the app after restoring for the changes to take effect. Make sure your current work is saved.'**
+  String get backupRestoreRestartNotice;
+
+  /// No description provided for @backupRestoreCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get backupRestoreCancel;
+
+  /// No description provided for @backupRestoreConfirmRestoreButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get backupRestoreConfirmRestoreButton;
+
+  /// No description provided for @backupRestoreIncompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Incomplete'**
+  String get backupRestoreIncompleteTitle;
+
+  /// No description provided for @backupRestoreIncompleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Data could not be fully restored and some data may have been cleared. Restart the app and try again.'**
+  String get backupRestoreIncompleteMessage;
+
+  /// No description provided for @backupRestoreSelectClearCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one data category to clear'**
+  String get backupRestoreSelectClearCategory;
+
+  /// No description provided for @backupRestoreClearingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing Data'**
+  String get backupRestoreClearingData;
+
+  /// No description provided for @backupRestoreDeletingCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting selected data categories…'**
+  String get backupRestoreDeletingCategories;
+
+  /// No description provided for @backupRestoreClearedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data Cleared'**
+  String get backupRestoreClearedTitle;
+
+  /// No description provided for @backupRestorePartiallyClearedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Some Data Cleared'**
+  String get backupRestorePartiallyClearedTitle;
+
+  /// No description provided for @backupRestoreClearedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected data was cleared. Restart the app for the changes to take effect.'**
+  String get backupRestoreClearedMessage;
+
+  /// No description provided for @backupRestorePartialClearMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Other selected data was cleared. This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.), so browser data that could not be cleared remains. Restart the app for the cleared data to take effect.'**
+  String get backupRestorePartialClearMessage;
+
+  /// No description provided for @backupRestoreClearFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear data: {error}'**
+  String backupRestoreClearFailed(String error);
+
+  /// No description provided for @backupRestoreClearIncompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Incomplete'**
+  String get backupRestoreClearIncompleteTitle;
+
+  /// No description provided for @backupRestoreClearIncompleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Some data could not be cleared. Restart the app and try clearing it again.'**
+  String get backupRestoreClearIncompleteMessage;
+
+  /// No description provided for @backupRestoreAnkiExportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki deck exported to: {path}'**
+  String backupRestoreAnkiExportSuccess(String path);
+
+  /// No description provided for @backupRestoreExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String backupRestoreExportFailed(String error);
+
+  /// No description provided for @backupRestoreApkgRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an .apkg file'**
+  String get backupRestoreApkgRequired;
+
+  /// No description provided for @backupRestoreImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String backupRestoreImportFailed(String error);
+
+  /// No description provided for @backupRestoreRestoreSuccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data Restored'**
+  String get backupRestoreRestoreSuccessTitle;
+
+  /// No description provided for @backupRestoreRestoredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Data was restored from the backup. Restart the app to use the restored data.'**
+  String get backupRestoreRestoredMessage;
+
+  /// No description provided for @backupRestoreExitApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit App'**
+  String get backupRestoreExitApp;
+
+  /// No description provided for @backupRestoreRestartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Now'**
+  String get backupRestoreRestartNow;
+
+  /// No description provided for @backupRestoreSkippedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Some Data Skipped'**
+  String get backupRestoreSkippedTitle;
+
+  /// No description provided for @backupRestoreNothingRestoredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No Data Restored'**
+  String get backupRestoreNothingRestoredTitle;
+
+  /// No description provided for @backupRestoreGotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get backupRestoreGotIt;
+
+  /// No description provided for @backupRestoreSkippedCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup did not confirm restorable content for these selected categories, so they were skipped and existing data was kept: {categories}.'**
+  String backupRestoreSkippedCategories(String categories);
+
+  /// No description provided for @backupRestoreSkippedTasksLegacy.
+  ///
+  /// In en, this message translates to:
+  /// **'In older backups, an empty task file cannot distinguish an empty task list from tasks not exported by that platform. To avoid overwriting current tasks, the task category was skipped and existing data was kept.'**
+  String get backupRestoreSkippedTasksLegacy;
+
+  /// No description provided for @backupRestoreSkippedCookies.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains no built-in browser cookies to import, so this category was skipped and existing cookies were kept.'**
+  String get backupRestoreSkippedCookies;
+
+  /// No description provided for @backupRestoreSkippedWebsiteData.
+  ///
+  /// In en, this message translates to:
+  /// **'The website storage directory in this older backup was skipped. Cookies can still be imported separately if the archive contains them and that category is selected.'**
+  String get backupRestoreSkippedWebsiteData;
+
+  /// No description provided for @backupRestoreApkgTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki Deck'**
+  String get backupRestoreApkgTitle;
+
+  /// No description provided for @backupRestoreApkgInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import or Export an Anki Deck'**
+  String get backupRestoreApkgInfoTitle;
+
+  /// No description provided for @backupRestoreApkgInfoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes card information only, not media'**
+  String get backupRestoreApkgInfoMessage;
+
+  /// No description provided for @backupRestoreApkgDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Import or export Anki decks in .apkg format'**
+  String get backupRestoreApkgDescription;
+
+  /// No description provided for @backupRestoreExportingApkg.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting…'**
+  String get backupRestoreExportingApkg;
+
+  /// No description provided for @backupRestoreExportApkg.
+  ///
+  /// In en, this message translates to:
+  /// **'Export .apkg'**
+  String get backupRestoreExportApkg;
+
+  /// No description provided for @backupRestoreImportingApkg.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing…'**
+  String get backupRestoreImportingApkg;
+
+  /// No description provided for @backupRestoreImportApkg.
+  ///
+  /// In en, this message translates to:
+  /// **'Import .apkg'**
+  String get backupRestoreImportApkg;
+
+  /// No description provided for @backupRestoreCategoryHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Data Categories to Back Up or Restore'**
+  String get backupRestoreCategoryHeading;
+
+  /// No description provided for @backupRestoreExporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting…'**
+  String get backupRestoreExporting;
+
+  /// No description provided for @backupRestoreExportBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Backup'**
+  String get backupRestoreExportBackup;
+
+  /// No description provided for @backupRestoreRestoring.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring…'**
+  String get backupRestoreRestoring;
+
+  /// No description provided for @backupRestoreChooseBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Backup File and Restore'**
+  String get backupRestoreChooseBackup;
+
+  /// No description provided for @backupRestoreClearSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Selected Data'**
+  String get backupRestoreClearSelected;
+
+  /// No description provided for @backupRestoreClearDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the selected data categories directly without a backup file. Unselected categories will remain unchanged. This action cannot be undone.'**
+  String get backupRestoreClearDescription;
+
+  /// No description provided for @backupRestoreClearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing…'**
+  String get backupRestoreClearing;
+
+  /// No description provided for @backupRestoreCategoryChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat History and Attachments'**
+  String get backupRestoreCategoryChat;
+
+  /// No description provided for @backupRestoreCategoryChatDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat conversations, message content, and attachments'**
+  String get backupRestoreCategoryChatDescription;
+
+  /// No description provided for @backupRestoreCategorySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get backupRestoreCategorySettings;
+
+  /// No description provided for @backupRestoreCategorySettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'App configuration, provider settings, and interface preferences'**
+  String get backupRestoreCategorySettingsDescription;
+
+  /// No description provided for @backupRestoreCategoryPictures.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get backupRestoreCategoryPictures;
+
+  /// No description provided for @backupRestoreCategoryPicturesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos and thumbnails'**
+  String get backupRestoreCategoryPicturesDescription;
+
+  /// No description provided for @backupRestoreCategoryAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get backupRestoreCategoryAudio;
+
+  /// No description provided for @backupRestoreCategoryAudioDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech synthesis and recordings'**
+  String get backupRestoreCategoryAudioDescription;
+
+  /// No description provided for @backupRestoreCategoryVideos.
+  ///
+  /// In en, this message translates to:
+  /// **'Videos'**
+  String get backupRestoreCategoryVideos;
+
+  /// No description provided for @backupRestoreCategoryVideosDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Video files'**
+  String get backupRestoreCategoryVideosDescription;
+
+  /// No description provided for @backupRestoreCategoryTexts.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get backupRestoreCategoryTexts;
+
+  /// No description provided for @backupRestoreCategoryTextsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Text documents'**
+  String get backupRestoreCategoryTextsDescription;
+
+  /// No description provided for @backupRestoreCategoryTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get backupRestoreCategoryTasks;
+
+  /// No description provided for @backupRestoreCategoryTasksDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Background task records'**
+  String get backupRestoreCategoryTasksDescription;
+
+  /// No description provided for @backupRestoreCategoryAnki.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki Flashcard Data'**
+  String get backupRestoreCategoryAnki;
+
+  /// No description provided for @backupRestoreCategoryAnkiDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki database'**
+  String get backupRestoreCategoryAnkiDescription;
+
+  /// No description provided for @backupRestoreAnkiDataInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki Flashcard Data'**
+  String get backupRestoreAnkiDataInfoTitle;
+
+  /// No description provided for @backupRestoreAnkiDataInfoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up or restoring Anki flashcard data also includes card media in the collection.media directory.'**
+  String get backupRestoreAnkiDataInfoMessage;
+
+  /// No description provided for @backupRestoreAnkiDataInfoTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'About Anki Flashcard Data'**
+  String get backupRestoreAnkiDataInfoTooltip;
+
+  /// No description provided for @backupRestoreCategoryBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in Browser Data'**
+  String get backupRestoreCategoryBrowser;
+
+  /// No description provided for @backupRestoreCategoryBrowserDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Backs up and restores cookies only; clearing also removes supported website storage'**
+  String get backupRestoreCategoryBrowserDescription;
+
+  /// No description provided for @backupRestoreViewInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'View information'**
+  String get backupRestoreViewInfo;
+
+  /// No description provided for @backupRestoreApkgInfoTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'About Anki Deck Import and Export'**
+  String get backupRestoreApkgInfoTooltip;
+
+  /// No description provided for @backupRestoreConfirmClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Clear'**
+  String get backupRestoreConfirmClear;
+
+  /// No description provided for @backupRestoreClearCategoriesIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'The following data categories will be cleared without using a backup file:'**
+  String get backupRestoreClearCategoriesIntro;
+
+  /// No description provided for @backupRestoreBrowserClearUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.). Confirming clears the other selected data; browser data that cannot be cleared will remain.'**
+  String get backupRestoreBrowserClearUnsupported;
+
+  /// No description provided for @backupRestoreUnselectedUnchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Unselected categories will remain unchanged.'**
+  String get backupRestoreUnselectedUnchanged;
+
+  /// No description provided for @backupRestoreClearWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This action cannot be undone. Restart the app after clearing for the changes to take effect.'**
+  String get backupRestoreClearWarning;
+
+  /// No description provided for @backupRestoreConfirmClearCountdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear ({seconds})'**
+  String backupRestoreConfirmClearCountdown(int seconds);
+
+  /// No description provided for @backgroundOptimizationBrowserEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser environment'**
+  String get backgroundOptimizationBrowserEnvironment;
+
+  /// No description provided for @backupRestoreIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Export selected data categories manually. During import, only selected categories found in the archive are restored. A missing category or required file is skipped with a notice, and unselected categories remain unchanged. You can also clear selected categories directly.'**
+  String get backupRestoreIntro;
+
+  /// No description provided for @backupRestoreOtherSelectedRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'The other selected data was restored. Restart the app for the changes to take effect.'**
+  String get backupRestoreOtherSelectedRestored;
+
+  /// No description provided for @notificationSettingsPermissionBlockedGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are blocked. Open system settings and allow notifications for Stroom.'**
+  String get notificationSettingsPermissionBlockedGuide;
+
+  /// No description provided for @notificationSettingsPermissionBlockedAndroid.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are blocked. Go to System Settings → Apps → Stroom → Notification Management and allow notifications.'**
+  String get notificationSettingsPermissionBlockedAndroid;
+
+  /// No description provided for @notificationSettingsPermissionBlockedIos.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.'**
+  String get notificationSettingsPermissionBlockedIos;
 }
 
 class _AppLocalizationsDelegate

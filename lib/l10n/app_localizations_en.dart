@@ -7369,6 +7369,741 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get audioSeparationEngineUnavailable =>
       'Audio separation engine is unavailable.';
+
+  @override
+  String get backgroundOptimizationTitle => 'Background Optimization';
+
+  @override
+  String get backgroundOptimizationEnvironment => 'System Environment';
+
+  @override
+  String get backgroundOptimizationChecks => 'Background Service Status';
+
+  @override
+  String get backgroundOptimizationKeepAliveStrategies =>
+      'Keep-Alive Strategies';
+
+  @override
+  String get backgroundOptimizationDetecting => 'Checking…';
+
+  @override
+  String get backgroundOptimizationUnsupportedStatus =>
+      'Background services are not supported on this platform';
+
+  @override
+  String get backgroundOptimizationServiceRunning =>
+      'Background service is running';
+
+  @override
+  String get backgroundOptimizationServiceStopped =>
+      'Background service is not running';
+
+  @override
+  String get backgroundOptimizationServiceCheckFailed =>
+      'Could not check background service status';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailable =>
+      'The desktop tray is unavailable. Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopCloseExits =>
+      'The app exits when the desktop window closes';
+
+  @override
+  String get backgroundOptimizationDesktopTrayKeepsAlive =>
+      'The desktop tray keeps the app running';
+
+  @override
+  String get backgroundOptimizationStartFailed => 'Could not start the service';
+
+  @override
+  String get backgroundOptimizationStopFailed => 'Could not stop the service';
+
+  @override
+  String get backgroundOptimizationRestartFailed =>
+      'Could not restart the service';
+
+  @override
+  String get backgroundOptimizationStopService => 'Stop Service';
+
+  @override
+  String get backgroundOptimizationRestartService => 'Restart Service';
+
+  @override
+  String get backgroundOptimizationStartService => 'Start Service';
+
+  @override
+  String get backgroundOptimizationRedetect => 'Check Again';
+
+  @override
+  String get backgroundOptimizationUnsupportedControl =>
+      'Background service controls are not supported on this platform.';
+
+  @override
+  String get backgroundOptimizationCheckingBattery =>
+      'Checking battery optimization status…';
+
+  @override
+  String get backgroundOptimizationBatteryIgnored =>
+      'Battery optimization is disabled for this app';
+
+  @override
+  String get backgroundOptimizationBatteryMayKill =>
+      'Battery optimization is enabled — background activity may be stopped';
+
+  @override
+  String get backgroundOptimizationIgnoreBattery =>
+      'Disable Battery Optimization';
+
+  @override
+  String get backgroundOptimizationExactAlarm =>
+      'Allow Exact Alarms (more reliable background activity)';
+
+  @override
+  String get backgroundOptimizationWatchdogTitle => 'AlarmManager Watchdog';
+
+  @override
+  String get backgroundOptimizationWatchdogDetail =>
+      'When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
+
+  @override
+  String get backgroundOptimizationSaveWatchdogFailed =>
+      'Could not save the watchdog setting; it was not changed';
+
+  @override
+  String get backgroundOptimizationWatchdogActivationFailed =>
+      'Could not activate the watchdog; background service status is unconfirmed';
+
+  @override
+  String get backgroundOptimizationColdStartTitle =>
+      'Restore Service on App Launch';
+
+  @override
+  String get backgroundOptimizationColdStartDetail =>
+      'When enabled, the app checks for and restores a previously running background service each time it opens.\n\nIf the system or user stops the app process, the background service restarts the next time you open the app.\n\nRecommended for all users.\nBattery impact: none; the app checks only once at launch.';
+
+  @override
+  String get backgroundOptimizationSaveColdStartFailed =>
+      'Could not save the launch recovery setting; it was not changed';
+
+  @override
+  String get backgroundOptimizationBatteryReminderTitle =>
+      'Battery Optimization Reminder';
+
+  @override
+  String get backgroundOptimizationBatteryReminderDetail =>
+      'When enabled, this page shows the battery optimization status. If the app is not on the battery exemption list, you can open system settings to exempt it.\n\nAndroid battery optimization (Doze) limits background apps. Adding this app to the exemption list prevents the system from stopping it to save power.\n\nTurning this off only hides the reminder card; it does not change the app’s battery exemption.';
+
+  @override
+  String get backgroundOptimizationStrategyIntro =>
+      'These strategies can be enabled independently. They are all on by default for the most reliable background activity. Turning one off affects only that strategy, not the background service itself.';
+
+  @override
+  String get backgroundOptimizationIosNoteTitle => 'iOS Background Tasks';
+
+  @override
+  String get backgroundOptimizationIosSupported =>
+      'This version of iOS (26 or later) supports ongoing background tasks. Tasks usually continue when you switch apps or lock the screen, though the system may stop them when resources are low. You can view progress on the Lock Screen.';
+
+  @override
+  String get backgroundOptimizationIosUnsupported =>
+      'This version of iOS (earlier than 26) does not support ongoing background tasks. While a task is running, return to the app every few minutes (about every 5–10 minutes; timing depends on iOS) to refresh its background time and prevent suspension.';
+
+  @override
+  String get backgroundOptimizationIosWarning =>
+      'On every iOS version, do not swipe Stroom away in the app switcher. Doing so immediately stops all running tasks.';
+
+  @override
+  String get backgroundOptimizationDesktopIntro =>
+      'Desktop systems do not have the mobile platforms’ process keep-alive mechanism, but the app can continue running after its window closes.';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeTitle =>
+      'Minimize on Window Close';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeDetail =>
+      'When enabled, clicking the window’s close button hides the app in the system tray instead of exiting. Background tasks continue running.\n\nRestore the window from the tray icon or its “Show Main Window” menu item. To exit, use the “Quit App” button below.\n\nRecommended for all desktop users.';
+
+  @override
+  String get backgroundOptimizationQuitApp => 'Quit App';
+
+  @override
+  String get backgroundOptimizationGotIt => 'Got it';
+
+  @override
+  String get backgroundOptimizationWebNoteTitle => 'Web Background Tasks';
+
+  @override
+  String get backgroundOptimizationWebNote =>
+      'Browsers cannot keep apps running in the background. Closing or refreshing this tab, or the browser freezing an inactive background tab, immediately stops running tasks. Keep the Stroom tab open and in the foreground while tasks run.';
+
+  @override
+  String get backgroundOptimizationTutorial => 'Platform Guides';
+
+  @override
+  String get backgroundOptimizationTutorialDescription =>
+      'View background optimization guides for each platform';
+
+  @override
+  String get backgroundOptimizationServiceCheckingDescription =>
+      'Checking background service status…';
+
+  @override
+  String get backgroundOptimizationServiceUnknown =>
+      'Background service status is unknown. Check again to confirm whether the service is running.';
+
+  @override
+  String get backgroundOptimizationServiceRunningDescription =>
+      'The background service is running. Tasks can continue in the background.';
+
+  @override
+  String get backgroundOptimizationWebServiceUnsupported =>
+      'Background services are not supported in web browsers. Keep this page open to continue tasks.';
+
+  @override
+  String get backgroundOptimizationLinuxTrayUnavailable =>
+      'The desktop tray is unavailable (Linux builds require libayatana-appindicator3-dev). Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailableDescription =>
+      'The desktop tray is unavailable. Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopExitDescription =>
+      'The app is set to exit when the desktop window closes. It will follow the existing exit confirmation flow and will not continue running in the tray.';
+
+  @override
+  String get backgroundOptimizationLinuxTrayDescription =>
+      'The desktop tray is enabled. Closing the window hides the app in the system tray, where it continues running. Select “Show Main Window” in the tray menu to restore it. To exit completely, select “Quit Stroom” from the tray menu.';
+
+  @override
+  String get backgroundOptimizationDesktopTrayDescription =>
+      'The desktop tray is enabled. Closing the window minimizes the app to the system tray, where it continues running. Click the tray icon or select “Show Main Window” from its menu to restore the window. To exit completely, select “Quit Stroom” from the tray menu.';
+
+  @override
+  String get backgroundOptimizationServiceNotRunningDescription =>
+      'The background service is not running. Select “Start Service” below, or view the platform guides to learn how to optimize background activity.';
+
+  @override
+  String get notificationSettingsPageTitle =>
+      'Notification Permission Settings';
+
+  @override
+  String get notificationSettingsWebUnsupported =>
+      'Notifications are not supported in web browsers';
+
+  @override
+  String get notificationSettingsChecking => 'Checking…';
+
+  @override
+  String get notificationSettingsPermissionGranted =>
+      'Notification permission granted';
+
+  @override
+  String get notificationSettingsPermissionDenied =>
+      'Notification permission not granted';
+
+  @override
+  String get notificationSettingsPermissionRestricted =>
+      'Notification permission restricted';
+
+  @override
+  String get notificationSettingsPermissionBlocked =>
+      'Notification permission permanently blocked';
+
+  @override
+  String get notificationSettingsPermissionProvisional =>
+      'Provisional notification permission';
+
+  @override
+  String get notificationSettingsWebGuide =>
+      'System notifications are not supported in web browsers.';
+
+  @override
+  String get notificationSettingsCheckingPermission =>
+      'Checking notification permission…';
+
+  @override
+  String get notificationSettingsPermissionGrantedGuide =>
+      'Notification permission is granted. You can enable task completion notifications to receive system alerts when a task completes or fails.';
+
+  @override
+  String get notificationSettingsPermissionDeniedGuide =>
+      'Notification permission has not been granted. Select the button below to request permission, or enable notifications for Stroom in system settings.';
+
+  @override
+  String get notificationSettingsPermissionRestrictedGuide =>
+      'Notification permission is restricted by the system, for example by parental controls. Check Stroom’s notification settings in system settings.';
+
+  @override
+  String get notificationSettingsEnvironment => 'System Environment';
+
+  @override
+  String get notificationSettingsPermissionSection => 'Notification Permission';
+
+  @override
+  String get notificationSettingsPlatformGuides => 'Platform Guide';
+
+  @override
+  String get notificationSettingsGuideIntro =>
+      'Follow these steps for your operating system to enable notifications for Stroom.';
+
+  @override
+  String get notificationSettingsTaskCompleteTitle =>
+      'Task Completion Notifications';
+
+  @override
+  String get notificationSettingsTaskCompleteDescription =>
+      'Send a notification when a task completes or fails';
+
+  @override
+  String get notificationSettingsCheckAgain => 'Check Again';
+
+  @override
+  String get notificationSettingsOpenSystemSettings => 'Open System Settings';
+
+  @override
+  String get notificationSettingsRequestPermission => 'Request Permission';
+
+  @override
+  String get notificationSettingsGuideUnsupported =>
+      'Notification setup guides are not available for this platform.';
+
+  @override
+  String get notificationSettingsUsageReason =>
+      'To send notifications when tasks complete';
+
+  @override
+  String get notificationSettingsAndroidEnableTitle => 'Enable Notifications';
+
+  @override
+  String get notificationSettingsAndroidEnableDescription =>
+      'Go to Settings → Apps → Stroom → Notification Management and allow notifications. If you cannot find Stroom, make sure it is installed. If notifications are disabled, turn them on.';
+
+  @override
+  String get notificationSettingsAndroidDndTitle => 'Check Do Not Disturb';
+
+  @override
+  String get notificationSettingsAndroidDndDescription =>
+      'Go to Settings → Sound & Vibration → Do Not Disturb. Make sure it is off or that Stroom notifications are allowed.';
+
+  @override
+  String get notificationSettingsAndroidPopupTitle =>
+      'Allow Notifications to Pop Up';
+
+  @override
+  String get notificationSettingsAndroidPopupDescription =>
+      'Some Android systems, such as MIUI, EMUI, and ColorOS, require “Allow notifications” and “Allow pop-ups” to be enabled in App Info. Also consider turning off “Notification filtering” or “Smart notifications” for the app.';
+
+  @override
+  String get notificationSettingsReturnTitle => 'Return to This Page';
+
+  @override
+  String get notificationSettingsAndroidReturnDescription =>
+      'After changing these settings, select “Check Again” to confirm the permission status. When permission is granted, you can enable task completion notifications.';
+
+  @override
+  String get notificationSettingsIosEnableDescription =>
+      'Go to Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center to stay up to date on task status.';
+
+  @override
+  String get notificationSettingsIosFocusTitle => 'Turn Off Focus';
+
+  @override
+  String get notificationSettingsIosFocusDescription =>
+      'Go to Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps. Focus can silence app notifications.';
+
+  @override
+  String get notificationSettingsIosReturnDescription =>
+      'After changing these settings, select “Check Again” to confirm the permission status. On iOS, notification permission usually must be enabled manually in system settings.';
+
+  @override
+  String get notificationSettingsWindowsEnableTitle =>
+      'Enable System Notifications';
+
+  @override
+  String get notificationSettingsWindowsEnableDescription =>
+      'Go to Settings → System → Notifications & actions and turn on “Get notifications from apps and other senders”. Find Stroom in the app list below and make sure its notifications are on.';
+
+  @override
+  String get notificationSettingsWindowsFocusTitle =>
+      'Add a Focus Assist Exception';
+
+  @override
+  String get notificationSettingsWindowsFocusDescription =>
+      'Go to Settings → System → Focus Assist. Add Stroom to “Priority only” or turn Focus Assist off; Focus Assist can silence notifications.';
+
+  @override
+  String get notificationSettingsMacEnableTitle => 'Enable Notifications';
+
+  @override
+  String get notificationSettingsMacEnableDescription =>
+      'Go to System Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center.';
+
+  @override
+  String get notificationSettingsMacFocusDescription =>
+      'Go to System Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps.';
+
+  @override
+  String get notificationSettingsLinuxDesktopTitle =>
+      'Check Desktop Notification Settings';
+
+  @override
+  String get notificationSettingsLinuxDesktopDescription =>
+      'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), go to System Settings → Notifications, find Stroom, and make sure notifications are on.';
+
+  @override
+  String get notificationSettingsLinuxDaemonTitle =>
+      'Check the Notification Daemon';
+
+  @override
+  String get notificationSettingsLinuxDaemonDescription =>
+      'Linux desktop environments need a notification daemon, such as notify-osd or dunst, to show system notifications. Make sure one is installed and running.';
+
+  @override
+  String get backupRestorePageTitle => 'Backup and Restore';
+
+  @override
+  String get backupRestoreSelectBackupCategory =>
+      'Select at least one data category to back up';
+
+  @override
+  String get backupRestorePreparingData => 'Preparing data…';
+
+  @override
+  String get backupRestoreExportingBackup => 'Exporting backup';
+
+  @override
+  String get backupRestoreCollectingDatabase => 'Collecting database records…';
+
+  @override
+  String get backupRestoreProcessingSettings => 'Processing settings…';
+
+  @override
+  String get backupRestoreAddingTasks => 'Adding task files…';
+
+  @override
+  String get backupRestoreAddingPictures => 'Adding image files…';
+
+  @override
+  String get backupRestoreAddingAudio => 'Adding audio files…';
+
+  @override
+  String get backupRestoreAddingVideo => 'Adding video files…';
+
+  @override
+  String get backupRestoreAddingText => 'Adding text files…';
+
+  @override
+  String get backupRestoreAddingChat => 'Adding chat history and attachments…';
+
+  @override
+  String get backupRestoreCompressing => 'Compressing archive…';
+
+  @override
+  String get backupRestoreCompleted => 'Complete';
+
+  @override
+  String get backupRestoreSelectRestoreCategory =>
+      'Select at least one data category to restore';
+
+  @override
+  String get backupRestoreConfirmRestore => 'Confirm Restore';
+
+  @override
+  String get backupRestoreSelectedCategories => 'Selected data categories:';
+
+  @override
+  String get backupRestoreRestoreInfo =>
+      'Selected categories found in the backup will be restored to this device. All categories except built-in browser cookies replace the corresponding local data. Cookies are written by domain, name, and path; local cookies not included in the backup are preserved. Unselected categories and categories missing from the backup remain unchanged. Missing categories are skipped with a notice.';
+
+  @override
+  String get backupRestoreRestartNotice =>
+      'Restart the app after restoring for the changes to take effect. Make sure your current work is saved.';
+
+  @override
+  String get backupRestoreCancel => 'Cancel';
+
+  @override
+  String get backupRestoreConfirmRestoreButton => 'Restore';
+
+  @override
+  String get backupRestoreIncompleteTitle => 'Restore Incomplete';
+
+  @override
+  String get backupRestoreIncompleteMessage =>
+      'Data could not be fully restored and some data may have been cleared. Restart the app and try again.';
+
+  @override
+  String get backupRestoreSelectClearCategory =>
+      'Select at least one data category to clear';
+
+  @override
+  String get backupRestoreClearingData => 'Clearing Data';
+
+  @override
+  String get backupRestoreDeletingCategories =>
+      'Deleting selected data categories…';
+
+  @override
+  String get backupRestoreClearedTitle => 'Data Cleared';
+
+  @override
+  String get backupRestorePartiallyClearedTitle => 'Some Data Cleared';
+
+  @override
+  String get backupRestoreClearedMessage =>
+      'Selected data was cleared. Restart the app for the changes to take effect.';
+
+  @override
+  String get backupRestorePartialClearMessage =>
+      'Other selected data was cleared. This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.), so browser data that could not be cleared remains. Restart the app for the cleared data to take effect.';
+
+  @override
+  String backupRestoreClearFailed(String error) {
+    return 'Could not clear data: $error';
+  }
+
+  @override
+  String get backupRestoreClearIncompleteTitle => 'Clear Incomplete';
+
+  @override
+  String get backupRestoreClearIncompleteMessage =>
+      'Some data could not be cleared. Restart the app and try clearing it again.';
+
+  @override
+  String backupRestoreAnkiExportSuccess(String path) {
+    return 'Anki deck exported to: $path';
+  }
+
+  @override
+  String backupRestoreExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get backupRestoreApkgRequired => 'Select an .apkg file';
+
+  @override
+  String backupRestoreImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get backupRestoreRestoreSuccessTitle => 'Data Restored';
+
+  @override
+  String get backupRestoreRestoredMessage =>
+      'Data was restored from the backup. Restart the app to use the restored data.';
+
+  @override
+  String get backupRestoreExitApp => 'Quit App';
+
+  @override
+  String get backupRestoreRestartNow => 'Restart Now';
+
+  @override
+  String get backupRestoreSkippedTitle => 'Some Data Skipped';
+
+  @override
+  String get backupRestoreNothingRestoredTitle => 'No Data Restored';
+
+  @override
+  String get backupRestoreGotIt => 'Got it';
+
+  @override
+  String backupRestoreSkippedCategories(String categories) {
+    return 'The backup did not confirm restorable content for these selected categories, so they were skipped and existing data was kept: $categories.';
+  }
+
+  @override
+  String get backupRestoreSkippedTasksLegacy =>
+      'In older backups, an empty task file cannot distinguish an empty task list from tasks not exported by that platform. To avoid overwriting current tasks, the task category was skipped and existing data was kept.';
+
+  @override
+  String get backupRestoreSkippedCookies =>
+      'The backup contains no built-in browser cookies to import, so this category was skipped and existing cookies were kept.';
+
+  @override
+  String get backupRestoreSkippedWebsiteData =>
+      'The website storage directory in this older backup was skipped. Cookies can still be imported separately if the archive contains them and that category is selected.';
+
+  @override
+  String get backupRestoreApkgTitle => 'Anki Deck';
+
+  @override
+  String get backupRestoreApkgInfoTitle => 'Import or Export an Anki Deck';
+
+  @override
+  String get backupRestoreApkgInfoMessage =>
+      'Includes card information only, not media';
+
+  @override
+  String get backupRestoreApkgDescription =>
+      'Import or export Anki decks in .apkg format';
+
+  @override
+  String get backupRestoreExportingApkg => 'Exporting…';
+
+  @override
+  String get backupRestoreExportApkg => 'Export .apkg';
+
+  @override
+  String get backupRestoreImportingApkg => 'Importing…';
+
+  @override
+  String get backupRestoreImportApkg => 'Import .apkg';
+
+  @override
+  String get backupRestoreCategoryHeading =>
+      'Choose Data Categories to Back Up or Restore';
+
+  @override
+  String get backupRestoreExporting => 'Exporting…';
+
+  @override
+  String get backupRestoreExportBackup => 'Export Backup';
+
+  @override
+  String get backupRestoreRestoring => 'Restoring…';
+
+  @override
+  String get backupRestoreChooseBackup => 'Choose Backup File and Restore';
+
+  @override
+  String get backupRestoreClearSelected => 'Clear Selected Data';
+
+  @override
+  String get backupRestoreClearDescription =>
+      'Clear the selected data categories directly without a backup file. Unselected categories will remain unchanged. This action cannot be undone.';
+
+  @override
+  String get backupRestoreClearing => 'Clearing…';
+
+  @override
+  String get backupRestoreCategoryChat => 'Chat History and Attachments';
+
+  @override
+  String get backupRestoreCategoryChatDescription =>
+      'Chat conversations, message content, and attachments';
+
+  @override
+  String get backupRestoreCategorySettings => 'Settings';
+
+  @override
+  String get backupRestoreCategorySettingsDescription =>
+      'App configuration, provider settings, and interface preferences';
+
+  @override
+  String get backupRestoreCategoryPictures => 'Images';
+
+  @override
+  String get backupRestoreCategoryPicturesDescription =>
+      'Photos and thumbnails';
+
+  @override
+  String get backupRestoreCategoryAudio => 'Audio';
+
+  @override
+  String get backupRestoreCategoryAudioDescription =>
+      'Speech synthesis and recordings';
+
+  @override
+  String get backupRestoreCategoryVideos => 'Videos';
+
+  @override
+  String get backupRestoreCategoryVideosDescription => 'Video files';
+
+  @override
+  String get backupRestoreCategoryTexts => 'Text';
+
+  @override
+  String get backupRestoreCategoryTextsDescription => 'Text documents';
+
+  @override
+  String get backupRestoreCategoryTasks => 'Tasks';
+
+  @override
+  String get backupRestoreCategoryTasksDescription => 'Background task records';
+
+  @override
+  String get backupRestoreCategoryAnki => 'Anki Flashcard Data';
+
+  @override
+  String get backupRestoreCategoryAnkiDescription => 'Anki database';
+
+  @override
+  String get backupRestoreAnkiDataInfoTitle => 'Anki Flashcard Data';
+
+  @override
+  String get backupRestoreAnkiDataInfoMessage =>
+      'Backing up or restoring Anki flashcard data also includes card media in the collection.media directory.';
+
+  @override
+  String get backupRestoreAnkiDataInfoTooltip => 'About Anki Flashcard Data';
+
+  @override
+  String get backupRestoreCategoryBrowser => 'Built-in Browser Data';
+
+  @override
+  String get backupRestoreCategoryBrowserDescription =>
+      'Backs up and restores cookies only; clearing also removes supported website storage';
+
+  @override
+  String get backupRestoreViewInfo => 'View information';
+
+  @override
+  String get backupRestoreApkgInfoTooltip =>
+      'About Anki Deck Import and Export';
+
+  @override
+  String get backupRestoreConfirmClear => 'Confirm Clear';
+
+  @override
+  String get backupRestoreClearCategoriesIntro =>
+      'The following data categories will be cleared without using a backup file:';
+
+  @override
+  String get backupRestoreBrowserClearUnsupported =>
+      'This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.). Confirming clears the other selected data; browser data that cannot be cleared will remain.';
+
+  @override
+  String get backupRestoreUnselectedUnchanged =>
+      'Unselected categories will remain unchanged.';
+
+  @override
+  String get backupRestoreClearWarning =>
+      'This action cannot be undone. Restart the app after clearing for the changes to take effect.';
+
+  @override
+  String backupRestoreConfirmClearCountdown(int seconds) {
+    return 'Clear ($seconds)';
+  }
+
+  @override
+  String get backgroundOptimizationBrowserEnvironment => 'Browser environment';
+
+  @override
+  String get backupRestoreIntro =>
+      'Export selected data categories manually. During import, only selected categories found in the archive are restored. A missing category or required file is skipped with a notice, and unselected categories remain unchanged. You can also clear selected categories directly.';
+
+  @override
+  String get backupRestoreOtherSelectedRestored =>
+      'The other selected data was restored. Restart the app for the changes to take effect.';
+
+  @override
+  String get notificationSettingsPermissionBlockedGuide =>
+      'Notifications are blocked. Open system settings and allow notifications for Stroom.';
+
+  @override
+  String get notificationSettingsPermissionBlockedAndroid =>
+      'Notifications are blocked. Go to System Settings → Apps → Stroom → Notification Management and allow notifications.';
+
+  @override
+  String get notificationSettingsPermissionBlockedIos =>
+      'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -14735,4 +15470,739 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get audioSeparationEngineUnavailable =>
       'Audio separation engine is unavailable.';
+
+  @override
+  String get backgroundOptimizationTitle => 'Background Optimization';
+
+  @override
+  String get backgroundOptimizationEnvironment => 'System Environment';
+
+  @override
+  String get backgroundOptimizationChecks => 'Background Service Status';
+
+  @override
+  String get backgroundOptimizationKeepAliveStrategies =>
+      'Keep-Alive Strategies';
+
+  @override
+  String get backgroundOptimizationDetecting => 'Checking…';
+
+  @override
+  String get backgroundOptimizationUnsupportedStatus =>
+      'Background services are not supported on this platform';
+
+  @override
+  String get backgroundOptimizationServiceRunning =>
+      'Background service is running';
+
+  @override
+  String get backgroundOptimizationServiceStopped =>
+      'Background service is not running';
+
+  @override
+  String get backgroundOptimizationServiceCheckFailed =>
+      'Could not check background service status';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailable =>
+      'The desktop tray is unavailable. Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopCloseExits =>
+      'The app exits when the desktop window closes';
+
+  @override
+  String get backgroundOptimizationDesktopTrayKeepsAlive =>
+      'The desktop tray keeps the app running';
+
+  @override
+  String get backgroundOptimizationStartFailed => 'Could not start the service';
+
+  @override
+  String get backgroundOptimizationStopFailed => 'Could not stop the service';
+
+  @override
+  String get backgroundOptimizationRestartFailed =>
+      'Could not restart the service';
+
+  @override
+  String get backgroundOptimizationStopService => 'Stop Service';
+
+  @override
+  String get backgroundOptimizationRestartService => 'Restart Service';
+
+  @override
+  String get backgroundOptimizationStartService => 'Start Service';
+
+  @override
+  String get backgroundOptimizationRedetect => 'Check Again';
+
+  @override
+  String get backgroundOptimizationUnsupportedControl =>
+      'Background service controls are not supported on this platform.';
+
+  @override
+  String get backgroundOptimizationCheckingBattery =>
+      'Checking battery optimization status…';
+
+  @override
+  String get backgroundOptimizationBatteryIgnored =>
+      'Battery optimization is disabled for this app';
+
+  @override
+  String get backgroundOptimizationBatteryMayKill =>
+      'Battery optimization is enabled — background activity may be stopped';
+
+  @override
+  String get backgroundOptimizationIgnoreBattery =>
+      'Disable Battery Optimization';
+
+  @override
+  String get backgroundOptimizationExactAlarm =>
+      'Allow Exact Alarms (more reliable background activity)';
+
+  @override
+  String get backgroundOptimizationWatchdogTitle => 'AlarmManager Watchdog';
+
+  @override
+  String get backgroundOptimizationWatchdogDetail =>
+      'When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
+
+  @override
+  String get backgroundOptimizationSaveWatchdogFailed =>
+      'Could not save the watchdog setting; it was not changed';
+
+  @override
+  String get backgroundOptimizationWatchdogActivationFailed =>
+      'Could not activate the watchdog; background service status is unconfirmed';
+
+  @override
+  String get backgroundOptimizationColdStartTitle =>
+      'Restore Service on App Launch';
+
+  @override
+  String get backgroundOptimizationColdStartDetail =>
+      'When enabled, the app checks for and restores a previously running background service each time it opens.\n\nIf the system or user stops the app process, the background service restarts the next time you open the app.\n\nRecommended for all users.\nBattery impact: none; the app checks only once at launch.';
+
+  @override
+  String get backgroundOptimizationSaveColdStartFailed =>
+      'Could not save the launch recovery setting; it was not changed';
+
+  @override
+  String get backgroundOptimizationBatteryReminderTitle =>
+      'Battery Optimization Reminder';
+
+  @override
+  String get backgroundOptimizationBatteryReminderDetail =>
+      'When enabled, this page shows the battery optimization status. If the app is not on the battery exemption list, you can open system settings to exempt it.\n\nAndroid battery optimization (Doze) limits background apps. Adding this app to the exemption list prevents the system from stopping it to save power.\n\nTurning this off only hides the reminder card; it does not change the app’s battery exemption.';
+
+  @override
+  String get backgroundOptimizationStrategyIntro =>
+      'These strategies can be enabled independently. They are all on by default for the most reliable background activity. Turning one off affects only that strategy, not the background service itself.';
+
+  @override
+  String get backgroundOptimizationIosNoteTitle => 'iOS Background Tasks';
+
+  @override
+  String get backgroundOptimizationIosSupported =>
+      'This version of iOS (26 or later) supports ongoing background tasks. Tasks usually continue when you switch apps or lock the screen, though the system may stop them when resources are low. You can view progress on the Lock Screen.';
+
+  @override
+  String get backgroundOptimizationIosUnsupported =>
+      'This version of iOS (earlier than 26) does not support ongoing background tasks. While a task is running, return to the app every few minutes (about every 5–10 minutes; timing depends on iOS) to refresh its background time and prevent suspension.';
+
+  @override
+  String get backgroundOptimizationIosWarning =>
+      'On every iOS version, do not swipe Stroom away in the app switcher. Doing so immediately stops all running tasks.';
+
+  @override
+  String get backgroundOptimizationDesktopIntro =>
+      'Desktop systems do not have the mobile platforms’ process keep-alive mechanism, but the app can continue running after its window closes.';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeTitle =>
+      'Minimize on Window Close';
+
+  @override
+  String get backgroundOptimizationCloseMinimizeDetail =>
+      'When enabled, clicking the window’s close button hides the app in the system tray instead of exiting. Background tasks continue running.\n\nRestore the window from the tray icon or its “Show Main Window” menu item. To exit, use the “Quit App” button below.\n\nRecommended for all desktop users.';
+
+  @override
+  String get backgroundOptimizationQuitApp => 'Quit App';
+
+  @override
+  String get backgroundOptimizationGotIt => 'Got it';
+
+  @override
+  String get backgroundOptimizationWebNoteTitle => 'Web Background Tasks';
+
+  @override
+  String get backgroundOptimizationWebNote =>
+      'Browsers cannot keep apps running in the background. Closing or refreshing this tab, or the browser freezing an inactive background tab, immediately stops running tasks. Keep the Stroom tab open and in the foreground while tasks run.';
+
+  @override
+  String get backgroundOptimizationTutorial => 'Platform Guides';
+
+  @override
+  String get backgroundOptimizationTutorialDescription =>
+      'View background optimization guides for each platform';
+
+  @override
+  String get backgroundOptimizationServiceCheckingDescription =>
+      'Checking background service status…';
+
+  @override
+  String get backgroundOptimizationServiceUnknown =>
+      'Background service status is unknown. Check again to confirm whether the service is running.';
+
+  @override
+  String get backgroundOptimizationServiceRunningDescription =>
+      'The background service is running. Tasks can continue in the background.';
+
+  @override
+  String get backgroundOptimizationWebServiceUnsupported =>
+      'Background services are not supported in web browsers. Keep this page open to continue tasks.';
+
+  @override
+  String get backgroundOptimizationLinuxTrayUnavailable =>
+      'The desktop tray is unavailable (Linux builds require libayatana-appindicator3-dev). Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopTrayUnavailableDescription =>
+      'The desktop tray is unavailable. Closing the window will exit the app.';
+
+  @override
+  String get backgroundOptimizationDesktopExitDescription =>
+      'The app is set to exit when the desktop window closes. It will follow the existing exit confirmation flow and will not continue running in the tray.';
+
+  @override
+  String get backgroundOptimizationLinuxTrayDescription =>
+      'The desktop tray is enabled. Closing the window hides the app in the system tray, where it continues running. Select “Show Main Window” in the tray menu to restore it. To exit completely, select “Quit Stroom” from the tray menu.';
+
+  @override
+  String get backgroundOptimizationDesktopTrayDescription =>
+      'The desktop tray is enabled. Closing the window minimizes the app to the system tray, where it continues running. Click the tray icon or select “Show Main Window” from its menu to restore the window. To exit completely, select “Quit Stroom” from the tray menu.';
+
+  @override
+  String get backgroundOptimizationServiceNotRunningDescription =>
+      'The background service is not running. Select “Start Service” below, or view the platform guides to learn how to optimize background activity.';
+
+  @override
+  String get notificationSettingsPageTitle =>
+      'Notification Permission Settings';
+
+  @override
+  String get notificationSettingsWebUnsupported =>
+      'Notifications are not supported in web browsers';
+
+  @override
+  String get notificationSettingsChecking => 'Checking…';
+
+  @override
+  String get notificationSettingsPermissionGranted =>
+      'Notification permission granted';
+
+  @override
+  String get notificationSettingsPermissionDenied =>
+      'Notification permission not granted';
+
+  @override
+  String get notificationSettingsPermissionRestricted =>
+      'Notification permission restricted';
+
+  @override
+  String get notificationSettingsPermissionBlocked =>
+      'Notification permission permanently blocked';
+
+  @override
+  String get notificationSettingsPermissionProvisional =>
+      'Provisional notification permission';
+
+  @override
+  String get notificationSettingsWebGuide =>
+      'System notifications are not supported in web browsers.';
+
+  @override
+  String get notificationSettingsCheckingPermission =>
+      'Checking notification permission…';
+
+  @override
+  String get notificationSettingsPermissionGrantedGuide =>
+      'Notification permission is granted. You can enable task completion notifications to receive system alerts when a task completes or fails.';
+
+  @override
+  String get notificationSettingsPermissionDeniedGuide =>
+      'Notification permission has not been granted. Select the button below to request permission, or enable notifications for Stroom in system settings.';
+
+  @override
+  String get notificationSettingsPermissionRestrictedGuide =>
+      'Notification permission is restricted by the system, for example by parental controls. Check Stroom’s notification settings in system settings.';
+
+  @override
+  String get notificationSettingsEnvironment => 'System Environment';
+
+  @override
+  String get notificationSettingsPermissionSection => 'Notification Permission';
+
+  @override
+  String get notificationSettingsPlatformGuides => 'Platform Guide';
+
+  @override
+  String get notificationSettingsGuideIntro =>
+      'Follow these steps for your operating system to enable notifications for Stroom.';
+
+  @override
+  String get notificationSettingsTaskCompleteTitle =>
+      'Task Completion Notifications';
+
+  @override
+  String get notificationSettingsTaskCompleteDescription =>
+      'Send a notification when a task completes or fails';
+
+  @override
+  String get notificationSettingsCheckAgain => 'Check Again';
+
+  @override
+  String get notificationSettingsOpenSystemSettings => 'Open System Settings';
+
+  @override
+  String get notificationSettingsRequestPermission => 'Request Permission';
+
+  @override
+  String get notificationSettingsGuideUnsupported =>
+      'Notification setup guides are not available for this platform.';
+
+  @override
+  String get notificationSettingsUsageReason =>
+      'To send notifications when tasks complete';
+
+  @override
+  String get notificationSettingsAndroidEnableTitle => 'Enable Notifications';
+
+  @override
+  String get notificationSettingsAndroidEnableDescription =>
+      'Go to Settings → Apps → Stroom → Notification Management and allow notifications. If you cannot find Stroom, make sure it is installed. If notifications are disabled, turn them on.';
+
+  @override
+  String get notificationSettingsAndroidDndTitle => 'Check Do Not Disturb';
+
+  @override
+  String get notificationSettingsAndroidDndDescription =>
+      'Go to Settings → Sound & Vibration → Do Not Disturb. Make sure it is off or that Stroom notifications are allowed.';
+
+  @override
+  String get notificationSettingsAndroidPopupTitle =>
+      'Allow Notifications to Pop Up';
+
+  @override
+  String get notificationSettingsAndroidPopupDescription =>
+      'Some Android systems, such as MIUI, EMUI, and ColorOS, require “Allow notifications” and “Allow pop-ups” to be enabled in App Info. Also consider turning off “Notification filtering” or “Smart notifications” for the app.';
+
+  @override
+  String get notificationSettingsReturnTitle => 'Return to This Page';
+
+  @override
+  String get notificationSettingsAndroidReturnDescription =>
+      'After changing these settings, select “Check Again” to confirm the permission status. When permission is granted, you can enable task completion notifications.';
+
+  @override
+  String get notificationSettingsIosEnableDescription =>
+      'Go to Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center to stay up to date on task status.';
+
+  @override
+  String get notificationSettingsIosFocusTitle => 'Turn Off Focus';
+
+  @override
+  String get notificationSettingsIosFocusDescription =>
+      'Go to Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps. Focus can silence app notifications.';
+
+  @override
+  String get notificationSettingsIosReturnDescription =>
+      'After changing these settings, select “Check Again” to confirm the permission status. On iOS, notification permission usually must be enabled manually in system settings.';
+
+  @override
+  String get notificationSettingsWindowsEnableTitle =>
+      'Enable System Notifications';
+
+  @override
+  String get notificationSettingsWindowsEnableDescription =>
+      'Go to Settings → System → Notifications & actions and turn on “Get notifications from apps and other senders”. Find Stroom in the app list below and make sure its notifications are on.';
+
+  @override
+  String get notificationSettingsWindowsFocusTitle =>
+      'Add a Focus Assist Exception';
+
+  @override
+  String get notificationSettingsWindowsFocusDescription =>
+      'Go to Settings → System → Focus Assist. Add Stroom to “Priority only” or turn Focus Assist off; Focus Assist can silence notifications.';
+
+  @override
+  String get notificationSettingsMacEnableTitle => 'Enable Notifications';
+
+  @override
+  String get notificationSettingsMacEnableDescription =>
+      'Go to System Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center.';
+
+  @override
+  String get notificationSettingsMacFocusDescription =>
+      'Go to System Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps.';
+
+  @override
+  String get notificationSettingsLinuxDesktopTitle =>
+      'Check Desktop Notification Settings';
+
+  @override
+  String get notificationSettingsLinuxDesktopDescription =>
+      'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), go to System Settings → Notifications, find Stroom, and make sure notifications are on.';
+
+  @override
+  String get notificationSettingsLinuxDaemonTitle =>
+      'Check the Notification Daemon';
+
+  @override
+  String get notificationSettingsLinuxDaemonDescription =>
+      'Linux desktop environments need a notification daemon, such as notify-osd or dunst, to show system notifications. Make sure one is installed and running.';
+
+  @override
+  String get backupRestorePageTitle => 'Backup and Restore';
+
+  @override
+  String get backupRestoreSelectBackupCategory =>
+      'Select at least one data category to back up';
+
+  @override
+  String get backupRestorePreparingData => 'Preparing data…';
+
+  @override
+  String get backupRestoreExportingBackup => 'Exporting backup';
+
+  @override
+  String get backupRestoreCollectingDatabase => 'Collecting database records…';
+
+  @override
+  String get backupRestoreProcessingSettings => 'Processing settings…';
+
+  @override
+  String get backupRestoreAddingTasks => 'Adding task files…';
+
+  @override
+  String get backupRestoreAddingPictures => 'Adding image files…';
+
+  @override
+  String get backupRestoreAddingAudio => 'Adding audio files…';
+
+  @override
+  String get backupRestoreAddingVideo => 'Adding video files…';
+
+  @override
+  String get backupRestoreAddingText => 'Adding text files…';
+
+  @override
+  String get backupRestoreAddingChat => 'Adding chat history and attachments…';
+
+  @override
+  String get backupRestoreCompressing => 'Compressing archive…';
+
+  @override
+  String get backupRestoreCompleted => 'Complete';
+
+  @override
+  String get backupRestoreSelectRestoreCategory =>
+      'Select at least one data category to restore';
+
+  @override
+  String get backupRestoreConfirmRestore => 'Confirm Restore';
+
+  @override
+  String get backupRestoreSelectedCategories => 'Selected data categories:';
+
+  @override
+  String get backupRestoreRestoreInfo =>
+      'Selected categories found in the backup will be restored to this device. All categories except built-in browser cookies replace the corresponding local data. Cookies are written by domain, name, and path; local cookies not included in the backup are preserved. Unselected categories and categories missing from the backup remain unchanged. Missing categories are skipped with a notice.';
+
+  @override
+  String get backupRestoreRestartNotice =>
+      'Restart the app after restoring for the changes to take effect. Make sure your current work is saved.';
+
+  @override
+  String get backupRestoreCancel => 'Cancel';
+
+  @override
+  String get backupRestoreConfirmRestoreButton => 'Restore';
+
+  @override
+  String get backupRestoreIncompleteTitle => 'Restore Incomplete';
+
+  @override
+  String get backupRestoreIncompleteMessage =>
+      'Data could not be fully restored and some data may have been cleared. Restart the app and try again.';
+
+  @override
+  String get backupRestoreSelectClearCategory =>
+      'Select at least one data category to clear';
+
+  @override
+  String get backupRestoreClearingData => 'Clearing Data';
+
+  @override
+  String get backupRestoreDeletingCategories =>
+      'Deleting selected data categories…';
+
+  @override
+  String get backupRestoreClearedTitle => 'Data Cleared';
+
+  @override
+  String get backupRestorePartiallyClearedTitle => 'Some Data Cleared';
+
+  @override
+  String get backupRestoreClearedMessage =>
+      'Selected data was cleared. Restart the app for the changes to take effect.';
+
+  @override
+  String get backupRestorePartialClearMessage =>
+      'Other selected data was cleared. This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.), so browser data that could not be cleared remains. Restart the app for the cleared data to take effect.';
+
+  @override
+  String backupRestoreClearFailed(String error) {
+    return 'Could not clear data: $error';
+  }
+
+  @override
+  String get backupRestoreClearIncompleteTitle => 'Clear Incomplete';
+
+  @override
+  String get backupRestoreClearIncompleteMessage =>
+      'Some data could not be cleared. Restart the app and try clearing it again.';
+
+  @override
+  String backupRestoreAnkiExportSuccess(String path) {
+    return 'Anki deck exported to: $path';
+  }
+
+  @override
+  String backupRestoreExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get backupRestoreApkgRequired => 'Select an .apkg file';
+
+  @override
+  String backupRestoreImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get backupRestoreRestoreSuccessTitle => 'Data Restored';
+
+  @override
+  String get backupRestoreRestoredMessage =>
+      'Data was restored from the backup. Restart the app to use the restored data.';
+
+  @override
+  String get backupRestoreExitApp => 'Quit App';
+
+  @override
+  String get backupRestoreRestartNow => 'Restart Now';
+
+  @override
+  String get backupRestoreSkippedTitle => 'Some Data Skipped';
+
+  @override
+  String get backupRestoreNothingRestoredTitle => 'No Data Restored';
+
+  @override
+  String get backupRestoreGotIt => 'Got it';
+
+  @override
+  String backupRestoreSkippedCategories(String categories) {
+    return 'The backup did not confirm restorable content for these selected categories, so they were skipped and existing data was kept: $categories.';
+  }
+
+  @override
+  String get backupRestoreSkippedTasksLegacy =>
+      'In older backups, an empty task file cannot distinguish an empty task list from tasks not exported by that platform. To avoid overwriting current tasks, the task category was skipped and existing data was kept.';
+
+  @override
+  String get backupRestoreSkippedCookies =>
+      'The backup contains no built-in browser cookies to import, so this category was skipped and existing cookies were kept.';
+
+  @override
+  String get backupRestoreSkippedWebsiteData =>
+      'The website storage directory in this older backup was skipped. Cookies can still be imported separately if the archive contains them and that category is selected.';
+
+  @override
+  String get backupRestoreApkgTitle => 'Anki Deck';
+
+  @override
+  String get backupRestoreApkgInfoTitle => 'Import or Export an Anki Deck';
+
+  @override
+  String get backupRestoreApkgInfoMessage =>
+      'Includes card information only, not media';
+
+  @override
+  String get backupRestoreApkgDescription =>
+      'Import or export Anki decks in .apkg format';
+
+  @override
+  String get backupRestoreExportingApkg => 'Exporting…';
+
+  @override
+  String get backupRestoreExportApkg => 'Export .apkg';
+
+  @override
+  String get backupRestoreImportingApkg => 'Importing…';
+
+  @override
+  String get backupRestoreImportApkg => 'Import .apkg';
+
+  @override
+  String get backupRestoreCategoryHeading =>
+      'Choose Data Categories to Back Up or Restore';
+
+  @override
+  String get backupRestoreExporting => 'Exporting…';
+
+  @override
+  String get backupRestoreExportBackup => 'Export Backup';
+
+  @override
+  String get backupRestoreRestoring => 'Restoring…';
+
+  @override
+  String get backupRestoreChooseBackup => 'Choose Backup File and Restore';
+
+  @override
+  String get backupRestoreClearSelected => 'Clear Selected Data';
+
+  @override
+  String get backupRestoreClearDescription =>
+      'Clear the selected data categories directly without a backup file. Unselected categories will remain unchanged. This action cannot be undone.';
+
+  @override
+  String get backupRestoreClearing => 'Clearing…';
+
+  @override
+  String get backupRestoreCategoryChat => 'Chat History and Attachments';
+
+  @override
+  String get backupRestoreCategoryChatDescription =>
+      'Chat conversations, message content, and attachments';
+
+  @override
+  String get backupRestoreCategorySettings => 'Settings';
+
+  @override
+  String get backupRestoreCategorySettingsDescription =>
+      'App configuration, provider settings, and interface preferences';
+
+  @override
+  String get backupRestoreCategoryPictures => 'Images';
+
+  @override
+  String get backupRestoreCategoryPicturesDescription =>
+      'Photos and thumbnails';
+
+  @override
+  String get backupRestoreCategoryAudio => 'Audio';
+
+  @override
+  String get backupRestoreCategoryAudioDescription =>
+      'Speech synthesis and recordings';
+
+  @override
+  String get backupRestoreCategoryVideos => 'Videos';
+
+  @override
+  String get backupRestoreCategoryVideosDescription => 'Video files';
+
+  @override
+  String get backupRestoreCategoryTexts => 'Text';
+
+  @override
+  String get backupRestoreCategoryTextsDescription => 'Text documents';
+
+  @override
+  String get backupRestoreCategoryTasks => 'Tasks';
+
+  @override
+  String get backupRestoreCategoryTasksDescription => 'Background task records';
+
+  @override
+  String get backupRestoreCategoryAnki => 'Anki Flashcard Data';
+
+  @override
+  String get backupRestoreCategoryAnkiDescription => 'Anki database';
+
+  @override
+  String get backupRestoreAnkiDataInfoTitle => 'Anki Flashcard Data';
+
+  @override
+  String get backupRestoreAnkiDataInfoMessage =>
+      'Backing up or restoring Anki flashcard data also includes card media in the collection.media directory.';
+
+  @override
+  String get backupRestoreAnkiDataInfoTooltip => 'About Anki Flashcard Data';
+
+  @override
+  String get backupRestoreCategoryBrowser => 'Built-in Browser Data';
+
+  @override
+  String get backupRestoreCategoryBrowserDescription =>
+      'Backs up and restores cookies only; clearing also removes supported website storage';
+
+  @override
+  String get backupRestoreViewInfo => 'View information';
+
+  @override
+  String get backupRestoreApkgInfoTooltip =>
+      'About Anki Deck Import and Export';
+
+  @override
+  String get backupRestoreConfirmClear => 'Confirm Clear';
+
+  @override
+  String get backupRestoreClearCategoriesIntro =>
+      'The following data categories will be cleared without using a backup file:';
+
+  @override
+  String get backupRestoreBrowserClearUnsupported =>
+      'This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.). Confirming clears the other selected data; browser data that cannot be cleared will remain.';
+
+  @override
+  String get backupRestoreUnselectedUnchanged =>
+      'Unselected categories will remain unchanged.';
+
+  @override
+  String get backupRestoreClearWarning =>
+      'This action cannot be undone. Restart the app after clearing for the changes to take effect.';
+
+  @override
+  String backupRestoreConfirmClearCountdown(int seconds) {
+    return 'Clear ($seconds)';
+  }
+
+  @override
+  String get backgroundOptimizationBrowserEnvironment => 'Browser environment';
+
+  @override
+  String get backupRestoreIntro =>
+      'Export selected data categories manually. During import, only selected categories found in the archive are restored. A missing category or required file is skipped with a notice, and unselected categories remain unchanged. You can also clear selected categories directly.';
+
+  @override
+  String get backupRestoreOtherSelectedRestored =>
+      'The other selected data was restored. Restart the app for the changes to take effect.';
+
+  @override
+  String get notificationSettingsPermissionBlockedGuide =>
+      'Notifications are blocked. Open system settings and allow notifications for Stroom.';
+
+  @override
+  String get notificationSettingsPermissionBlockedAndroid =>
+      'Notifications are blocked. Go to System Settings → Apps → Stroom → Notification Management and allow notifications.';
+
+  @override
+  String get notificationSettingsPermissionBlockedIos =>
+      'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.';
 }

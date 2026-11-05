@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
@@ -52,12 +54,23 @@ void _resetDesktopAppServiceForTest() {
 /// Builds the test app wrapping BackgroundOptimizationPage.
 /// Optionally overrides [backgroundTasksProvider] with a pre-seeded notifier
 /// (e.g. to simulate running tasks for the quit-confirmation flow).
-Widget _buildTestApp({BackgroundTaskNotifier? taskNotifier}) {
+Widget _buildTestApp({
+  BackgroundTaskNotifier? taskNotifier,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return ProviderScope(
     overrides: taskNotifier == null
         ? []
         : [backgroundTasksProvider.overrideWith((ref) => taskNotifier)],
-    child: const MaterialApp(
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: BackgroundOptimizationPage(),
     ),
   );
@@ -228,6 +241,15 @@ MockBackgroundServicePlatform registerMockPlatform() {
 }
 
 void main() {
+  testWidgets('background optimization title follows the selected locale', (
+    tester,
+  ) async {
+    registerMockPlatform();
+    await tester.pumpWidget(_buildTestApp(locale: const Locale('en', 'US')));
+    await tester.pumpAndSettle();
+    expect(find.text('Background Optimization'), findsOneWidget);
+  });
+
   setUp(_resetDesktopAppServiceForTest);
 
   tearDown(() {
