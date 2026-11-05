@@ -547,6 +547,63 @@ String? unclosedFenceTail(String text) {
   return _unclosedFenceInfo(text).tail;
 }
 
+class _SegmentedText {
+  _SegmentedText([String initialText = '']) {
+    append(initialText);
+  }
+
+  static const int _chunkSize = 4096;
+  final List<String> _completeChunks = [];
+  StringBuffer _pendingChunk = StringBuffer();
+
+  Iterable<String> get segments sync* {
+    yield* _completeChunks;
+    if (_pendingChunk.length > 0) yield _pendingChunk.toString();
+  }
+
+  void append(String text) {
+    var offset = 0;
+    while (offset < text.length) {
+      final available = _chunkSize - _pendingChunk.length;
+      final remaining = text.length - offset;
+      final length = remaining < available ? remaining : available;
+      _pendingChunk.write(text.substring(offset, offset + length));
+      offset += length;
+      if (_pendingChunk.length == _chunkSize) {
+        _completeChunks.add(_pendingChunk.toString());
+        _pendingChunk = StringBuffer();
+      }
+    }
+  }
+
+  void appendCodeUnit(int codeUnit) {
+    _pendingChunk.writeCharCode(codeUnit);
+    if (_pendingChunk.length == _chunkSize) {
+      _completeChunks.add(_pendingChunk.toString());
+      _pendingChunk = StringBuffer();
+    }
+  }
+
+  void writeTo(StringBuffer target) {
+    for (final chunk in _completeChunks) {
+      target.write(chunk);
+    }
+    target.write(_pendingChunk);
+  }
+
+  void clear() {
+    _completeChunks.clear();
+    _pendingChunk = StringBuffer();
+  }
+
+  @override
+  String toString() {
+    final text = StringBuffer();
+    writeTo(text);
+    return text.toString();
+  }
+}
+
 class _NormalizedContainerTailSource {
   _NormalizedContainerTailSource(
     String initialText,
@@ -562,11 +619,15 @@ class _NormalizedContainerTailSource {
   final int listIndent;
   final int innerQuoteDepth;
   final int fenceIndent;
-  final List<String> _completeLines = [];
-  final List<String> _pendingLine = [];
+  final _SegmentedText _completeLines = _SegmentedText();
+  final _SegmentedText _pendingPrefix = _SegmentedText();
+  _SegmentedText _pendingLine = _SegmentedText();
+  String _transformedPendingPrefix = '';
+  bool _pendingPrefixResolved = false;
+  int _pendingQuoteMarkers = 0;
 
   Iterable<String> get segments sync* {
-    yield* _completeLines;
+    yield* _completeLines.segments;
     yield* _pendingSegments();
   }
 
@@ -575,73 +636,112 @@ class _NormalizedContainerTailSource {
     while (start < text.length) {
       final newline = text.indexOf('\n', start);
       if (newline == -1) {
-        _pendingLine.add(text.substring(start));
+        _appendPending(text.substring(start));
         return;
       }
-      if (newline > start) _pendingLine.add(text.substring(start, newline));
-      _completeLines.add(_stripPendingContainerPrefix());
-      _completeLines.add('\n');
+      if (newline > start) _appendPending(text.substring(start, newline));
+      _completeLines.append(_stripPendingContainerPrefix());
+      _completeLines.append('\n');
+      _pendingPrefix.clear();
       _pendingLine.clear();
+      _transformedPendingPrefix = '';
+      _pendingPrefixResolved = false;
+      _pendingQuoteMarkers = 0;
       start = newline + 1;
     }
   }
 
-  Iterable<String> _pendingSegments() sync* {
-    if (_pendingLine.every(
-      (chunk) => chunk.codeUnits.every(_isTrimWhitespace),
-    )) {
+  void _appendPending(String text) {
+    if (_pendingPrefixResolved) {
+      _pendingLine.append(text);
       return;
     }
-    final prefix = StringBuffer();
-    for (var chunkIndex = 0; chunkIndex < _pendingLine.length; chunkIndex++) {
-      final chunk = _pendingLine[chunkIndex];
-      for (var offset = 0; offset < chunk.length; offset++) {
-        final codeUnit = chunk.codeUnitAt(offset);
-        prefix.writeCharCode(codeUnit);
-        if (_isTrimWhitespace(codeUnit)) continue;
-        final transformed = _stripFenceContainerPrefix(
-          prefix.toString(),
-          quoteDepth,
-          listIndent,
-          innerQuoteDepth,
-          fenceIndent,
-        );
-        if (transformed.codeUnits.any((unit) => !_isTrimWhitespace(unit))) {
-          yield transformed;
-          if (offset + 1 < chunk.length) {
-            yield chunk.substring(offset + 1);
-          }
-          for (var rest = chunkIndex + 1; rest < _pendingLine.length; rest++) {
-            yield _pendingLine[rest];
-          }
-          return;
-        }
+    for (var offset = 0; offset < text.length; offset++) {
+      final codeUnit = text.codeUnitAt(offset);
+      _pendingPrefix.appendCodeUnit(codeUnit);
+      if (_isTrimWhitespace(codeUnit)) continue;
+      if (codeUnit == 0x3e) {
+        _pendingQuoteMarkers++;
+        if (_pendingQuoteMarkers < quoteDepth + innerQuoteDepth) continue;
       }
-    }
-    if (prefix.length > 0) {
-      yield _stripFenceContainerPrefix(
-        prefix.toString(),
+      final prefixText = _pendingPrefix.toString();
+      if (_hasIncompleteContainerPrefix(
+        prefixText,
+        quoteDepth,
+        listIndent,
+        innerQuoteDepth,
+      )) {
+        continue;
+      }
+      final transformed = _stripFenceContainerPrefix(
+        prefixText,
         quoteDepth,
         listIndent,
         innerQuoteDepth,
         fenceIndent,
       );
+      if (!transformed.codeUnits.any((unit) => !_isTrimWhitespace(unit))) {
+        continue;
+      }
+      _transformedPendingPrefix = transformed;
+      _pendingPrefixResolved = true;
+      if (offset + 1 < text.length) {
+        _pendingLine.append(text.substring(offset + 1));
+      }
+      return;
     }
   }
 
-  String _stripPendingContainerPrefix() => _stripFenceContainerPrefix(
-        _pendingLine.join(),
-        quoteDepth,
-        listIndent,
-        innerQuoteDepth,
-        fenceIndent,
-      );
+  Iterable<String> _pendingSegments() sync* {
+    if (!_pendingPrefixResolved) return;
+    yield _transformedPendingPrefix;
+    yield* _pendingLine.segments;
+  }
+
+  String _stripPendingContainerPrefix() {
+    final line = StringBuffer();
+    _pendingPrefix.writeTo(line);
+    _pendingLine.writeTo(line);
+    return _stripFenceContainerPrefix(
+        line.toString(), quoteDepth, listIndent, innerQuoteDepth, fenceIndent);
+  }
+}
+
+bool _hasIncompleteContainerPrefix(
+  String line,
+  int quoteDepth,
+  int listIndent,
+  int innerQuoteDepth,
+) {
+  bool hasIncompleteQuotePrefix(String text, int depth) {
+    var remaining = text;
+    var matchedDepth = 0;
+    while (matchedDepth < depth) {
+      final stripped = _stripOneBlockQuotePrefix(remaining);
+      if (!stripped.matched) {
+        return matchedDepth > 0 && _isMarkdownBlankLine(remaining);
+      }
+      matchedDepth++;
+      remaining = stripped.line;
+    }
+    return false;
+  }
+
+  if (hasIncompleteQuotePrefix(line, quoteDepth)) return true;
+  final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+  if (listIndent > 0 &&
+      _isMarkdownBlankLine(outerQuoteStripped) &&
+      _leadingIndentColumns(outerQuoteStripped) < listIndent) {
+    return true;
+  }
+  final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
+  return hasIncompleteQuotePrefix(listStripped, innerQuoteDepth);
 }
 
 typedef _MermaidFenceInfo = ({
   String? tail,
   String? tailSource,
-  List<String>? normalizedTailSource,
+  _SegmentedText? normalizedTailSource,
   _NormalizedContainerTailSource? normalizedContainerTailSource,
   bool isCached,
   bool hasUnfencedIndentedCode,
@@ -919,7 +1019,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
       : null;
   final tail = includeTail ? normalizedTail : null;
   final normalizedTailSource = shouldCacheTail && !needsContainerTransform
-      ? <String>[normalizedTail!]
+      ? _SegmentedText(normalizedTail!)
       : null;
   final normalizedContainerTailSource =
       shouldCacheTail && needsContainerTransform
@@ -1110,7 +1210,7 @@ class StreamingFenceInfoCache {
   }) {
     final normalizedTailSource = cached.normalizedTailSource;
     if (cached.hasUnfencedIndentedCode && normalizedAppended.isNotEmpty) {
-      normalizedTailSource?.add(normalizedAppended);
+      normalizedTailSource?.append(normalizedAppended);
       cached.normalizedContainerTailSource?.append(normalizedAppended);
     }
     final updated = (
@@ -1349,8 +1449,7 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
-      final normalizedTailSource =
-          fenceInfo.normalizedTailSource ?? const <String>[];
+      final normalizedTailSource = fenceInfo.normalizedTailSource;
       final hasMermaidFenceIndex = mermaidFenceIndex != null &&
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
       final matchesTail = hasMermaidFenceIndex &&
@@ -1359,8 +1458,8 @@ bool _isStreamingMermaidTailWithInfo(
               code,
               fenceInfo.normalizedContainerTailSource!.segments,
             )
-          : fenceInfo.normalizedTailSource != null
-              ? _matchesTrimmedSegments(code, normalizedTailSource)
+          : normalizedTailSource != null
+              ? _matchesTrimmedSegments(code, normalizedTailSource.segments)
               : _matchesTrimmedNormalizedSource(
                   code,
                   tailSource,
