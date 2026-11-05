@@ -8254,6 +8254,187 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get platformTutorialPageTitle => '平台教程';
+
+  @override
+  String galleryUnsupportedPreview(String format) {
+    return '不支持预览 .$format 格式';
+  }
+
+  @override
+  String galleryCameraFailed(String error) {
+    return '拍照失败：$error';
+  }
+
+  @override
+  String get galleryPhotoSaved => '照片已保存';
+
+  @override
+  String galleryUnsupportedImportFormat(String format) {
+    return '已跳过不支持的格式：$format';
+  }
+
+  @override
+  String galleryImportImagesCount(int count) {
+    return '已导入 $count 张图片';
+  }
+
+  @override
+  String galleryImportVideosCount(int count) {
+    return '已导入 $count 个视频';
+  }
+
+  @override
+  String galleryImportFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get galleryFileReadFailed => '文件数据读取失败';
+
+  @override
+  String get galleryExportImageTitle => '导出图片';
+
+  @override
+  String get galleryExportVideoTitle => '导出视频';
+
+  @override
+  String galleryExportedTo(String path) {
+    return '已导出到：$path';
+  }
+
+  @override
+  String galleryExportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get galleryChooseExportDirectory => '选择导出目录';
+
+  @override
+  String galleryExportedFilesCount(int count) {
+    return '已导出 $count 个文件';
+  }
+
+  @override
+  String get galleryFolderExportTitle => '导出文件夹';
+
+  @override
+  String get galleryWebFolderExportInfo => '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get galleryDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String get galleryExportImageFolderTitle => '导出图片文件夹';
+
+  @override
+  String get galleryExportVideoFolderTitle => '导出视频文件夹';
+
+  @override
+  String get galleryImagePageTitle => '相册';
+
+  @override
+  String get galleryVideoPageTitle => '视频';
+
+  @override
+  String get galleryTakePhoto => '拍照';
+
+  @override
+  String get galleryRecordVideo => '录制';
+
+  @override
+  String get galleryImport => '导入';
+
+  @override
+  String get galleryExportToLocal => '导出到本地';
+
+  @override
+  String get galleryPlayVideo => '播放';
+
+  @override
+  String galleryCopyFailed(String error) {
+    return '复制失败：$error';
+  }
+
+  @override
+  String get galleryVideoSaved => '视频已保存';
+
+  @override
+  String galleryVideoRecordFailed(String error) {
+    return '录制失败：$error';
+  }
+
+  @override
+  String get galleryVideoLoadFailed => '无法加载视频';
+
+  @override
+  String get imageEditorSaveImageTitle => '保存图片';
+
+  @override
+  String get imageEditorSaveImagePrompt => '请选择保存方式：';
+
+  @override
+  String get imageEditorOverwrite => '覆盖';
+
+  @override
+  String get imageEditorSaveAs => '另存为';
+
+  @override
+  String get imageEditorSavePhotoTitle => '保存照片';
+
+  @override
+  String get imageEditorSavePhotoPrompt => '是否保存当前照片？';
+
+  @override
+  String get imageEditorDiscard => '不保存';
+
+  @override
+  String get imageEditorDoneLoading => '正在生成图片，请稍候…';
+
+  @override
+  String imageEditorQuickTitle(String fileName) {
+    return '快速编辑 - $fileName';
+  }
+
+  @override
+  String get imageEditorNotReady => '编辑器尚未就绪，请稍后重试';
+
+  @override
+  String imageEditorProcessingFailed(String error) {
+    return '图片处理失败：$error';
+  }
+
+  @override
+  String get imageEditorLoadFailed => '无法加载图片';
+
+  @override
+  String get imageEditorProcessing => '正在处理图片，请稍候…';
+
+  @override
+  String get imageEditorRotateLeft => '左旋';
+
+  @override
+  String get imageEditorRotateRight => '右旋';
+
+  @override
+  String get imageEditorFlip => '翻转';
+
+  @override
+  String get imageEditorCrop => '裁剪';
+
+  @override
+  String get imageViewerImageSavedAsCopy => '图片已另存为副本';
+
+  @override
+  String get imageViewerImageUpdated => '图片已更新';
+
+  @override
+  String imageViewerSaveFailed(String error) {
+    return '图片保存失败：$error';
+  }
+
+  @override
+  String get imageViewerInvalidIndex => '图片索引无效';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -16505,4 +16686,185 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get platformTutorialPageTitle => '平台教程';
+
+  @override
+  String galleryUnsupportedPreview(String format) {
+    return '不支持预览 .$format 格式';
+  }
+
+  @override
+  String galleryCameraFailed(String error) {
+    return '拍照失败：$error';
+  }
+
+  @override
+  String get galleryPhotoSaved => '照片已保存';
+
+  @override
+  String galleryUnsupportedImportFormat(String format) {
+    return '已跳过不支持的格式：$format';
+  }
+
+  @override
+  String galleryImportImagesCount(int count) {
+    return '已导入 $count 张图片';
+  }
+
+  @override
+  String galleryImportVideosCount(int count) {
+    return '已导入 $count 个视频';
+  }
+
+  @override
+  String galleryImportFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get galleryFileReadFailed => '文件数据读取失败';
+
+  @override
+  String get galleryExportImageTitle => '导出图片';
+
+  @override
+  String get galleryExportVideoTitle => '导出视频';
+
+  @override
+  String galleryExportedTo(String path) {
+    return '已导出到：$path';
+  }
+
+  @override
+  String galleryExportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get galleryChooseExportDirectory => '选择导出目录';
+
+  @override
+  String galleryExportedFilesCount(int count) {
+    return '已导出 $count 个文件';
+  }
+
+  @override
+  String get galleryFolderExportTitle => '导出文件夹';
+
+  @override
+  String get galleryWebFolderExportInfo => '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get galleryDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String get galleryExportImageFolderTitle => '导出图片文件夹';
+
+  @override
+  String get galleryExportVideoFolderTitle => '导出视频文件夹';
+
+  @override
+  String get galleryImagePageTitle => '相册';
+
+  @override
+  String get galleryVideoPageTitle => '视频';
+
+  @override
+  String get galleryTakePhoto => '拍照';
+
+  @override
+  String get galleryRecordVideo => '录制';
+
+  @override
+  String get galleryImport => '导入';
+
+  @override
+  String get galleryExportToLocal => '导出到本地';
+
+  @override
+  String get galleryPlayVideo => '播放';
+
+  @override
+  String galleryCopyFailed(String error) {
+    return '复制失败：$error';
+  }
+
+  @override
+  String get galleryVideoSaved => '视频已保存';
+
+  @override
+  String galleryVideoRecordFailed(String error) {
+    return '录制失败：$error';
+  }
+
+  @override
+  String get galleryVideoLoadFailed => '无法加载视频';
+
+  @override
+  String get imageEditorSaveImageTitle => '保存图片';
+
+  @override
+  String get imageEditorSaveImagePrompt => '请选择保存方式：';
+
+  @override
+  String get imageEditorOverwrite => '覆盖';
+
+  @override
+  String get imageEditorSaveAs => '另存为';
+
+  @override
+  String get imageEditorSavePhotoTitle => '保存照片';
+
+  @override
+  String get imageEditorSavePhotoPrompt => '是否保存当前照片？';
+
+  @override
+  String get imageEditorDiscard => '不保存';
+
+  @override
+  String get imageEditorDoneLoading => '正在生成图片，请稍候…';
+
+  @override
+  String imageEditorQuickTitle(String fileName) {
+    return '快速编辑 - $fileName';
+  }
+
+  @override
+  String get imageEditorNotReady => '编辑器尚未就绪，请稍后重试';
+
+  @override
+  String imageEditorProcessingFailed(String error) {
+    return '图片处理失败：$error';
+  }
+
+  @override
+  String get imageEditorLoadFailed => '无法加载图片';
+
+  @override
+  String get imageEditorProcessing => '正在处理图片，请稍候…';
+
+  @override
+  String get imageEditorRotateLeft => '左旋';
+
+  @override
+  String get imageEditorRotateRight => '右旋';
+
+  @override
+  String get imageEditorFlip => '翻转';
+
+  @override
+  String get imageEditorCrop => '裁剪';
+
+  @override
+  String get imageViewerImageSavedAsCopy => '图片已另存为副本';
+
+  @override
+  String get imageViewerImageUpdated => '图片已更新';
+
+  @override
+  String imageViewerSaveFailed(String error) {
+    return '图片保存失败：$error';
+  }
+
+  @override
+  String get imageViewerInvalidIndex => '图片索引无效';
 }

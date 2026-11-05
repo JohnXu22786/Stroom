@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -58,7 +60,7 @@ Future<void> _pushEditor(
   ValueChanged<Uint8List?>? onPopResult,
   bool waitForEditorReady = true,
 }) async {
-  await tester.pumpWidget(MaterialApp(
+  await tester.pumpWidget(_localizedMaterialApp(
     home: Builder(
       builder: (context) => ElevatedButton(
         onPressed: () async {
@@ -108,12 +110,25 @@ Uint8List _createSmallJpeg() {
   return img.encodeJpg(im, quality: 90);
 }
 
+
+Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: home,
+);
+
 void main() {
   group('ExtendedImageEditorPage', () {
     testWidgets('close button pops with null', (tester) async {
       Uint8List? result;
       final png = await tester.runAsync(createTestImage);
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {

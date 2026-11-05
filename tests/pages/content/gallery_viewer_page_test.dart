@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/gallery_viewer_page.dart';
@@ -45,6 +47,19 @@ Future<Uint8List> _createEnginePng() async {
   return byteData!.buffer.asUint8List();
 }
 
+
+Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: home,
+);
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -78,7 +93,7 @@ void main() {
         format: 'png',
       );
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: GalleryViewerPage(
           images: [recordA, recordB],
           initialIndex: 0,
@@ -123,7 +138,7 @@ void main() {
       final thumb = await ImageThumbnailLoader.loadThumbnail(record);
       expect(thumb, isNotNull);
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: GalleryViewerPage(images: [record], initialIndex: 0),
       ));
 
@@ -155,7 +170,7 @@ void main() {
     testWidgets('dialog shows correct options for quick edit save', (
       tester,
     ) async {
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: Builder(builder: (context) {
           return ElevatedButton(
             onPressed: () => showImageSaveDialog(context),
@@ -177,7 +192,7 @@ void main() {
     testWidgets('overwrite returns SaveAction.overwrite', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: Builder(builder: (context) {
           return ElevatedButton(
             onPressed: () async {
@@ -200,7 +215,7 @@ void main() {
     testWidgets('save-as returns SaveAction.saveAs', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: Builder(builder: (context) {
           return ElevatedButton(
             onPressed: () async {
@@ -223,7 +238,7 @@ void main() {
     testWidgets('cancel returns SaveAction.cancel', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedMaterialApp(
         home: Builder(builder: (context) {
           return ElevatedButton(
             onPressed: () async {
