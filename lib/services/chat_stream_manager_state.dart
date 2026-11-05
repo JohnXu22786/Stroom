@@ -104,18 +104,26 @@ class _ConversationStreamState {
     _reasoningSectionActive = false;
   }
 
-  final List<StringBuffer> _textChunks = [StringBuffer()];
-  List<String> get textChunks =>
-      _textChunks.map((chunk) => chunk.toString()).toList();
-
-  void appendText(String text) {
-    _fullReply.write(text);
-    _textChunks.last.write(text);
+  // Text chunks are ranges into the canonical full reply. Keeping a buffer
+  // per chunk as well as `_fullReply` retained every streamed character twice.
+  final List<int> _textChunkStarts = [0];
+  List<String> get textChunks {
+    final reply = _fullReply.toString();
+    return List<String>.generate(_textChunkStarts.length, (index) {
+      final start = _textChunkStarts[index];
+      final end = index + 1 < _textChunkStarts.length
+          ? _textChunkStarts[index + 1]
+          : reply.length;
+      return reply.substring(start, end);
+    });
   }
 
-  void startTextChunk() => _textChunks.add(StringBuffer());
+  void appendText(String text) => _fullReply.write(text);
 
-  bool get currentTextChunkIsNotEmpty => _textChunks.last.isNotEmpty;
+  void startTextChunk() => _textChunkStarts.add(_fullReply.length);
+
+  bool get currentTextChunkIsNotEmpty =>
+      _textChunkStarts.last < _fullReply.length;
 
   /// Per-round text chunks that mirror reasoning sections: each time a new
   /// tool call round begins, a new chunk is started so that post-stream
@@ -125,6 +133,7 @@ class _ConversationStreamState {
   List<ChatMessage> history = [];
   List<ChatMessage>? historyOnSuccess;
   bool hasReceivedFirstToken = false;
+  bool hasSyntheticErrorReply = false;
   bool isComplete = false;
 
   /// Accumulator for tool calls across streaming rounds (used for history).

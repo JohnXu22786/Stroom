@@ -129,6 +129,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (wasCancelled) {
           blocks.add(const ErrorBlock(message: '用户中断了输出'));
         } else if (hadStreamError &&
+            !state.hasSyntheticErrorReply &&
             (state.textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
           blocks.add(ErrorBlock(

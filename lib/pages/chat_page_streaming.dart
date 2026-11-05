@@ -70,8 +70,6 @@ extension _ChatPageStreamingExt on _ChatPageState {
     try {
       ref.read(isStreamingProvider(activeConvId).notifier).state = true;
       ref.read(streamingMsgIdProvider(activeConvId).notifier).state = msgId;
-      ref.read(streamingFullReplyProvider(activeConvId).notifier).state =
-          fullReply;
       ref
           .read(streamingReasoningSectionsProvider(activeConvId).notifier)
           .state = List<String>.from(reasoningSections);
@@ -155,16 +153,14 @@ extension _ChatPageStreamingExt on _ChatPageState {
         // Insert directly as Message.text so it renders through the
         // normal textMessageBuilder (gray bubble + segments) instead of
         // textStreamMessageBuilder (raw white-background Markdown).
-        // Re-read the fullReply at insert time (not the value captured
-        // at _restoreStreamingState time) so the bubble carries the
-        // latest text if the stream advanced while the load ran.
-        final latestFullReply = manager.fullReplyFor(activeConvId);
+        // The live text is rendered from the segment state, so keep the
+        // controller message empty instead of retaining another full copy.
         restoreController
             ?.insertMessage(
           Message.text(
             id: msgId,
             authorId: _aiUser.id,
-            text: latestFullReply,
+            text: '',
             createdAt: DateTime.now(),
           ),
         )

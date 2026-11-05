@@ -17,12 +17,11 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         if (now.difference(state.lastTextUpdate) >=
             ChatStreamManager._textThrottle) {
           state.lastTextUpdate = now;
-          // Set textSections first (no listener) so that when
-          // fullReply fires its listener and reads streamingTextSectionsProvider
-          // inside _rebuildLiveSegments, it sees the already-updated value.
+          // Text sections are the sole live text provider. The page derives
+          // its controller message from these ranges instead of retaining a
+          // second full-reply snapshot in another provider.
           _pushToProvider(convId, streamingTextSectionsProvider,
               List<String>.from(state.textChunks));
-          _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
         }
 
       case ReasoningEvent e:
