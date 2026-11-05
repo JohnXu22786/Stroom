@@ -60,6 +60,33 @@ void main() {
     expect(shortSafeResponse, {'requestId': 'req'});
   });
 
+  test('long body credentials exclude request ID fragments after bound', () {
+    final echoedRequestId = 'req-${List.filled(146, 'e').join()}';
+    final credential =
+        '${List.filled(600, 'x').join()}$echoedRequestId${List.filled(2300, 'y').join()}';
+    const safeRequestId = 'req-safe-after-long-credential-bound-203';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(credential.length, greaterThan(2900));
+    expect(echoedRequestId.length, 150);
+    expect(excludedValues.every((value) => value.length <= 2048), isTrue);
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
   test('long Bearer credentials exclude stripped URL and header echoes', () {
     final token = 'opaque-long-bearer-${List.filled(700, 'y').join()}';
     final echoedPrefix = token.substring(0, 120);

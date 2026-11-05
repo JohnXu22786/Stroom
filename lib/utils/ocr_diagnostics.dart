@@ -9,7 +9,7 @@ class OcrDiagnosticSnapshot {
 
   static const maxSerializedBytes = 2048;
   static const _maxTextLength = 160;
-  static const _maxCredentialValueLength = 512;
+  static const _maxCredentialValueLength = maxSerializedBytes;
   static const _requestIdHeaders = {
     'x-request-id',
     'request-id',
