@@ -9,7 +9,6 @@ class OcrDiagnosticSnapshot {
 
   static const maxSerializedBytes = 2048;
   static const _maxTextLength = 160;
-  static const _maxCredentialValueLength = maxSerializedBytes;
   static const _requestIdHeaders = {
     'x-request-id',
     'request-id',
@@ -76,6 +75,8 @@ class OcrDiagnosticSnapshot {
     caseSensitive: false,
   );
 
+  /// Extracted values may contain full secrets. Use them only as transient
+  /// sanitizer exclusions; never expose or persist the returned values.
   static List<String> credentialValuesFromUrl(dynamic rawUrl) {
     if (rawUrl is! String || rawUrl.isEmpty) return const [];
     final uri = Uri.tryParse(rawUrl);
@@ -156,17 +157,12 @@ class OcrDiagnosticSnapshot {
     final value = rawValue.trim();
     if (value.isEmpty) return;
 
-    String bounded(String credential) =>
-        credential.length <= _maxCredentialValueLength
-            ? credential
-            : credential.substring(0, _maxCredentialValueLength);
-
-    values.add(bounded(value));
+    values.add(value);
     final token = RegExp(
       r'^(?:Bearer|Basic)\s+(.+)$',
       caseSensitive: false,
     ).firstMatch(value)?.group(1)?.trim();
-    if (token != null && token.isNotEmpty) values.add(bounded(token));
+    if (token != null && token.isNotEmpty) values.add(token);
   }
 
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {

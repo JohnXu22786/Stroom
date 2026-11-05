@@ -2317,6 +2317,50 @@ void main() {
       );
 
       test(
+        'diagnostic response does not re-expose interceptor credentials',
+        () async {
+          const credential = 'req-interceptor-secret-credential-94';
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  options.headers['Authorization'] = 'Bearer $credential';
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      data: {
+                        'request_id': credential,
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                      headers: Headers.fromMap({
+                        'x-request-id': [credential],
+                      }),
+                    ),
+                  );
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], isNull);
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(credential)),
+          );
+        },
+      );
+
+      test(
         'overlapping OCR requests keep their Authorization exclusions paired',
         () async {
           const firstCredential = 'overlapping-dio-secret-a-91';

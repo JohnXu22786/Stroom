@@ -171,7 +171,6 @@ class OcrService {
   String? _lastFinishReason;
   String? _lastRequestId;
   String? _lastErrorType;
-  List<String> _lastRequestCredentialValues = const [];
 
   /// Safe diagnostic maps for task persistence and the error detail view.
   static List<String> _credentialValuesFromHeaders(dynamic headers) {
@@ -221,7 +220,7 @@ class OcrService {
           'url': lastRequestUrl,
           'body': lastRequestBody,
         }),
-        ..._lastRequestCredentialValues,
+        ..._credentialValuesFromHeaders(_dio.options.headers),
       }.toList(growable: false);
 
   List<String> get _diagnosticCredentialValues => [
@@ -245,9 +244,10 @@ class OcrService {
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
         errorType: _lastErrorType ?? error?.runtimeType.toString(),
-        headers: lastResponseHeaders,
-        data: lastResponseData,
-        excludedValues: _diagnosticCredentialValues,
+        // Request IDs and finish reasons are sanitized when the response is
+        // captured, while the response's request options are still available.
+        // Re-reading raw response data here would lose interceptor-added
+        // credential exclusions.
       );
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -396,7 +396,6 @@ class OcrService {
         ...requestCredentialValues,
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
       }.toList(growable: false);
-      _lastRequestCredentialValues = responseCredentialValues;
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
@@ -414,7 +413,10 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = parsed.finishReason;
+      _lastFinishReason = OcrDiagnosticSnapshot.response(
+        {'finishReason': parsed.finishReason},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['finishReason'] as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -497,7 +499,6 @@ class OcrService {
         ...requestCredentialValues,
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
       }.toList(growable: false);
-      _lastRequestCredentialValues = responseCredentialValues;
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
@@ -515,7 +516,10 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = parsed.finishReason;
+      _lastFinishReason = OcrDiagnosticSnapshot.response(
+        {'finishReason': parsed.finishReason},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['finishReason'] as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -551,7 +555,6 @@ class OcrService {
     final requestCredentialValues = _credentialValuesFromHeaders(
       _dio.options.headers,
     );
-    _lastRequestCredentialValues = requestCredentialValues;
     lastRequestBody = null;
     lastRequestUrl = _chatUrl;
     lastRequestHeaders = {
@@ -629,7 +632,6 @@ class OcrService {
       ...requestCredentialValues,
       ..._credentialValuesFromHeaders(e.requestOptions.headers),
     }.toList(growable: false);
-    _lastRequestCredentialValues = responseCredentialValues;
     if (e.response?.data is Map) {
       lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
     } else if (e.response?.data is String) {
