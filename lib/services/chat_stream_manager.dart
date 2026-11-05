@@ -22,6 +22,7 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'todo_tool_service.dart';
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -359,6 +360,27 @@ class ChatStreamManager {
         ?.read(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
+    if (conv != null && snappedChatService != null) {
+      snappedChatService.registerConversationToolHandler(
+        'todowrite',
+        (args) async {
+          final current = _ref
+              ?.read(conversationsProvider)
+              .where((conversation) => conversation.id == convId)
+              .firstOrNull;
+          if (current == null) return 'Error: conversation no longer exists.';
+          final ref = _ref;
+          if (ref == null) return 'Error: conversation storage is unavailable.';
+          return TodoToolService.handleConversationTodo(
+            args,
+            currentTodos: current.todoItems,
+            saveTodos: (todos) => ref
+                .read(conversationsProvider.notifier)
+                .updateTodoItems(convId, todos),
+          );
+        },
+      );
+    }
     snappedChatService?.setContextSummary(conv?.contextSummary);
 
     // 发送历史过滤（对齐 opencode filterCompacted）：

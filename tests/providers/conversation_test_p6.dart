@@ -1,6 +1,118 @@
 part of 'conversation_test.dart';
 
+class _RejectRawConversationDataStore extends InMemorySharedPreferencesStore {
+  _RejectRawConversationDataStore() : super.empty();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.conversations' && value is String) {
+      final records = jsonDecode(value) as List;
+      final hasRawData = records.whereType<Map>().any((record) {
+        final messages = record['messages'];
+        return messages is List &&
+            messages.whereType<Map>().any(
+                  (message) =>
+                      message['rawRequest'] != null ||
+                      message['rawResponse'] != null,
+                );
+      });
+      if (hasRawData) return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _RejectConversationWritesStore extends InMemorySharedPreferencesStore {
+  _RejectConversationWritesStore() : super.empty();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.conversations') return Future<bool>.value(false);
+    return super.setValue(valueType, key, value);
+  }
+}
+
 void conversationGroup6() {
+  group('Conversation TODO persistence', () {
+    test('updates only the selected conversation and persists its items',
+        () async {
+      final first = Conversation(id: 'first', title: 'First');
+      final second = Conversation(id: 'second', title: 'Second');
+      final container = _createContainer(initialState: [first, second]);
+      addTearDown(container.dispose);
+
+      await container.read(conversationsProvider.notifier).updateTodoItems(
+        'first',
+        const [TodoItem(content: 'Review notes', position: 0)],
+      );
+
+      final state = container.read(conversationsProvider);
+      expect(state.first.todoItems.single.content, 'Review notes');
+      expect(state.last.todoItems, isEmpty);
+      expect(Conversation.fromMap(state.first.toMap()).todoItems.single.content,
+          'Review notes');
+    });
+
+    test('raw-data fallback save keeps conversation todos', () async {
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectRawConversationDataStore();
+      SharedPreferencesStorePlatform.instance = store;
+      addTearDown(
+          () => SharedPreferencesStorePlatform.instance = previousStore);
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+
+      final id = notifier.createConversation();
+      await notifier.updateTodoItems(
+        id,
+        const [TodoItem(content: 'Persist this list', position: 0)],
+      );
+      await notifier.updateMessages(id, [
+        ChatMessage(
+          id: 'assistant-with-raw-data',
+          role: 'assistant',
+          content: 'Saved',
+          rawRequest: const {'request': 'captured'},
+        ),
+      ]);
+
+      final prefs = await SharedPreferences.getInstance();
+      final saved = (jsonDecode(prefs.getString('conversations')!) as List)
+          .single as Map<String, dynamic>;
+      final restored = Conversation.fromMap(saved);
+      expect(restored.messages.single.rawRequest, isNull);
+      expect(restored.todoItems.single.content, 'Persist this list');
+    });
+
+    test('reports failed todo persistence to the tool handler', () async {
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _RejectConversationWritesStore();
+      addTearDown(
+          () => SharedPreferencesStorePlatform.instance = previousStore);
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      final id = notifier.createConversation();
+      final result = await TodoToolService.handleConversationTodo(
+        {
+          'todos': [
+            {'content': 'This write must fail'}
+          ],
+        },
+        currentTodos: const [],
+        saveTodos: (todos) => notifier.updateTodoItems(id, todos),
+      );
+
+      expect(result, contains('could not be saved'));
+    });
+  });
+
   // ===================================================================
   // 6. Draft attachments (unsent attachment snapshots) persistence
   // ===================================================================

@@ -278,6 +278,20 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     await _persistNow();
   }
 
+  /// Persist the TODO list owned by one conversation.
+  Future<bool> updateTodoItems(
+      String conversationId, List<TodoItem> todos) async {
+    await ready;
+    if (!mounted || !state.any((c) => c.id == conversationId)) return false;
+    state = state.map((conversation) {
+      if (conversation.id != conversationId) return conversation;
+      conversation.todoItems = List<TodoItem>.from(todos);
+      conversation.updatedAt = DateTime.now();
+      return conversation;
+    }).toList();
+    return _persistNowChecked();
+  }
+
   /// Confirm flow messages reached disk before sending or completing a step.
   Future<bool> updateFlowMessagesChecked(
       String conversationId, List<ChatMessage> messages) async {

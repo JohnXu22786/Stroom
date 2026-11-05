@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/services/todo_tool_service.dart';
 
 void main() {
@@ -72,6 +73,95 @@ void main() {
       // 类型非法（如字符串）时返回错误提示而非静默读取，让模型自行修正。
       final result = await TodoToolService.handleTodo({'todos': 'not-a-list'});
       expect(result, contains('todos 参数必须是数组'));
+    });
+  });
+
+  group('TodoToolService - conversation-scoped storage', () {
+    test('writes and reads only the supplied conversation list', () async {
+      var firstTodos = <TodoItem>[];
+      var secondTodos = <TodoItem>[];
+
+      await TodoToolService.handleConversationTodo(
+        {
+          'todos': [
+            {'content': 'Read chapter 2', 'priority': 'high'}
+          ],
+        },
+        currentTodos: firstTodos,
+        saveTodos: (todos) async {
+          firstTodos = todos;
+          return true;
+        },
+      );
+      await TodoToolService.handleConversationTodo(
+        {
+          'todos': [
+            {'content': 'Finish worksheet'}
+          ],
+        },
+        currentTodos: secondTodos,
+        saveTodos: (todos) async {
+          secondTodos = todos;
+          return true;
+        },
+      );
+
+      expect(firstTodos.single.content, 'Read chapter 2');
+      expect(secondTodos.single.content, 'Finish worksheet');
+      expect(
+        await TodoToolService.handleConversationTodo(
+          {},
+          currentTodos: firstTodos,
+          saveTodos: (_) async => true,
+        ),
+        contains('Read chapter 2'),
+      );
+      expect(
+        await TodoToolService.handleConversationTodo(
+          {},
+          currentTodos: secondTodos,
+          saveTodos: (_) async => true,
+        ),
+        contains('Finish worksheet'),
+      );
+    });
+
+    test('reports a failed persistence callback instead of claiming success',
+        () async {
+      final result = await TodoToolService.handleConversationTodo(
+        {
+          'todos': [
+            {'content': 'Do not claim this was saved'}
+          ],
+        },
+        currentTodos: const [],
+        saveTodos: (_) async => false,
+      );
+
+      expect(result, contains('could not be saved'));
+    });
+
+    test('conversation serialization restores todos and tolerates legacy data',
+        () {
+      final conversation = Conversation(
+        id: 'todo-conversation',
+        title: 'Study plan',
+        todoItems: const [
+          TodoItem(
+            content: 'Review notes',
+            status: 'in_progress',
+            priority: 'high',
+            position: 0,
+          ),
+        ],
+      );
+
+      final restored = Conversation.fromMap(conversation.toMap());
+      final legacy = Conversation.fromMap({'id': 'legacy', 'title': 'Old'});
+
+      expect(restored.todoItems.single.content, 'Review notes');
+      expect(restored.todoItems.single.status, 'in_progress');
+      expect(legacy.todoItems, isEmpty);
     });
   });
 

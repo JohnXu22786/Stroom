@@ -58,6 +58,9 @@ class ChatService {
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
 
+  final Map<String, dynamic Function(Map<String, dynamic>)>
+      _conversationToolHandlers = {};
+
   /// 工具结果存储上限（对齐 opencode tool-output-store MAX_BYTES = 50KB）。
   /// 50KB 内**完整保留**（UI 可展开查看、历史重建可发送），
   /// 发送给模型时另有渲染截断（上限由助手设置决定，
@@ -337,6 +340,16 @@ class ChatService {
     dynamic Function(Map<String, dynamic>) handler,
   ) {
     _toolRegistries[def.name] = {'definition': def, 'handler': handler};
+  }
+
+  /// Installs a handler that is private to this conversation's ChatService.
+  /// The global tool definition stays shared, while stateful execution can
+  /// read and write the owning conversation's persisted data.
+  void registerConversationToolHandler(
+    String name,
+    dynamic Function(Map<String, dynamic>) handler,
+  ) {
+    _conversationToolHandlers[name] = handler;
   }
 
   /// Prevents registered tools from executing while their provider group is off.
