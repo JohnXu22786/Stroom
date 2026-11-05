@@ -1,0 +1,1 @@
+TypeScript lifecycle ran in Node Mobile

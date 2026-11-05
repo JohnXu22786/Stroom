@@ -71,14 +71,14 @@ run_node() {
     echo "Activity start has not completed yet; waiting for $label output."
   fi
   for i in $(seq 1 "$max_wait"); do
-    log=$(adb logcat -d -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+    log=$(adb logcat -d -v threadtime -s 'TestNode:V' nodejs:E '*:S' 2>/dev/null || true)
     local pid
     pid=$(awk -v marker="$launch_marker" 'index($0, marker) { print $3; exit }' <<<"$log")
     if [[ -n "$pid" ]]; then
       # Capture this launch's logs even after npm exits the app process. The
       # per-launch marker prevents an older process's generic RESULT line from
       # being mistaken for this run.
-      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:I' nodejs:E '*:S' 2>/dev/null || true)
+      log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:V' nodejs:E '*:S' 2>/dev/null || true)
     fi
     if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
       break
@@ -140,3 +140,11 @@ run_node 'Clean npm ci with committed lock and fast-uri override' "$npm_args" 'N
 
 verify_args="-p (eval(new/**/TextDecoder().decode(require('node:fs').readFileSync('$shim'))),require('$fixture/verify-install.cjs'))"
 run_node 'Patched package, TypeScript, and MCP API checks' "$verify_args" 'MCP_IN_MEMORY_INITIALIZE_LIST_CALL_PASS' 120
+
+runner="$files/test/mobile-runtime-poc/run-lifecycle-install.cjs"
+for lifecycle_case in javascript typescript child-process native-command; do
+  lifecycle_expression="(globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case',require('$runner'))"
+  run_node "npm lifecycle bridge: $lifecycle_case" \
+    "-p $lifecycle_expression" \
+    "MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS $lifecycle_case" 180
+done

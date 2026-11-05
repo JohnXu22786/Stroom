@@ -78,6 +78,9 @@ jobs:
           mkdir -p nodejs-mobile/test/mobile-runtime-poc
           cp tools/mobile-runtime-poc/compatibility-shim.cjs nodejs-mobile/test/mobile-runtime-poc/
           cp -R tools/mobile-runtime-poc/npm-fixture nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/npm-lifecycle-bridge.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/run-lifecycle-install.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp -R tools/mobile-runtime-poc/lifecycle-fixtures nodejs-mobile/test/mobile-runtime-poc/
 
       - name: Build upstream Android sample app
         working-directory: nodejs-mobile/tools/mobile-test/android/testnode
