@@ -128,7 +128,7 @@ class _ConversationStreamState {
     return append;
   }
 
-  List<String> _reasoningSections = [];
+  final List<String> _reasoningSections = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
         ..._reasoningSections,
@@ -148,7 +148,8 @@ class _ConversationStreamState {
   }
 
   void endReasoningSection() {
-    _reasoningSections = reasoningSections..add('');
+    if (_reasoningSectionActive) _reasoningSections.add(_reasoningSnapshot);
+    _reasoningSections.add('');
     _reasoningBuffer.clear();
     _reasoningBufferSnapshot = null;
     _reasoningSectionActive = false;
