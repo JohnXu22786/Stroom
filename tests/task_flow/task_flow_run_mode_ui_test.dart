@@ -129,72 +129,73 @@ bool _startButtonEnabled(WidgetTester tester) {
 void main() {
   group('Task flow run-mode input adapts to the FIRST block', () {
     testWidgets(
-        'OCR rejects a valid image selection when another manifest record is unresolved',
-        (tester) async {
-      ManifestDatabase.enableTestMode();
-      ImageManifest.invalidateCache();
-      final folderName =
-          'ocr_picker_${DateTime.now().microsecondsSinceEpoch}';
-      final pictureRoot = Directory('${Directory.current.path}/pictures');
-      final pictureRootExisted = pictureRoot.existsSync();
-      final pictureDirectory = Directory('${pictureRoot.path}/$folderName');
-      pictureDirectory.createSync(recursive: true);
-      final now = DateTime(2026, 1, 1);
-      final validRecord = ImageRecord(
-        id: 'valid-image',
-        name: 'Available image',
-        hash: '$folderName/available',
-        format: 'png',
-        createdAt: now,
-        size: 4,
-      );
-      final unresolvedRecord = ImageRecord(
-        id: 'unresolved-image',
-        name: 'Missing image',
-        hash: '$folderName/missing',
-        format: 'png',
-        createdAt: now,
-        size: 4,
-      );
-      addTearDown(() async {
-        await ImageManifest.deleteFile(validRecord.storagePath);
-        await ManifestDatabase.clearAllData();
+      'OCR rejects a valid image selection when another manifest record is unresolved',
+      (tester) async {
+        ManifestDatabase.enableTestMode();
         ImageManifest.invalidateCache();
-        if (pictureDirectory.existsSync()) {
-          pictureDirectory.deleteSync(recursive: true);
-        }
-        if (!pictureRootExisted &&
-            pictureRoot.existsSync() &&
-            pictureRoot.listSync().isEmpty) {
-          pictureRoot.deleteSync();
-        }
-      });
-      await ImageManifest.addRecord(validRecord);
-      await ImageManifest.addRecord(unresolvedRecord);
-      await ImageManifest.writeFile(
-        validRecord.storagePath,
-        Uint8List.fromList([1, 2, 3, 4]),
-      );
-      File('${pictureDirectory.path}/available.png')
-          .writeAsBytesSync([1, 2, 3, 4]);
+        final folderName =
+            'ocr_picker_${DateTime.now().microsecondsSinceEpoch}';
+        final pictureRoot = Directory('${Directory.current.path}/pictures');
+        final pictureRootExisted = pictureRoot.existsSync();
+        final pictureDirectory = Directory('${pictureRoot.path}/$folderName');
+        pictureDirectory.createSync(recursive: true);
+        final now = DateTime(2026, 1, 1);
+        final validRecord = ImageRecord(
+          id: 'valid-image',
+          name: 'Available image',
+          hash: '$folderName/available',
+          format: 'png',
+          createdAt: now,
+          size: 4,
+        );
+        final unresolvedRecord = ImageRecord(
+          id: 'unresolved-image',
+          name: 'Missing image',
+          hash: '$folderName/missing',
+          format: 'png',
+          createdAt: now,
+          size: 4,
+        );
+        addTearDown(() async {
+          await ImageManifest.deleteFile(validRecord.storagePath);
+          await ManifestDatabase.clearAllData();
+          ImageManifest.invalidateCache();
+          if (pictureDirectory.existsSync()) {
+            pictureDirectory.deleteSync(recursive: true);
+          }
+          if (!pictureRootExisted &&
+              pictureRoot.existsSync() &&
+              pictureRoot.listSync().isEmpty) {
+            pictureRoot.deleteSync();
+          }
+        });
+        await ImageManifest.addRecord(validRecord);
+        await ImageManifest.addRecord(unresolvedRecord);
+        await ImageManifest.writeFile(
+          validRecord.storagePath,
+          Uint8List.fromList([1, 2, 3, 4]),
+        );
+        File('${pictureDirectory.path}/available.png')
+            .writeAsBytesSync([1, 2, 3, 4]);
 
-      final control = _CaptureControl();
-      await _pumpRunMode(
-        tester,
-        TaskFlowBlock(typeKey: BlockType.ocr),
-        control: control,
-      );
-      await tester.tap(find.text('选择图片（可多选）'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Available image'));
-      await tester.tap(find.text('Missing image'));
-      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
-      await tester.pumpAndSettle();
+        final control = _CaptureControl();
+        await _pumpRunMode(
+          tester,
+          TaskFlowBlock(typeKey: BlockType.ocr),
+          control: control,
+        );
+        await tester.tap(find.text('选择图片（可多选）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Available image'));
+        await tester.tap(find.text('Missing image'));
+        await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('1 个已选文件无法找到或读取'), findsOneWidget);
-      expect(_startButtonEnabled(tester), isFalse);
-      expect(control.submitted, isNull);
-    });
+        expect(find.textContaining('1 个已选文件无法找到或读取'), findsOneWidget);
+        expect(_startButtonEnabled(tester), isFalse);
+        expect(control.submitted, isNull);
+      },
+    );
 
     testWidgets('a restored generic file input stays a picked file', (
       tester,
