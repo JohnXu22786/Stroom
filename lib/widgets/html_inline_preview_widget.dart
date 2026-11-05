@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:html/dom.dart' as html;
@@ -19,11 +20,13 @@ import 'package:stroom/widgets/html_code_block_widget.dart';
 class HtmlInlinePreviewWidget extends StatefulWidget {
   final String htmlCode;
   final bool isStreaming;
+  final ValueListenable<double?>? conversationViewportHeight;
 
   const HtmlInlinePreviewWidget({
     super.key,
     required this.htmlCode,
     this.isStreaming = false,
+    this.conversationViewportHeight,
   });
 
   static InAppWebViewSettings get inlineWebViewSettings => InAppWebViewSettings(
@@ -31,6 +34,7 @@ class HtmlInlinePreviewWidget extends StatefulWidget {
         javaScriptBridgeEnabled: false,
         javaScriptCanOpenWindowsAutomatically: false,
         allowFileAccess: false,
+        allowContentAccess: false,
         allowFileAccessFromFileURLs: false,
         allowUniversalAccessFromFileURLs: false,
         iframeSandbox: {Sandbox.ALLOW_SCRIPTS},
@@ -74,7 +78,10 @@ class HtmlInlinePreviewWidget extends StatefulWidget {
     queued = false;
     const root = document.documentElement;
     const body = document.body;
-    report(Math.max(root?.scrollHeight || 0, body?.scrollHeight || 0, body?.offsetHeight || 0));
+    const viewportHeight = window.innerHeight || 0;
+    const bodyHeight = Math.max(body?.scrollHeight || 0, body?.offsetHeight || 0);
+    const rootHeight = Math.max(root?.scrollHeight || 0, root?.offsetHeight || 0);
+    report(Math.max(bodyHeight, rootHeight > viewportHeight ? rootHeight : 0));
   };
   const schedule = () => {
     if (queued) return;
@@ -157,7 +164,6 @@ class _HtmlInlinePreviewWidgetState extends State<HtmlInlinePreviewWidget> {
   late String _token = _createToken();
   double _contentHeight = 1;
   bool _hasError = false;
-  bool _tooTall = false;
 
   static String _createToken() =>
       '${DateTime.now().microsecondsSinceEpoch}-${math.Random().nextInt(1 << 32)}';
@@ -169,7 +175,6 @@ class _HtmlInlinePreviewWidgetState extends State<HtmlInlinePreviewWidget> {
     _token = _createToken();
     _contentHeight = 1;
     _hasError = false;
-    _tooTall = false;
   }
 
   void _handleConsoleMessage(ConsoleMessage message) {
@@ -186,27 +191,33 @@ class _HtmlInlinePreviewWidgetState extends State<HtmlInlinePreviewWidget> {
         contentHeight.isInfinite) {
       return;
     }
-    final scrollable = Scrollable.maybeOf(context);
-    final viewportHeight = scrollable?.position.viewportDimension ??
-        MediaQuery.sizeOf(context).height;
-    final tooTall = HtmlInlinePreviewWidget.exceedsViewport(
-      contentHeight,
-      viewportHeight,
-    );
     if (mounted) {
       setState(() {
         _contentHeight = math.max(1, contentHeight);
-        _tooTall = tooTall;
       });
     }
   }
 
   void _openFullScreen() {
-    showHtmlPreviewDialog(context: context, htmlCode: widget.htmlCode);
+    showHtmlPreviewDialog(
+      context: context,
+      htmlCode: widget.htmlCode,
+      sandboxed: true,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final viewportHeight = widget.conversationViewportHeight;
+    if (viewportHeight == null) return _buildContent(context, null);
+    return ValueListenableBuilder<double?>(
+      valueListenable: viewportHeight,
+      builder: (context, height, _) => _buildContent(context, height),
+    );
+  }
+
+  Widget _buildContent(
+      BuildContext context, double? conversationViewportHeight) {
     if (widget.isStreaming) {
       return const SizedBox(
         height: 56,
@@ -214,12 +225,16 @@ class _HtmlInlinePreviewWidgetState extends State<HtmlInlinePreviewWidget> {
       );
     }
     if (_hasError) {
-      return CodeBlockSourceView(
-        code: widget.htmlCode,
-        language: 'html',
-      );
+      return CodeBlockSourceView(code: widget.htmlCode, language: 'html');
     }
-    if (_tooTall) {
+    final scrollable = Scrollable.maybeOf(context);
+    final viewportHeight = conversationViewportHeight ??
+        scrollable?.position.viewportDimension ??
+        MediaQuery.sizeOf(context).height;
+    if (HtmlInlinePreviewWidget.exceedsViewport(
+      _contentHeight,
+      viewportHeight,
+    )) {
       return Align(
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
@@ -229,9 +244,6 @@ class _HtmlInlinePreviewWidgetState extends State<HtmlInlinePreviewWidget> {
         ),
       );
     }
-    final scrollable = Scrollable.maybeOf(context);
-    final viewportHeight = scrollable?.position.viewportDimension ??
-        MediaQuery.sizeOf(context).height;
     return SizedBox(
       width: double.infinity,
       height: math.min(_contentHeight, viewportHeight),

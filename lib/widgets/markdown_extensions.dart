@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
@@ -320,6 +321,7 @@ Widget _buildCodeBlock(
   PreConfig preConfig, {
   bool isStreaming = false,
   String? streamingText,
+  ValueListenable<double?>? conversationViewportHeight,
 }) {
   if (language.toLowerCase() == 'mermaid') {
     // During streaming, show a loading animation only while the block's
@@ -348,6 +350,7 @@ Widget _buildCodeBlock(
         streamingText: streamingText,
         code: code,
       ),
+      conversationViewportHeight: conversationViewportHeight,
     );
   }
 
@@ -494,6 +497,7 @@ PreConfig codeBlockPreConfig({
   required bool isDark,
   bool isStreaming = false,
   String? streamingText,
+  ValueListenable<double?>? conversationViewportHeight,
 }) {
   final baseConfig = PreConfig(
     theme: draculaTheme,
@@ -518,6 +522,7 @@ PreConfig codeBlockPreConfig({
       baseConfig,
       isStreaming: isStreaming,
       streamingText: streamingText,
+      conversationViewportHeight: conversationViewportHeight,
     ),
   );
 }
@@ -850,6 +855,7 @@ MarkdownConfig buildMarkdownConfig({
   required bool isDark,
   bool isStreaming = false,
   String? streamingText,
+  ValueListenable<double?>? conversationViewportHeight,
 }) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
@@ -858,6 +864,7 @@ MarkdownConfig buildMarkdownConfig({
       isDark: isDark,
       isStreaming: isStreaming,
       streamingText: streamingText,
+      conversationViewportHeight: conversationViewportHeight,
     ),
     TableConfig(
       wrapper: _wrapTableWithHorizontalScroll,
@@ -894,6 +901,7 @@ MarkdownConfig buildMessageMarkdownConfig({
   required String? streamingMsgId,
   required String messageId,
   String? streamingText,
+  ValueListenable<double?>? conversationViewportHeight,
 }) {
   final isThisMessageStreaming =
       conversationIsStreaming && streamingMsgId == messageId;
@@ -901,5 +909,6 @@ MarkdownConfig buildMessageMarkdownConfig({
     isDark: isDark,
     isStreaming: isThisMessageStreaming,
     streamingText: isThisMessageStreaming ? streamingText : null,
+    conversationViewportHeight: conversationViewportHeight,
   );
 }

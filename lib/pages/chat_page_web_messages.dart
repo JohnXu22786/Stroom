@@ -293,7 +293,11 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
     switch (action) {
       case 'html':
         if (fence.language == 'html-preview' && !fence.generating) {
-          showHtmlPreviewDialog(context: context, htmlCode: fence.code);
+          showHtmlPreviewDialog(
+            context: context,
+            htmlCode: fence.code,
+            sandboxed: true,
+          );
         }
       case 'mermaid':
         if (fence.language == 'mermaid' && !fence.generating) {

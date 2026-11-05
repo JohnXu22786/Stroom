@@ -21,7 +21,15 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // relationship without firing a scroll event, and only this
       // notification carries it (an idle ScrollPosition does not notify
       // its controller listeners).
-      onNotification: (_) {
+      onNotification: (notification) {
+        final source = Scrollable.maybeOf(notification.context);
+        if (_chatScrollController.hasClients &&
+            source?.position == _chatScrollController.position) {
+          final viewportHeight = notification.metrics.viewportDimension;
+          if (_conversationViewportHeight.value != viewportHeight) {
+            _conversationViewportHeight.value = viewportHeight;
+          }
+        }
         // Re-pin first: the follow's post-frame jump must run BEFORE the
         // overlay recompute, otherwise a content growth would read as "not
         // at the bottom" and flash the button on for a frame until the
@@ -322,6 +330,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
         streamingMsgId: streamingMsgId,
         messageId: message.id,
         streamingText: streamingFullReply,
+        conversationViewportHeight: _conversationViewportHeight,
       );
       return Padding(
         padding: const EdgeInsets.all(12),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart'
+    show htmlPreviewWebViewSettings;
 import 'package:stroom/widgets/html_inline_preview_widget.dart';
 
 void main() {
@@ -24,8 +26,29 @@ void main() {
       expect(script.text, contains('DOMContentLoaded'));
     });
 
-    testWidgets('open visual fence stays inert while content streams',
-        (tester) async {
+    test('measures natural content instead of the frame viewport', () {
+      final document = HtmlInlinePreviewWidget.buildPreviewDocument(
+        '<p>Short answer</p>',
+        token: 'short-content',
+      );
+      final frame = html_parser.parse(document).querySelector('iframe')!;
+      final preview = html_parser.parse(frame.attributes['srcdoc']!);
+      final script = preview.querySelector('[data-stroom-preview-monitor]')!;
+
+      expect(
+        script.text,
+        contains('const viewportHeight = window.innerHeight'),
+      );
+      expect(
+        script.text,
+        contains('rootHeight > viewportHeight ? rootHeight : 0'),
+      );
+      expect(script.text, contains('Math.max(bodyHeight, rootHeight'));
+    });
+
+    testWidgets('open visual fence stays inert while content streams', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -41,13 +64,68 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('closed preview reloads when its HTML changes in place',
-        (tester) async {
+    testWidgets('rechecks the cutoff when the conversation viewport changes', (
+      tester,
+    ) async {
       final originalPlatform = InAppWebViewPlatform.instance;
       final platform = _PreviewPlatform();
       InAppWebViewPlatform.instance = platform;
-      addTearDown(() => InAppWebViewPlatform.instance =
-          originalPlatform ?? _PreviewPlatform());
+      addTearDown(
+        () => InAppWebViewPlatform.instance =
+            originalPlatform ?? _PreviewPlatform(),
+      );
+      final viewportHeight = ValueNotifier<double?>(600);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 600,
+              child: SingleChildScrollView(
+                child: HtmlInlinePreviewWidget(
+                  htmlCode: '<p>tall visual</p>',
+                  conversationViewportHeight: viewportHeight,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final webViewParams = platform.webViews.single.params;
+      final document = webViewParams.initialData!.data;
+      final token =
+          RegExp(r'const token = "([^"]+)"').firstMatch(document)!.group(1)!;
+      final controller = InAppWebViewController.fromPlatform(
+        platform: _PreviewController(),
+      );
+      webViewParams.onConsoleMessage?.call(
+        controller,
+        ConsoleMessage(message: 'stroom-html-preview-height:$token:500'),
+      );
+      await tester.pump();
+      expect(find.text('在全屏预览'), findsNothing);
+
+      viewportHeight.value = 400;
+      await tester.pump();
+      expect(find.text('在全屏预览'), findsOneWidget);
+
+      viewportHeight.value = 600;
+      await tester.pump();
+      expect(find.text('在全屏预览'), findsNothing);
+      viewportHeight.dispose();
+    });
+
+    testWidgets('closed preview reloads when its HTML changes in place', (
+      tester,
+    ) async {
+      final originalPlatform = InAppWebViewPlatform.instance;
+      final platform = _PreviewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(
+        () => InAppWebViewPlatform.instance =
+            originalPlatform ?? _PreviewPlatform(),
+      );
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -56,8 +134,10 @@ void main() {
           ),
         ),
       );
-      expect(platform.webViews.last.params.initialData?.data,
-          contains('first version'));
+      expect(
+        platform.webViews.last.params.initialData?.data,
+        contains('first version'),
+      );
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -73,44 +153,59 @@ void main() {
     });
 
     test(
-        'HTML fragments get a single document and keep inline scripts and URLs',
-        () {
-      const html = '<main><h1>Visual answer</h1></main>'
-          '<script>window.answerRendered = true;</script>'
-          '<script src="https://cdn.example.test/view.js"></script>'
-          '<img src="https://images.example.test/chart.png">';
+      'HTML fragments get a single document and keep inline scripts and URLs',
+      () {
+        const html = '<main><h1>Visual answer</h1></main>'
+            '<script>window.answerRendered = true;</script>'
+            '<script src="https://cdn.example.test/view.js"></script>'
+            '<img src="https://images.example.test/chart.png">';
 
-      final document = HtmlInlinePreviewWidget.buildPreviewDocument(
-        html,
-        token: 'test-token',
-      );
+        final document = HtmlInlinePreviewWidget.buildPreviewDocument(
+          html,
+          token: 'test-token',
+        );
 
-      final wrapper = html_parser.parse(document);
-      final frame = wrapper.querySelector('#stroom-html-preview')!;
-      final preview = html_parser.parse(frame.attributes['srcdoc']!);
+        final wrapper = html_parser.parse(document);
+        final frame = wrapper.querySelector('#stroom-html-preview')!;
+        final preview = html_parser.parse(frame.attributes['srcdoc']!);
 
-      expect(frame.attributes['sandbox'], 'allow-scripts');
-      expect(
-          frame.attributes['srcdoc'], contains('window.answerRendered = true'));
-      expect(frame.attributes['srcdoc'],
-          contains('https://cdn.example.test/view.js'));
-      expect(frame.attributes['srcdoc'],
-          contains('https://images.example.test/chart.png'));
-      expect(preview.querySelectorAll('body'), hasLength(1));
-      expect(preview.body?.text, contains('Visual answer'));
-      expect(preview.querySelector('[data-stroom-preview-monitor]')?.text,
-          contains('parent.postMessage'));
-      expect(
-        preview.querySelector('[data-stroom-preview-monitor]')?.text,
-        contains('event.target instanceof HTMLScriptElement'),
-      );
-      expect(preview.querySelector('[data-stroom-preview-monitor]')?.text,
-          contains('const token = "test-token";'));
-      expect(wrapper.querySelector('body script')?.text,
-          contains('event.source !== frame.contentWindow'));
-      expect(wrapper.querySelector('body script')?.text,
-          contains("'stroom-html-preview-height:' + token"));
-    });
+        expect(frame.attributes['sandbox'], 'allow-scripts');
+        expect(
+          frame.attributes['srcdoc'],
+          contains('window.answerRendered = true'),
+        );
+        expect(
+          frame.attributes['srcdoc'],
+          contains('https://cdn.example.test/view.js'),
+        );
+        expect(
+          frame.attributes['srcdoc'],
+          contains('https://images.example.test/chart.png'),
+        );
+        expect(preview.querySelectorAll('body'), hasLength(1));
+        expect(preview.body?.text, contains('Visual answer'));
+        expect(
+          preview.querySelector('[data-stroom-preview-monitor]')?.text,
+          contains('parent.postMessage'),
+        );
+        expect(
+          preview.querySelector('[data-stroom-preview-monitor]')?.text,
+          contains('event.target instanceof HTMLScriptElement'),
+        );
+        expect(
+          preview.querySelector('[data-stroom-preview-monitor]')?.text,
+          contains('const token = "test-token";'),
+        );
+        expect(
+          wrapper.querySelector('body script')?.text,
+          contains('event.source !== frame.contentWindow'),
+        );
+        expect(
+          wrapper.querySelector('body script')?.text,
+          contains("'stroom-html-preview-height:' + token"),
+        );
+      },
+    );
 
     test('complete documents keep their existing head and body', () {
       const html = '<!doctype html><html lang="en"><head><title>Example</title>'
@@ -129,10 +224,14 @@ void main() {
       expect(preview.querySelectorAll('head'), hasLength(1));
       expect(preview.querySelectorAll('body'), hasLength(1));
       expect(preview.querySelector('title')?.text, 'Example');
-      expect(preview.querySelector('[data-stroom-preview-monitor]')?.text,
-          contains("'stroom-html-preview-height'"));
-      expect(preview.querySelector('[data-stroom-preview-monitor]')?.text,
-          contains('const token = "full-document";'));
+      expect(
+        preview.querySelector('[data-stroom-preview-monitor]')?.text,
+        contains("'stroom-html-preview-height'"),
+      );
+      expect(
+        preview.querySelector('[data-stroom-preview-monitor]')?.text,
+        contains('const token = "full-document";'),
+      );
     });
 
     test('native wrapper validates child window and preview token', () {
@@ -145,8 +244,9 @@ void main() {
       final script = wrapper.querySelector('body script')!.text;
 
       expect(
-          wrapper.querySelector('#stroom-html-preview')?.attributes['sandbox'],
-          'allow-scripts');
+        wrapper.querySelector('#stroom-html-preview')?.attributes['sandbox'],
+        'allow-scripts',
+      );
       final bodyNodes = wrapper.querySelector('body')!.nodes;
       expect(
         bodyNodes.indexOf(wrapper.querySelector('#stroom-html-preview')!),
@@ -166,22 +266,59 @@ void main() {
       expect(settings.javaScriptEnabled, isTrue);
       expect(settings.javaScriptBridgeEnabled, isFalse);
       expect(settings.allowFileAccess, isFalse);
+      expect(settings.allowContentAccess, isFalse);
       expect(settings.allowFileAccessFromFileURLs, isFalse);
       expect(settings.allowUniversalAccessFromFileURLs, isFalse);
       expect(settings.iframeSandbox, contains(Sandbox.ALLOW_SCRIPTS));
       expect(
-          settings.iframeSandbox, isNot(contains(Sandbox.ALLOW_SAME_ORIGIN)));
+        settings.iframeSandbox,
+        isNot(contains(Sandbox.ALLOW_SAME_ORIGIN)),
+      );
     });
 
     test('fullscreen threshold is the conversation viewport height', () {
       expect(HtmlInlinePreviewWidget.exceedsViewport(400, 400), isFalse);
       expect(HtmlInlinePreviewWidget.exceedsViewport(401, 400), isTrue);
     });
+
+    test(
+      'full-screen AI preview keeps scripts/network but denies host access',
+      () {
+        final settings = htmlPreviewWebViewSettings(sandboxed: true);
+
+        expect(settings.javaScriptEnabled, isTrue);
+        expect(settings.javaScriptBridgeEnabled, isFalse);
+        expect(settings.allowContentAccess, isFalse);
+        expect(settings.allowFileAccess, isFalse);
+        expect(settings.allowFileAccessFromFileURLs, isFalse);
+        expect(settings.allowUniversalAccessFromFileURLs, isFalse);
+        expect(settings.javaScriptCanOpenWindowsAutomatically, isFalse);
+        expect(settings.supportMultipleWindows, isFalse);
+        expect(settings.useShouldOverrideUrlLoading, isTrue);
+      },
+    );
+
+    test(
+      'ordinary full-screen HTML preview keeps its existing permissions',
+      () {
+        final settings = htmlPreviewWebViewSettings(sandboxed: false);
+
+        expect(settings.allowContentAccess, isTrue);
+        expect(settings.allowFileAccessFromFileURLs, isTrue);
+        expect(settings.allowUniversalAccessFromFileURLs, isTrue);
+      },
+    );
   });
 }
 
 class _PreviewPlatform extends InAppWebViewPlatform {
   final List<_PreviewWebView> webViews = [];
+
+  @override
+  PlatformInAppWebViewController createPlatformInAppWebViewController(
+    PlatformInAppWebViewControllerCreationParams params,
+  ) =>
+      _PreviewController();
 
   @override
   PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
@@ -191,6 +328,16 @@ class _PreviewPlatform extends InAppWebViewPlatform {
     webViews.add(webView);
     return webView;
   }
+}
+
+class _PreviewController extends PlatformInAppWebViewController {
+  _PreviewController()
+      : super.implementation(
+          const PlatformInAppWebViewControllerCreationParams(id: 1),
+        );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _PreviewWebView extends PlatformInAppWebViewWidget {
