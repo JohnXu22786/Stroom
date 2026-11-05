@@ -854,6 +854,15 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     baseUrl: 'https://api.chatanywhere.org/v1/chat/completions',
     modelsUrl: 'https://api.chatanywhere.org/v1/models',
   ),
+  // Evidence: OmniRoute open-sse/config/providers/registry/chenzk/index.ts.
+  // Its runtime default context length is not representable for discovered
+  // models in this preset contract, so no per-model context is asserted here.
+  LlmProviderPreset(
+    id: 'chenzk',
+    displayName: 'Chenzk',
+    baseUrl: 'https://chenzk.top/v1/chat/completions',
+    modelsUrl: 'https://chenzk.top/v1/models',
+  ),
   LlmProviderPreset(
     id: 'cheaperinference',
     displayName: 'CheaperInference',
