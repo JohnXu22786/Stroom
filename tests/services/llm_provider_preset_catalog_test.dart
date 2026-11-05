@@ -4130,13 +4130,6 @@ void main() {
     expect(preset.authorizationHeader, 'Authorization');
     expect(preset.authorizationScheme, 'Bearer');
     expect(preset.defaultApiProtocol, 'openai.chat_completions');
-    expect(
-      preset.applyToEndpointConfig(const {
-        'providerPresetId': 'chenzk',
-        'modelsUrl': 'https://chenzk.top/v1/models',
-      }),
-      isNot(contains('modelsUrl')),
-    );
     expect(preset.fallbackModels, isEmpty);
   });
 
@@ -4244,6 +4237,13 @@ void main() {
     expect(preset.authorizationHeader, 'Authorization');
     expect(preset.authorizationScheme, 'Bearer');
     expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(
+      preset.applyToEndpointConfig(const {
+        'providerPresetId': 'chenzk',
+        'modelsUrl': 'https://chenzk.top/v1/models',
+      }),
+      isNot(contains('modelsUrl')),
+    );
     expect(
       preset.fallbackModels.map((model) => (model.id, model.displayName)),
       [
