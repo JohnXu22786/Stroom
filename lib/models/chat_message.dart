@@ -333,6 +333,7 @@ class ChatMessage {
     final errorBlocks = hasCanonicalSections
         ? blocks?.whereType<ErrorBlock>().toList()
         : blocks;
+    final savedReasoningContent = reasoningContent;
     return {
       'id': id,
       'role': role,
@@ -347,12 +348,12 @@ class ChatMessage {
       'attachments': attachments.map((a) => a.toMap()).toList(),
       if (isStreaming) 'isStreaming': true,
       if (isError) 'isError': true,
-      if (reasoningContent != null &&
-          !_matchesJoinedSections(reasoningSections, reasoningContent,
+      if (savedReasoningContent != null &&
+          !_matchesJoinedSections(reasoningSections, savedReasoningContent,
               separator: '\n',
-              skipEmptySections: toolCallRoundStarts == null ||
-                  toolCallRoundStarts!.isEmpty))
-        'reasoningContent': reasoningContent,
+              skipEmptySections:
+                  toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty))
+        'reasoningContent': savedReasoningContent,
       // Sanitize raw maps to ensure JSON-serializable output.
       // This prevents non-serializable types (Dio ResponseBody, DateTime,
       // custom objects, etc.) from silently breaking conversation persistence.

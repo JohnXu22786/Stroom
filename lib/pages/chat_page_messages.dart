@@ -380,11 +380,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
         rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
         final hasCanonicalFields = msg.toolCallRoundStarts != null ||
             ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
-                !(msg.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+                !(msg.blocks?.any((block) => block is ToolCallBlock) ??
+                    false) &&
                 (msg.reasoningSections != null || msg.textSections != null));
-        final blocks = hasCanonicalFields
-            ? rebuiltBlocks
-            : (msg.blocks ?? rebuiltBlocks);
+        final blocks =
+            hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {

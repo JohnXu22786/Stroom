@@ -120,9 +120,12 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         // 用显式错误标志而非文本前缀判断：模型正常回复以"错误:"开头
         // 时不应被误标为错误消息。
         final isError = hadStreamError || wasCancelled;
-        // Text, reasoning and tool blocks are derived from canonical fields
-        // when displayed. Keep only errors, which have no equivalent there.
-        final blocks = <MessageBlock>[];
+        final blocks = legacyToBlocks(
+          reasoningSections: state.reasoningSections,
+          textChunks: state.textChunks,
+          toolCalls: state.accumulatedToolCalls,
+          toolCallRoundStarts: state.toolCallRoundStarts,
+        );
         if (wasCancelled) {
           blocks.add(const ErrorBlock(message: '用户中断了输出'));
         } else if (hadStreamError &&
