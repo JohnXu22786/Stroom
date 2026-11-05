@@ -986,8 +986,7 @@ class StreamingFenceInfoCache {
     String text,
     String normalizedAppended,
     _MermaidFenceInfo cached,
-    _ClosingFencePrefix? pendingClosingPrefix,
-    {
+    _ClosingFencePrefix? pendingClosingPrefix, {
     int? tailSourceStart,
   }) {
     final updated = (
