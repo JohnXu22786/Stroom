@@ -58,6 +58,7 @@ import 'files_page_shared.dart' show filesRefreshSignalProvider;
 import 'chat/dialogs/message_save_destination_dialog.dart'
     show MessageSaveDestination, showMessageSaveDestinationDialog;
 import 'message_search_page.dart';
+import 'assistant_selection_page.dart' show ChatTabVisibility;
 import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
@@ -637,9 +638,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           ),
                           if (_isInitialChatLoadPending ||
                               _pendingInitialScrollAdjustment)
-                            const Positioned.fill(
-                              child: Center(
-                                child: CircularProgressIndicator(),
+                            Positioned.fill(
+                              child: TickerMode(
+                                enabled: ChatTabVisibility.of(context),
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               ),
                             ),
                         ],
