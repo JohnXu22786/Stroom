@@ -19,6 +19,7 @@ import 'chat_task_flow_tool_service.dart';
 import 'http_tool_service.dart';
 import 'mcp_client.dart';
 import 'todo_tool_service.dart';
+import 'text_storage_tool_service.dart';
 import 'web_search_service.dart';
 
 part 'chat_adapter_mcp.dart';
@@ -259,22 +260,25 @@ class ChatAdapter {
       if (selected == null) return null;
       final config = selected.config;
       final model = selected.model;
-      final endpointType =
-          effectiveEndpointType(model.endpointType, config.endpointType);
+      final endpointType = effectiveEndpointType(
+        model.endpointType,
+        config.endpointType,
+      );
       return _activeServices.putIfAbsent(
-          convId,
-          () => _buildService(
-                createChatProviderFromConfig(
-                  providerName: config.providerName,
-                  baseUrl: config.host,
-                  apiKey: config.key,
-                  endpointType: endpointType,
-                ),
-                model,
-                config,
-                endpointType,
-                assistant: assistant,
-              ));
+        convId,
+        () => _buildService(
+          createChatProviderFromConfig(
+            providerName: config.providerName,
+            baseUrl: config.host,
+            apiKey: config.key,
+            endpointType: endpointType,
+          ),
+          model,
+          config,
+          endpointType,
+          assistant: assistant,
+        ),
+      );
     }
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
@@ -477,20 +481,17 @@ class ChatAdapter {
     ChatService? svc;
     if (resolved != null) {
       final (config, modelConfig) = resolved;
-      final endpointType =
-          effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+      final endpointType = effectiveEndpointType(
+        modelConfig.endpointType,
+        config.endpointType,
+      );
       final provider = createChatProviderFromConfig(
         providerName: config.providerName,
         baseUrl: config.host,
         apiKey: config.key,
         endpointType: endpointType,
       );
-      svc = _buildTransientService(
-        provider,
-        modelConfig,
-        config,
-        endpointType,
-      );
+      svc = _buildTransientService(provider, modelConfig, config, endpointType);
     } else {
       svc = createTransientService();
     }
@@ -611,8 +612,10 @@ class ChatAdapter {
       currentModelIndex = -1;
       return;
     }
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
       'endpoint=$endpointType',
@@ -677,8 +680,10 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.selectModel: using config[$configIndex] '
       'host=${config.host} model=${modelConfig.modelId} endpoint=$endpointType',
@@ -740,9 +745,7 @@ class ChatAdapter {
     return [
       ...filterMcpSearchToolDefinitions(
         ChatService.getRegisteredToolDefinitions()
-            .where(
-              (tool) => !_disabledMcpToolNames.contains(tool.name),
-            )
+            .where((tool) => !_disabledMcpToolNames.contains(tool.name))
             .toList(),
         mcpEnabled: _mcpMasterSwitchEnabled,
       ),
@@ -815,8 +818,11 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
   }) {
     final svc = convId.isNotEmpty
-        ? getOrCreateService(convId,
-            assistant: assistant, entriesState: entriesState)
+        ? getOrCreateService(
+            convId,
+            assistant: assistant,
+            entriesState: entriesState,
+          )
         : currentChatService;
     if (svc == null) {
       return Stream.error('请先配置聊天供应商');

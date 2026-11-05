@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:crypto/crypto.dart' show md5;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../utils/file_record.dart';
@@ -34,6 +36,11 @@ class ManifestOperations<T extends FileRecord> {
   /// record → `Map<String, dynamic>` 转换函数
   final Map<String, dynamic> Function(T record) toMap;
 
+  static final RegExp _textContentHashPattern = RegExp(
+    r'^[0-9a-f]{32}$',
+    caseSensitive: false,
+  );
+
   /// 缩略图文件扩展名（含点号），如 '.png' 或 '.jpg'
   final String thumbnailExtension;
 
@@ -53,6 +60,30 @@ class ManifestOperations<T extends FileRecord> {
   List<T>? _cache;
   bool _dirty = false;
   Set<String> _folderCache = {};
+  Future<void> _textRecordMutationQueue = Future<void>.value();
+
+  Future<R> _serializeTextRecordMutation<R>(
+    Future<R> Function() operation,
+  ) async {
+    final previous = _textRecordMutationQueue;
+    final release = Completer<void>();
+    _textRecordMutationQueue = release.future;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release.complete();
+    }
+  }
+
+  /// Resets the queue after isolated tests that leave asynchronous work in a
+  /// completed Flutter fake-async zone. Production callers must not use this.
+  void resetTextMutationQueueForTesting() {
+    if (!_isTextTable) {
+      throw StateError('Only text manifests have a mutation queue.');
+    }
+    _textRecordMutationQueue = Future<void>.value();
+  }
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
@@ -83,17 +114,23 @@ class ManifestOperations<T extends FileRecord> {
         if (await legacy.exists()) await legacy.delete();
       }
     } catch (e) {
-      debugPrint('ManifestOperations($manifestKey) '
-          'delete legacy thumbnail failed: $e');
+      debugPrint(
+        'ManifestOperations($manifestKey) '
+        'delete legacy thumbnail failed: $e',
+      );
     }
   }
 
   // ---- 数据库代理方法（根据 tableName 路由到正确的表操作） ---------------
 
-  Future<List<Map<String, dynamic>>> _dbGetAllRecords() async {
+  Future<List<Map<String, dynamic>>> _dbGetAllRecords({
+    bool forceRefresh = false,
+  }) async {
     if (_isImageTable) return ManifestDatabase.getAllImageRecords();
     if (_isVideoTable) return ManifestDatabase.getAllVideoRecords();
-    if (_isTextTable) return ManifestDatabase.getAllTextRecords();
+    if (_isTextTable) {
+      return ManifestDatabase.getAllTextRecords(forceRefresh: forceRefresh);
+    }
     return ManifestDatabase.getAllAudioRecords();
   }
 
@@ -185,18 +222,23 @@ class ManifestOperations<T extends FileRecord> {
     if (_cache != null && !_dirty && !forceRefresh) return _cache!;
 
     try {
-      final rows = await _dbGetAllRecords();
+      final rows = await _dbGetAllRecords(forceRefresh: forceRefresh);
       final records = rows.map((m) => fromMap(m)).toList();
-      final folders =
-          (await ManifestDatabase.getAllFolders(recordTable: tableName))
-              .toSet();
+      final folders = (await ManifestDatabase.getAllFolders(
+        recordTable: tableName,
+        forceRefresh: forceRefresh && _isTextTable,
+      ))
+          .toSet();
       _cache = records;
       _folderCache = folders;
       _dirty = false;
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'loadRecords failed', e);
+        'ManifestOperations($manifestKey)',
+        'loadRecords failed',
+        e,
+      );
       if (throwOnError) {
         _dirty = true;
         rethrow;
@@ -210,15 +252,91 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- CRUD -------------------------------------------------------------
 
-  Future<void> addRecord(T record) async {
+  Future<void> addRecord(T record) => _isTextTable
+      ? _serializeTextRecordMutation(() => _addRecord(record))
+      : _addRecord(record);
+
+  Future<String> addTextRecordWithContent(
+    T record,
+    Uint8List contentBytes,
+  ) async {
+    if (!_isTextTable) {
+      throw StateError('Text content writes are only for text records.');
+    }
+    final hash = hashOf(record);
+    if (!_textContentHashPattern.hasMatch(hash)) {
+      throw ArgumentError.value(
+        hash,
+        'record.hash',
+        'Invalid text content hash.',
+      );
+    }
+    if (md5.convert(contentBytes).toString() != hash) {
+      throw ArgumentError('Text content bytes do not match record.hash.');
+    }
+    if (_useWebFileStore) {
+      await ManifestDatabase.insertTextRecordWithContent(
+        toMap(record),
+        _webKey(storageNameOf(record)),
+        contentBytes,
+      );
+      _cache = null;
+      _dirty = true;
+      _folderCache = {};
+      try {
+        await _ensureFolderPathTracked(folderOf(record));
+      } catch (error) {
+        await AppLogService.warning(
+          'ManifestOperations($manifestKey)',
+          'Record ${record.id} was added, but folder tracking failed: $error',
+        );
+      }
+      return storageNameOf(record);
+    }
+
+    return _serializeTextRecordMutation(() async {
+      final filePath = await writeFile(storageNameOf(record), contentBytes);
+      try {
+        await _addRecord(record);
+      } catch (_) {
+        await _deleteTextFileIfUnreferenced(hashOf(record));
+        rethrow;
+      }
+      return filePath;
+    });
+  }
+
+  Future<void> _addRecord(T record) async {
     try {
       await loadRecords();
+      if (_isTextTable) {
+        final hash = hashOf(record);
+        if (!_textContentHashPattern.hasMatch(hash)) {
+          throw StateError('Text content hash is invalid.');
+        }
+        if (await readFile(storageNameOf(record)) == null) {
+          throw StateError('Text content file is missing.');
+        }
+      }
       await _dbInsertRecord(toMap(record));
       _cache!.add(record);
-      await _ensureFolderPathTracked(folderOf(record));
+      try {
+        await _ensureFolderPathTracked(folderOf(record));
+      } catch (error) {
+        // The record itself carries its folder, so a failure to update the
+        // auxiliary folder index must not report this committed add as failed.
+        await AppLogService.warning(
+          'ManifestOperations($manifestKey)',
+          'Record ${record.id} was added, but folder tracking failed: $error',
+        );
+      }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'addRecord failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
@@ -227,7 +345,9 @@ class ManifestOperations<T extends FileRecord> {
     final storageName = storageNameOf(record);
     final refCount =
         _cache!.where((r) => storageNameOf(r) == storageName).length;
-    if (refCount <= 1) {
+    if (_isTextTable && _useWebFileStore) {
+      await ManifestDatabase.deleteUnreferencedTextContent(hashOf(record));
+    } else if (refCount <= 1) {
       final name = storageNameOf(record);
       // Guard against names without extension
       final dotIndex = name.lastIndexOf('.');
@@ -248,7 +368,8 @@ class ManifestOperations<T extends FileRecord> {
     if (hashRefCount <= 1) {
       final thumbName = _thumbFileNameOf(record);
       debugPrint(
-          'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
+        'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]',
+      );
       if (_useWebFileStore) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
@@ -260,32 +381,67 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> deleteRecord(String id, {bool preserveFiles = false}) async {
+  Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
+      _isTextTable
+          ? _serializeTextRecordMutation(
+              () => _deleteRecord(id, preserveFiles: preserveFiles),
+            )
+          : _deleteRecord(id, preserveFiles: preserveFiles);
+
+  Future<void> _deleteRecord(String id, {bool preserveFiles = false}) async {
     try {
-      await loadRecords();
+      await loadRecords(forceRefresh: _isTextTable);
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index == -1) return;
       final record = _cache![index];
       // A caller undoing a just-added record cannot know whether another
       // writer has begun using the same content-addressed file. In that
       // case, remove only its metadata and retain the shared bytes.
-      if (!preserveFiles) await _deleteEntityFiles(record);
-      _cache!.removeAt(index);
-      await _dbDeleteRecord(id);
+      if (_isTextTable) {
+        final deletedRow = await ManifestDatabase.deleteTextRecordAndGet(id);
+        if (deletedRow == null) {
+          await loadRecords(forceRefresh: true);
+          return;
+        }
+        final deletedRecord = fromMap(deletedRow);
+        if (!preserveFiles) {
+          try {
+            await _deleteEntityFiles(deletedRecord);
+          } catch (error) {
+            await AppLogService.warning(
+              'ManifestOperations($manifestKey)',
+              'Text record $id was deleted, but content cleanup failed: $error',
+            );
+          }
+        }
+        await loadRecords(forceRefresh: true);
+      } else {
+        if (!preserveFiles) await _deleteEntityFiles(record);
+        _cache!.removeAt(index);
+        await _dbDeleteRecord(id);
+      }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'deleteRecord failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'deleteRecord failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
   /// Batch delete: partition list, delete files, then replace cache.
-  Future<void> deleteRecords(List<String> ids) async {
+  Future<void> deleteRecords(List<String> ids) => _isTextTable
+      ? _serializeTextRecordMutation(() => _deleteRecords(ids))
+      : _deleteRecords(ids);
+
+  Future<void> _deleteRecords(List<String> ids) async {
     try {
-      await loadRecords();
+      await loadRecords(forceRefresh: _isTextTable);
       final idSet = ids.toSet();
-      final toDelete = <T>[];
-      final remaining = <T>[];
+      var toDelete = <T>[];
+      var remaining = <T>[];
       for (final r in _cache!) {
         if (idSet.contains(r.id)) {
           toDelete.add(r);
@@ -305,89 +461,414 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
 
-      for (final r in toDelete) {
-        final sn = storageNameOf(r);
-        storageCount[sn] = (storageCount[sn] ?? 1) - 1;
-        if (storageCount[sn]! <= 0) {
-          final name = storageNameOf(r);
-          // Guard against names without extension
-          final dotIndex = name.lastIndexOf('.');
-          if (dotIndex == -1) continue;
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(name));
-          } else {
-            final dir = await _storageDir;
-            final file = File(p.join(dir, name));
-            if (await file.exists()) await file.delete();
-          }
-          await onExtraDelete?.call(r);
-        }
-        // Thumbnail deletion: keyed by hash, not storageName
-        final h = hashOf(r);
-        hashCount[h] = (hashCount[h] ?? 1) - 1;
-        if (hashCount[h]! <= 0) {
-          final thumbName = _thumbFileNameOf(r);
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(thumbName));
-          } else {
-            final dir = await _storageDir;
-            final thumbFile = File(p.join(dir, thumbName));
-            if (await thumbFile.exists()) await thumbFile.delete();
-          }
-          await _deleteLegacyThumbIfImage(h);
-        }
+      if (_isTextTable) {
+        final deletedRows = await ManifestDatabase.deleteTextRecordsAndGet(ids);
+        toDelete = deletedRows.map(fromMap).toList();
+        await loadRecords(forceRefresh: true);
+        remaining = List<T>.from(_cache!);
+        if (toDelete.isEmpty) return;
       }
-      _cache = remaining;
-      await _dbDeleteRecords(ids);
+
+      try {
+        for (final r in toDelete) {
+          final sn = storageNameOf(r);
+          storageCount[sn] = (storageCount[sn] ?? 1) - 1;
+          if (_isTextTable && _useWebFileStore) {
+            await ManifestDatabase.deleteUnreferencedTextContent(hashOf(r));
+            await onExtraDelete?.call(r);
+          } else if (storageCount[sn]! <= 0) {
+            final name = storageNameOf(r);
+            // Guard against names without extension
+            final dotIndex = name.lastIndexOf('.');
+            if (dotIndex == -1) continue;
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(name));
+            } else {
+              final dir = await _storageDir;
+              final file = File(p.join(dir, name));
+              if (await file.exists()) await file.delete();
+            }
+            await onExtraDelete?.call(r);
+          }
+          // Thumbnail deletion: keyed by hash, not storageName
+          final h = hashOf(r);
+          hashCount[h] = (hashCount[h] ?? 1) - 1;
+          if (hashCount[h]! <= 0) {
+            final thumbName = _thumbFileNameOf(r);
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(thumbName));
+            } else {
+              final dir = await _storageDir;
+              final thumbFile = File(p.join(dir, thumbName));
+              if (await thumbFile.exists()) await thumbFile.delete();
+            }
+            await _deleteLegacyThumbIfImage(h);
+          }
+        }
+      } catch (error) {
+        if (!_isTextTable) rethrow;
+        await AppLogService.warning(
+          'ManifestOperations($manifestKey)',
+          'Text records were deleted, but content cleanup failed: $error',
+        );
+      }
+      if (!_isTextTable) {
+        _cache = remaining;
+        await _dbDeleteRecords(ids);
+      }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'deleteRecords failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
-  Future<void> updateRecord(T updated) async {
+  Future<void> updateRecord(T updated) => _isTextTable
+      ? _serializeTextRecordMutation(() => _updateRecord(updated))
+      : _updateRecord(updated);
+
+  Future<void> _updateRecord(T updated) async {
     try {
-      await loadRecords();
+      await loadRecords(forceRefresh: _isTextTable);
       final index = _cache!.indexWhere((r) => r.id == updated.id);
       if (index != -1) {
+        if (_isTextTable) {
+          final current = _cache![index];
+          final changed = await ManifestDatabase.updateTextRecordIfHash(
+            updated.id,
+            hashOf(current),
+            {
+              'name': current.name,
+              'format': current.format,
+              'folder': folderOf(current),
+            },
+            toMap(updated),
+          );
+          if (!changed) {
+            _dirty = true;
+            throw StateError('Text record changed before the update.');
+          }
+          _cache![index] = updated;
+          return;
+        }
         _cache![index] = updated;
         await _dbUpdateRecord(updated.id, toMap(updated));
       }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'updateRecord failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'updateRecord failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
-  Future<void> renameRecord(String id, String newName) async {
+  Future<bool> updateTextRecordMetadata(
+    String id,
+    T Function(T current) update,
+  ) {
+    if (!_isTextTable) {
+      throw StateError('Metadata updates are only for text records.');
+    }
+    return _serializeTextRecordMutation(() async {
+      try {
+        await loadRecords(forceRefresh: true);
+        final index = _cache!.indexWhere((record) => record.id == id);
+        if (index == -1) return false;
+        final updated = update(_cache![index]);
+        if (updated.id != id) {
+          throw StateError('Text metadata updates cannot change record IDs.');
+        }
+        final current = _cache![index];
+        final updates = <String, dynamic>{};
+        if (updated.name != current.name) updates['name'] = updated.name;
+        if (updated.format != current.format) {
+          updates['format'] = updated.format;
+        }
+        if (updated.folder != current.folder) {
+          updates['folder'] = updated.folder;
+        }
+        if (updated.modifiedAt != current.modifiedAt) {
+          updates['modifiedAt'] = updated.modifiedAt.toIso8601String();
+        }
+        if (updates.isNotEmpty) {
+          await ManifestDatabase.updateTextRecord(updated.id, updates);
+          await loadRecords(forceRefresh: true);
+        }
+        try {
+          await _ensureFolderPathTracked(folderOf(updated));
+        } catch (error) {
+          await AppLogService.warning(
+            'ManifestOperations($manifestKey)',
+            'Text record $id was updated, but folder tracking failed: $error',
+          );
+        }
+        return true;
+      } catch (e, st) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'update text metadata failed',
+          e,
+          st,
+        );
+        rethrow;
+      }
+    });
+  }
+
+  /// Holds the text-record mutation queue while a tool reads record metadata
+  /// and its referenced content as one consistent snapshot.
+  Future<R> withSerializedTextRead<R>(Future<R> Function() read) {
+    if (!_isTextTable) {
+      throw StateError('Serialized text reads are only for text records.');
+    }
+    return _serializeTextRecordMutation(read);
+  }
+
+  /// Update a text record only while its content hash matches the caller's
+  /// snapshot, so concurrent edits cannot silently overwrite one another.
+  Future<bool> updateTextRecordIfHash(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    T updated,
+  ) =>
+      _serializeTextRecordMutation(
+        () => _updateTextRecordIfHash(
+            id, expectedHash, expectedMetadata, updated),
+      );
+
+  Future<bool> updateTextRecordIfHashWithContent(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    T updated,
+    Uint8List contentBytes,
+  ) {
+    if (!_isTextTable) {
+      throw StateError('Conditional hash updates are only for text records.');
+    }
+    if (updated.id != id) {
+      throw ArgumentError('Conditional text updates cannot change record IDs.');
+    }
+    final updatedHash = hashOf(updated);
+    if (!_textContentHashPattern.hasMatch(updatedHash)) {
+      throw ArgumentError.value(
+        updatedHash,
+        'updated.hash',
+        'Invalid text content hash.',
+      );
+    }
+    if (md5.convert(contentBytes).toString() != updatedHash) {
+      throw ArgumentError('Text content bytes do not match updated.hash.');
+    }
+    return _serializeTextRecordMutation(() async {
+      if (_useWebFileStore) {
+        final oldContent = await readFile('$expectedHash.txt');
+        if (oldContent == null ||
+            md5.convert(oldContent).toString() != expectedHash) {
+          return false;
+        }
+        final changed =
+            await ManifestDatabase.updateTextRecordIfHashWithContent(
+          id,
+          expectedHash,
+          expectedMetadata,
+          toMap(updated),
+          _webKey(storageNameOf(updated)),
+          contentBytes,
+        );
+        if (!changed) {
+          invalidateCache();
+          return false;
+        }
+        invalidateCache();
+        _folderCache = {};
+        try {
+          await _ensureFolderPathTracked(folderOf(updated));
+        } catch (error) {
+          await AppLogService.warning(
+            'ManifestOperations($manifestKey)',
+            'Text record $id was updated, but folder tracking failed: $error',
+          );
+        }
+        if (expectedHash != updatedHash) {
+          await _deleteTextFileIfUnreferenced(expectedHash);
+        }
+        return true;
+      }
+      await loadRecords(forceRefresh: true);
+      final oldIndex = _cache!.indexWhere((record) => record.id == id);
+      final oldRecord = oldIndex == -1 ? null : _cache![oldIndex];
+      final oldHash = oldRecord == null ? null : hashOf(oldRecord);
+      if (oldRecord == null || oldHash != expectedHash) return false;
+      final oldContent = await readFile(storageNameOf(oldRecord));
+      if (oldContent == null || md5.convert(oldContent).toString() != oldHash) {
+        return false;
+      }
+      await writeFile(storageNameOf(updated), contentBytes);
+      late final bool replaced;
+      try {
+        replaced = await _updateTextRecordIfHash(
+          id,
+          expectedHash,
+          expectedMetadata,
+          updated,
+        );
+      } catch (_) {
+        await _deleteTextFileIfUnreferenced(hashOf(updated));
+        rethrow;
+      }
+      final cleanupHash = replaced ? oldHash : hashOf(updated);
+      if (cleanupHash != null && cleanupHash != hashOf(updated)) {
+        await _deleteTextFileIfUnreferenced(cleanupHash);
+      } else if (!replaced) {
+        await _deleteTextFileIfUnreferenced(hashOf(updated));
+      }
+      return replaced;
+    });
+  }
+
+  Future<void> _deleteTextFileIfUnreferenced(String hash) async {
+    if (!_textContentHashPattern.hasMatch(hash)) return;
+    if (_useWebFileStore) {
+      try {
+        await ManifestDatabase.deleteUnreferencedTextContent(hash);
+      } catch (error) {
+        debugPrint(
+          'ManifestOperations($manifestKey) cleanup of unreferenced text '
+          'content [$hash.txt] failed: $error',
+        );
+        await AppLogService.warning(
+          'ManifestOperations($manifestKey)',
+          'Failed to clean up unreferenced text content [$hash.txt].',
+        );
+      }
+      return;
+    }
+    if (_cache == null || _dirty) await loadRecords(forceRefresh: true);
+    final storageName = '$hash.txt';
+    if (_cache!.any((record) => storageNameOf(record) == storageName)) return;
+    try {
+      await deleteFile(storageName);
+    } catch (error) {
+      debugPrint(
+        'ManifestOperations($manifestKey) cleanup of unreferenced text '
+        'content [$storageName] failed: $error',
+      );
+      await AppLogService.warning(
+        'ManifestOperations($manifestKey)',
+        'Failed to clean up unreferenced text content [$storageName].',
+      );
+    }
+  }
+
+  Future<bool> _updateTextRecordIfHash(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    T updated,
+  ) async {
+    if (!_isTextTable) {
+      throw StateError('Conditional hash updates are only for text records.');
+    }
+    if (updated.id != id) {
+      throw ArgumentError('Conditional text updates cannot change record IDs.');
+    }
+    try {
+      await loadRecords(forceRefresh: true);
+      final index = _cache!.indexWhere((record) => record.id == id);
+      if (index == -1 || hashOf(_cache![index]) != expectedHash) return false;
+      final changed = await ManifestDatabase.updateTextRecordIfHash(
+        id,
+        expectedHash,
+        expectedMetadata,
+        toMap(updated),
+      );
+      if (!changed) {
+        _dirty = true;
+        return false;
+      }
+      _cache![index] = updated;
+      try {
+        await _ensureFolderPathTracked(folderOf(updated));
+      } catch (error) {
+        await AppLogService.warning(
+          'ManifestOperations($manifestKey)',
+          'Text record $id was updated, but folder tracking failed: $error',
+        );
+      }
+      return true;
+    } catch (e, st) {
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'conditional text update failed',
+        e,
+        st,
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> renameRecord(String id, String newName) => _isTextTable
+      ? _serializeTextRecordMutation(() => _renameRecord(id, newName))
+      : _renameRecord(id, newName);
+
+  Future<void> _renameRecord(String id, String newName) async {
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
         _cache![index] = copyName(_cache![index], newName);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        if (_isTextTable) {
+          await ManifestDatabase.updateTextRecord(id, {'name': newName});
+          await loadRecords(forceRefresh: true);
+        } else {
+          await _dbUpdateRecord(id, toMap(_cache![index]));
+        }
       }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'renameRecord failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'renameRecord failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
-  Future<void> moveRecord(String id, String targetFolder) async {
+  Future<void> moveRecord(String id, String targetFolder) => _isTextTable
+      ? _serializeTextRecordMutation(() => _moveRecord(id, targetFolder))
+      : _moveRecord(id, targetFolder);
+
+  Future<void> _moveRecord(String id, String targetFolder) async {
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
         _cache![index] = copyFolder(_cache![index], targetFolder);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        if (_isTextTable) {
+          await ManifestDatabase.updateTextRecord(id, {'folder': targetFolder});
+          await loadRecords(forceRefresh: true);
+        } else {
+          await _dbUpdateRecord(id, toMap(_cache![index]));
+        }
         await _ensureFolderPathTracked(targetFolder);
       }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'moveRecord failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'moveRecord failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
@@ -410,7 +891,11 @@ class ManifestOperations<T extends FileRecord> {
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).writeFile error: $e');
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'writeFile failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'writeFile failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
@@ -430,9 +915,30 @@ class ManifestOperations<T extends FileRecord> {
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).readFile error: $e');
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'readFile failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'readFile failed',
+        e,
+        st,
+      );
       return null;
     }
+  }
+
+  Future<Uint8List?> readFileLimited(String fileName, int maxBytes) async {
+    if (_useWebFileStore) {
+      return WebFileStore.readLimited(_webKey(fileName), maxBytes);
+    }
+    final dir = await _storageDir;
+    final file = File(p.join(dir, fileName));
+    if (!await file.exists()) return null;
+    if (await file.length() > maxBytes) {
+      throw StoredFileSizeLimitExceeded(maxBytes);
+    }
+    final data = await file.readAsBytes();
+    if (data.lengthInBytes > maxBytes) {
+      throw StoredFileSizeLimitExceeded(maxBytes);
+    }
+    return data;
   }
 
   Future<bool> deleteFile(String fileName) async {
@@ -451,7 +957,11 @@ class ManifestOperations<T extends FileRecord> {
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).deleteFile error: $e');
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'deleteFile failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'deleteFile failed',
+        e,
+        st,
+      );
       return false;
     }
   }
@@ -472,7 +982,11 @@ class ManifestOperations<T extends FileRecord> {
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).readFilePath error: $e');
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'readFilePath failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'readFilePath failed',
+        e,
+        st,
+      );
       return null;
     }
   }
@@ -493,7 +1007,11 @@ class ManifestOperations<T extends FileRecord> {
       }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'addFolder failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'addFolder failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
@@ -507,14 +1025,22 @@ class ManifestOperations<T extends FileRecord> {
       }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'addFolderPath failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'addFolderPath failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
-  Future<void> removeFolder(String folderName) async {
+  Future<void> removeFolder(String folderName) => _isTextTable
+      ? _serializeTextRecordMutation(() => _removeFolder(folderName))
+      : _removeFolder(folderName);
+
+  Future<void> _removeFolder(String folderName) async {
     try {
-      await loadRecords();
+      await loadRecords(forceRefresh: _isTextTable);
       // 空字符串表示根目录，绝不能把全部记录连带文件删除
       if (folderName.isEmpty) return;
 
@@ -523,25 +1049,23 @@ class ManifestOperations<T extends FileRecord> {
         final f = folderOf(r);
         if (f.isNotEmpty) allPaths.add(f);
       }
-      final descendants =
-          FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
+      final descendants = FolderPathUtils.getAllDescendantFolderPaths(
+        folderName,
+        allPaths,
+      );
 
       // Collect all records to delete
       final idsToDelete = <String>[];
       final toRemoveRecords = <T>[];
 
       for (final child in descendants) {
-        _folderCache.remove(child);
         final childRecords =
             _cache!.where((r) => folderOf(r) == child).toList();
         toRemoveRecords.addAll(childRecords);
         for (final record in childRecords) {
           idsToDelete.add(record.id);
         }
-        await ManifestDatabase.deleteFolder(child, recordTable: tableName);
       }
-
-      _folderCache.remove(folderName);
 
       final folderRecords =
           _cache!.where((r) => folderOf(r) == folderName).toList();
@@ -549,7 +1073,6 @@ class ManifestOperations<T extends FileRecord> {
       for (final record in folderRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
       // Pre-count storage names and hash counts across ALL records before deletion
       final storageNameCount = <String, int>{};
@@ -559,6 +1082,28 @@ class ManifestOperations<T extends FileRecord> {
         storageNameCount[sn] = (storageNameCount[sn] ?? 0) + 1;
         final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 0) + 1;
+      }
+
+      // Commit record deletion before removing its content. If manifest
+      // persistence fails, the existing records must still point to files.
+      if (_isTextTable) {
+        final deletedRows = await ManifestDatabase.deleteTextRecordsUnderFolder(
+          folderName,
+        );
+        toRemoveRecords
+          ..clear()
+          ..addAll(deletedRows.map(fromMap));
+        idsToDelete
+          ..clear()
+          ..addAll(deletedRows.map((row) => row['id'] as String));
+        await loadRecords(forceRefresh: true);
+      } else if (idsToDelete.isNotEmpty) {
+        await _dbDeleteRecords(idsToDelete);
+        _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+      }
+      for (final folder in [...descendants, folderName]) {
+        await ManifestDatabase.deleteFolder(folder, recordTable: tableName);
+        _folderCache.remove(folder);
       }
 
       // Decrement per record being deleted; only delete file when count reaches 0
@@ -571,13 +1116,19 @@ class ManifestOperations<T extends FileRecord> {
           final dotIndex = name.lastIndexOf('.');
           if (dotIndex == -1) continue;
           if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(name));
+            if (_isTextTable) {
+              await ManifestDatabase.deleteUnreferencedTextContent(hashOf(r));
+              await onExtraDelete?.call(r);
+            } else {
+              await WebFileStore.delete(_webKey(name));
+              await onExtraDelete?.call(r);
+            }
           } else {
             final dir = await _storageDir;
             final file = File(p.join(dir, name));
             if (await file.exists()) await file.delete();
+            await onExtraDelete?.call(r);
           }
-          await onExtraDelete?.call(r);
         }
         // Thumbnail deletion: keyed by hash, not storageName
         final h = hashOf(r);
@@ -594,16 +1145,13 @@ class ManifestOperations<T extends FileRecord> {
           await _deleteLegacyThumbIfImage(h);
         }
       }
-
-      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-
-      // Delete records from DB
-      if (idsToDelete.isNotEmpty) {
-        await _dbDeleteRecords(idsToDelete);
-      }
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'removeFolder failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'removeFolder failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
@@ -620,12 +1168,25 @@ class ManifestOperations<T extends FileRecord> {
       return folders;
     } catch (e, st) {
       await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'getAllFolders failed', e, st);
+        'ManifestOperations($manifestKey)',
+        'getAllFolders failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }
 
   Future<void> removeFolderFromCache(String folderPath) async {
+    if (_isTextTable) {
+      return _serializeTextRecordMutation(
+        () => _removeFolderFromCache(folderPath),
+      );
+    }
+    return _removeFolderFromCache(folderPath);
+  }
+
+  Future<void> _removeFolderFromCache(String folderPath) async {
     try {
       await loadRecords();
       final prefix = folderPath.isEmpty ? '' : '$folderPath/';
@@ -648,12 +1209,21 @@ class ManifestOperations<T extends FileRecord> {
         if (f == folderPath ||
             (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
           _cache![i] = copyFolder(r, '');
-          await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+          if (_isTextTable) {
+            await ManifestDatabase.updateTextRecord(r.id, {'folder': ''});
+          } else {
+            await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+          }
         }
       }
+      if (_isTextTable) await loadRecords(forceRefresh: true);
     } catch (e, st) {
-      await AppLogService.error('ManifestOperations($manifestKey)',
-          'removeFolderFromCache failed', e, st);
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'removeFolderFromCache failed',
+        e,
+        st,
+      );
       rethrow;
     }
   }

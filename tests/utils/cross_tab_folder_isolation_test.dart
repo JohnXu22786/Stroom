@@ -9,6 +9,15 @@ import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+void _testWithRealAsync(
+  String description,
+  Future<void> Function(WidgetTester tester) body,
+) {
+  testWidgets(description, (tester) async {
+    await tester.runAsync(() => body(tester));
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -51,7 +60,7 @@ void main() {
               'Folders must be isolated per tab type.');
     });
 
-    testWidgets(
+    _testWithRealAsync(
         'folder created in VideoManifest does NOT leak to ImageManifest',
         (WidgetTester t) async {
       await VideoManifest.addFolder('video_only_folder');
@@ -72,7 +81,7 @@ void main() {
           reason: 'BUG: ImageManifest should NOT contain video folder');
     });
 
-    testWidgets(
+    _testWithRealAsync(
         'folder created in VideoManifest does NOT leak to AudioManifest',
         (WidgetTester t) async {
       await VideoManifest.addFolder('video_only_folder');
@@ -94,7 +103,8 @@ void main() {
               'BUG: AudioManifest (FileManifest) should NOT contain video folder');
     });
 
-    testWidgets('folder created in TextManifest does NOT leak to other tabs',
+    _testWithRealAsync(
+        'folder created in TextManifest does NOT leak to other tabs',
         (WidgetTester t) async {
       await TextManifest.addFolder('text_folder');
 
@@ -124,7 +134,8 @@ void main() {
           reason: 'BUG: VideoManifest should NOT contain text_folder');
     });
 
-    testWidgets('folder created in ImageManifest does NOT leak to other tabs',
+    _testWithRealAsync(
+        'folder created in ImageManifest does NOT leak to other tabs',
         (WidgetTester t) async {
       await ImageManifest.addFolder('image_folder');
 
@@ -153,7 +164,8 @@ void main() {
           reason: 'BUG: VideoManifest should NOT contain image_folder');
     });
 
-    testWidgets('folder created in AudioManifest does NOT leak to other tabs',
+    _testWithRealAsync(
+        'folder created in AudioManifest does NOT leak to other tabs',
         (WidgetTester t) async {
       await FileManifest.addFolder('audio_folder');
 
@@ -182,7 +194,7 @@ void main() {
           reason: 'BUG: VideoManifest should NOT contain audio_folder');
     });
 
-    testWidgets(
+    _testWithRealAsync(
         'deleting folder from VideoManifest does NOT affect TextManifest',
         (WidgetTester t) async {
       // Create separate folders in different manifests
@@ -219,7 +231,7 @@ void main() {
               'VideoManifest folder was deleted');
     });
 
-    testWidgets(
+    _testWithRealAsync(
         'deleting folder from one tab does NOT delete same-name folder from other tabs',
         (WidgetTester t) async {
       // Create same-named folders in multiple manifests (they should be independent)
@@ -250,7 +262,8 @@ void main() {
               '"shared_name" folder');
     });
 
-    testWidgets('each tab can have independent folders with the same name',
+    _testWithRealAsync(
+        'each tab can have independent folders with the same name',
         (WidgetTester t) async {
       // Create same-named folders in all four manifests
       await TextManifest.addFolder('my_folder');
@@ -298,7 +311,8 @@ void main() {
           reason: 'BUG: VideoManifest folder should still exist');
     });
 
-    testWidgets('create-empty-folder across all 4 manifests - each independent',
+    _testWithRealAsync(
+        'create-empty-folder across all 4 manifests - each independent',
         (WidgetTester t) async {
       // Create one empty folder in each manifest
       await TextManifest.addFolder('text_empty');
@@ -356,7 +370,7 @@ void main() {
           reason: 'BUG: Video should not see image_empty');
     });
 
-    testWidgets(
+    _testWithRealAsync(
         'v1→v2 migration: legacy shared folders are migrated to '
         'all four per-type tables and legacy key is removed',
         (WidgetTester t) async {

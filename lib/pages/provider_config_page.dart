@@ -6,6 +6,7 @@ import '../providers/provider_config.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
 import '../services/todo_tool_service.dart';
+import '../services/text_storage_tool_service.dart';
 import '../services/web_search_service.dart';
 import 'connectivity_test_dialog.dart';
 import 'provider_config_detail_page.dart';
@@ -16,6 +17,7 @@ import 'provider_settings_panel.dart';
 final _builtinToolDefinitions = [
   ...TodoToolService.toolDefinitions,
   ...WebSearchService.toolDefinitions,
+  ...TextStorageToolService.toolDefinitions,
 ];
 
 ToolDefinition? _httpToolDefinition(String providerName) {
@@ -249,7 +251,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   static const _connectivityTestNote =
       '测试会向对应服务发出真实请求。MCP 仅调用只读 tools/list，HTTP/网页搜索会执行一次查询；'
-      'Todo 默认读取清单；为保护当前数据，todos 参数必须省略或设置为 null。';
+      'Todo 默认读取清单；Stroom 文本空间测试不会显示正文或修改文档。';
 
   Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
     final entry = _entry;
@@ -409,8 +411,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (name == null || name.isEmpty || !mounted) return;
     final groups = ref.read(providerEntriesProvider).mcpGroups;
     if (groups.any((group) => group.name.toLowerCase() == name.toLowerCase())) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
     await ref
@@ -428,8 +431,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       (item) =>
           item.id != group.id && item.name.toLowerCase() == name.toLowerCase(),
     )) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
     await ref
@@ -754,7 +758,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       settingsTooltip: '查看接口',
       onSettings: () => _showBuiltinToolDetails(definition),
       onDelete: null,
-      onTest: () => _testBuiltinTool(definition),
+      onTest: definition.name == 'stroom_space_write'
+          ? null
+          : () => _testBuiltinTool(definition),
       onTap: () => _showBuiltinToolDetails(definition),
     );
   }
@@ -905,10 +911,9 @@ class _McpPageIntro extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: colorScheme.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
@@ -975,10 +980,9 @@ class _McpSectionHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 description,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -1011,19 +1015,18 @@ class _McpEmptyState extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             '还没有服务配置',
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 4),
           Text(
             '添加一个 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。',
             textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
           FilledButton.tonalIcon(

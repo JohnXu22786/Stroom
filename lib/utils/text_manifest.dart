@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
@@ -162,15 +163,53 @@ class TextManifest {
     toMap: (r) => r.toMap(),
   );
 
-  static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
+  static Future<List<TextRecord>> loadRecords({bool forceRefresh = false}) =>
+      _ops.loadRecords(forceRefresh: forceRefresh);
   static Future<void> addRecord(TextRecord record) => _ops.addRecord(record);
+  static Future<String> addRecordWithContent(
+    TextRecord record,
+    Uint8List contentBytes,
+  ) =>
+      _ops.addTextRecordWithContent(record, contentBytes);
   static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
+  static Future<R> withSerializedTextRead<R>(Future<R> Function() read) =>
+      _ops.withSerializedTextRead(read);
   static Future<void> updateRecord(TextRecord updated) =>
       _ops.updateRecord(updated);
+  static Future<bool> updateRecordIfHash(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    TextRecord updated,
+  ) =>
+      _ops.updateTextRecordIfHash(id, expectedHash, expectedMetadata, updated);
+  static Future<bool> updateRecordIfHashWithContent(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    TextRecord updated,
+    Uint8List contentBytes,
+  ) =>
+      _ops.updateTextRecordIfHashWithContent(
+        id,
+        expectedHash,
+        expectedMetadata,
+        updated,
+        contentBytes,
+      );
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
+  static Future<bool> renameRecordWithFormat(
+    String id,
+    String newName,
+    String format,
+  ) =>
+      _ops.updateTextRecordMetadata(
+        id,
+        (record) => record.copyWithName(newName).copyWithFormat(format),
+      );
   static Future<void> moveRecord(String id, String targetFolder) =>
       _ops.moveRecord(id, targetFolder);
 
@@ -194,6 +233,14 @@ class TextManifest {
     return utf8.decode(bytes);
   }
 
+  /// Reads and decodes text only when the stored byte size is within the cap.
+  static Future<String?> readTextLimited(String fileName, int maxBytes) async {
+    final bytes = await _ops.readFileLimited(fileName, maxBytes);
+    if (bytes == null) return null;
+    if (bytes.isEmpty) return '';
+    return utf8.decode(bytes);
+  }
+
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
@@ -202,20 +249,28 @@ class TextManifest {
       _ops.removeFolderFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
 
+  /// Clears the mutation queue between isolated widget tests.
+  @visibleForTesting
+  static void resetMutationQueueForTesting() =>
+      _ops.resetTextMutationQueueForTesting();
+
   // Path utilities — forward to shared utilities
   static String getFolderBaseName(String folderPath) =>
       FolderPathUtils.getFolderBaseName(folderPath);
   static String getParentFolderPath(String folderPath) =>
       FolderPathUtils.getParentFolderPath(folderPath);
-  static List<String> getChildFolderPaths(String parentPath,
-          [List<String>? allPaths]) =>
+  static List<String> getChildFolderPaths(
+    String parentPath, [
+    List<String>? allPaths,
+  ]) =>
       FolderPathUtils.getChildFolderPaths(parentPath, allPaths?.toSet() ?? {});
   static String? validateFolderName(String name) =>
       FolderPathUtils.validateFolderName(name);
 
   /// Get descendant folder paths using the manifest's internal state.
   static Future<List<String>> getAllDescendantFolderPaths(
-      String parentPath) async {
+    String parentPath,
+  ) async {
     final allPaths = await _ops.getAllFolders();
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }

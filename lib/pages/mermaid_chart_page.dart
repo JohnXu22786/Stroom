@@ -260,9 +260,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   Future<void> _saveChart() async {
     final content = _codeController.text.trim();
     if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('图表内容为空，无法保存')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图表内容为空，无法保存')));
       return;
     }
 
@@ -294,9 +294,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     if (userFileName.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
       }
       return;
     }
@@ -310,7 +310,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
       final baseName = userFileName;
@@ -323,23 +322,26 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         counter++;
       }
 
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+      await TextManifest.addRecordWithContent(
+        TextRecord(
+          name: finalName,
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: content.length,
+        ),
+        bytes,
+      );
 
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd'),
+              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -349,10 +351,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -374,10 +373,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         actions: [
           // Three-state editor mode selector (popup menu)
           IconButton(
-            icon: Icon(
-              _editorMode.icon,
-              size: 20,
-            ),
+            icon: Icon(_editorMode.icon, size: 20),
             tooltip: '切换视图模式',
             onPressed: _showEditorModeMenu,
           ),
@@ -471,9 +467,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             ),
 
           // ----- Main content -----
-          Expanded(
-            child: _buildMainContent(cs),
-          ),
+          Expanded(child: _buildMainContent(cs)),
         ],
       ),
     );
@@ -509,12 +503,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Expanded(child: leftPanel),
               // Swap button in the middle — centered vertically
-              SizedBox(
-                width: 28,
-                child: Center(
-                  child: _buildSwapButton(cs),
-                ),
-              ),
+              SizedBox(width: 28, child: Center(child: _buildSwapButton(cs))),
               Expanded(child: rightPanel),
             ],
           );
@@ -537,9 +526,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               ),
             // Editor overlay for edit mode (full area)
             if (_editorMode == EditorMode.edit)
-              Positioned.fill(
-                child: _buildCodeEditor(cs),
-              ),
+              Positioned.fill(child: _buildCodeEditor(cs)),
             // Editor overlay for split mode (bottom portion, no overlap)
             if (isSplitMode)
               Positioned(
@@ -627,10 +614,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               const SizedBox(width: 4),
               Text(
                 '代码',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
               const Expanded(child: Divider(thickness: 0.5)),
             ],
@@ -675,9 +659,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       child: TextField(
         controller: _codeController,
         decoration: InputDecoration(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),
           hintText: '输入 Mermaid 代码...',
           labelText: 'Mermaid 代码',

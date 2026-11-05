@@ -76,6 +76,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+    TextManifest.resetMutationQueueForTesting();
+    ManifestDatabase.resetTextMutationQueueForTesting();
   });
 
   group('TextPreviewEditPage', () {
@@ -110,74 +112,99 @@ void main() {
     }
 
     /// 进入编辑模式（含初始化 widget）
-    Future<void> enterEditMode(WidgetTester tester,
-        {TextRecord? file, String? content}) async {
-      await tester
-          .pumpWidget(_buildTestApp(file ?? testFile, content ?? testContent));
+    Future<void> enterEditMode(
+      WidgetTester tester, {
+      TextRecord? file,
+      String? content,
+    }) async {
+      await tester.pumpWidget(
+        _buildTestApp(file ?? testFile, content ?? testContent),
+      );
       await navigateToEditor(tester);
       // Tap the edit icon button
       await tester.tap(find.byIcon(Icons.edit));
       await tester.pumpAndSettle();
     }
 
+    Future<void> saveAndWaitForStorage(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+      for (var attempt = 0; attempt < 10; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+      }
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason: 'Saving should finish before the editor settles.',
+      );
+      await tester.pumpAndSettle();
+    }
+
     // ==================== View Mode ====================
 
     testWidgets(
-        'renders in view mode with read-only text and icon-only edit button',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(testFile, testContent));
-      await navigateToEditor(tester);
+      'renders in view mode with read-only text and icon-only edit button',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp(testFile, testContent));
+        await navigateToEditor(tester);
 
-      // Title shows filename.format
-      expect(find.text('test_file.txt'), findsOneWidget);
+        // Title shows filename.format
+        expect(find.text('test_file.txt'), findsOneWidget);
 
-      // Content is shown as selectable read-only text
-      expect(find.text(testContent), findsOneWidget);
+        // Content is shown as selectable read-only text
+        expect(find.text(testContent), findsOneWidget);
 
-      // Edit button is icon-only (no text label), save/discard icons are not visible
-      expect(find.byIcon(Icons.edit), findsOneWidget);
-      expect(find.byIcon(Icons.save), findsNothing);
-      expect(find.byIcon(Icons.close), findsNothing);
+        // Edit button is icon-only (no text label), save/discard icons are not visible
+        expect(find.byIcon(Icons.edit), findsOneWidget);
+        expect(find.byIcon(Icons.save), findsNothing);
+        expect(find.byIcon(Icons.close), findsNothing);
 
-      // Content is wrapped in SelectionArea (read-only) not TextField
-      expect(find.byType(SelectionArea), findsOneWidget);
-      expect(find.byType(TextField), findsNothing);
-    });
+        // Content is wrapped in SelectionArea (read-only) not TextField
+        expect(find.byType(SelectionArea), findsOneWidget);
+        expect(find.byType(TextField), findsNothing);
+      },
+    );
 
     // ==================== Edit Mode: Icon-Only Buttons ====================
 
     testWidgets(
-        'edit mode shows icon-only save, discard, undo, redo, font size buttons',
-        (tester) async {
-      await enterEditMode(tester);
+      'edit mode shows icon-only save, discard, undo, redo, font size buttons',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // View-mode edit icon should be gone
-      expect(find.byIcon(Icons.edit), findsNothing);
+        // View-mode edit icon should be gone
+        expect(find.byIcon(Icons.edit), findsNothing);
 
-      // Edit mode should have icon-only buttons (no text labels)
-      expect(find.byIcon(Icons.format_size), findsOneWidget);
-      expect(find.byIcon(Icons.save), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
-      expect(find.byIcon(Icons.undo), findsOneWidget);
-      expect(find.byIcon(Icons.redo), findsOneWidget);
+        // Edit mode should have icon-only buttons (no text labels)
+        expect(find.byIcon(Icons.format_size), findsOneWidget);
+        expect(find.byIcon(Icons.save), findsOneWidget);
+        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(find.byIcon(Icons.undo), findsOneWidget);
+        expect(find.byIcon(Icons.redo), findsOneWidget);
 
-      // No text labels for any of these buttons
-      expect(find.text('编辑'), findsNothing);
-      expect(find.text('保存'), findsNothing);
-      expect(find.text('放弃'), findsNothing);
+        // No text labels for any of these buttons
+        expect(find.text('编辑'), findsNothing);
+        expect(find.text('保存'), findsNothing);
+        expect(find.text('放弃'), findsNothing);
 
-      // SelectionArea should be replaced by TextField
-      expect(find.byType(SelectionArea), findsNothing);
-      expect(find.byType(TextField), findsOneWidget);
+        // SelectionArea should be replaced by TextField
+        expect(find.byType(SelectionArea), findsNothing);
+        expect(find.byType(TextField), findsOneWidget);
 
-      // TextField should contain the original content
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      final controller = textField.controller;
-      expect(controller?.text, equals(testContent));
-    });
+        // TextField should contain the original content
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        final controller = textField.controller;
+        expect(controller?.text, equals(testContent));
+      },
+    );
 
-    testWidgets('font size button shows slider popup and changes text size',
-        (tester) async {
+    testWidgets('font size button shows slider popup and changes text size', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Font size button should be present
@@ -301,8 +328,9 @@ void main() {
 
     // ==================== Discard ====================
 
-    testWidgets('close button is enabled in edit mode when no changes',
-        (tester) async {
+    testWidgets('close button is enabled in edit mode when no changes', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Close button should be enabled even when no changes have been made
@@ -314,8 +342,9 @@ void main() {
       expect(closeButton.onPressed, isNotNull);
     });
 
-    testWidgets('close button discards directly when no changes made',
-        (tester) async {
+    testWidgets('close button discards directly when no changes made', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // No modifications made - tap close (Icons.close)
@@ -328,72 +357,75 @@ void main() {
     });
 
     testWidgets(
-        'close button shows confirmation dialog when changes have been made and "放弃" discards',
-        (tester) async {
-      await enterEditMode(tester);
+      'close button shows confirmation dialog when changes have been made and "放弃" discards',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // Modify the content
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      final controller = textField.controller;
-      controller?.text = 'Modified content';
-      await tester.pump();
+        // Modify the content
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        final controller = textField.controller;
+        controller?.text = 'Modified content';
+        await tester.pump();
 
-      // Tap discard (Icons.close)
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
+        // Tap discard (Icons.close)
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog should appear
-      expect(find.text('放弃编辑？'), findsOneWidget);
-      expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
-      expect(find.text('取消'), findsOneWidget);
-      expect(find.text('放弃'), findsOneWidget);
+        // Confirmation dialog should appear
+        expect(find.text('放弃编辑？'), findsOneWidget);
+        expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
+        expect(find.text('取消'), findsOneWidget);
+        expect(find.text('放弃'), findsOneWidget);
 
-      // Tap "放弃" to confirm discarding
-      await tester.tap(find.text('放弃'));
-      await tester.pumpAndSettle();
+        // Tap "放弃" to confirm discarding
+        await tester.tap(find.text('放弃'));
+        await tester.pumpAndSettle();
 
-      // Should be back in view mode with the edit icon
-      expect(find.byIcon(Icons.edit), findsOneWidget);
-      expect(find.byIcon(Icons.save), findsNothing);
-      expect(find.byIcon(Icons.close), findsNothing);
+        // Should be back in view mode with the edit icon
+        expect(find.byIcon(Icons.edit), findsOneWidget);
+        expect(find.byIcon(Icons.save), findsNothing);
+        expect(find.byIcon(Icons.close), findsNothing);
 
-      // Original content should be preserved (not the modified one)
-      expect(find.text(testContent), findsOneWidget);
-      expect(find.text('Modified content'), findsNothing);
-    });
+        // Original content should be preserved (not the modified one)
+        expect(find.text(testContent), findsOneWidget);
+        expect(find.text('Modified content'), findsNothing);
+      },
+    );
 
     testWidgets(
-        'close button dialog "取消" dismisses dialog and stays in edit mode',
-        (tester) async {
-      await enterEditMode(tester);
+      'close button dialog "取消" dismisses dialog and stays in edit mode',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // Modify the content
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      final controller = textField.controller;
-      controller?.text = 'Modified content';
-      await tester.pump();
+        // Modify the content
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        final controller = textField.controller;
+        controller?.text = 'Modified content';
+        await tester.pump();
 
-      // Tap close (Icons.close)
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
+        // Tap close (Icons.close)
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog should appear
-      expect(find.text('放弃编辑？'), findsOneWidget);
+        // Confirmation dialog should appear
+        expect(find.text('放弃编辑？'), findsOneWidget);
 
-      // Tap "取消" to dismiss dialog
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
+        // Tap "取消" to dismiss dialog
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
 
-      // Should still be in edit mode with modified content
-      expect(find.byIcon(Icons.save), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
-      expect(find.text('Modified content'), findsOneWidget);
-    });
+        // Should still be in edit mode with modified content
+        expect(find.byIcon(Icons.save), findsOneWidget);
+        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(find.text('Modified content'), findsOneWidget);
+      },
+    );
 
     // ==================== Save ====================
 
-    testWidgets('save writes new content under new hash filename',
-        (tester) async {
+    testWidgets('save writes new content under new hash filename', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Modify the content
@@ -404,11 +436,12 @@ void main() {
       await tester.pump();
 
       // Tap save (Icons.save)
-      await tester.tap(find.byIcon(Icons.save));
-      await tester.pumpAndSettle();
+      await saveAndWaitForStorage(tester);
 
       // The old file should be deleted (no longer exists)
-      final oldContent = await TextManifest.readText(testFile.storagePath);
+      final oldContent = await tester.runAsync(
+        () => TextManifest.readText(testFile.storagePath),
+      );
       expect(oldContent, isNull);
 
       // The new content should be saved under the new hash filename
@@ -416,12 +449,15 @@ void main() {
       final newBytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(newBytes);
       final newStorageFileName = '$newHash.txt';
-      final savedContent = await TextManifest.readText(newStorageFileName);
+      final savedContent = await tester.runAsync(
+        () => TextManifest.readText(newStorageFileName),
+      );
       expect(savedContent, equals(newContent));
     });
 
-    testWidgets('save with Chinese text preserves content correctly',
-        (tester) async {
+    testWidgets('save with Chinese text preserves content correctly', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Modify with Chinese content (non-ASCII)
@@ -432,8 +468,7 @@ void main() {
       await tester.pump();
 
       // Tap save
-      await tester.tap(find.byIcon(Icons.save));
-      await tester.pumpAndSettle();
+      await saveAndWaitForStorage(tester);
 
       // Compute expected hash using utf8.encode (same as fixed save logic)
       final expectedBytes = Uint8List.fromList(utf8.encode(chineseContent));
@@ -441,28 +476,41 @@ void main() {
       final newStorageFileName = '$expectedHash.txt';
 
       // Verify the saved content can be read back correctly
-      final savedContent = await TextManifest.readText(newStorageFileName);
-      expect(savedContent, equals(chineseContent),
-          reason:
-              'Chinese text saved via TextPreviewEditPage must roundtrip correctly. '
-              'If this fails, the save logic may still use codeUnits instead of utf8.encode.');
+      final savedContent = await tester.runAsync(
+        () => TextManifest.readText(newStorageFileName),
+      );
+      expect(
+        savedContent,
+        equals(chineseContent),
+        reason:
+            'Chinese text saved via TextPreviewEditPage must roundtrip correctly. '
+            'If this fails, the save logic may still use codeUnits instead of utf8.encode.',
+      );
 
       // Verify the old test file (ASCII only) was deleted
-      final oldContent = await TextManifest.readText(testFile.storagePath);
+      final oldContent = await tester.runAsync(
+        () => TextManifest.readText(testFile.storagePath),
+      );
       expect(oldContent, isNull);
 
       // Verify the hash computed by the page matches our expected hash
       // by comparing the stored file hash from the database
-      final records = await TextManifest.loadRecords();
-      final updatedRecord = records.first;
-      expect(updatedRecord.hash, equals(expectedHash),
-          reason:
-              'Database record hash must match utf8-based hash for Chinese text. '
-              'Bug: codeUnits truncation produces wrong hash for non-ASCII text.');
-      expect(updatedRecord.size, equals(expectedBytes.length),
-          reason:
-              'Database record size must match utf8 byte count for Chinese text. '
-              'Bug: codeUnits truncation produces wrong byte count.');
+      final records = await tester.runAsync(TextManifest.loadRecords);
+      final updatedRecord = records!.first;
+      expect(
+        updatedRecord.hash,
+        equals(expectedHash),
+        reason:
+            'Database record hash must match utf8-based hash for Chinese text. '
+            'Bug: codeUnits truncation produces wrong hash for non-ASCII text.',
+      );
+      expect(
+        updatedRecord.size,
+        equals(expectedBytes.length),
+        reason:
+            'Database record size must match utf8 byte count for Chinese text. '
+            'Bug: codeUnits truncation produces wrong byte count.',
+      );
     });
 
     // ==================== Title ====================
@@ -498,8 +546,9 @@ void main() {
       expect(find.text('Open Editor'), findsOneWidget);
     });
 
-    testWidgets('back button pops directly in edit mode with NO changes',
-        (tester) async {
+    testWidgets('back button pops directly in edit mode with NO changes', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // No changes made to the content
@@ -515,37 +564,39 @@ void main() {
     // ==================== Back Navigation: With Changes ====================
 
     testWidgets(
-        'back button shows confirmation dialog in edit mode WITH changes',
-        (tester) async {
-      await enterEditMode(tester);
+      'back button shows confirmation dialog in edit mode WITH changes',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // Make a change
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      final controller = textField.controller;
-      controller?.text = 'Changed content';
-      await tester.pump();
+        // Make a change
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        final controller = textField.controller;
+        controller?.text = 'Changed content';
+        await tester.pump();
 
-      // Tap back button
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
+        // Tap back button
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog should appear
-      expect(find.text('放弃编辑？'), findsOneWidget);
-      expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
+        // Confirmation dialog should appear
+        expect(find.text('放弃编辑？'), findsOneWidget);
+        expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
 
-      // '取消' button should exist
-      expect(find.text('取消'), findsOneWidget);
+        // '取消' button should exist
+        expect(find.text('取消'), findsOneWidget);
 
-      // Tap '取消' to dismiss the dialog
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
+        // Tap '取消' to dismiss the dialog
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
 
-      // Should still be in edit mode
-      expect(find.byIcon(Icons.save), findsOneWidget);
-    });
+        // Should still be in edit mode
+        expect(find.byIcon(Icons.save), findsOneWidget);
+      },
+    );
 
-    testWidgets('back button confirmation "放弃" discards changes and pops',
-        (tester) async {
+    testWidgets('back button confirmation "放弃" discards changes and pops', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Make a change
@@ -641,31 +692,33 @@ void main() {
       expect(find.text('14'), findsOneWidget);
     });
 
-    testWidgets('font size reset button restores font size to 14 after change',
-        (tester) async {
-      await enterEditMode(tester);
+    testWidgets(
+      'font size reset button restores font size to 14 after change',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // Tap font size button
-      await tester.tap(find.byIcon(Icons.format_size));
-      await tester.pumpAndSettle();
+        // Tap font size button
+        await tester.tap(find.byIcon(Icons.format_size));
+        await tester.pumpAndSettle();
 
-      // Drag slider to change font size
-      final slider = find.byType(Slider);
-      await tester.drag(slider, const Offset(100, 0));
-      await tester.pumpAndSettle();
+        // Drag slider to change font size
+        final slider = find.byType(Slider);
+        await tester.drag(slider, const Offset(100, 0));
+        await tester.pumpAndSettle();
 
-      // The displayed value should have changed
-      final fontSizeText = find.textContaining(RegExp(r'[0-9]+'));
-      expect(fontSizeText, findsWidgets);
+        // The displayed value should have changed
+        final fontSizeText = find.textContaining(RegExp(r'[0-9]+'));
+        expect(fontSizeText, findsWidgets);
 
-      // Tap reset button
-      await tester.tap(find.text('恢复默认'));
-      await tester.pumpAndSettle();
+        // Tap reset button
+        await tester.tap(find.text('恢复默认'));
+        await tester.pumpAndSettle();
 
-      // After reset, should show '14' again
-      // (the popup re-renders with fontSize back to 14)
-      expect(find.text('14'), findsWidgets);
-    });
+        // After reset, should show '14' again
+        // (the popup re-renders with fontSize back to 14)
+        expect(find.text('14'), findsWidgets);
+      },
+    );
 
     // ==================== Font Size Persistence ====================
 
@@ -697,8 +750,9 @@ void main() {
       expect(_viewModeContentStyle(tester)?.fontSize, adjustedSize);
     });
 
-    testWidgets('font size reset persists default across page reopen',
-        (tester) async {
+    testWidgets('font size reset persists default across page reopen', (
+      tester,
+    ) async {
       await enterEditMode(tester);
 
       // Increase font size first
@@ -724,8 +778,9 @@ void main() {
       expect(_viewModeContentStyle(tester)?.fontSize, 14);
     });
 
-    testWidgets('out-of-range persisted font size is clamped on load',
-        (tester) async {
+    testWidgets('out-of-range persisted font size is clamped on load', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({'text_preview_font_size': 999.0});
 
       await tester.pumpWidget(_buildTestApp(testFile, testContent));
@@ -736,10 +791,12 @@ void main() {
       expect(selectable?.fontSize, 28);
     });
 
-    testWidgets('non-finite persisted font size falls back to default',
-        (tester) async {
-      SharedPreferences.setMockInitialValues(
-          {'text_preview_font_size': double.nan});
+    testWidgets('non-finite persisted font size falls back to default', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'text_preview_font_size': double.nan,
+      });
 
       await tester.pumpWidget(_buildTestApp(testFile, testContent));
       await navigateToEditor(tester);
@@ -750,31 +807,33 @@ void main() {
     });
 
     testWidgets(
-        'font size adjusted mid-drag is persisted when dialog dismissed',
-        (tester) async {
-      await enterEditMode(tester);
+      'font size adjusted mid-drag is persisted when dialog dismissed',
+      (tester) async {
+        await enterEditMode(tester);
 
-      // Open the popup and start a slider drag without releasing the pointer
-      await tester.tap(find.byIcon(Icons.format_size));
-      await tester.pumpAndSettle();
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.byType(Slider)));
-      await gesture.moveBy(const Offset(100, 0));
-      await tester.pump();
+        // Open the popup and start a slider drag without releasing the pointer
+        await tester.tap(find.byIcon(Icons.format_size));
+        await tester.pumpAndSettle();
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(Slider)),
+        );
+        await gesture.moveBy(const Offset(100, 0));
+        await tester.pump();
 
-      // Dismiss the dialog mid-drag by tapping the barrier with a second
-      // pointer, so Slider's onChangeEnd never fires
-      await tester.tapAt(const Offset(5, 5));
-      await tester.pumpAndSettle();
-      await gesture.cancel();
-      await tester.pumpAndSettle();
+        // Dismiss the dialog mid-drag by tapping the barrier with a second
+        // pointer, so Slider's onChangeEnd never fires
+        await tester.tapAt(const Offset(5, 5));
+        await tester.pumpAndSettle();
+        await gesture.cancel();
+        await tester.pumpAndSettle();
 
-      // The adjusted size must still have been persisted
-      final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getDouble('text_preview_font_size');
-      expect(saved, isNotNull);
-      expect(saved, greaterThan(14));
-    });
+        // The adjusted size must still have been persisted
+        final prefs = await SharedPreferences.getInstance();
+        final saved = prefs.getDouble('text_preview_font_size');
+        expect(saved, isNotNull);
+        expect(saved, greaterThan(14));
+      },
+    );
 
     // ==================== MMD Format Support ====================
 
@@ -800,8 +859,9 @@ void main() {
         await TextManifest.addRecord(mmdFile);
       });
 
-      testWidgets('renders mmd file content as selectable text in view mode',
-          (tester) async {
+      testWidgets('renders mmd file content as selectable text in view mode', (
+        tester,
+      ) async {
         await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
         await navigateToEditor(tester);
 
@@ -814,14 +874,15 @@ void main() {
       });
 
       testWidgets(
-          'mmd view mode shows chart editor button to open MermaidChartPage',
-          (tester) async {
-        await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
-        await navigateToEditor(tester);
+        'mmd view mode shows chart editor button to open MermaidChartPage',
+        (tester) async {
+          await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
+          await navigateToEditor(tester);
 
-        // Should show the chart editor button in view mode
-        expect(find.byIcon(Icons.account_tree), findsOneWidget);
-      });
+          // Should show the chart editor button in view mode
+          expect(find.byIcon(Icons.account_tree), findsOneWidget);
+        },
+      );
     });
 
     // ==================== Scroll on Drag (desktop) ====================
@@ -900,42 +961,45 @@ void main() {
     });
 
     testWidgets(
-        'desktop touch drag on the trailing blank area scrolls the page',
-        (tester) async {
-      await _withPlatform(tester, TargetPlatform.windows, () async {
-        // 文本末尾带大量空行：末尾空行（空白区域）位于文本小部件的
-        // 命中范围内，同样不应拦截滚动
-        final content = '${longContent(40)}\n${'\n' * 80}';
-        await tester.pumpWidget(_buildTestApp(testFile, content));
-        await navigateToEditor(tester);
+      'desktop touch drag on the trailing blank area scrolls the page',
+      (tester) async {
+        await _withPlatform(tester, TargetPlatform.windows, () async {
+          // 文本末尾带大量空行：末尾空行（空白区域）位于文本小部件的
+          // 命中范围内，同样不应拦截滚动
+          final content = '${longContent(40)}\n${'\n' * 80}';
+          await tester.pumpWidget(_buildTestApp(testFile, content));
+          await navigateToEditor(tester);
 
-        final scrollable = pageScrollable();
-        final position = tester.state<ScrollableState>(scrollable).position;
+          final scrollable = pageScrollable();
+          final position = tester.state<ScrollableState>(scrollable).position;
 
-        // 先滚到底部附近，让末尾空行区域进入视口
-        position.jumpTo(position.maxScrollExtent);
-        await tester.pumpAndSettle();
-        expect(position.pixels, greaterThan(0));
-        final pixelsBefore = position.pixels;
+          // 先滚到底部附近，让末尾空行区域进入视口
+          position.jumpTo(position.maxScrollExtent);
+          await tester.pumpAndSettle();
+          expect(position.pixels, greaterThan(0));
+          final pixelsBefore = position.pixels;
 
-        // 在视口下部（末尾空行所在的空白区域）快速向下拖动（位于文档
-        // 底部时向下拖动是向文档开头滚动）：页面必须滚动。
-        // 注意拖动点必须落在滚动视图内（测试环境中 Scaffold 给 body 的
-        // 是松散约束，滚动视图会收缩到文本宽度，而不是铺满屏幕）
-        final viewportRect = tester.getRect(find.byType(SingleChildScrollView));
-        await fastDrag(
-          tester,
-          Offset(viewportRect.center.dx, viewportRect.bottom - 30),
-          bigJump: const Offset(0, 60),
-        );
+          // 在视口下部（末尾空行所在的空白区域）快速向下拖动（位于文档
+          // 底部时向下拖动是向文档开头滚动）：页面必须滚动。
+          // 注意拖动点必须落在滚动视图内（测试环境中 Scaffold 给 body 的
+          // 是松散约束，滚动视图会收缩到文本宽度，而不是铺满屏幕）
+          final viewportRect = tester.getRect(
+            find.byType(SingleChildScrollView),
+          );
+          await fastDrag(
+            tester,
+            Offset(viewportRect.center.dx, viewportRect.bottom - 30),
+            bigJump: const Offset(0, 60),
+          );
 
-        expect(
-          position.pixels,
-          lessThan(pixelsBefore),
-          reason: '在末尾空白区域拖动应滚动页面而不是被文本选择手势拦截',
-        );
-      });
-    });
+          expect(
+            position.pixels,
+            lessThan(pixelsBefore),
+            reason: '在末尾空白区域拖动应滚动页面而不是被文本选择手势拦截',
+          );
+        });
+      },
+    );
 
     // ==================== Markdown Format ====================
 
@@ -960,8 +1024,9 @@ void main() {
         await TextManifest.addRecord(mdFile);
       });
 
-      testWidgets('markdown hides font size button in view and edit mode',
-          (tester) async {
+      testWidgets('markdown hides font size button in view and edit mode', (
+        tester,
+      ) async {
         await tester.pumpWidget(_buildTestApp(mdFile, mdContent));
         await navigateToEditor(tester);
 
