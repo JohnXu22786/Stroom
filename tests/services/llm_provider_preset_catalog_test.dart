@@ -1005,6 +1005,10 @@ void main() {
 
   test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
+      'api-airforce',
+      'navy',
+      'pioneer',
+      'uc-direct',
       'agnes-cn',
       'ai21',
       'aimlapi',
@@ -1015,7 +1019,6 @@ void main() {
       'alibaba-cn',
       'ant-ling',
       'anyapi',
-      'api-airforce',
       'apmix',
       'arcee-ai',
       'auriko',
@@ -1097,7 +1100,6 @@ void main() {
       'nan',
       'nanogpt',
       'nara',
-      'navy',
       'nebius',
       'nous-research',
       'nscale',
@@ -1112,7 +1114,6 @@ void main() {
       'plamo',
       'poe',
       'poixe-ai',
-      'pioneer',
       'poolside',
       'publicai',
       'regolo',
@@ -1130,7 +1131,6 @@ void main() {
       'tokenmarket',
       'tokenreply',
       'typhoon',
-      'uc-direct',
       'unifically',
       'unorouter',
       'upstage',
