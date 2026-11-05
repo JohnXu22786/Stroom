@@ -106,6 +106,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 中断工具标记失败: $e');
     }
 
+    final fullReply = state.fullReply;
     final textChunks =
         state.hasSyntheticErrorReply ? <String>[] : state.textChunks;
     try {
@@ -115,7 +116,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
       final hasContent = wasCancelled ||
-          state.fullReply.isNotEmpty ||
+          fullReply.isNotEmpty ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
       if (hasContent) {
@@ -139,7 +140,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         }
         final msg = ChatMessage(
           role: 'assistant',
-          content: state.fullReply,
+          content: fullReply,
           id: state.streamingMsgId ?? '',
           isError: isError,
           rawRequest: rawRequestCapture,
@@ -205,7 +206,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       result = StreamResult(
         history: List.from(state.history),
         assistantMessage: assistantMessage,
-        fullReply: state.fullReply,
+        fullReply: fullReply,
         reasoningBuffer: state.reasoningBuffer,
         reasoningSections: List.from(state.reasoningSections),
         textSections: List.from(textChunks),
@@ -223,7 +224,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
       result = StreamResult(
         history: List.from(state.history),
-        fullReply: state.fullReply,
+        fullReply: fullReply,
         cancelled: wasCancelled,
       );
     }
