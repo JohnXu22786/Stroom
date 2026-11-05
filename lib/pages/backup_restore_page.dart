@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/backup_service.dart';
 import '../startup/app_restart.dart';
 import '../anki/apkg/apkg_exporter.dart';
@@ -22,6 +23,7 @@ class BackupRestorePage extends ConsumerStatefulWidget {
 }
 
 class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
+  AppLocalizations get _strings => AppLocalizations.of(context)!;
   bool _isExporting = false;
   bool _isImporting = false;
   bool _isClearing = false;
@@ -69,8 +71,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (!_hasSelection) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('请至少选择一项要备份的数据类别'),
+          SnackBar(
+            content: Text(_strings.backupRestoreSelectBackupCategory),
             backgroundColor: Colors.orange,
           ),
         );
@@ -82,7 +84,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     setState(() => _isExporting = true);
     try {
       // 显示不可关闭的进度弹窗
-      final progressNotifier = ValueNotifier<String>('正在准备数据...');
       final progressValue = ValueNotifier<double?>(null);
 
       showDialog<void>(
@@ -91,7 +92,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: const Text('正在导出备份'),
+            title: Text(
+              AppLocalizations.of(ctx)!.backupRestoreExportingBackup,
+            ),
             content: Row(
               children: [
                 ValueListenableBuilder<double?>(
@@ -116,9 +119,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: progressNotifier,
-                    builder: (_, msg, __) => Text(msg),
+                  child: ValueListenableBuilder<double?>(
+                    valueListenable: progressValue,
+                    builder: (progressContext, progress, __) => Text(
+                      _exportProgressLabel(
+                        AppLocalizations.of(progressContext)!,
+                        progress,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -134,27 +142,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         context,
         onProgress: (progress) {
           progressValue.value = progress;
-          if (progress < 0.05) {
-            progressNotifier.value = '正在收集数据库记录...';
-          } else if (progress < 0.15) {
-            progressNotifier.value = '正在处理配置数据...';
-          } else if (progress < 0.35) {
-            progressNotifier.value = '正在添加任务文件...';
-          } else if (progress < 0.5) {
-            progressNotifier.value = '正在添加图片文件...';
-          } else if (progress < 0.65) {
-            progressNotifier.value = '正在添加音频文件...';
-          } else if (progress < 0.75) {
-            progressNotifier.value = '正在添加视频文件...';
-          } else if (progress < 0.8) {
-            progressNotifier.value = '正在添加文本文件...';
-          } else if (progress < 0.85) {
-            progressNotifier.value = '正在添加聊天记录和附件...';
-          } else if (progress < 1.0) {
-            progressNotifier.value = '正在压缩打包...';
-          } else {
-            progressNotifier.value = '已完成';
-          }
         },
         selection: selection,
       );
@@ -166,12 +153,26 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     }
   }
 
+  String _exportProgressLabel(AppLocalizations strings, double? progress) {
+    if (progress == null) return strings.backupRestorePreparingData;
+    if (progress < 0.05) return strings.backupRestoreCollectingDatabase;
+    if (progress < 0.15) return strings.backupRestoreProcessingSettings;
+    if (progress < 0.35) return strings.backupRestoreAddingTasks;
+    if (progress < 0.5) return strings.backupRestoreAddingPictures;
+    if (progress < 0.65) return strings.backupRestoreAddingAudio;
+    if (progress < 0.75) return strings.backupRestoreAddingVideo;
+    if (progress < 0.8) return strings.backupRestoreAddingText;
+    if (progress < 0.85) return strings.backupRestoreAddingChat;
+    if (progress < 1.0) return strings.backupRestoreCompressing;
+    return strings.backupRestoreCompleted;
+  }
+
   Future<void> _onImport() async {
     if (!_hasSelection) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('请至少选择一项要恢复的数据类别'),
+          SnackBar(
+            content: Text(_strings.backupRestoreSelectRestoreCategory),
             backgroundColor: Colors.orange,
           ),
         );
@@ -181,25 +182,43 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final selection = _selection;
     final restoreWarnings = <String>[];
-    if (selection.chatRecordsAndAttachments) restoreWarnings.add('聊天记录和附件');
-    if (selection.settings) restoreWarnings.add('设置');
-    if (selection.pictures) restoreWarnings.add('图片');
-    if (selection.audio) restoreWarnings.add('音频');
-    if (selection.videos) restoreWarnings.add('视频');
-    if (selection.texts) restoreWarnings.add('文本');
-    if (selection.tasks) restoreWarnings.add('任务');
-    if (selection.ankiData) restoreWarnings.add('Anki闪卡数据库');
-    if (selection.browserCookies) restoreWarnings.add('内置浏览器数据');
+    if (selection.chatRecordsAndAttachments) {
+      restoreWarnings.add(_strings.backupRestoreCategoryChat);
+    }
+    if (selection.settings) {
+      restoreWarnings.add(_strings.backupRestoreCategorySettings);
+    }
+    if (selection.pictures) {
+      restoreWarnings.add(_strings.backupRestoreCategoryPictures);
+    }
+    if (selection.audio) {
+      restoreWarnings.add(_strings.backupRestoreCategoryAudio);
+    }
+    if (selection.videos) {
+      restoreWarnings.add(_strings.backupRestoreCategoryVideos);
+    }
+    if (selection.texts) {
+      restoreWarnings.add(_strings.backupRestoreCategoryTexts);
+    }
+    if (selection.tasks) {
+      restoreWarnings.add(_strings.backupRestoreCategoryTasks);
+    }
+    if (selection.ankiData) {
+      restoreWarnings.add(_strings.backupRestoreCategoryAnki);
+    }
+    if (selection.browserCookies) {
+      restoreWarnings.add(_strings.backupRestoreCategoryBrowser);
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认恢复'),
+        title: Text(_strings.backupRestoreConfirmRestore),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('已勾选的数据类别：'),
+            Text(_strings.backupRestoreSelectedCategories),
             const SizedBox(height: 12),
             ...restoreWarnings.map(
               (w) => Padding(
@@ -220,13 +239,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               ),
             ),
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
                 Icon(Icons.info_outline, color: Colors.blue, size: 18),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '备份中实际包含的已勾选类别会恢复到本机。除内置浏览器 Cookies 外，其余类别会替换本机对应数据；Cookies 按域名、名称和路径写入，备份中没有的本机 Cookies 保持原样。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。',
+                    _strings.backupRestoreRestoreInfo,
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ),
@@ -240,7 +259,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.orange.shade200),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(
                     Icons.warning_amber_rounded,
@@ -250,7 +269,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '恢复完成后需重启应用才能生效，请确保已保存当前工作。',
+                      _strings.backupRestoreRestartNotice,
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -262,11 +281,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确定恢复'),
+            child: Text(_strings.backupRestoreConfirmRestoreButton),
           ),
         ],
       ),
@@ -290,9 +309,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           await _showSkippedCategoriesPrompt(skippedCategories);
         } else {
           final message = skippedCategories.isEmpty
-              ? '数据已从备份中恢复。请重启应用以使用恢复的数据。'
-              : '${_skippedCategoriesMessage(skippedCategories)}'
-                  '其余所选数据已恢复，请重启应用以生效。';
+              ? _strings.backupRestoreRestoredMessage
+              : '${_skippedCategoriesMessage(skippedCategories)}\n\n'
+                  '${_strings.backupRestoreOtherSelectedRestored}';
           await _showRestartPrompt(message: message);
         }
       }
@@ -308,8 +327,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       // 恢复失败时恢复可能已部分完成（选中类别的文件已被清除但恢复中断），
       // 提示重启以恢复干净状态（失败详情已由 importBackup 弹出）。
       await _showRestartPrompt(
-        title: '恢复未完成',
-        message: '数据未能完整恢复，部分数据可能已被清除。请重启应用后重试。',
+        title: _strings.backupRestoreIncompleteTitle,
+        message: _strings.backupRestoreIncompleteMessage,
         icon: Icons.warning_amber_rounded,
         iconColor: Colors.orange,
       );
@@ -325,8 +344,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (!_hasSelection) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('请至少选择一项要清除的数据类别'),
+          SnackBar(
+            content: Text(_strings.backupRestoreSelectClearCategory),
             backgroundColor: Colors.orange,
           ),
         );
@@ -349,7 +368,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _ClearSelectedDataConfirmationDialog(
-        labels: clearLabels,
+        labels: _localizedCategoryLabels(clearLabels),
         browserWebsiteDataUnsupported: browserWebsiteDataUnsupported,
       ),
     );
@@ -365,8 +384,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         barrierDismissible: false,
         builder: (ctx) => PopScope(
           canPop: false,
-          child: const AlertDialog(
-            title: Text('正在清除数据'),
+          child: AlertDialog(
+            title: Text(_strings.backupRestoreClearingData),
             content: Row(
               children: [
                 SizedBox(
@@ -375,7 +394,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   child: CircularProgressIndicator(strokeWidth: 2.5),
                 ),
                 SizedBox(width: 16),
-                Expanded(child: Text('正在删除所选类别的数据...')),
+                Expanded(child: Text(_strings.backupRestoreDeletingCategories)),
               ],
             ),
           ),
@@ -398,10 +417,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
         setState(() => _isClearing = false);
         await _showRestartPrompt(
-          title: browserWebsiteDataCleared ? '数据清除完成' : '部分数据已清除',
+          title: browserWebsiteDataCleared
+              ? _strings.backupRestoreClearedTitle
+              : _strings.backupRestorePartiallyClearedTitle,
           message: browserWebsiteDataCleared
-              ? '所选数据已清除。请重启应用以生效。'
-              : '其他所选数据已清除。当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；未能清除的浏览器数据仍会保留。请重启应用使已清除的数据生效。',
+              ? _strings.backupRestoreClearedMessage
+              : _strings.backupRestorePartialClearMessage,
           icon: browserWebsiteDataCleared
               ? Icons.check_circle_outline
               : Icons.warning_amber_rounded,
@@ -418,7 +439,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清除失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(_strings.backupRestoreClearFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       if (e is DataManagementPreflightException) return;
@@ -427,8 +451,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         setState(() => _isClearing = false);
         await _showRestartPrompt(
-          title: '清除未完成',
-          message: '部分数据未能清除。请重启应用后重试清除操作。',
+          title: _strings.backupRestoreClearIncompleteTitle,
+          message: _strings.backupRestoreClearIncompleteMessage,
           icon: Icons.warning_amber_rounded,
           iconColor: Colors.orange,
         );
@@ -450,7 +474,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Anki闪卡片组已导出到: $path'),
+            content: Text(_strings.backupRestoreAnkiExportSuccess(path)),
             backgroundColor: Colors.green,
           ),
         );
@@ -458,7 +482,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(_strings.backupRestoreExportFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -476,8 +503,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (path == null || !path.endsWith('.apkg')) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('请选择 .apkg 格式的文件'),
+          SnackBar(
+            content: Text(_strings.backupRestoreApkgRequired),
             backgroundColor: Colors.orange,
           ),
         );
@@ -496,7 +523,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(_strings.backupRestoreImportFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -508,8 +538,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   ///
   /// 由用户选择「退出应用」或「立即重启」，不做自动倒计时重启。
   Future<void> _showRestartPrompt({
-    String title = '数据恢复成功',
-    String message = '数据已从备份中恢复。请重启应用以使用恢复的数据。',
+    String? title,
+    String? message,
     IconData icon = Icons.check_circle,
     Color iconColor = const Color(0xFF43A047),
   }) async {
@@ -525,24 +555,24 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             children: [
               Icon(icon, color: iconColor, size: 24),
               const SizedBox(width: 8),
-              Text(title),
+              Text(title ?? _strings.backupRestoreRestoreSuccessTitle),
             ],
           ),
-          content: Text(message),
+          content: Text(message ?? _strings.backupRestoreRestoredMessage),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: const Text('退出应用'),
+              child: Text(_strings.backupRestoreExitApp),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: const Text('立即重启'),
+              child: Text(_strings.backupRestoreRestartNow),
             ),
           ],
         ),
@@ -557,14 +587,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       builder: (dialogContext) => AlertDialog(
         title: Text(
           categories.every((category) => category == '内置浏览器网站存储')
-              ? '部分数据已跳过'
-              : '未恢复任何数据',
+              ? _strings.backupRestoreSkippedTitle
+              : _strings.backupRestoreNothingRestoredTitle,
         ),
         content: Text(_skippedCategoriesMessage(categories)),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
+            child: Text(_strings.backupRestoreGotIt),
           ),
         ],
       ),
@@ -574,24 +604,49 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   String _skippedCategoriesMessage(List<String> categories) {
     final skippedCategories =
         categories.where((category) => category != '内置浏览器网站存储').toList();
+    final displayCategories = _localizedCategoryLabels(skippedCategories);
     var message = skippedCategories.isEmpty
         ? ''
-        : '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
-            '当前数据保持不变：${skippedCategories.join('、')}。';
+        : _strings.backupRestoreSkippedCategories(displayCategories.join(', '));
     if (skippedCategories.contains('任务')) {
-      message += '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
-          '为避免覆盖当前任务，任务类别已跳过并保留原数据。';
+      message += '\n\n${_strings.backupRestoreSkippedTasksLegacy}';
     }
     if (skippedCategories.contains('内置浏览器数据')) {
-      message += '\n\n备份中没有可导入的内置浏览器 Cookies，已跳过；本机现有 Cookies 保持不变。';
+      message += '\n\n${_strings.backupRestoreSkippedCookies}';
     }
     if (categories.contains('内置浏览器网站存储')) {
       if (message.isNotEmpty) message += '\n\n';
-      message += '旧版备份中的网站存储目录已跳过；'
-          '备份包若包含 Cookies 且该类别已勾选，仍可单独导入。';
+      message += _strings.backupRestoreSkippedWebsiteData;
     }
     return message;
   }
+
+  List<String> _localizedCategoryLabels(List<String> labels) =>
+      labels.map((label) {
+        switch (label) {
+          case '聊天记录和附件':
+            return _strings.backupRestoreCategoryChat;
+          case '设置':
+            return _strings.backupRestoreCategorySettings;
+          case '图片':
+            return _strings.backupRestoreCategoryPictures;
+          case '音频':
+            return _strings.backupRestoreCategoryAudio;
+          case '视频':
+            return _strings.backupRestoreCategoryVideos;
+          case '文本':
+            return _strings.backupRestoreCategoryTexts;
+          case '任务':
+            return _strings.backupRestoreCategoryTasks;
+          case 'Anki闪卡数据':
+          case 'Anki闪卡数据库':
+            return _strings.backupRestoreCategoryAnki;
+          case '内置浏览器数据':
+            return _strings.backupRestoreCategoryBrowser;
+          default:
+            return label;
+        }
+      }).toList();
 
   /// 退出应用（与启动迁移弹窗的行为一致）。
   void _exitApp() {
@@ -610,7 +665,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('数据备份与恢复')),
+      appBar: AppBar(title: Text(_strings.backupRestorePageTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -622,11 +677,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 children: [
                   const Icon(Icons.info_outline, color: Colors.blue),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。',
-                    ),
-                  ),
+                  Expanded(child: Text(_strings.backupRestoreIntro)),
                 ],
               ),
             ),
@@ -634,9 +685,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           const SizedBox(height: 24),
           // === Anki 闪卡 .apkg 导出/导入 ===
           _buildSectionHeader(
-            'Anki闪卡牌组',
-            onInfoPressed: () =>
-                _showInfoDialog('Anki 闪卡牌组导入/导出', '只包含卡片信息，不包含媒体内容'),
+            _strings.backupRestoreApkgTitle,
+            onInfoPressed: () => _showInfoDialog(
+              _strings.backupRestoreApkgInfoTitle,
+              _strings.backupRestoreApkgInfoMessage,
+            ),
           ),
           Card(
             child: Padding(
@@ -645,7 +698,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '导入/导出 .apkg 格式的 Anki 牌组',
+                    _strings.backupRestoreApkgDescription,
                     style: TextStyle(
                       fontSize: 13,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -666,7 +719,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_upload_outlined),
-                          label: Text(_isAnkiExporting ? '导出中...' : '导出 .apkg'),
+                          label: Text(
+                            _isAnkiExporting
+                                ? _strings.backupRestoreExportingApkg
+                                : _strings.backupRestoreExportApkg,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -682,7 +739,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_download_outlined),
-                          label: Text(_isAnkiImporting ? '导入中...' : '导入 .apkg'),
+                          label: Text(
+                            _isAnkiImporting
+                                ? _strings.backupRestoreImportingApkg
+                                : _strings.backupRestoreImportApkg,
+                          ),
                         ),
                       ),
                     ],
@@ -693,7 +754,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           ),
           const SizedBox(height: 24),
           // === 统一选择卡片（导入和导出共用） ===
-          _buildSectionHeader('选择要备份或恢复的数据类别'),
+          _buildSectionHeader(_strings.backupRestoreCategoryHeading),
           _buildUnifiedSelectionCard(),
           const SizedBox(height: 16),
           // === 导入导出按钮 ===
@@ -712,7 +773,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.backup),
-                      label: Text(_isExporting ? '正在导出...' : '导出备份'),
+                      label: Text(
+                        _isExporting
+                            ? _strings.backupRestoreExporting
+                            : _strings.backupRestoreExportBackup,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -726,7 +791,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.restore),
-                      label: Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
+                      label: Text(
+                        _isImporting
+                            ? _strings.backupRestoreRestoring
+                            : _strings.backupRestoreChooseBackup,
+                      ),
                     ),
                   ),
                 ],
@@ -750,7 +819,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '清除所选数据',
+                        _strings.backupRestoreClearSelected,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
@@ -761,8 +830,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '直接清除当前勾选的数据类别（不需要备份文件）。'
-                    '未勾选的类别将保持原样。此操作不可撤销。',
+                    _strings.backupRestoreClearDescription,
                     style: TextStyle(
                       fontSize: 13,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -780,7 +848,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.delete_forever_outlined),
-                      label: Text(_isClearing ? '正在清除...' : '清除所选数据'),
+                      label: Text(
+                        _isClearing
+                            ? _strings.backupRestoreClearing
+                            : _strings.backupRestoreClearSelected,
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                       ),
@@ -807,8 +879,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               value: _chatRecordsAndAttachments,
               onChanged: (v) =>
                   setState(() => _chatRecordsAndAttachments = v ?? false),
-              title: '聊天记录和附件',
-              subtitle: '聊天对话记录、消息内容与附件文件',
+              title: _strings.backupRestoreCategoryChat,
+              subtitle: _strings.backupRestoreCategoryChatDescription,
               icon: Icons.chat_bubble_outline,
               iconColor: Colors.blue,
             ),
@@ -816,8 +888,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _settings,
               onChanged: (v) => setState(() => _settings = v ?? false),
-              title: '设置',
-              subtitle: '应用配置、提供商设置与界面偏好',
+              title: _strings.backupRestoreCategorySettings,
+              subtitle: _strings.backupRestoreCategorySettingsDescription,
               icon: Icons.settings_outlined,
               iconColor: Colors.grey,
             ),
@@ -825,8 +897,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _pictures,
               onChanged: (v) => setState(() => _pictures = v ?? false),
-              title: '图片',
-              subtitle: '照片和缩略图',
+              title: _strings.backupRestoreCategoryPictures,
+              subtitle: _strings.backupRestoreCategoryPicturesDescription,
               icon: Icons.image_outlined,
               iconColor: Colors.pink,
             ),
@@ -834,8 +906,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _audio,
               onChanged: (v) => setState(() => _audio = v ?? false),
-              title: '音频',
-              subtitle: '语音合成和录音',
+              title: _strings.backupRestoreCategoryAudio,
+              subtitle: _strings.backupRestoreCategoryAudioDescription,
               icon: Icons.audiotrack_outlined,
               iconColor: Colors.purple,
             ),
@@ -843,8 +915,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _videos,
               onChanged: (v) => setState(() => _videos = v ?? false),
-              title: '视频',
-              subtitle: '视频文件',
+              title: _strings.backupRestoreCategoryVideos,
+              subtitle: _strings.backupRestoreCategoryVideosDescription,
               icon: Icons.videocam_outlined,
               iconColor: Colors.indigo,
             ),
@@ -852,8 +924,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _texts,
               onChanged: (v) => setState(() => _texts = v ?? false),
-              title: '文本',
-              subtitle: '文本文档',
+              title: _strings.backupRestoreCategoryTexts,
+              subtitle: _strings.backupRestoreCategoryTextsDescription,
               icon: Icons.description_outlined,
               iconColor: Colors.teal,
             ),
@@ -861,8 +933,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _tasks,
               onChanged: (v) => setState(() => _tasks = v ?? false),
-              title: '任务',
-              subtitle: '后台任务记录',
+              title: _strings.backupRestoreCategoryTasks,
+              subtitle: _strings.backupRestoreCategoryTasksDescription,
               icon: Icons.assignment_outlined,
               iconColor: Colors.brown,
             ),
@@ -870,20 +942,20 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _ankiData,
               onChanged: (v) => setState(() => _ankiData = v ?? false),
-              title: 'Anki闪卡数据',
-              subtitle: 'Anki 原始数据库',
+              title: _strings.backupRestoreCategoryAnki,
+              subtitle: _strings.backupRestoreCategoryAnkiDescription,
               icon: Icons.extension,
               iconColor: Colors.green,
-              infoTitle: 'Anki 闪卡数据',
-              infoMessage: '备份和恢复 Anki 闪卡数据时会包含 collection.media 目录中的卡片媒体内容。',
-              infoTooltip: 'Anki 闪卡数据说明',
+              infoTitle: _strings.backupRestoreAnkiDataInfoTitle,
+              infoMessage: _strings.backupRestoreAnkiDataInfoMessage,
+              infoTooltip: _strings.backupRestoreAnkiDataInfoTooltip,
             ),
             const Divider(height: 1),
             _buildCheckboxItem(
               value: _browserCookies,
               onChanged: (v) => setState(() => _browserCookies = v ?? false),
-              title: '内置浏览器数据',
-              subtitle: '仅备份与恢复 Cookies；清除时同时清理可支持的网站存储',
+              title: _strings.backupRestoreCategoryBrowser,
+              subtitle: _strings.backupRestoreCategoryBrowserDescription,
               icon: Icons.cookie,
               iconColor: Colors.orange,
             ),
@@ -933,7 +1005,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         Padding(
           padding: const EdgeInsets.only(right: 16),
           child: IconButton(
-            tooltip: infoTooltip ?? '查看说明',
+            tooltip: infoTooltip ?? _strings.backupRestoreViewInfo,
             icon: const Icon(Icons.info_outline, size: 20),
             onPressed: () => _showInfoDialog(infoTitle ?? title, infoMessage),
           ),
@@ -951,7 +1023,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
+            child: Text(_strings.backupRestoreGotIt),
           ),
         ],
       ),
@@ -975,7 +1047,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           ),
           if (onInfoPressed != null)
             IconButton(
-              tooltip: 'Anki 牌组导入导出说明',
+              tooltip: _strings.backupRestoreApkgInfoTooltip,
               icon: const Icon(Icons.info_outline, size: 20),
               onPressed: onInfoPressed,
             ),
@@ -1027,12 +1099,12 @@ class _ClearSelectedDataConfirmationDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('确认清除'),
+      title: Text(AppLocalizations.of(context)!.backupRestoreConfirmClear),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('将清除以下数据类别（不经过备份文件）：'),
+          Text(AppLocalizations.of(context)!.backupRestoreClearCategoriesIntro),
           const SizedBox(height: 12),
           ...widget.labels.map(
             (label) => Padding(
@@ -1050,13 +1122,14 @@ class _ClearSelectedDataConfirmationDialogState
           ),
           if (widget.browserWebsiteDataUnsupported) ...[
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
                 Icon(Icons.info_outline, color: Colors.orange, size: 18),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；确认后会清除其他所选数据，无法清除的浏览器数据将保留。',
+                    AppLocalizations.of(context)!
+                        .backupRestoreBrowserClearUnsupported,
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ),
@@ -1065,13 +1138,14 @@ class _ClearSelectedDataConfirmationDialogState
           ],
           if (widget.labels.length < 9) ...[
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
                 Icon(Icons.info_outline, color: Colors.blue, size: 18),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '未勾选的类别将保持原样，不会被清除。',
+                    AppLocalizations.of(context)!
+                        .backupRestoreUnselectedUnchanged,
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ),
@@ -1086,13 +1160,13 @@ class _ClearSelectedDataConfirmationDialogState
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: Colors.red.shade200),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '此操作不可撤销。清除完成后需重启应用才能生效。',
+                    AppLocalizations.of(context)!.backupRestoreClearWarning,
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ),
@@ -1104,7 +1178,7 @@ class _ClearSelectedDataConfirmationDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
         ),
         FilledButton(
           onPressed: _secondsRemaining == 0
@@ -1112,7 +1186,10 @@ class _ClearSelectedDataConfirmationDialogState
               : null,
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           child: Text(
-            _secondsRemaining == 0 ? '确定清除' : '确定清除（$_secondsRemaining）',
+            _secondsRemaining == 0
+                ? AppLocalizations.of(context)!.backupRestoreClearSelected
+                : AppLocalizations.of(context)!
+                    .backupRestoreConfirmClearCountdown(_secondsRemaining),
           ),
         ),
       ],

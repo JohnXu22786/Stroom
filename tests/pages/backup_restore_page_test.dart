@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/backup_restore_page.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 
-Widget createTestApp() {
-  return const ProviderScope(
+Widget createTestApp({Locale locale = const Locale('zh', 'CN')}) {
+  return ProviderScope(
     child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: BackupRestorePage(),
     ),
   );
@@ -16,6 +26,16 @@ Widget createTestApp() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('backup page title and categories follow the selected locale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(createTestApp(locale: const Locale('en', 'US')));
+    await tester.pumpAndSettle();
+    expect(find.text('Backup and Restore'), findsOneWidget);
+    expect(find.text('Chat History and Attachments'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+  });
 
   setUp(() {
     // 清除/恢复流程会触及 ManifestDatabase/WebFileStore，
@@ -83,7 +103,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('确定清除'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, '清除所选数据'),
+      );
       await tester.pumpAndSettle();
 
       // Button-based restart prompt (mirrors the startup migration dialog),

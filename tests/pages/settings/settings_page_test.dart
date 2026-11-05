@@ -10,10 +10,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/notification_settings_page.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -155,6 +157,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('General'), findsOneWidget);
+    expect(find.text('Task Completion Notifications'), findsOneWidget);
+    expect(find.text('Background Operation Optimization'), findsOneWidget);
     await _scrollSettingsToEnd(tester);
     await tester.ensureVisible(find.text('About'));
     expect(find.text('About'), findsOneWidget);
@@ -167,9 +171,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('常规设置'), findsOneWidget);
+    expect(find.text('任务完成通知'), findsOneWidget);
+    expect(find.text('后台运行优化'), findsOneWidget);
     await _scrollSettingsToEnd(tester);
     await tester.ensureVisible(find.text('关于'));
     expect(find.text('关于'), findsOneWidget);
+  });
+
+  testWidgets('notification settings page follows the selected locale', (
+    tester,
+  ) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 1};
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Notification Permission Settings'), findsOneWidget);
+    expect(find.text('System Environment'), findsOneWidget);
+    expect(find.text('Platform Guide'), findsOneWidget);
   });
 
   testWidgets('update check errors follow the selected locale', (tester) async {
