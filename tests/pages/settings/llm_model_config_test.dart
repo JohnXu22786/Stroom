@@ -342,7 +342,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         // Should show error about missing or incomplete toggle
-        expect(find.textContaining('请先完整填写推理开关，再配置推理力度'), findsWidgets);
+        expect(
+          find.textContaining('请先完整填写推理开关，其他推理参数才能生效'),
+          findsWidgets,
+        );
       },
     );
   });
@@ -468,12 +471,12 @@ void main() {
 
       // The effort card should show helper text since toggle is not complete
       await tester.scrollUntilVisible(
-        find.text('请先完整填写推理开关，再配置推理力度。'),
+        find.text('请先完整填写推理开关，其他推理参数才能生效。'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-      expect(find.text('请先完整填写推理开关，再配置推理力度。'), findsOneWidget);
+      expect(find.text('请先完整填写推理开关，其他推理参数才能生效。'), findsOneWidget);
       // The effort card header "推理力度" should use blue (primary) color, not gray
       final effortHeader = find.text('推理力度');
       expect(effortHeader, findsOneWidget);
@@ -785,7 +788,7 @@ void main() {
       // Fill in model ID first
       await enterTextAndSettle(
         tester,
-        find.byType(TextField).at(0),
+        find.byType(TextField).at(1),
         'test-model',
       );
 
@@ -832,12 +835,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Fill in model ID
-      await enterTextAndSettle(tester, find.byType(TextField).at(0), 'gpt-4o');
+      await enterTextAndSettle(tester, find.byType(TextField).at(1), 'gpt-4o');
 
       // Fill in model name
       await enterTextAndSettle(
         tester,
-        find.byType(TextField).at(1),
+        find.byType(TextField).at(0),
         'GPT-4o Vision',
       );
 
@@ -884,7 +887,7 @@ void main() {
       // Fill in model ID only
       await enterTextAndSettle(
         tester,
-        find.byType(TextField).at(0),
+        find.byType(TextField).at(1),
         'whisper-1',
       );
 
@@ -929,7 +932,7 @@ void main() {
       // Fill model ID
       await enterTextAndSettle(
         tester,
-        find.byType(TextField).at(0),
+        find.byType(TextField).at(1),
         'custom-model',
       );
 
@@ -972,11 +975,11 @@ void main() {
       expect(find.text('My Whisper'), findsNWidgets(2));
 
       // Fields should be populated
-      final nameField = tester.widget<TextField>(find.byType(TextField).at(1));
+      final nameField = tester.widget<TextField>(find.byType(TextField).at(0));
       expect(nameField.controller?.text, equals('My Whisper'));
 
       final modelIdField = tester.widget<TextField>(
-        find.byType(TextField).at(0),
+        find.byType(TextField).at(1),
       );
       expect(modelIdField.controller?.text, equals('whisper-1'));
 
@@ -1017,12 +1020,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Clear name first so auto-fill from modelId works
-      await enterTextAndSettle(tester, find.byType(TextField).at(1), '');
+      await enterTextAndSettle(tester, find.byType(TextField).at(0), '');
 
       // Modify model ID
       await enterTextAndSettle(
         tester,
-        find.byType(TextField).at(0),
+        find.byType(TextField).at(1),
         'new-model-id',
       );
 

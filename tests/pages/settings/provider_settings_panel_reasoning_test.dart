@@ -39,6 +39,8 @@ Future<ProviderConfigItem?> _openAndSave(
       ),
     ),
   );
+  await tester.pumpAndSettle();
+  await tester.pumpAndSettle();
   await tester.tap(find.text('打开供应商设置'));
   await tester.pumpAndSettle();
 
@@ -54,10 +56,10 @@ Future<ProviderConfigItem?> _openAndSave(
 }
 
 ProviderConfigItem _baseConfig() => ProviderConfigItem(
-  providerName: 'Test Provider',
-  host: 'https://api.example.com/v1',
-  key: 'sk-test',
-);
+      providerName: 'Test Provider',
+      host: 'https://api.example.com/v1',
+      key: 'sk-test',
+    );
 
 void main() {
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
@@ -227,6 +229,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -243,6 +248,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -308,6 +314,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -324,6 +333,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -357,7 +367,8 @@ void main() {
       expect(effort.options, ['high', 'low', 'medium']);
     });
 
-    testWidgets('option rows display the new order after drag reordering '
+    testWidgets(
+        'option rows display the new order after drag reordering '
         '(no stale text)', (tester) async {
       // 回归：行按索引复用元素，TextFormField 的 initialValue 不跟随
       // 重建更新——拖拽排序后行内显示的必须是新顺序的文本。
@@ -383,6 +394,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -397,6 +411,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -474,6 +489,9 @@ void main() {
         ProviderConfigItem? saved;
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Builder(
               builder: (context) => Center(
                 child: ElevatedButton(
@@ -490,6 +508,7 @@ void main() {
             ),
           ),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('打开供应商设置'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('参数设置'));
@@ -534,7 +553,8 @@ void main() {
       },
     );
 
-    testWidgets('boolean custom param saves with empty options after type '
+    testWidgets(
+        'boolean custom param saves with empty options after type '
         'switch', (tester) async {
       // 类型从 string 切到 boolean 后，残留的 options 必须在保存时清空
       // （否则请求会发送 options.first 而非默认 true）
@@ -555,6 +575,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -571,6 +594,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -653,14 +677,18 @@ void main() {
       await tester.enterText(fields.at(0), 'reasoning_effort');
       await tester.pump();
 
-      expect(find.text('推理参数与自定义参数重名：effort'), findsOneWidget);
+      expect(find.text('参数已存在：reasoning_effort'), findsOneWidget);
     });
 
-    testWidgets('boolean reasoning toggle has no on/off inputs and saves '
+    testWidgets(
+        'boolean reasoning toggle has no on/off inputs and saves '
         'by name only', (tester) async {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -677,6 +705,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));

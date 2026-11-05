@@ -92,9 +92,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (entry.type == 'mcp') {
       final config = entry.configs[configIndex];
-      final typeConfig = config.models.isNotEmpty
-          ? config.models[0].typeConfig
-          : null;
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) {
         await _editHttpToolConfig(configIndex);
         return;
@@ -213,9 +212,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       config.typeConfig = Map<String, dynamic>.from(config.typeConfig)
         ..['connectivityTest'] = content;
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -529,9 +526,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     for (var i = 0; i < groupIndices.length; i++) {
       configs[groupIndices[i]] = groupConfigs[i];
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -553,9 +548,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final providerName = config.providerName.isNotEmpty
         ? config.providerName
         : AppLocalizations.of(context)!.providerUnnamed;
-    final typeConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
@@ -624,8 +618,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
-          final groupId =
-              config.groupId ??
+          final groupId = config.groupId ??
               defaultMcpGroupIdForProvider(config.providerName);
           return groupId == group.id;
         }).toList(),
@@ -686,16 +679,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
-                  itemCount:
-                      (configsByGroup[group.id]?.length ?? 0) +
+                  itemCount: (configsByGroup[group.id]?.length ?? 0) +
                       (group.id == builtinSearchMcpGroupId ? 1 : 0),
                   onEnabledChanged: (value) =>
                       _setMcpGroupEnabled(group, value),
                   onAdd: () => _addConfig(groupId: group.id),
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
-                  onDelete: group.isBuiltin
-                      ? null
-                      : () => _deleteMcpGroup(group),
+                  onDelete:
+                      group.isBuiltin ? null : () => _deleteMcpGroup(group),
                 ),
               ),
             ),
@@ -727,11 +718,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
                       _reorderMcpGroupConfigs(
-                        entry,
-                        group.id,
-                        oldIndex,
-                        newIndex,
-                      ),
+                    entry,
+                    group.id,
+                    oldIndex,
+                    newIndex,
+                  ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
                     borderRadius: BorderRadius.circular(12),
@@ -831,7 +822,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       isBuiltinWebSearch
                           ? AppLocalizations.of(context)!.providerBuiltinTools
                           : AppLocalizations.of(context)!
-                                .providerConfigurationHeading,
+                              .providerConfigurationHeading,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -861,7 +852,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   child: Text(
                     isBuiltinWebSearch
                         ? AppLocalizations.of(context)!
-                              .providerBuiltinWebSearchEmpty
+                            .providerBuiltinWebSearchEmpty
                         : AppLocalizations.of(context)!.providerNoConfigsAdd,
                     style: const TextStyle(color: Colors.grey),
                     textAlign: TextAlign.center,
@@ -928,13 +919,17 @@ class _McpPageIntro extends StatelessWidget {
       children: [
         Text(
           AppLocalizations.of(context)!.providerServicesAndTools,
-          style: Theme.of(context).textTheme.titleLarge
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
               ?.copyWith(color: colorScheme.onSurface),
         ),
         const SizedBox(height: 4),
         Text(
           AppLocalizations.of(context)!.providerManageServicesDescription,
-          style: Theme.of(context).textTheme.bodySmall
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
               ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
@@ -971,9 +966,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -989,9 +984,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                 ],
@@ -999,7 +994,9 @@ class _McpSectionHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 description,
-                style: Theme.of(context).textTheme.bodySmall
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
                     ?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
@@ -1033,14 +1030,18 @@ class _McpEmptyState extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             AppLocalizations.of(context)!.providerNoServices,
-            style: Theme.of(context).textTheme.titleSmall
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
                 ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
             AppLocalizations.of(context)!.providerAddServiceDescription,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
                 ?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
@@ -1110,9 +1111,8 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Keep provider rows neutral and consistent with the rest of settings.
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1231,8 +1231,7 @@ class _McpConfigCard extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                       onPressed: onSettings,
-                      tooltip:
-                          settingsTooltip ??
+                      tooltip: settingsTooltip ??
                           AppLocalizations.of(context)!.appSettings,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -1270,8 +1269,8 @@ class _McpConfigCard extends StatelessWidget {
                         color: cs.error,
                       ),
                       onPressed: onDelete,
-                      tooltip: AppLocalizations.of(context)!
-                          .providerDeleteTooltip,
+                      tooltip:
+                          AppLocalizations.of(context)!.providerDeleteTooltip,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -1419,9 +1418,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
@@ -1459,7 +1457,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                               child: Text(
                                 AppLocalizations.of(context)!
                                     .providerMcpMasterLabel,
-                                style: Theme.of(context).textTheme.titleSmall
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
                                     ?.copyWith(
                                       color: cs.onSurface,
                                       fontWeight: FontWeight.w700,
@@ -1474,7 +1474,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                         Text(
                           AppLocalizations.of(context)!
                               .providerMcpMasterDescription,
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
@@ -1504,7 +1506,9 @@ class _McpStatusLabel extends StatelessWidget {
       enabled
           ? AppLocalizations.of(context)!.providerEnabled
           : AppLocalizations.of(context)!.providerDisabled,
-      style: Theme.of(context).textTheme.labelSmall
+      style: Theme.of(context)
+          .textTheme
+          .labelSmall
           ?.copyWith(color: cs.onSurfaceVariant),
     );
   }

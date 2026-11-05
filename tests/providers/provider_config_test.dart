@@ -423,7 +423,8 @@ void main() {
       },
     );
 
-    test('ASR entry preserves existing provider configs (TTS, LLM, OCR)', () async {
+    test('ASR entry preserves existing provider configs (TTS, LLM, OCR)',
+        () async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': _savedDataWithoutAsr(),
       });

@@ -119,7 +119,8 @@ void main() {
     expect(popupValues(tester), kExpectedSuggestions);
   });
 
-  testWidgets('after a no-match filter, re-tapping the field reopens the '
+  testWidgets(
+      'after a no-match filter, re-tapping the field reopens the '
       'full list', (tester) async {
     await pumpPage(tester);
 
@@ -227,7 +228,8 @@ void main() {
     expect(find.text('65536'), findsOneWidget);
   });
 
-  testWidgets('field keeps focus after selecting a suggestion, so typing '
+  testWidgets(
+      'field keeps focus after selecting a suggestion, so typing '
       'continues to work', (tester) async {
     await pumpPage(tester);
 

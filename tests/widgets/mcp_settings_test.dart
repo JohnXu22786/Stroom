@@ -55,40 +55,41 @@ class _BlockingProviderEntriesNotifier extends ProviderEntriesNotifier {
 }
 
 Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
-  (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
-);
+      (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
+    );
 
 Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
-  (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
-);
+      (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
+    );
 
 Finder _descriptionFieldFinder() => find.byWidgetPredicate(
-  (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
-);
+      (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
+    );
 
 Finder _commandFieldFinder() => find.byWidgetPredicate(
-  (w) => w is TextField && w.decoration?.hintText == '例如：npx',
-);
+      (w) => w is TextField && w.decoration?.hintText == '例如：npx',
+    );
 
 Finder _argsFieldFinder() => find.byWidgetPredicate(
-  (w) =>
-      w is TextField && w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
-);
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
+    );
 
 Finder _urlFieldFinder() => find.byWidgetPredicate(
-  (w) =>
-      w is TextField &&
-      w.decoration?.hintText == '例如: http://localhost:3001/sse',
-);
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == '例如：http://localhost:3001/sse',
+    );
 
 Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
-  (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
-);
+      (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
+    );
 
 Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
-  of: _readOnlyDescriptionFinder(),
-  matching: find.text(value),
-);
+      of: _readOnlyDescriptionFinder(),
+      matching: find.text(value),
+    );
 
 Future<void> _openCustomMcpConfig(
   WidgetTester tester, {
@@ -219,12 +220,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['apiKey'], 'sk-new');
         expect(typeConfig['headers'], {
@@ -285,12 +284,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['env'], {
           'API_KEY': 'sk-new',
@@ -336,12 +333,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['headers'], {'X-Mode': 'keep-this-header'});
         expect(
@@ -397,12 +392,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['env'], {
           'KEYBOARD_LAYOUT': 'us',
@@ -461,12 +454,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['env'], {
           'REFRESH_TOKEN': 'refresh-secret',
@@ -524,12 +515,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['env'], {
           'SESSION_TOKEN': 'session-secret',
@@ -596,12 +585,10 @@ void main() {
       final entry = entries.singleWhere(
         (item) => item['id'] == 'builtin_mcp',
       ) as Map<String, dynamic>;
-      final config = (entry['configs'] as List)
-          .cast<Map<String, dynamic>>()
-          .first;
-      final model = (config['models'] as List)
-          .cast<Map<String, dynamic>>()
-          .first;
+      final config =
+          (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+      final model =
+          (config['models'] as List).cast<Map<String, dynamic>>().first;
       final typeConfig = model['typeConfig'] as Map<String, dynamic>;
       expect(typeConfig, isNot(contains('apiKey')));
       expect(typeConfig['headers'], {
@@ -669,12 +656,10 @@ void main() {
         final entry = entries.singleWhere(
           (item) => item['id'] == 'builtin_mcp',
         ) as Map<String, dynamic>;
-        final config = (entry['configs'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
-        final model = (config['models'] as List)
-            .cast<Map<String, dynamic>>()
-            .first;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig['transport'], 'sse');
         expect(typeConfig, isNot(contains('command')));
@@ -697,7 +682,8 @@ void main() {
       },
     );
 
-    testWidgets('built-in MCP details keep the "Bearer " placeholder unset and expose '
+    testWidgets(
+        'built-in MCP details keep the "Bearer " placeholder unset and expose '
         'an empty key field only after entering edit mode', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -779,8 +765,7 @@ void main() {
           matching: find.text('（未设置）'),
         ),
         findsOneWidget,
-        reason:
-            'the "Bearer " placeholder must remain unset, not become a '
+        reason: 'the "Bearer " placeholder must remain unset, not become a '
             'fake API key',
       );
 
@@ -792,8 +777,7 @@ void main() {
       expect(
         apiKeyField.controller!.text,
         isEmpty,
-        reason:
-            'the "Bearer " header placeholder must not be auto-filled '
+        reason: 'the "Bearer " header placeholder must not be auto-filled '
             'as the API key',
       );
 
@@ -892,8 +876,7 @@ void main() {
         expect(
           apiKeyField.controller!.text,
           'sk-123',
-          reason:
-              'edit mode must expose the actual key from the '
+          reason: 'edit mode must expose the actual key from the '
               'Authorization header',
         );
         expect(
@@ -1064,8 +1047,7 @@ void main() {
           matching: find.byType(TextField),
         ),
       );
-      final allFieldsDisabled =
-          dialogFields.isNotEmpty &&
+      final allFieldsDisabled = dialogFields.isNotEmpty &&
           dialogFields.every((field) => field.enabled == false);
 
       try {

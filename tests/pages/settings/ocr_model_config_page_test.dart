@@ -36,6 +36,7 @@ Future<void> _pumpConfigPage(
       ),
     ),
   );
+  await tester.pumpAndSettle();
   await tester.tap(find.text('打开配置'));
   await tester.pumpAndSettle();
 }
@@ -97,7 +98,8 @@ void main() {
         );
       },
     );
-    testWidgets('renders 3 universal params; instruction section and '
+    testWidgets(
+        'renders 3 universal params; instruction section and '
         'removed params absent', (tester) async {
       await _pumpConfigPage(tester);
 
@@ -110,8 +112,8 @@ void main() {
       expect(find.text('温度'), findsOneWidget);
       await _scrollTo(tester, find.text('Top P'));
       expect(find.text('Top P'), findsOneWidget);
-      await _scrollTo(tester, find.text('最大输出 Token 数'));
-      expect(find.text('最大输出 Token 数'), findsOneWidget);
+      await _scrollTo(tester, find.text('最大 Token 数'));
+      expect(find.text('最大 Token 数'), findsOneWidget);
 
       // Params verified non-universal for OCR models are not built in.
       expect(find.text('图片细节级别 (Detail)'), findsNothing);
@@ -411,7 +413,7 @@ void main() {
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
       await _enterField(tester, 0, 'Edited OCR model');
-      await _scrollTo(tester, find.text('最大输出 Token 数'));
+      await _scrollTo(tester, find.text('最大 Token 数'));
       await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.byType(Switch).last);
       await tester.pumpAndSettle();
@@ -435,7 +437,7 @@ void main() {
       );
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-      await _scrollTo(tester, find.text('最大输出 Token 数'));
+      await _scrollTo(tester, find.text('最大 Token 数'));
       await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();

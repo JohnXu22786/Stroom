@@ -45,6 +45,7 @@ Future<ModelConfig?> _pumpAndSave(
       ),
     ),
   );
+  await tester.pumpAndSettle();
   await tester.tap(find.text('打开模型配置'));
   await tester.pumpAndSettle();
   if (tapSave) {
@@ -119,7 +120,8 @@ Future<void> _tapBlock(WidgetTester tester, String value) async {
 
 void main() {
   group('LlmModelConfigPage reasoning option blocks', () {
-    testWidgets('provider effort values show as blocks, none selected by '
+    testWidgets(
+        'provider effort values show as blocks, none selected by '
         'default', (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -397,7 +399,8 @@ void main() {
       },
     );
 
-    testWidgets('model custom param colliding with a provider reasoning param '
+    testWidgets(
+        'model custom param colliding with a provider reasoning param '
         'is blocked at save', (tester) async {
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
@@ -927,7 +930,7 @@ void main() {
           await _scrollToReasoning(tester, find.text('use_cache'));
           // 布尔类型：无添加值按钮、无选项块
           expect(find.text('添加值'), findsNothing);
-          expect(find.textContaining('布尔类型无需配置参数值'), findsOneWidget);
+          expect(find.textContaining('布尔参数无需配置值'), findsOneWidget);
         },
       );
 
@@ -1006,7 +1009,8 @@ void main() {
       expect(find.text('添加选项'), findsNothing);
     });
 
-    testWidgets('boolean custom param has no value area (like reasoning '
+    testWidgets(
+        'boolean custom param has no value area (like reasoning '
         'boolean params)', (tester) async {
       final model = ModelConfig(
         name: 'test-model',
@@ -1219,7 +1223,8 @@ void main() {
       expect(_savedEffortOptions(saved!), isEmpty);
     });
 
-    testWidgets('opening the model page never mutates the provider config '
+    testWidgets(
+        'opening the model page never mutates the provider config '
         '(model edits stay model-only)', (tester) async {
       // 回归：_hasUnsavedChanges 的基线归一化曾直接修改合并结果中
       // 供应商的共享实例（清空力度选项），导致模型页的勾选/排序泄漏
@@ -1258,11 +1263,14 @@ void main() {
       final providerEffort = provider.reasoningParams.firstWhere(
         (p) => p.isEffortParam,
       );
-      expect(providerEffort.options, [
-        'low',
-        'medium',
-        'high',
-      ], reason: '打开模型页不应修改供应商的力度选项');
+      expect(
+          providerEffort.options,
+          [
+            'low',
+            'medium',
+            'high',
+          ],
+          reason: '打开模型页不应修改供应商的力度选项');
       expect(
         provider.reasoningParams.firstWhere((p) => p.isReasoningToggle).onValue,
         'enabled',
@@ -1278,7 +1286,8 @@ void main() {
       );
     });
 
-    testWidgets('saved selection reappears on reopen with provider values '
+    testWidgets(
+        'saved selection reappears on reopen with provider values '
         'unchecked and no delete badges', (tester) async {
       // 回归：模型页勾选保存后重开，供应商的值必须重新出现（未勾选、
       // 无删除按钮），而不是全部变成「模型自定义 + 带叉号」。
@@ -1316,7 +1325,8 @@ void main() {
       expect(find.textContaining('当前：供应商'), findsWidgets);
     });
 
-    testWidgets('provider name-only effort param does not trigger the discard '
+    testWidgets(
+        'provider name-only effort param does not trigger the discard '
         'dialog on back', (tester) async {
       // 回归：供应商的名称式力度参数（仅参数名、无选项）被 initState
       // 从工作副本移除，基线比较必须镜像同一处理，否则打开未修改
@@ -1381,7 +1391,8 @@ void main() {
       expect(find.text('打开模型配置'), findsOneWidget);
     });
 
-    testWidgets('boolean reasoning toggle has no on/off inputs and saves '
+    testWidgets(
+        'boolean reasoning toggle has no on/off inputs and saves '
         'by name only', (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -1409,7 +1420,7 @@ void main() {
           // 与推理力度一致：没有开/关值输入框
           expect(find.text('开启时值'), findsNothing);
           expect(find.text('关闭时值'), findsNothing);
-          expect(find.textContaining('布尔类型无需配置参数值'), findsOneWidget);
+          expect(find.textContaining('布尔参数无需配置值'), findsOneWidget);
         },
       );
 
@@ -1820,19 +1831,20 @@ void main() {
     ModelConfig modelWithNumberParam({
       required String defaultValue,
       List<String> options = const [],
-    }) => ModelConfig(
-      name: 'test-model',
-      modelId: 'test-model',
-      typeConfig: {'context': 4096},
-      customParams: [
-        CustomParam(
-          paramName: 'top_p',
-          type: 'number',
-          defaultValue: defaultValue,
-          options: options,
-        ),
-      ],
-    );
+    }) =>
+        ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          customParams: [
+            CustomParam(
+              paramName: 'top_p',
+              type: 'number',
+              defaultValue: defaultValue,
+              options: options,
+            ),
+          ],
+        );
 
     for (final invalidValue in ['not-a-number', 'NaN', 'Infinity']) {
       testWidgets('rejects $invalidValue number options', (tester) async {
@@ -1845,7 +1857,7 @@ void main() {
         );
 
         expect(saved, isNull, reason: '$invalidValue must not be saved');
-        expect(find.text('参数“top_p”的选项值必须是有限数字：$invalidValue'), findsOneWidget);
+        expect(find.text('参数“top_p”的值必须是有限数字：$invalidValue'), findsOneWidget);
       });
     }
 
@@ -1856,7 +1868,7 @@ void main() {
       );
 
       expect(saved, isNull);
-      expect(find.text('参数“top_p”的选项值必须是有限数字：NaN'), findsOneWidget);
+      expect(find.text('参数“top_p”的值必须是有限数字：NaN'), findsOneWidget);
     });
 
     testWidgets('saves integer and decimal option values', (tester) async {
@@ -1933,7 +1945,8 @@ void main() {
       },
     );
 
-    testWidgets('provider custom param uncheck persists; the unselected '
+    testWidgets(
+        'provider custom param uncheck persists; the unselected '
         'value reappears unchecked on reopen', (tester) async {
       final provider = providerWithCustomParams();
       final saved = await _pumpAndSave(
@@ -2037,7 +2050,8 @@ void main() {
       },
     );
 
-    testWidgets('opening the page with provider custom params and going back '
+    testWidgets(
+        'opening the page with provider custom params and going back '
         'does not warn', (tester) async {
       // 新模型 + 供应商自定义参数：打开即显示供应商参数不算改动，
       // 返回不应弹「放弃修改」。
@@ -2077,7 +2091,8 @@ void main() {
       expect(find.text('打开模型配置'), findsOneWidget);
     });
 
-    testWidgets('editing a model: unchecking a custom param chip triggers the '
+    testWidgets(
+        'editing a model: unchecking a custom param chip triggers the '
         'discard dialog on back', (tester) async {
       // 回归：块操作只改内存中的块列表/勾选集合，不同步则未保存比较
       // 看不到任何变化 → 编辑模式下的勾选改动被静默丢弃。
@@ -2210,21 +2225,22 @@ void main() {
     () {
       /// 卡片（按标题文本定位）内的开关。
       Finder switchInCard(String headerText) => find.descendant(
-        of: find.ancestor(
-          of: find.text(headerText),
-          matching: find.byType(Card),
-        ),
-        matching: find.byType(Switch),
-      );
+            of: find.ancestor(
+              of: find.text(headerText),
+              matching: find.byType(Card),
+            ),
+            matching: find.byType(Switch),
+          );
 
       ReasoningParam toggleParam() => ReasoningParam(
-        paramName: 'thinking.type',
-        isReasoningToggle: true,
-        onValue: 'enabled',
-        offValue: 'disabled',
-      );
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          );
 
-      testWidgets('effort card: switch replaces the delete button and saves '
+      testWidgets(
+          'effort card: switch replaces the delete button and saves '
           'enabled=false', (tester) async {
         final model = ModelConfig(
           name: 'test-model',
@@ -2272,7 +2288,8 @@ void main() {
         );
       });
 
-      testWidgets('toggle card: switch replaces the delete button and saves '
+      testWidgets(
+          'toggle card: switch replaces the delete button and saves '
           'enabled=false', (tester) async {
         final model = ModelConfig(
           name: 'test-model',
@@ -2374,7 +2391,8 @@ void main() {
         );
       });
 
-      testWidgets('provider-inherited additional param cannot be deleted; '
+      testWidgets(
+          'provider-inherited additional param cannot be deleted; '
           'model-added one can', (tester) async {
         final provider = ProviderConfigItem(
           providerName: 'Test Provider',
@@ -2449,7 +2467,8 @@ void main() {
         );
       });
 
-      testWidgets('provider-inherited custom param cannot be deleted; '
+      testWidgets(
+          'provider-inherited custom param cannot be deleted; '
           'model-added one can', (tester) async {
         final provider = ProviderConfigItem(
           providerName: 'Test Provider',
@@ -2524,7 +2543,8 @@ void main() {
         ]);
       });
 
-      testWidgets('session-added additional param renamed to a provider name '
+      testWidgets(
+          'session-added additional param renamed to a provider name '
           'stays deletable', (tester) async {
         // 本会话「添加推理参数」创建的参数即使改名为供应商同名参数，
         // 仍是模型自己的参数（可删除），不应被误锁。
@@ -2571,7 +2591,8 @@ void main() {
         );
       });
 
-      testWidgets('provider-inherited additional param becomes deletable after '
+      testWidgets(
+          'provider-inherited additional param becomes deletable after '
           'its type is changed', (tester) async {
         // 修改供应商参数的参数定义（类型）后，参数归模型所有 → 可删除。
         final provider = ProviderConfigItem(
@@ -2630,7 +2651,8 @@ void main() {
         );
       });
 
-      testWidgets('session-added custom param renamed to a provider name stays '
+      testWidgets(
+          'session-added custom param renamed to a provider name stays '
           'deletable', (tester) async {
         // 与附加参数同款：本会话新建的自定义参数改名成供应商同名后
         // 仍应可删除（不被误锁）。
@@ -2675,7 +2697,8 @@ void main() {
         );
       });
 
-      testWidgets('toggling the effort switch does not relabel the param as '
+      testWidgets(
+          'toggling the effort switch does not relabel the param as '
           'model-defined', (tester) async {
         // enabled 是模型偏好（默认启用标记），不是参数定义的一部分：
         // 关闭供应商参数的开关不应把来源标签从「当前：供应商」改成

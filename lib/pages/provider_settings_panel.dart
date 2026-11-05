@@ -156,9 +156,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _ocrRequestSizeBudgetController = TextEditingController(
       text: _isOcrType && ocrRequestBudget is num
           ? (ocrRequestBudget / (1024 * 1024)).toString().replaceFirst(
-              RegExp(r'\.0$'),
-              '',
-            )
+                RegExp(r'\.0$'),
+                '',
+              )
           : '',
     );
     // Initialize JSON validation for existing params

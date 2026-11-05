@@ -43,11 +43,11 @@ Widget createTestApp({List<Assistant>? assistants}) {
 }
 
 Widget _localizedAssistantSelectionApp() => MaterialApp(
-  locale: const Locale('zh', 'CN'),
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: const AssistantSelectionPage(),
-);
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const AssistantSelectionPage(),
+    );
 
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   final context = tester.element(find.byType(AssistantSelectionPage));
@@ -269,7 +269,8 @@ void main() {
       },
     );
 
-    testWidgets('edit dialog on a very short window falls back to a scrollable '
+    testWidgets(
+        'edit dialog on a very short window falls back to a scrollable '
         'layout without overflow', (tester) async {
       // Short window: the fixed rows + expanded prompt would overflow, so
       // the editor must switch to its scrollable fallback layout.
@@ -304,7 +305,8 @@ void main() {
       expect(find.text('保存'), findsOneWidget);
     });
 
-    testWidgets('large text scale on a medium window also uses the fallback '
+    testWidgets(
+        'large text scale on a medium window also uses the fallback '
         'layout (scaled threshold)', (tester) async {
       // 560dp window is above the unscaled fill threshold (540), but with
       // system font scaling 2.0 the fixed rows would overflow the fill
@@ -486,18 +488,16 @@ void main() {
         final container = ProviderScope.containerOf(
           tester.element(find.byType(AssistantSelectionPage)),
         );
-        final order = container
-            .read(assistantProvider)
-            .map((a) => a.name)
-            .toList();
+        final order =
+            container.read(assistantProvider).map((a) => a.name).toList();
         expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
 
         // 顺序持久化：prefs 里保存的是重排后的顺序
         final prefs = await SharedPreferences.getInstance();
         final json = prefs.getString('assistants');
         expect(json, isNotNull);
-        final decoded = (jsonDecode(json!) as List)
-            .cast<Map<String, dynamic>>();
+        final decoded =
+            (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
         expect((decoded.first['name'] as String), '助手乙');
       },
     );
@@ -871,7 +871,7 @@ void main() {
       expect(find.text('温度 (Temperature)'), findsOneWidget);
       expect(find.text('流式输出'), findsOneWidget);
       expect(find.text('Top P'), findsOneWidget);
-      expect(find.text('最大Token数 (Max Tokens)'), findsOneWidget);
+      expect(find.text('最大 Token 数'), findsOneWidget);
       expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
       expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
       expect(find.text('随机种子 (Seed)'), findsOneWidget);
@@ -1140,7 +1140,7 @@ void main() {
         reason: '越界输入必须就地提示有效范围',
       );
       // 副标题仍显示生效值（未写入 vars）
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1152,7 +1152,8 @@ void main() {
       expect(settings.maxToolOutputChars, 5000, reason: '非法输入不落库：保存的必是生效值');
     });
 
-    testWidgets('从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
+    testWidgets(
+        '从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
         'tab 显示全关但新话题全开的误导）', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -1237,7 +1238,8 @@ void main() {
       expect(find.textContaining('已启用 0 /'), findsOneWidget);
     });
 
-    testWidgets('默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
+    testWidgets(
+        '默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
         '保存后自动清除失效记录', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -1285,7 +1287,8 @@ void main() {
       expect(assistant.defaultModelName, isNull);
     });
 
-    testWidgets('同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
+    testWidgets(
+        '同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
         '重复 value 崩溃', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -1477,7 +1480,8 @@ void main() {
       expect(assistant.defaultToolNames, isNot(contains('todowrite')));
     });
 
-    testWidgets('默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
+    testWidgets(
+        '默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
         '排序，而不是按供应商配置的添加顺序', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -1529,13 +1533,11 @@ void main() {
 
       // 已保存顺序中的模型按保存顺序排在前，未保存的模型按原顺序追加在末尾：
       // 期望 claude → gpt-4o → gemini（而非配置添加顺序 gpt-4o → claude → gemini）。
-      final claudeY = tester
-          .getCenter(find.text('claude-3.5-sonnet | OpenAI'))
-          .dy;
+      final claudeY =
+          tester.getCenter(find.text('claude-3.5-sonnet | OpenAI')).dy;
       final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
-      final geminiY = tester
-          .getCenter(find.text('gemini-2.0-flash | OpenAI'))
-          .dy;
+      final geminiY =
+          tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
       expect(
         claudeY,
         lessThan(gptY),
@@ -1544,7 +1546,8 @@ void main() {
       expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
-    testWidgets('saving the dialog without touching 默认设置 keeps defaults '
+    testWidgets(
+        'saving the dialog without touching 默认设置 keeps defaults '
         'unconfigured', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -1581,8 +1584,7 @@ void main() {
       expect(
         assistant.defaultToolNames,
         isNull,
-        reason:
-            '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
+        reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
             '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭',
       );
     });
