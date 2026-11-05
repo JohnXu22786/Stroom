@@ -940,8 +940,7 @@ class StreamingFenceInfoCache {
   ) {
     final updated = (
       tail: null,
-      tailSource:
-          cached.hasUnfencedIndentedCode ? text : null,
+      tailSource: cached.hasUnfencedIndentedCode ? text : null,
       isCached: true,
       hasUnfencedIndentedCode: cached.hasUnfencedIndentedCode,
       openFenceIndex: cached.openFenceIndex,

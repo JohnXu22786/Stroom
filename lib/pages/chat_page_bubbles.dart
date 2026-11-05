@@ -373,13 +373,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // the message text as streamingText for the same fence-completion
     // check, so a closed block in a streaming message is never treated as
     // still being generated.
-    final streamingFenceInfoCache =
-        isStreaming && _streamingMsgId == message.id
-            ? _streamingFenceInfoCaches.putIfAbsent(
-                '${message.id}:fallback',
-                StreamingFenceInfoCache.new,
-              )
-            : null;
+    final streamingFenceInfoCache = isStreaming && _streamingMsgId == message.id
+        ? _streamingFenceInfoCaches.putIfAbsent(
+            '${message.id}:fallback',
+            StreamingFenceInfoCache.new,
+          )
+        : null;
     final markdownConfig = buildMessageMarkdownConfig(
       isDark: isDark,
       conversationIsStreaming: isStreaming,
