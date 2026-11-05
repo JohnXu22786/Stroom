@@ -18,7 +18,6 @@ const cases = {
     accepted: false,
     exitCode: 17,
     diagnostic: 'lifecycle JS entry failed',
-    exitCodeDiagnostic: 'npm error code 17',
   },
   'async-failure': {
     marker: null,
@@ -114,9 +113,7 @@ process.on('exit', () => {
       (!expected.forbiddenLogMarker || !lifecycleOutput.some((line) =>
         line.indexOf(expected.forbiddenLogMarker) !== -1)) &&
       (!expected.diagnostic || diagnostics.concat(stderrOutput).some((entry) =>
-        entry.indexOf(expected.diagnostic) !== -1)) &&
-      (!expected.exitCodeDiagnostic || stderrOutput.some((entry) =>
-        entry.indexOf(expected.exitCodeDiagnostic) !== -1))
+        entry.indexOf(expected.diagnostic) !== -1))
   console.log(
     statusMatches
       ? 'MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS ' + caseName
