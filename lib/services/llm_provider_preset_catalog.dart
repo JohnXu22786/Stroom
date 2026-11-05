@@ -2711,8 +2711,10 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
   ),
   // M46 deferred: the pinned Tencent registry warns that its legacy Hunyuan
   // platform discontinues 46 model lines (including TurboS/T1) on 2026-06-22
-  // and requests a recheck before 2026-09-30. No newer endpoint/model evidence
-  // is pinned, so the provider remains deferred. SumoPod, Token Kiosk and
+  // and requests a recheck by 2026-09-30. That date has passed; this cohort
+  // audit has no post-deadline source verifying current endpoint/model support,
+  // so Tencent remains excluded pending verification. This does not assert
+  // that the entire provider is discontinued. SumoPod, Token Kiosk and
   // TokenRouter declare defaultContextLength=128000 with dynamic /models, which
   // the existing preset contract cannot attach to remotely discovered models.
   // TheB.AI has no per-ID registry entry/executable adapter at M33 pin d1ba822.
