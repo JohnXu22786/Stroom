@@ -385,7 +385,6 @@ void main() {
       'orcarouter',
       'ovhcloud',
       'perplexity',
-      'pioneer',
     ]) {
       expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
     }
@@ -912,10 +911,8 @@ void main() {
       'supportedThinkingEfforts': ['low', 'medium', 'high'],
     });
 
-    // Navy needs a provider-specific User-Agent header, and NLP Cloud's
-    // `/v1/gpu` registry URL cannot be represented by this connector, which
-    // appends `/chat/completions` to the configured endpoint.
-    expect(findLlmOpenAiProviderPreset('navy'), isNull);
+    // NLP Cloud's `/v1/gpu` registry URL cannot be represented by this
+    // connector, which appends `/chat/completions` to the configured endpoint.
     expect(findLlmOpenAiProviderPreset('nlpcloud'), isNull);
     // Naga.ai requires an API key; the similarly named Naga.ac registry entry
     // permits anonymous requests and is not the same account mode.
@@ -1018,6 +1015,7 @@ void main() {
       'alibaba-cn',
       'ant-ling',
       'anyapi',
+      'api-airforce',
       'apmix',
       'arcee-ai',
       'auriko',
@@ -1099,6 +1097,7 @@ void main() {
       'nan',
       'nanogpt',
       'nara',
+      'navy',
       'nebius',
       'nous-research',
       'nscale',
@@ -1113,6 +1112,7 @@ void main() {
       'plamo',
       'poe',
       'poixe-ai',
+      'pioneer',
       'poolside',
       'publicai',
       'regolo',
@@ -1130,6 +1130,7 @@ void main() {
       'tokenmarket',
       'tokenreply',
       'typhoon',
+      'uc-direct',
       'unifically',
       'unorouter',
       'upstage',
@@ -1152,8 +1153,13 @@ void main() {
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
       expect(preset.authType, 'api_key');
-      expect(preset.authorizationHeader, 'Authorization');
-      expect(preset.authorizationScheme, 'Bearer');
+      if (const {'pioneer', 'uc-direct'}.contains(preset.id)) {
+        expect(preset.authorizationHeader, 'X-API-Key', reason: preset.id);
+        expect(preset.authorizationScheme, isEmpty, reason: preset.id);
+      } else {
+        expect(preset.authorizationHeader, 'Authorization', reason: preset.id);
+        expect(preset.authorizationScheme, 'Bearer', reason: preset.id);
+      }
       expect(preset.defaultApiProtocol, 'openai.chat_completions');
     }
     expect(
@@ -1176,6 +1182,7 @@ void main() {
         'ant-ling': 'https://api.ant-ling.com/v1/chat/completions',
         'anyapi': 'https://api.anyapi.ai/v1/chat/completions',
         'apmix': 'https://api.apmix.ai/v1/chat/completions',
+        'api-airforce': 'https://api.airforce/v1/chat/completions',
         'auriko': 'https://api.auriko.ai/v1/chat/completions',
         'baseten': 'https://inference.baseten.co/v1/chat/completions',
         'baichuan': 'https://api.baichuan-ai.com/v1/chat/completions',
@@ -1256,6 +1263,7 @@ void main() {
         'nan': 'https://api.nan.builders/v1/chat/completions',
         'nanogpt': 'https://nano-gpt.com/api/v1/chat/completions',
         'nara': 'https://router.bynara.id/v1/chat/completions',
+        'navy': 'https://api.navy/v1/chat/completions',
         'nebius': 'https://api.tokenfactory.nebius.com/v1/chat/completions',
         'nous-research':
             'https://inference-api.nousresearch.com/v1/chat/completions',
@@ -1272,6 +1280,7 @@ void main() {
         'plamo': 'https://api.platform.preferredai.jp/v1/chat/completions',
         'poe': 'https://api.poe.com/v1/chat/completions',
         'poixe-ai': 'https://api.poixe.com/v1/chat/completions',
+        'pioneer': 'https://api.pioneer.ai/v1/chat/completions',
         'poolside': 'https://inference.poolside.ai/v1/chat/completions',
         'publicai': 'https://api.publicai.co/v1/chat/completions',
         'regolo': 'https://api.regolo.ai/v1/chat/completions',
@@ -1289,6 +1298,7 @@ void main() {
         'tokenmarket': 'https://api.tokensmarket.ai/v1/chat/completions',
         'tokenreply': 'https://api.tokenreply.com/v1/chat/completions',
         'typhoon': 'https://api.opentyphoon.ai/v1/chat/completions',
+        'uc-direct': 'https://api.uncensored.com/api/v1/chat/completions',
         'unifically': 'https://api.unifically.com/v1/chat/completions',
         'unorouter': 'https://api.unorouter.com/v1/chat/completions',
         'upstage': 'https://api.upstage.ai/v1/chat/completions',
@@ -2357,9 +2367,6 @@ void main() {
       ]) {
         expect(findLlmOpenAiProviderPreset(id), isNull);
       }
-      // Deferred: open-sse/config/providers/registry/api-airforce/index.ts:13-16
-      // requires HTTP-Referer and X-Title headers that presets cannot represent.
-      expect(findLlmOpenAiProviderPreset('api-airforce'), isNull);
       // Deferred: open-sse/config/providers/registry/bai/index.ts:16 requires
       // reasoning-content echo, which presets cannot represent.
       expect(findLlmOpenAiProviderPreset('bai'), isNull);
@@ -3703,10 +3710,6 @@ void main() {
         });
       }
     }
-
-    // UC Direct requires a secret-backed X-API-Key header, which the shared
-    // OpenAI-compatible account connector cannot express.
-    expect(findLlmOpenAiProviderPreset('uc-direct'), isNull);
   });
 
   test(
