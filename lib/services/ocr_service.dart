@@ -413,7 +413,7 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = OcrDiagnosticSnapshot.response(
+      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
         {'finishReason': parsed.finishReason},
         excludedValues: [config.apiKey, ...responseCredentialValues],
       )?['finishReason'] as String?;
@@ -516,7 +516,7 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = OcrDiagnosticSnapshot.response(
+      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
         {'finishReason': parsed.finishReason},
         excludedValues: [config.apiKey, ...responseCredentialValues],
       )?['finishReason'] as String?;
