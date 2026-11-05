@@ -78,6 +78,28 @@ void main() {
     );
   });
 
+  test('GigaChat preset uses source metadata and static models', () {
+    final preset = findLlmOpenAiProviderPreset('gigachat')!;
+    expect(preset.baseUrl, 'https://gigachat.devices.sberbank.ru/api/v1');
+    expect(preset.modelsUrl, isNull);
+    expect(preset.authType, 'api_key');
+    expect(preset.authorizationHeader, 'Authorization');
+    expect(preset.authorizationScheme, 'Bearer');
+    expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(
+      preset.fallbackModels.map((model) => model.id),
+      ['GigaChat-2-Max', 'GigaChat-2-Pro', 'GigaChat-2-Lite'],
+    );
+    expect(
+      preset.fallbackModels.every((model) => model.capabilities.isEmpty),
+      isTrue,
+    );
+    final config = preset.applyToEndpointConfig({});
+    expect(config['providerPresetId'], 'gigachat');
+    expect(config['apiKeyHeader'], 'Authorization');
+    expect(config['apiKeyScheme'], 'Bearer');
+  });
+
   test('g4f.space presets use source URLs, Bearer keys, and model fallbacks',
       () {
     const expected = {
@@ -1119,6 +1141,7 @@ void main() {
       'g4f-nvidia',
       'g4f-ollama',
       'g4f-pollinations',
+      'gigachat',
       'api-airforce',
       'navy',
       'pioneer',
@@ -1292,6 +1315,7 @@ void main() {
         'g4f-ollama': 'https://g4f.space/api/ollama/v1/chat/completions',
         'g4f-pollinations':
             'https://g4f.space/api/pollinations/v1/chat/completions',
+        'gigachat': 'https://gigachat.devices.sberbank.ru/api/v1',
         'ai21': 'https://api.ai21.com/studio/v1/chat/completions',
         'aimlapi': 'https://api.aimlapi.com/v1/chat/completions',
         'ainative': 'https://api.ainative.studio/api/v1/chat/completions',

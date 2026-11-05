@@ -366,28 +366,28 @@ void main() {
     );
   });
   test(
-    'CheaperInference model protocol defaults and overrides are independent',
+    'GigaChat model protocol defaults and overrides are independent',
     () {
       final account = AiGatewayAccount(
-        id: 'cheaperinference-account',
+        id: 'gigachat-account',
         connectorType: 'openai-compatibility',
         authType: 'api_key',
-        displayName: 'CheaperInference',
+        displayName: 'GigaChat',
         endpointConfig: const {
-          'providerPresetId': 'cheaperinference',
+          'providerPresetId': 'gigachat',
           'apiProtocol': 'openai.chat_completions',
         },
         models: [
           AiGatewayUpstreamModel(
-            id: 'gpt-5.4-model',
-            upstreamModelId: 'gpt-5.4',
-            displayName: 'GPT-5.4',
+            id: 'GigaChat-2-Max-model',
+            upstreamModelId: 'GigaChat-2-Max',
+            displayName: 'GigaChat 2 Max',
             config: {'apiProtocolOverride': 'openai.responses'},
           ),
           AiGatewayUpstreamModel(
             id: 'chat-model',
-            upstreamModelId: 'gpt-5.4-mini',
-            displayName: 'GPT-5.4 Mini',
+            upstreamModelId: 'GigaChat-2-Pro',
+            displayName: 'GigaChat 2 Pro',
             config: {'apiProtocolOverride': 'openai.chat_completions'},
           ),
           AiGatewayUpstreamModel(
@@ -401,7 +401,7 @@ void main() {
       expect(
         llmRoutedChatProtocolForAccountModel(
           account: account,
-          upstreamModelId: 'gpt-5.4',
+          upstreamModelId: 'GigaChat-2-Max',
           endpointType: 'openai.chat_completions',
         ),
         'openai.responses',
@@ -409,7 +409,7 @@ void main() {
       expect(
         llmRoutedChatProtocolForAccountModel(
           account: account,
-          upstreamModelId: 'gpt-5.4-mini',
+          upstreamModelId: 'GigaChat-2-Pro',
           endpointType: 'openai.chat_completions',
         ),
         'openai.chat_completions',
@@ -426,7 +426,7 @@ void main() {
       expect(
         llmRoutedChatProtocolForAccountModel(
           account: account,
-          upstreamModelId: 'gpt-5.4',
+          upstreamModelId: 'GigaChat-2-Max',
           endpointType: 'openai.chat_completions',
           apiProtocolOverride: 'openai.chat_completions',
         ),

@@ -253,7 +253,7 @@ void main() {
   });
 
   testWidgets(
-    'CheaperInference preset seeds Responses models on API-key account',
+    'GigaChat preset stores its API key securely and seeds source models',
     (tester) async {
       final credentials = _MemoryCredentialStore();
       final service = LlmAccountConnectorService(
@@ -276,14 +276,14 @@ void main() {
               widget.decoration.labelText == '服务商预设',
         ),
       );
-      preset.onChanged!('cheaperinference');
+      preset.onChanged!('gigachat');
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byWidgetPredicate(
           (widget) =>
               widget is TextField && widget.decoration?.labelText == '凭据',
         ),
-        'cheaperinference-test-key',
+        'gigachat-test-key',
       );
       await tester.ensureVisible(find.text('保存').last);
       await tester.tap(find.text('保存').last);
@@ -291,28 +291,25 @@ void main() {
 
       final saved = (await service.listAccounts()).single;
       expect(saved.connectorType, 'openai-compatibility');
-      expect(saved.endpointConfig['providerPresetId'], 'cheaperinference');
+      expect(saved.endpointConfig['providerPresetId'], 'gigachat');
       expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
       expect(
         saved.endpointConfig['baseUrl'],
-        'https://api.cheaperinference.com/v1/chat/completions',
+        'https://gigachat.devices.sberbank.ru/api/v1',
       );
       expect(
         saved.models.map((model) => model.upstreamModelId),
         orderedEquals([
-          'gpt-5.4',
-          'gpt-5.4-mini',
-          'gpt-5.5',
-          'gpt-5.6-luna',
-          'gpt-5.6-sol',
-          'gpt-5.6-terra',
+          'GigaChat-2-Max',
+          'GigaChat-2-Pro',
+          'GigaChat-2-Lite',
         ]),
       );
       expect(
         saved.models.map((model) => model.config['apiProtocolOverride']),
-        everyElement('openai.responses'),
+        everyElement(isNull),
       );
-      expect(credentials.values.values, ['cheaperinference-test-key']);
+      expect(credentials.values.values, ['gigachat-test-key']);
     },
   );
 

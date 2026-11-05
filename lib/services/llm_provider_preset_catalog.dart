@@ -190,6 +190,16 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     ],
   ),
   LlmProviderPreset(
+    id: 'gigachat',
+    displayName: 'GigaChat',
+    baseUrl: 'https://gigachat.devices.sberbank.ru/api/v1',
+    fallbackModels: [
+      LlmProviderPresetModel('GigaChat-2-Max'),
+      LlmProviderPresetModel('GigaChat-2-Pro'),
+      LlmProviderPresetModel('GigaChat-2-Lite'),
+    ],
+  ),
+  LlmProviderPreset(
     id: 'api-airforce',
     displayName: 'Api.airforce',
     baseUrl: 'https://api.airforce/v1/chat/completions',
