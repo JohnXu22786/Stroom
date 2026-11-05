@@ -14,6 +14,67 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
+  test('M42 API-key presets retain audited endpoints and model discovery', () {
+    const endpoints = {
+      'logfare': 'https://logfare.ai/v1/chat/completions',
+      'longcat': 'https://api.longcat.chat/openai/v1/chat/completions',
+      'lyceum': 'https://api.lyceum.technology/openai/v1/chat/completions',
+      'meganova-ai': 'https://api.meganova.ai/v1/chat/completions',
+      'mixlayer': 'https://models.mixlayer.ai/v1/chat/completions',
+      'mnn-ai': 'https://api.mnnai.ru/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect(
+      {
+        for (final id in [
+          'logfare',
+          'lyceum',
+          'meganova-ai',
+          'mixlayer',
+          'mnn-ai',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'logfare': 'https://logfare.ai/v1/models',
+        'lyceum': 'https://api.lyceum.technology/openai/v1/models',
+        'meganova-ai': 'https://api.meganova.ai/v1/models',
+        'mixlayer': 'https://models.mixlayer.ai/v1/models',
+        'mnn-ai': 'https://api.mnnai.ru/v1/models',
+      },
+    );
+    expect(findLlmOpenAiProviderPreset('longcat')!.modelsUrl, isNull);
+    expect(
+      findLlmOpenAiProviderPreset('longcat')!.fallbackModels.single.id,
+      'LongCat-2.0',
+    );
+    expect(
+      findLlmOpenAiProviderPreset('longcat')!
+          .fallbackModels
+          .single
+          .capabilities,
+      {'contextLength': 1048576},
+    );
+    for (final id in [
+      'meta-llama',
+      'modal',
+      'maritalk',
+      'modelscope',
+      'monsterapi',
+      'morph',
+      'naga-ac',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
+    }
+  });
+
   test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
       'agnes-cn',
@@ -97,6 +158,12 @@ void main() {
       'llm-kiwi',
       'llm7',
       'llmgateway',
+      'logfare',
+      'longcat',
+      'lyceum',
+      'meganova-ai',
+      'mixlayer',
+      'mnn-ai',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -195,6 +262,12 @@ void main() {
         'llm-kiwi': 'https://api.llm.kiwi/v1/chat/completions',
         'llm7': 'https://api.llm7.io/v1/chat/completions',
         'llmgateway': 'https://api.llmgateway.io/v1/chat/completions',
+        'logfare': 'https://logfare.ai/v1/chat/completions',
+        'longcat': 'https://api.longcat.chat/openai/v1/chat/completions',
+        'lyceum': 'https://api.lyceum.technology/openai/v1/chat/completions',
+        'meganova-ai': 'https://api.meganova.ai/v1/chat/completions',
+        'mixlayer': 'https://models.mixlayer.ai/v1/chat/completions',
+        'mnn-ai': 'https://api.mnnai.ru/v1/chat/completions',
       },
     );
     expect(
@@ -219,6 +292,11 @@ void main() {
           'llm-kiwi',
           'llm7',
           'llmgateway',
+          'logfare',
+          'lyceum',
+          'meganova-ai',
+          'mixlayer',
+          'mnn-ai',
         ])
           id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
       },
@@ -230,6 +308,11 @@ void main() {
         'llm-kiwi': 'https://api.llm.kiwi/v1/models',
         'llm7': 'https://api.llm7.io/v1/models',
         'llmgateway': 'https://api.llmgateway.io/v1/models',
+        'logfare': 'https://logfare.ai/v1/models',
+        'lyceum': 'https://api.lyceum.technology/openai/v1/models',
+        'meganova-ai': 'https://api.meganova.ai/v1/models',
+        'mixlayer': 'https://models.mixlayer.ai/v1/models',
+        'mnn-ai': 'https://api.mnnai.ru/v1/models',
       },
     );
     expect(
