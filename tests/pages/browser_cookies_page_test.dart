@@ -216,7 +216,7 @@ void main() {
       await tester.pump();
       await platform.initialReadStarted.future;
 
-      await tester.tap(find.text('清除所有Cookies'));
+      await tester.tap(find.text('清除所有 Cookie'));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('清除'));
       await tester.pump();
@@ -242,7 +242,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Clear All
-      await tester.tap(find.text('清除所有Cookies'));
+      await tester.tap(find.text('清除所有 Cookie'));
       await tester.pumpAndSettle();
 
       // Tap cancel
@@ -274,7 +274,7 @@ void main() {
       expect(find.text('example.com'), findsOneWidget);
 
       // Tap Clear All
-      await tester.tap(find.text('清除所有Cookies'));
+      await tester.tap(find.text('清除所有 Cookie'));
       await tester.pumpAndSettle();
 
       // Confirm
@@ -322,7 +322,7 @@ void main() {
             of: find.text('example.com'),
             matching: find.byType(Card),
           ),
-          matching: find.byTooltip('清除此域名下的所有Cookies'),
+          matching: find.byTooltip('清除此域名下的所有 Cookie'),
         ),
       );
       await tester.pumpAndSettle();
@@ -355,7 +355,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('清除此域名下的所有Cookies').first);
+      await tester.tap(find.byTooltip('清除此域名下的所有 Cookie').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
@@ -393,17 +393,17 @@ void main() {
       await tester.pumpAndSettle();
 
       // Both cookie rows render a per-cookie delete button.
-      expect(find.byTooltip('删除此Cookie'), findsNWidgets(2));
+      expect(find.byTooltip('删除此 Cookie'), findsNWidgets(2));
 
       // Delete the first one (session). The tooltip finder returns them in
       // tree order; delete the first row's button.
-      await tester.tap(find.byTooltip('删除此Cookie').first);
+      await tester.tap(find.byTooltip('删除此 Cookie').first);
       await tester.pumpAndSettle();
 
       final cookies = await BrowserCookieService.getCookiesFromFile();
       final names = cookies['example.com']!.map((c) => c['name']).toList();
       expect(names, ['theme']);
-      expect(find.byTooltip('删除此Cookie'), findsOneWidget);
+      expect(find.byTooltip('删除此 Cookie'), findsOneWidget);
     });
 
     testWidgets('cookie without a name shows no delete button', (tester) async {
@@ -419,7 +419,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('example.com'), findsOneWidget);
-      expect(find.byTooltip('删除此Cookie'), findsNothing);
+      expect(find.byTooltip('删除此 Cookie'), findsNothing);
     });
   });
 }
