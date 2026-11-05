@@ -499,13 +499,19 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
   /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
-    final blocks = msg.blocks ??
-        legacyToBlocks(
-          reasoningSections: msg.reasoningSections ?? [],
-          textChunks: msg.textSections ?? [],
-          toolCalls: msg.toolCalls ?? [],
-          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
-        );
+    final rebuiltBlocks = legacyToBlocks(
+      reasoningSections: msg.reasoningSections ?? [],
+      textChunks: msg.textSections ?? [],
+      toolCalls: msg.toolCalls ?? [],
+      toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
+    );
+    rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
+    final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+        ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
+            !(msg.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+            (msg.reasoningSections != null || msg.textSections != null));
+    final blocks =
+        hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
     final segments = blocksToSegments(blocks);
 
     // Fallback: no blocks produced anything, use content as single block
