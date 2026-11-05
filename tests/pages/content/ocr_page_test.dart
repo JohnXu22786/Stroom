@@ -81,6 +81,7 @@ Widget _buildTestApp({
   List<SelectedImage>? testImages,
   Map<String, dynamic>? retryData,
   String? retryTaskId,
+  BackgroundTask? retryTaskGeneration,
   List<OcrPageOutcome> retryPageOutcomes = const [],
   Locale locale = const Locale('zh', 'CN'),
   List<OcrInstruction> ocrInstructions = const [],
@@ -108,6 +109,15 @@ Widget _buildTestApp({
     int? imageQuality,
   })? testGalleryPicker,
 }) {
+  var sourceTaskGeneration = retryTaskGeneration;
+  if (sourceTaskGeneration == null && retryTaskId != null) {
+    for (final task in backgroundTasksNotifier?.state ?? <BackgroundTask>[]) {
+      if (task.id == retryTaskId) {
+        sourceTaskGeneration = task;
+        break;
+      }
+    }
+  }
   return ProviderScope(
     overrides: [
       if (entries != null || testProviderEntriesNotifier != null)
@@ -139,6 +149,7 @@ Widget _buildTestApp({
         testOcrServiceFactory: testOcrServiceFactory,
         retryData: retryData,
         retryTaskId: retryTaskId,
+        retryTaskGeneration: sourceTaskGeneration,
         retryPageOutcomes: retryPageOutcomes,
         testCameraPicker: testCameraPicker,
         testGalleryPicker: testGalleryPicker,
@@ -1598,6 +1609,255 @@ void main() {
       expect(stillLegacy.instructionContent, 'Read the saved receipt');
       expect(stillLegacy.images.single.bytes, image.bytes);
 
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+      'legacy retry migration does not update a same-ID replacement task',
+      (tester) async {
+        WebFileStore.enableTestMode();
+        final storageDir = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('ocr_retry_generation_'),
+        ))!;
+        const taskId = 'legacy-retry-replaced-during-migration';
+        final bytes = Uint8List.fromList([17, 18, 19]);
+        final migrationStarted = Completer<void>();
+        final finishMigration = Completer<void>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final legacyRetryData = {
+          'type': 'ocr',
+          'version': 1,
+          'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+          'images': [
+            {'bytes': base64Encode(bytes), 'format': 'png'},
+          ],
+        };
+        final replacementRetryData = {
+          'type': 'ocr',
+          'version': 2,
+          'modelRef': {'configId': 'replacement', 'modelId': 'replacement'},
+          'images': <dynamic>[],
+        };
+        String? migratedReference;
+        BackgroundTaskNotifier.debugStorageDirectoryOverride = storageDir.path;
+        await tester.runAsync(() async {
+          final tasksFile = File('${storageDir.path}/background/tasks.json');
+          await tasksFile.parent.create(recursive: true);
+          await tasksFile.writeAsString('[]');
+        });
+        expect(
+          await tester.runAsync(() => notifier.restoreFromPersistence()),
+          isFalse,
+        );
+        notifier.setTasksForTest([
+          BackgroundTask(
+            id: taskId,
+            type: BackgroundTaskType.ocr,
+            title: 'legacy OCR retry',
+            status: TaskStatus.failed,
+            retryData: legacyRetryData,
+          ),
+        ]);
+
+        try {
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry()],
+              backgroundTasksNotifier: notifier,
+              retryData: legacyRetryData,
+              retryTaskId: taskId,
+              testRetryImageRestorer: (snapshot) async =>
+                  OcrRetryRestoreResult(
+                    images: snapshot.images,
+                    missingImageCount: 0,
+                  ),
+              testRetrySnapshotCacher: (
+                  {required taskId, required snapshot}) async {
+                final result = await OcrRetryStorage.cacheSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                );
+                migratedReference = OcrRetryStorage.referencesFromSnapshot(
+                  result,
+                ).single;
+                migrationStarted.complete();
+                await finishMigration.future;
+                return result;
+              },
+            ),
+          );
+          await _pumpUntil(tester, () => migrationStarted.isCompleted);
+
+          notifier.setTasksForTest([
+            BackgroundTask(
+              id: taskId,
+              type: BackgroundTaskType.ocr,
+              title: 'replacement OCR retry',
+              status: TaskStatus.failed,
+              retryData: replacementRetryData,
+            ),
+          ]);
+          finishMigration.complete();
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 100)),
+          );
+
+          expect(notifier.tasksForTest.single.retryData, replacementRetryData);
+          expect(migratedReference, isNotNull);
+          expect(
+            await tester.runAsync(
+              () => OcrRetryStorage.read(migratedReference!),
+            ),
+            isNull,
+          );
+        } finally {
+          if (!finishMigration.isCompleted) finishMigration.complete();
+          await tester.pumpWidget(const SizedBox.shrink());
+          BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
+          WebFileStore.disableTestMode();
+          await tester.runAsync(() => storageDir.delete(recursive: true));
+        }
+      },
+    );
+
+    testWidgets(
+      'legacy retry migration uses the generation that supplied retry data',
+      (tester) async {
+        const taskId = 'legacy-retry-replaced-before-page-open';
+        final bytes = Uint8List.fromList([41, 42, 43]);
+        final cacheStarted = Completer<void>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final legacyRetryData = {
+          'type': 'ocr',
+          'version': 1,
+          'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+          'images': [
+            {'bytes': base64Encode(bytes), 'format': 'png'},
+          ],
+        };
+        final originalTask = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.ocr,
+          title: 'legacy OCR retry',
+          status: TaskStatus.failed,
+          retryData: legacyRetryData,
+        );
+        final replacementRetryData = {
+          'type': 'ocr',
+          'version': 2,
+          'modelRef': {'configId': 'replacement', 'modelId': 'replacement'},
+          'images': <dynamic>[],
+        };
+        notifier.setTasksForTest([
+          BackgroundTask(
+            id: taskId,
+            type: BackgroundTaskType.ocr,
+            title: 'replacement OCR retry',
+            status: TaskStatus.failed,
+            retryData: replacementRetryData,
+          ),
+        ]);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry()],
+            backgroundTasksNotifier: notifier,
+            retryData: legacyRetryData,
+            retryTaskId: taskId,
+            retryTaskGeneration: originalTask,
+            testRetryImageRestorer: (snapshot) async =>
+                OcrRetryRestoreResult(
+                  images: snapshot.images,
+                  missingImageCount: 0,
+                ),
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cacheStarted.complete();
+              return Future.value({
+                'type': 'ocr',
+                'version': OcrRetrySnapshot.currentVersion,
+                'images': [
+                  {'storageRef': 'ocr_retry_cache/stale-page-source'},
+                ],
+              });
+            },
+          ),
+        );
+        await _pumpUntil(tester, () => cacheStarted.isCompleted);
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+
+        expect(notifier.tasksForTest.single.retryData, replacementRetryData);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets('legacy retry migration updates its original task generation', (
+      tester,
+    ) async {
+      const taskId = 'legacy-retry-migration-current-owner';
+      final bytes = Uint8List.fromList([21, 22, 23]);
+      final migrationStarted = Completer<void>();
+      final finishMigration = Completer<void>();
+      final notifier = _InspectableBackgroundTaskNotifier();
+      final legacyRetryData = {
+        'type': 'ocr',
+        'version': 1,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': [
+          {'bytes': base64Encode(bytes), 'format': 'png'},
+        ],
+      };
+      notifier.setTasksForTest([
+        BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.ocr,
+          title: 'legacy OCR retry',
+          status: TaskStatus.failed,
+          retryData: legacyRetryData,
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          backgroundTasksNotifier: notifier,
+          retryData: legacyRetryData,
+          retryTaskId: taskId,
+          testRetryImageRestorer: (snapshot) async =>
+              OcrRetryRestoreResult(
+                images: snapshot.images,
+                missingImageCount: 0,
+              ),
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) async {
+            migrationStarted.complete();
+            await finishMigration.future;
+            return {
+              'type': 'ocr',
+              'version': OcrRetrySnapshot.currentVersion,
+              'images': [
+                {'storageRef': 'ocr_retry_cache/migrated-current-owner'},
+              ],
+            };
+          },
+        ),
+      );
+      await _pumpUntil(tester, () => migrationStarted.isCompleted);
+      finishMigration.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+
+      expect(
+        notifier.tasksForTest.single.retryData?['version'],
+        OcrRetrySnapshot.currentVersion,
+      );
+      expect(
+        notifier.tasksForTest.single.retryData?['images'],
+        [
+          {'storageRef': 'ocr_retry_cache/migrated-current-owner'},
+        ],
+      );
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
