@@ -17,8 +17,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // cleared. Normal section-end events flush this same delta earlier.
     final reasoningTail = state.takeReasoningAppend();
     if (reasoningTail != null) {
-      _pushToProvider(
-          convId, streamingReasoningAppendProvider, reasoningTail);
+      _pushToProvider(convId, streamingReasoningAppendProvider, reasoningTail);
     }
 
     // Timer cancellation prevents future callbacks but does not wait for a

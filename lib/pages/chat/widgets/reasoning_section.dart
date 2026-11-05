@@ -394,8 +394,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     _displaySnapshot = text;
   }
 
-  String get _displayText =>
-      _displaySnapshot ??= _displayBuffer.toString();
+  String get _displayText => _displaySnapshot ??= _displayBuffer.toString();
 
   @override
   Widget build(BuildContext context) {

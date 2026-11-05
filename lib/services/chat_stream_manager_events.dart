@@ -43,8 +43,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           state.lastReasoningUpdate = now;
           final append = state.takeReasoningAppend();
           if (append != null) {
-            _pushToProvider(
-                convId, streamingReasoningAppendProvider, append);
+            _pushToProvider(convId, streamingReasoningAppendProvider, append);
           }
         }
 
@@ -57,8 +56,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         final completedReasoning = state.reasoningBuffer;
         state.endReasoningSection();
         final sections = state.reasoningSections;
-        _pushToProvider(
-            convId, streamingReasoningProvider, completedReasoning);
+        _pushToProvider(convId, streamingReasoningProvider, completedReasoning);
         // The service emits one ReasoningSectionEndEvent per tool round,
         // right before that round's ToolCallStartEvents. Mark that the
         // next tool call begins a new round: the reasoning-section

@@ -70,8 +70,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       _rebuildLiveSegments(msgId);
     });
 
-    ref.listen(streamingReasoningAppendProvider(convId),
-        (StreamingReasoningAppend? prev, StreamingReasoningAppend? next) {
+    ref.listen(streamingReasoningAppendProvider(convId), (prev, next) {
       if (!mounted || next == null || next.text.isEmpty) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
