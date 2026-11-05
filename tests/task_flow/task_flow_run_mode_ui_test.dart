@@ -19,6 +19,9 @@ import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/image_manifest.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -125,6 +128,64 @@ bool _startButtonEnabled(WidgetTester tester) {
 
 void main() {
   group('Task flow run-mode input adapts to the FIRST block', () {
+    testWidgets(
+        'OCR rejects a valid image selection when another manifest record is unresolved',
+        (tester) async {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      final directory = Directory.systemTemp.createTempSync('flow_ocr_pick_');
+      final originalDocuments = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _Documents(directory.path);
+      addTearDown(() async {
+        await ManifestDatabase.clearAllData();
+        ImageManifest.invalidateCache();
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+      await ManifestDatabase.clearAllData();
+      ImageManifest.invalidateCache();
+      final now = DateTime(2026, 1, 1);
+      final validRecord = ImageRecord(
+        id: 'valid-image',
+        name: 'Available image',
+        hash: 'available',
+        format: 'png',
+        createdAt: now,
+        size: 4,
+      );
+      final unresolvedRecord = ImageRecord(
+        id: 'unresolved-image',
+        name: 'Missing image',
+        hash: 'missing',
+        format: 'png',
+        createdAt: now,
+        size: 4,
+      );
+      await ImageManifest.addRecord(validRecord);
+      await ImageManifest.addRecord(unresolvedRecord);
+      final imageDirectory = Directory('${directory.path}/pictures')
+        ..createSync(recursive: true);
+      File('${imageDirectory.path}/${validRecord.storagePath}')
+          .writeAsBytesSync([1, 2, 3, 4]);
+
+      final control = _CaptureControl();
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.ocr),
+        control: control,
+      );
+      await tester.tap(find.text('选择图片（可多选）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Available image'));
+      await tester.tap(find.text('Missing image'));
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 个已选文件无法找到或读取'), findsOneWidget);
+      expect(_startButtonEnabled(tester), isFalse);
+      expect(control.submitted, isNull);
+    });
+
     testWidgets('a restored generic file input stays a picked file', (
       tester,
     ) async {

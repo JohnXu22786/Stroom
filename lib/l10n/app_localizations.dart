@@ -3274,6 +3274,12 @@ abstract class AppLocalizations {
   /// **'Some files are missing and were skipped'**
   String get taskFlowUiSomeFilesMissing;
 
+  /// No description provided for @taskFlowUiSelectedFilesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to access {count} selected file(s). Please select all files again.'**
+  String taskFlowUiSelectedFilesUnavailable(int count);
+
   /// No description provided for @taskFlowUiQueuedOne.
   ///
   /// In en, this message translates to:

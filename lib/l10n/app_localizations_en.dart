@@ -1923,6 +1923,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Some files are missing and were skipped';
 
   @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return 'Unable to access $count selected file(s). Please select all files again.';
+  }
+
+  @override
   String get taskFlowUiQueuedOne => 'Task flow added to the queue';
 
   @override
@@ -10608,6 +10613,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get taskFlowUiSomeFilesMissing =>
       'Some files are missing and were skipped';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return 'Unable to access $count selected file(s). Please select all files again.';
+  }
 
   @override
   String get taskFlowUiQueuedOne => 'Task flow added to the queue';

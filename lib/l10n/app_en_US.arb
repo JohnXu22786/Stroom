@@ -647,6 +647,14 @@
   "taskFlowUiFileTooLarge": "“{name}” exceeds {limit} MB. Choose a smaller file.",
   "taskFlowUiFileUnreadable": "“{name}” is empty or unreadable",
   "taskFlowUiSomeFilesMissing": "Some files are missing and were skipped",
+  "taskFlowUiSelectedFilesUnavailable": "Unable to access {count} selected file(s). Please select all files again.",
+  "@taskFlowUiSelectedFilesUnavailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "taskFlowUiQueuedOne": "Task flow added to the queue",
   "taskFlowUiQueuedMany": "Added {count} task flows to the queue",
   "taskFlowUiRunTitle": "This Run",

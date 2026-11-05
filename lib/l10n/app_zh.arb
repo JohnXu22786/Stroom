@@ -647,6 +647,14 @@
   "taskFlowUiFileTooLarge": "「{name}」超过 {limit} MB，请选择较小文件",
   "taskFlowUiFileUnreadable": "「{name}」为空或无法读取",
   "taskFlowUiSomeFilesMissing": "部分文件不存在，已跳过",
+  "taskFlowUiSelectedFilesUnavailable": "有 {count} 个已选文件无法找到或读取，请重新选择全部文件。",
+  "@taskFlowUiSelectedFilesUnavailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "taskFlowUiQueuedOne": "任务流已加入队列",
   "taskFlowUiQueuedMany": "已将 {count} 个任务流加入队列",
   "taskFlowUiRunTitle": "本次运行",
