@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,6 @@ import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -131,24 +131,19 @@ void main() {
     testWidgets(
         'OCR rejects a valid image selection when another manifest record is unresolved',
         (tester) async {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-      final directory = Directory.systemTemp.createTempSync('flow_ocr_pick_');
-      final originalDocuments = PathProviderPlatform.instance;
-      PathProviderPlatform.instance = _Documents(directory.path);
-      addTearDown(() async {
-        await ManifestDatabase.clearAllData();
-        ImageManifest.invalidateCache();
-        PathProviderPlatform.instance = originalDocuments;
-        directory.deleteSync(recursive: true);
-      });
-      await ManifestDatabase.clearAllData();
+      ManifestDatabase.enableTestMode();
       ImageManifest.invalidateCache();
+      final folderName =
+          'ocr_picker_${DateTime.now().microsecondsSinceEpoch}';
+      final pictureRoot = Directory('${Directory.current.path}/pictures');
+      final pictureRootExisted = pictureRoot.existsSync();
+      final pictureDirectory = Directory('${pictureRoot.path}/$folderName');
+      pictureDirectory.createSync(recursive: true);
       final now = DateTime(2026, 1, 1);
       final validRecord = ImageRecord(
         id: 'valid-image',
         name: 'Available image',
-        hash: 'available',
+        hash: '$folderName/available',
         format: 'png',
         createdAt: now,
         size: 4,
@@ -156,16 +151,31 @@ void main() {
       final unresolvedRecord = ImageRecord(
         id: 'unresolved-image',
         name: 'Missing image',
-        hash: 'missing',
+        hash: '$folderName/missing',
         format: 'png',
         createdAt: now,
         size: 4,
       );
+      addTearDown(() async {
+        await ImageManifest.deleteFile(validRecord.storagePath);
+        await ManifestDatabase.clearAllData();
+        ImageManifest.invalidateCache();
+        if (pictureDirectory.existsSync()) {
+          pictureDirectory.deleteSync(recursive: true);
+        }
+        if (!pictureRootExisted &&
+            pictureRoot.existsSync() &&
+            pictureRoot.listSync().isEmpty) {
+          pictureRoot.deleteSync();
+        }
+      });
       await ImageManifest.addRecord(validRecord);
       await ImageManifest.addRecord(unresolvedRecord);
-      final imageDirectory = Directory('${directory.path}/pictures')
-        ..createSync(recursive: true);
-      File('${imageDirectory.path}/${validRecord.storagePath}')
+      await ImageManifest.writeFile(
+        validRecord.storagePath,
+        Uint8List.fromList([1, 2, 3, 4]),
+      );
+      File('${pictureDirectory.path}/available.png')
           .writeAsBytesSync([1, 2, 3, 4]);
 
       final control = _CaptureControl();
