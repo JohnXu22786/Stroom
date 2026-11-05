@@ -1298,7 +1298,7 @@ void main() {
         'tokenmarket': 'https://api.tokensmarket.ai/v1/chat/completions',
         'tokenreply': 'https://api.tokenreply.com/v1/chat/completions',
         'typhoon': 'https://api.opentyphoon.ai/v1/chat/completions',
-        'uc-direct': 'https://api.uncensored.com/api/v1/chat/completions',
+        'uc-direct': 'https://api.uncensored.com/api/v1',
         'unifically': 'https://api.unifically.com/v1/chat/completions',
         'unorouter': 'https://api.unorouter.com/v1/chat/completions',
         'upstage': 'https://api.upstage.ai/v1/chat/completions',
