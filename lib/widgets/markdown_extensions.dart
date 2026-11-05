@@ -5,7 +5,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
 import '../utils/mhchem_syntax.dart';
 import 'code_block_source_widget.dart';
-import 'html_code_block_widget.dart';
+import 'html_inline_preview_widget.dart';
 import 'mermaid_render_widget.dart';
 
 /// Tag used by the LaTeX custom generator.
@@ -303,11 +303,9 @@ bool isCodeBlockStillGenerating({
 /// still open. A block whose fence has closed renders immediately (once),
 /// even if the stream continues after it. This avoids repeatedly loading
 /// the WebView on each incremental streaming update.
-/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
-/// which shows an HTML card (with full-screen preview / view-code actions)
-/// while streaming and a compact card with action buttons once the block
-/// finishes generating; the user must tap "查看代码" to see the raw HTML
-/// source (where the preview button renders the HTML in a dialog).
+/// If [language] is `'html-preview'`, renders the closed block as inline visual
+/// content. An open block remains inert until its fence closes. Plain `html`
+/// fences stay regular source code blocks.
 /// Otherwise, renders the code using [CodeBlockSourceView] which provides
 /// a unified code display area with line numbers, copy / save / wrap
 /// toolbar buttons and the language label in the top-left corner.
@@ -341,13 +339,10 @@ Widget _buildCodeBlock(
     return MermaidRenderWidget(mermaidCode: code);
   }
 
-  if (language.toLowerCase() == 'html') {
-    // The same fence-completion check as mermaid: the HTML card shows its
-    // "正在生成中" state only while the block's fence is still open, so a
-    // closed block renders as a finished card even mid-stream.
-    return HtmlCodeBlockWidget(
+  if (language.toLowerCase() == 'html-preview') {
+    // Do not mount the WebView until this visual-content fence is complete.
+    return HtmlInlinePreviewWidget(
       htmlCode: code,
-      language: language,
       isStreaming: isCodeBlockStillGenerating(
         isStreaming: isStreaming,
         streamingText: streamingText,
@@ -488,10 +483,8 @@ bool _isClosingFenceLine(String line, String char, int openingLength) {
 /// Mermaid code blocks (```` ```mermaid ````) are rendered using
 /// [MermaidRenderWidget].
 ///
-/// HTML code blocks (```` ```html ````) are rendered using
-/// [HtmlCodeBlockWidget] which shows an HTML card (with full-screen preview
-/// and view-code actions) instead of the raw source by default; the user
-/// must tap the "查看代码" button to see the raw HTML source.
+/// Plain HTML code blocks (```` ```html ````) remain source code. Only an
+/// explicit ```` ```html-preview ```` fence runs as inline visual content.
 ///
 /// All other code blocks are rendered using [CodeBlockSourceView] which
 /// provides a unified code display area with line numbers, copy / save /
@@ -509,7 +502,7 @@ PreConfig codeBlockPreConfig({
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
   );
-  // Use a builder so mermaid and html code blocks get rendered via WebView
+  // Use a builder so mermaid and html-preview blocks get rendered via WebView
   // while all other code blocks still get syntax highlighting.
   return PreConfig(
     theme: baseConfig.theme,
