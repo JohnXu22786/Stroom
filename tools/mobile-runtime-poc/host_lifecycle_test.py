@@ -32,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix="stroom-mobile-lifecycle-") as temp:
         env.update({
             "STROOM_NPM_CLI": str(npm_cli),
             "STROOM_SUCRASE_MODULE": str(sucrase),
+            "STROOM_LIFECYCLE_MARKER": str(target / "bridge-marker.txt"),
             "NODE_OPTIONS": "--require=" + str(bridge),
         })
         result = subprocess.run(
@@ -49,11 +50,7 @@ with tempfile.TemporaryDirectory(prefix="stroom-mobile-lifecycle-") as temp:
         if should_pass != accepted or output_marker not in result.stdout:
             raise SystemExit("Unexpected result for fixture: " + case)
         if accepted:
-            name = {
-                "javascript": "stroom-mobile-js-lifecycle-fixture",
-                "typescript": "stroom-mobile-ts-lifecycle-fixture",
-            }[case]
-            marker_file = target / "node_modules" / name / "bridge-marker.txt"
+            marker_file = target / "bridge-marker.txt"
             if marker_file.read_text() != file_marker:
                 raise SystemExit("Lifecycle marker does not match: " + case)
     print("HOST_MOBILE_BRIDGE_FIXTURES_PASS count=4")

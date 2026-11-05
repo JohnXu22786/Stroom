@@ -1,4 +1,4 @@
 const fs = require('node:fs')
-const path = require('node:path')
-fs.writeFileSync(path.join(__dirname, 'bridge-marker.txt'), 'JS lifecycle ran in Node Mobile')
+if (!process.env.STROOM_LIFECYCLE_MARKER) throw new Error('marker path was not passed')
+fs.writeFileSync(process.env.STROOM_LIFECYCLE_MARKER, 'JS lifecycle ran in Node Mobile')
 console.log('MOBILE_LIFECYCLE_JS_PASS')

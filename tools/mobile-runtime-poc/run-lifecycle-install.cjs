@@ -23,6 +23,7 @@ if (!expected) throw new Error('Unknown lifecycle fixture: ' + caseName)
 const fixtureRoot = path.join(__dirname, 'lifecycle-fixtures')
 const packagePath = path.join(fixtureRoot, caseName)
 const target = path.join(__dirname, 'lifecycle-install-' + caseName)
+const markerPath = path.join(target, 'bridge-marker.txt')
 const runtimeFiles = path.resolve(__dirname, '../..')
 const npmCli = path.join(runtimeFiles, 'test/npm/package/bin/npm-cli.js')
 const shim = path.join(__dirname, 'compatibility-shim.cjs')
@@ -39,6 +40,7 @@ console.error = (...args) => {
 eval(new TextDecoder('utf-8').decode(fs.readFileSync(shim)))
 process.env.STROOM_NPM_CLI = npmCli
 process.env.STROOM_SUCRASE_MODULE = sucrase
+process.env.STROOM_LIFECYCLE_MARKER = markerPath
 require(bridge)
 process.argv = [
   process.execPath, npmCli, 'install', '--prefix', target, '--foreground-scripts',
@@ -47,11 +49,11 @@ process.argv = [
 console.log('MOBILE_LIFECYCLE_INSTALL_BEGIN ' + caseName)
 process.on('exit', () => {
   const installedPath = path.join(target, 'node_modules', require(path.join(packagePath, 'package.json')).name)
-  const markerPath = path.join(installedPath, 'bridge-marker.txt')
+  const packageInstalled = fs.existsSync(path.join(installedPath, 'package.json'))
   const markerMatches = expected.marker !== null && fs.existsSync(markerPath) &&
     fs.readFileSync(markerPath, 'utf8') === expected.marker
   const statusMatches = expected.accepted
-    ? process.exitCode === 0 && markerMatches
+    ? process.exitCode === 0 && packageInstalled && markerMatches
     : process.exitCode !== 0 &&
       diagnostics.some((entry) => entry.indexOf(expected.diagnostic) === 0)
   console.log(
