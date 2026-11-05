@@ -71,16 +71,56 @@ class _ConversationStreamState {
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
   String? streamingMsgId;
-  String fullReply = '';
-  String reasoningBuffer = '';
-  List<String> reasoningSections = [];
+  final StringBuffer _fullReply = StringBuffer();
+  String get fullReply => _fullReply.toString();
+  set fullReply(String value) {
+    _fullReply
+      ..clear()
+      ..write(value);
+  }
+
+  final StringBuffer _reasoningBuffer = StringBuffer();
+  String get reasoningBuffer => _reasoningBuffer.toString();
+  List<String> _reasoningSections = [];
+  bool _reasoningSectionActive = false;
+  List<String> get reasoningSections => [
+        ..._reasoningSections,
+        if (_reasoningSectionActive) _reasoningBuffer.toString(),
+      ];
+
+  void appendReasoning(String text) {
+    if (!_reasoningSectionActive &&
+        _reasoningSections.isNotEmpty &&
+        _reasoningSections.last.isEmpty) {
+      _reasoningSections.removeLast();
+    }
+    _reasoningBuffer.write(text);
+    _reasoningSectionActive = true;
+  }
+
+  void endReasoningSection() {
+    _reasoningSections = reasoningSections..add('');
+    _reasoningBuffer.clear();
+    _reasoningSectionActive = false;
+  }
+
+  final List<StringBuffer> _textChunks = [StringBuffer()];
+  List<String> get textChunks =>
+      _textChunks.map((chunk) => chunk.toString()).toList();
+
+  void appendText(String text) {
+    _fullReply.write(text);
+    _textChunks.last.write(text);
+  }
+
+  void startTextChunk() => _textChunks.add(StringBuffer());
+
+  bool get currentTextChunkIsNotEmpty => _textChunks.last.isNotEmpty;
 
   /// Per-round text chunks that mirror reasoning sections: each time a new
   /// tool call round begins, a new chunk is started so that post-stream
   /// segment building can interleave assistant speech between reasoning and
   /// tool call blocks in the correct Agent chain order.
-  List<String> textChunks = [''];
-
   List<ToolCallData> toolCalls = [];
   List<ChatMessage> history = [];
   List<ChatMessage>? historyOnSuccess;
