@@ -13929,6 +13929,684 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter text content...'**
   String get textCreateContentHint;
+
+  /// No description provided for @platformTutorialPlatformSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} background optimization tutorial'**
+  String platformTutorialPlatformSubtitle(Object platform);
+
+  /// No description provided for @platformTutorialDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} background running guide'**
+  String platformTutorialDetailTitle(Object platform);
+
+  /// No description provided for @platformTutorialGuideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} background optimization guide'**
+  String platformTutorialGuideTitle(Object platform);
+
+  /// No description provided for @platformTutorialGuideIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'These steps can help optimize Stroom’s background experience on {platform} devices so tasks can continue running in the background.'**
+  String platformTutorialGuideIntro(Object platform);
+
+  /// No description provided for @platformTutorialStepsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimization steps'**
+  String get platformTutorialStepsHeading;
+
+  /// No description provided for @platformTutorialTipsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip'**
+  String get platformTutorialTipsHeading;
+
+  /// No description provided for @platformTutorialTipsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'After completing these settings, return to the “Background Optimization” page and check that the status has updated. If you still have problems, see another platform’s guide or report the issue on GitHub.'**
+  String get platformTutorialTipsDescription;
+
+  /// No description provided for @platformTutorialAndroidStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off battery optimization'**
+  String get platformTutorialAndroidStep1Title;
+
+  /// No description provided for @platformTutorialAndroidStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Apps → Stroom → Battery, then choose “Unrestricted” or “Don’t optimize.” You can also tap “Ignore battery optimization” on this app’s “Background Optimization” page to add Stroom to the system power-saving allowlist. Paths vary by device brand.'**
+  String get platformTutorialAndroidStep1Description;
+
+  /// No description provided for @platformTutorialAndroidStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow background activity'**
+  String get platformTutorialAndroidStep2Title;
+
+  /// No description provided for @platformTutorialAndroidStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Apps → Stroom and enable “Allow background activity” and “Allow auto-start.” Some phones also require allowing auto-start in Security Center or Phone Manager.'**
+  String get platformTutorialAndroidStep2Description;
+
+  /// No description provided for @platformTutorialAndroidStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock the background process'**
+  String get platformTutorialAndroidStep3Title;
+
+  /// No description provided for @platformTutorialAndroidStep3Description.
+  ///
+  /// In en, this message translates to:
+  /// **'In the recent-apps view, swipe down on the Stroom card or tap its lock icon to prevent the system from clearing the app.'**
+  String get platformTutorialAndroidStep3Description;
+
+  /// No description provided for @platformTutorialAndroidStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications (Android 13+)'**
+  String get platformTutorialAndroidStep4Title;
+
+  /// No description provided for @platformTutorialAndroidStep4Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Android 13 and later require notification permission. Without it, the foreground notification for the background service is hidden, though the service still runs. The app requests permission when you first tap “Start service,” or you can enable it in Settings → Apps → Stroom → Notifications.'**
+  String get platformTutorialAndroidStep4Description;
+
+  /// No description provided for @platformTutorialAndroidStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignore battery optimization'**
+  String get platformTutorialAndroidStep5Title;
+
+  /// No description provided for @platformTutorialAndroidStep5Description.
+  ///
+  /// In en, this message translates to:
+  /// **'When you enable “Task completion notifications” in Stroom, the app requests the related permission. You can also check that Stroom is set to “Don’t optimize” in Settings → Apps → Special app access → Battery optimization.'**
+  String get platformTutorialAndroidStep5Description;
+
+  /// No description provided for @platformTutorialAndroidStep6Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-start and background management on Android devices'**
+  String get platformTutorialAndroidStep6Title;
+
+  /// No description provided for @platformTutorialAndroidStep6Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Device manufacturers often add their own background controls:\n• Xiaomi/Redmi (MIUI/HyperOS): Settings → Apps → Permissions → Autostart; allow Stroom. Then open Battery → App battery saver → Stroom → No restrictions.\n• Huawei/Honor (EMUI/HarmonyOS): Settings → Apps → App launch → Stroom → Manage manually; allow auto-launch, secondary launch, and background activity.\n• OPPO/OnePlus/realme (ColorOS): Settings → Battery → App battery management → Stroom; allow full background activity.\n• vivo/iQOO (OriginOS): iManager → App management → Autostart; allow Stroom.'**
+  String get platformTutorialAndroidStep6Description;
+
+  /// No description provided for @platformTutorialAndroidStep7Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off lock-screen cleanup and power-saving modes'**
+  String get platformTutorialAndroidStep7Title;
+
+  /// No description provided for @platformTutorialAndroidStep7Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Battery and turn off “Power saving” or “Ultra power saving.” Also set “Clear memory after locking” to “Don’t clear.” Power-saving modes restrict background activity and may affect task completion.'**
+  String get platformTutorialAndroidStep7Description;
+
+  /// No description provided for @platformTutorialIosStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Background App Refresh'**
+  String get platformTutorialIosStep1Title;
+
+  /// No description provided for @platformTutorialIosStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → General → Background App Refresh, find Stroom, and turn it on. Choose “Wi-Fi & Cellular Data” for the best experience.'**
+  String get platformTutorialIosStep1Description;
+
+  /// No description provided for @platformTutorialIosStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get platformTutorialIosStep2Title;
+
+  /// No description provided for @platformTutorialIosStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Notifications → Stroom and turn on “Allow Notifications.” Enable both banners and Notification Center so you can see task updates promptly.'**
+  String get platformTutorialIosStep2Description;
+
+  /// No description provided for @platformTutorialIosStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off Low Power Mode'**
+  String get platformTutorialIosStep3Title;
+
+  /// No description provided for @platformTutorialIosStep3Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Battery and turn off “Low Power Mode.” The system restricts background activity while this mode is on.'**
+  String get platformTutorialIosStep3Description;
+
+  /// No description provided for @platformTutorialIosStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Understand iOS background limits'**
+  String get platformTutorialIosStep4Title;
+
+  /// No description provided for @platformTutorialIosStep4Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Versions before iOS 26 do not allow apps to stay in the background like Android apps. The system gives apps brief execution time only at certain times, such as Background App Refresh, location updates, or audio playback, and may suspend long-running tasks. We recommend:\n• Keep Stroom in the foreground for long-running tasks.\n• Return to the app periodically to refresh its background time.\n• Turn on “Task completion notifications” for important tasks.'**
+  String get platformTutorialIosStep4Description;
+
+  /// No description provided for @platformTutorialIosStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Background tips while tasks run'**
+  String get platformTutorialIosStep5Title;
+
+  /// No description provided for @platformTutorialIosStep5Description.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS 26 and later support persistent background tasks. Tasks usually continue if you switch apps or lock the screen, though the system may stop them when resources are scarce; progress appears on the Lock Screen.\n\nEarlier iOS versions do not support persistent background tasks. Return to the app every few minutes (5–10 minutes is a guideline; the system decides) to refresh background time and prevent suspension.\n\nOn every version, do not swipe Stroom away in the app switcher; doing so immediately stops all running tasks.'**
+  String get platformTutorialIosStep5Description;
+
+  /// No description provided for @platformTutorialIosStep6Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the app in the foreground'**
+  String get platformTutorialIosStep6Title;
+
+  /// No description provided for @platformTutorialIosStep6Description.
+  ///
+  /// In en, this message translates to:
+  /// **'On versions earlier than iOS 26, apps have limited background time. For long-running tasks, keep Stroom in the foreground or return to it periodically to extend that time.'**
+  String get platformTutorialIosStep6Description;
+
+  /// No description provided for @platformTutorialWindowsStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize when closing the window'**
+  String get platformTutorialWindowsStep1Title;
+
+  /// No description provided for @platformTutorialWindowsStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'By default, clicking the window’s close button minimizes Stroom to the system tray (near the clock) so it can keep running. Restore it from the tray icon or “Show main window” menu. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.'**
+  String get platformTutorialWindowsStep1Description;
+
+  /// No description provided for @platformTutorialWindowsStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off Battery Saver'**
+  String get platformTutorialWindowsStep2Title;
+
+  /// No description provided for @platformTutorialWindowsStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → System → Power & sleep and turn off Battery Saver. Alternatively, configure it to turn on only when the battery falls below a chosen level.'**
+  String get platformTutorialWindowsStep2Description;
+
+  /// No description provided for @platformTutorialWindowsStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow background apps'**
+  String get platformTutorialWindowsStep3Title;
+
+  /// No description provided for @platformTutorialWindowsStep3Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings → Privacy & security → Background apps, find Stroom, and make sure it is enabled. On Windows 11, go to Settings → Apps → Installed apps → Stroom → Advanced options → Background app permissions and choose “Always.”'**
+  String get platformTutorialWindowsStep3Description;
+
+  /// No description provided for @platformTutorialWindowsStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off sleep mode (optional)'**
+  String get platformTutorialWindowsStep4Title;
+
+  /// No description provided for @platformTutorialWindowsStep4Description.
+  ///
+  /// In en, this message translates to:
+  /// **'To keep Stroom running for long periods, open Settings → System → Power and set “Sleep” to “Never” (when plugged in only).'**
+  String get platformTutorialWindowsStep4Description;
+
+  /// No description provided for @platformTutorialWindowsStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Stroom to startup'**
+  String get platformTutorialWindowsStep5Title;
+
+  /// No description provided for @platformTutorialWindowsStep5Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Task Manager (Ctrl+Shift+Esc) → Startup, find Stroom, and right-click “Enable.” Or open Settings → Apps → Startup and turn on Stroom.'**
+  String get platformTutorialWindowsStep5Description;
+
+  /// No description provided for @platformTutorialMacosStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize when closing the window'**
+  String get platformTutorialMacosStep1Title;
+
+  /// No description provided for @platformTutorialMacosStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'By default, closing the window keeps Stroom running in the menu bar (top-right of the screen). Click its menu bar icon or choose “Show main window” to restore it. Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the menu bar menu.'**
+  String get platformTutorialMacosStep1Description;
+
+  /// No description provided for @platformTutorialMacosStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get platformTutorialMacosStep2Title;
+
+  /// No description provided for @platformTutorialMacosStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings → Notifications → Stroom and turn on “Allow Notifications.” We recommend enabling both banners and Notification Center.'**
+  String get platformTutorialMacosStep2Description;
+
+  /// No description provided for @platformTutorialMacosStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off Low Power Mode (MacBook)'**
+  String get platformTutorialMacosStep3Title;
+
+  /// No description provided for @platformTutorialMacosStep3Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings → Battery → Power Adapter and turn off “Low Power Mode.” This mode restricts background activity.'**
+  String get platformTutorialMacosStep3Description;
+
+  /// No description provided for @platformTutorialMacosStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the app active'**
+  String get platformTutorialMacosStep4Title;
+
+  /// No description provided for @platformTutorialMacosStep4Description.
+  ///
+  /// In en, this message translates to:
+  /// **'macOS places few restrictions on background apps. For long-running tasks, leave the Stroom window open. Avoid force-quitting the app; closing the window is enough.'**
+  String get platformTutorialMacosStep4Description;
+
+  /// No description provided for @platformTutorialMacosStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch at login (optional)'**
+  String get platformTutorialMacosStep5Title;
+
+  /// No description provided for @platformTutorialMacosStep5Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings → General → Login Items and add Stroom so it starts automatically when your computer starts.'**
+  String get platformTutorialMacosStep5Description;
+
+  /// No description provided for @platformTutorialLinuxStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize when closing the window'**
+  String get platformTutorialLinuxStep1Title;
+
+  /// No description provided for @platformTutorialLinuxStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'By default, closing the window hides Stroom in the system tray (requires a desktop environment with StatusNotifierItem support and libayatana-appindicator3-dev at build time). Restore it from the tray menu using “Show main window.” Do not quit while tasks are running. To exit, use “Exit application completely” on the “Background Optimization” page or choose “Quit Stroom” from the tray menu.'**
+  String get platformTutorialLinuxStep1Description;
+
+  /// No description provided for @platformTutorialLinuxStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop environment settings'**
+  String get platformTutorialLinuxStep2Title;
+
+  /// No description provided for @platformTutorialLinuxStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Depending on your desktop environment (GNOME, KDE, XFCE, etc.), open System Settings → Apps, find Stroom, and make sure background activity is not restricted.'**
+  String get platformTutorialLinuxStep2Description;
+
+  /// No description provided for @platformTutorialLinuxStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a systemd service (optional)'**
+  String get platformTutorialLinuxStep3Title;
+
+  /// No description provided for @platformTutorialLinuxStep3Description.
+  ///
+  /// In en, this message translates to:
+  /// **'For long-running background work, create a systemd user service. Create a stroom.service file under ~/.config/systemd/user/ and set ExecStart to the Stroom executable.'**
+  String get platformTutorialLinuxStep3Description;
+
+  /// No description provided for @platformTutorialLinuxStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable sleep'**
+  String get platformTutorialLinuxStep4Title;
+
+  /// No description provided for @platformTutorialLinuxStep4Description.
+  ///
+  /// In en, this message translates to:
+  /// **'For a server or desktop that needs to run for a long time, set HandleLidSwitch=ignore in /etc/systemd/logind.conf to prevent sleep when the lid closes.'**
+  String get platformTutorialLinuxStep4Description;
+
+  /// No description provided for @platformTutorialLinuxStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable autostart'**
+  String get platformTutorialLinuxStep5Title;
+
+  /// No description provided for @platformTutorialLinuxStep5Description.
+  ///
+  /// In en, this message translates to:
+  /// **'In GNOME, use Tweaks → Startup Applications → Add Stroom. Or create a stroom.desktop file under ~/.config/autostart/.'**
+  String get platformTutorialLinuxStep5Description;
+
+  /// No description provided for @platformTutorialWebStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the tab open'**
+  String get platformTutorialWebStep1Title;
+
+  /// No description provided for @platformTutorialWebStep1Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Web browsers do not support background services. Keep the Stroom tab open while tasks run; closing the tab or refreshing the page immediately interrupts them.'**
+  String get platformTutorialWebStep1Description;
+
+  /// No description provided for @platformTutorialWebStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent the browser from suspending the tab'**
+  String get platformTutorialWebStep2Title;
+
+  /// No description provided for @platformTutorialWebStep2Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Browsers may freeze inactive background tabs to save resources. Keep the Stroom tab in the foreground while tasks run, or interact with the page periodically to keep it active.'**
+  String get platformTutorialWebStep2Description;
+
+  /// No description provided for @browserNavigationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Page navigation failed; address restored'**
+  String get browserNavigationFailed;
+
+  /// No description provided for @browserAddressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a web address'**
+  String get browserAddressHint;
+
+  /// No description provided for @browserUserScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'User scripts'**
+  String get browserUserScripts;
+
+  /// No description provided for @browserSwitchToMobile.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to mobile view'**
+  String get browserSwitchToMobile;
+
+  /// No description provided for @browserSwitchToDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to desktop view'**
+  String get browserSwitchToDesktop;
+
+  /// No description provided for @browserUaSwitchedDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to desktop user agent'**
+  String get browserUaSwitchedDesktop;
+
+  /// No description provided for @browserUaSwitchedMobile.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to mobile user agent'**
+  String get browserUaSwitchedMobile;
+
+  /// No description provided for @browserCookieRetentionOnTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookie persistence (on)'**
+  String get browserCookieRetentionOnTooltip;
+
+  /// No description provided for @browserCookieRetentionOffTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookie persistence (off)'**
+  String get browserCookieRetentionOffTooltip;
+
+  /// No description provided for @browserCookiePersistenceEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookie persistence enabled'**
+  String get browserCookiePersistenceEnabled;
+
+  /// No description provided for @browserCookiePersistenceDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookie persistence disabled'**
+  String get browserCookiePersistenceDisabled;
+
+  /// No description provided for @browserAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get browserAdd;
+
+  /// No description provided for @browserNoScripts.
+  ///
+  /// In en, this message translates to:
+  /// **'No scripts yet. Tap “Add” to create one.'**
+  String get browserNoScripts;
+
+  /// No description provided for @browserUnnamedScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled script'**
+  String get browserUnnamedScript;
+
+  /// No description provided for @browserScriptMatchCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} matching rule} other{{count} matching rules}}'**
+  String browserScriptMatchCount(num count);
+
+  /// No description provided for @browserEditScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit script'**
+  String get browserEditScript;
+
+  /// No description provided for @browserScriptName.
+  ///
+  /// In en, this message translates to:
+  /// **'Script name'**
+  String get browserScriptName;
+
+  /// No description provided for @browserScriptCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Script code (JavaScript)'**
+  String get browserScriptCode;
+
+  /// No description provided for @browserMatchUrls.
+  ///
+  /// In en, this message translates to:
+  /// **'URL patterns (one per line)'**
+  String get browserMatchUrls;
+
+  /// No description provided for @browserScriptMatchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'*://*.example.com/*'**
+  String get browserScriptMatchHint;
+
+  /// No description provided for @browserCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get browserCancel;
+
+  /// No description provided for @browserSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get browserSave;
+
+  /// No description provided for @browserCookiesConfirmClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm clearing'**
+  String get browserCookiesConfirmClear;
+
+  /// No description provided for @browserCookiesConfirmClearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all cookies?\nThis action cannot be undone.'**
+  String get browserCookiesConfirmClearAll;
+
+  /// No description provided for @browserCookiesClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get browserCookiesClear;
+
+  /// No description provided for @browserCookiesCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get browserCookiesCancel;
+
+  /// No description provided for @browserCookiesClearedAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All cookies cleared'**
+  String get browserCookiesClearedAll;
+
+  /// No description provided for @browserCookiesClearFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear. Try again.'**
+  String get browserCookiesClearFailed;
+
+  /// No description provided for @browserCookiesClearedDomain.
+  ///
+  /// In en, this message translates to:
+  /// **'All cookies for {domain} cleared'**
+  String browserCookiesClearedDomain(Object domain);
+
+  /// No description provided for @browserCookiesClearDomainConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all cookies for {domain}?'**
+  String browserCookiesClearDomainConfirm(Object domain);
+
+  /// No description provided for @browserCookiesPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser data management'**
+  String get browserCookiesPageTitle;
+
+  /// No description provided for @browserCookiesRetentionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep cookies when exiting'**
+  String get browserCookiesRetentionTitle;
+
+  /// No description provided for @browserCookiesRetentionOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled — cookies are kept when exiting'**
+  String get browserCookiesRetentionOn;
+
+  /// No description provided for @browserCookiesRetentionOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled — cookies are cleared when exiting'**
+  String get browserCookiesRetentionOff;
+
+  /// No description provided for @browserCookiesClearAllTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all cookies'**
+  String get browserCookiesClearAllTitle;
+
+  /// No description provided for @browserCookiesClearAllDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all saved website cookies'**
+  String get browserCookiesClearAllDescription;
+
+  /// No description provided for @browserCookiesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No persistent data'**
+  String get browserCookiesEmptyTitle;
+
+  /// No description provided for @browserCookiesEmptyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the built-in browser and enable cookie persistence to see saved data here.'**
+  String get browserCookiesEmptyDescription;
+
+  /// No description provided for @browserCookiesStoredCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored cookies ({count})'**
+  String browserCookiesStoredCount(Object count);
+
+  /// No description provided for @browserCookiesDomainCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} cookie} other{{count} cookies}}'**
+  String browserCookiesDomainCount(num count);
+
+  /// No description provided for @browserCookiesClearDomainTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all cookies for this domain'**
+  String get browserCookiesClearDomainTooltip;
+
+  /// No description provided for @browserCookiesDeleteOneTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this cookie'**
+  String get browserCookiesDeleteOneTooltip;
+
+  /// No description provided for @browserCookiesDeletedOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookie deleted'**
+  String get browserCookiesDeletedOne;
+
+  /// No description provided for @browserCookiesDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete. Try again.'**
+  String get browserCookiesDeleteFailed;
+
+  /// No description provided for @browserCookiesEmptyValue.
+  ///
+  /// In en, this message translates to:
+  /// **'(empty value)'**
+  String get browserCookiesEmptyValue;
+
+  /// No description provided for @platformTutorialPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform tutorials'**
+  String get platformTutorialPageTitle;
 }
 
 class _AppLocalizationsDelegate

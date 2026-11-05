@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
@@ -559,8 +559,9 @@ class _BrowserPageState extends State<BrowserPage> {
       onNavigationFailure: () {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('页面导航失败，地址已恢复'),
+          SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.browserNavigationFailed),
             backgroundColor: Colors.red,
           ),
         );
@@ -590,6 +591,7 @@ class _BrowserPageState extends State<BrowserPage> {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
@@ -598,7 +600,7 @@ class _BrowserPageState extends State<BrowserPage> {
           controller: _urlController,
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
-            hintText: '输入网址',
+            hintText: l10n.browserAddressHint,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(20),
               borderSide: BorderSide.none,
@@ -619,7 +621,7 @@ class _BrowserPageState extends State<BrowserPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
-            tooltip: '用户脚本',
+            tooltip: l10n.browserUserScripts,
             onPressed: _showScriptManager,
           ),
         ],
@@ -840,7 +842,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 _isDesktopMode ? Icons.phone_android : Icons.desktop_windows,
                 size: 20,
               ),
-              tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
+              tooltip: _isDesktopMode
+                  ? l10n.browserSwitchToMobile
+                  : l10n.browserSwitchToDesktop,
               onPressed: () async {
                 final controller = _webViewController;
                 if (controller == null) return;
@@ -867,7 +871,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      _isDesktopMode ? '已切换到电脑版UA' : '已切换到手机版UA',
+                      _isDesktopMode
+                          ? l10n.browserUaSwitchedDesktop
+                          : l10n.browserUaSwitchedMobile,
                     ),
                     duration: const Duration(seconds: 1),
                   ),
@@ -883,8 +889,8 @@ class _BrowserPageState extends State<BrowserPage> {
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               tooltip: _cookieRetentionEnabled
-                  ? 'Cookies持久化(已开启)'
-                  : 'Cookies持久化(已关闭)',
+                  ? l10n.browserCookieRetentionOnTooltip
+                  : l10n.browserCookieRetentionOffTooltip,
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final newValue =
@@ -894,7 +900,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      newValue ? '已启用Cookies持久化' : '已关闭Cookies持久化',
+                      newValue
+                          ? l10n.browserCookiePersistenceEnabled
+                          : l10n.browserCookiePersistenceDisabled,
                     ),
                     duration: const Duration(seconds: 1),
                   ),
@@ -971,6 +979,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -980,28 +989,31 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
         child: Column(
           children: [
             AppBar(
-              title: const Text('用户脚本'),
+              title: Text(l10n.browserUserScripts),
               automaticallyImplyLeading: false,
               actions: [
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加'),
+                  label: Text(l10n.browserAdd),
                   onPressed: _addScript,
                 ),
               ],
             ),
             Expanded(
               child: _scripts.isEmpty
-                  ? const Center(
-                      child: Text('暂无脚本，点击"添加"创建'),
+                  ? Center(
+                      child: Text(l10n.browserNoScripts),
                     )
                   : ListView.builder(
                       itemCount: _scripts.length,
                       itemBuilder: (ctx, i) {
                         final s = _scripts[i];
                         return ListTile(
-                          title: Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
-                          subtitle: Text('${s.matches.length} 个匹配规则'),
+                          title: Text(s.name.isNotEmpty
+                              ? s.name
+                              : l10n.browserUnnamedScript),
+                          subtitle: Text(
+                              l10n.browserScriptMatchCount(s.matches.length)),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline,
                                 color: Colors.red),
@@ -1083,8 +1095,9 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('编辑脚本'),
+      title: Text(l10n.browserEditScript),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -1094,8 +1107,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
             children: [
               TextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '脚本名称',
+                decoration: InputDecoration(
+                  labelText: l10n.browserScriptName,
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1104,8 +1117,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               TextField(
                 controller: _codeCtrl,
                 maxLines: 8,
-                decoration: const InputDecoration(
-                  labelText: '脚本代码 (JavaScript)',
+                decoration: InputDecoration(
+                  labelText: l10n.browserScriptCode,
                   border: OutlineInputBorder(),
                   hintText:
                       '// ==UserScript==\n// @name\n// @match *://*/*\n// ==/UserScript==\n\nconsole.log("hello");',
@@ -1116,10 +1129,10 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               TextField(
                 controller: _matchesCtrl,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: '匹配网址 (每行一个)',
+                decoration: InputDecoration(
+                  labelText: l10n.browserMatchUrls,
                   border: OutlineInputBorder(),
-                  hintText: '*://*.example.com/*',
+                  hintText: l10n.browserScriptMatchHint,
                   isDense: true,
                 ),
               ),
@@ -1130,7 +1143,7 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.browserCancel),
         ),
         FilledButton(
           onPressed: () {
@@ -1147,7 +1160,7 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               ),
             );
           },
-          child: const Text('保存'),
+          child: Text(l10n.browserSave),
         ),
       ],
     );
