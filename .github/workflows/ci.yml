@@ -24,7 +24,7 @@ jobs:
       - run: flutter pub get
       - name: Check Dart formatting
         run: >-
-          dart format --output=none --set-exit-if-changed
+          dart format --language-version=3.0 --output=none --set-exit-if-changed
           lib/services/text_storage_tool_service.dart
           lib/services/chat_adapter.dart
           lib/services/chat_adapter_http_tools.dart
