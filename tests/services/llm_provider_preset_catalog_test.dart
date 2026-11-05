@@ -70,7 +70,9 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'nan',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       [
         'deepseek-v4-flash',
         'mimo-v2.5',
@@ -85,7 +87,9 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'nanogpt',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       ['chatgpt-4o-latest', 'claude-3.5-sonnet', 'gpt-4o-mini'],
     );
     expect(
@@ -104,13 +108,17 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'nous-research',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       ['Hermes-4-405B', 'Hermes-4-70B'],
     );
     expect(
       findLlmOpenAiProviderPreset(
         'nscale',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       [
         'moonshotai/Kimi-K2.5',
         'Qwen/Qwen3-235B-A22B-Instruct-2507',
