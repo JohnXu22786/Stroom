@@ -2514,11 +2514,9 @@ void main() {
           '_eventType': 'result',
           'result': {
             'message': {'thinkingContent': 'trace', 'content': 'answer'},
-            'usage': {
-              'promptTokens': 3,
-              'completionTokens': 2,
-              'totalTokens': 5,
-            },
+            'inputLength': 3,
+            'outputLength': 2,
+            'stopReason': 'length',
           },
         }, state: state);
         expect(

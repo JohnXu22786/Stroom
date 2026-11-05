@@ -308,18 +308,22 @@ class ClovaStudioSseAccumulator {
         ? snapshotReasoning
         : null;
     if (terminalReasoning != null) _reasoning = terminalReasoning;
-    final usage = result['usage'];
-    final normalizedUsage = usage is Map
+    final usage = result['usage'] is Map ? result['usage'] as Map : const {};
+    final inputTokens = usage['promptTokens'] ?? result['inputLength'];
+    final outputTokens = usage['completionTokens'] ?? result['outputLength'];
+    final totalTokens =
+        usage['totalTokens'] ??
+        (inputTokens is num && outputTokens is num
+            ? inputTokens + outputTokens
+            : null);
+    final normalizedUsage = inputTokens is num || outputTokens is num
         ? <String, dynamic>{
-            if (usage['promptTokens'] is num)
-              'input_tokens': usage['promptTokens'],
-            if (usage['completionTokens'] is num)
-              'output_tokens': usage['completionTokens'],
-            if (usage['totalTokens'] is num)
-              'total_tokens': usage['totalTokens'],
+            if (inputTokens is num) 'input_tokens': inputTokens,
+            if (outputTokens is num) 'output_tokens': outputTokens,
+            if (totalTokens is num) 'total_tokens': totalTokens,
           }
         : null;
-    final finish = result['finishReason'];
+    final finish = result['stopReason'] ?? result['finishReason'];
     _done = true;
     return ClovaStudioStreamEvent(
       textDelta: terminalText,

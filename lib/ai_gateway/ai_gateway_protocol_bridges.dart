@@ -177,17 +177,22 @@ abstract final class AiGatewayProtocolStreamBridge {
           );
         }
         final usage = _objectMap(result['usage']);
-        if (usage.isNotEmpty) {
+        final inputTokens = usage['promptTokens'] ?? result['inputLength'];
+        final outputTokens =
+            usage['completionTokens'] ?? result['outputLength'];
+        final totalTokens =
+            usage['totalTokens'] ??
+            (inputTokens is num && outputTokens is num
+                ? inputTokens + outputTokens
+                : null);
+        if (inputTokens is num || outputTokens is num) {
           mapped.add(
             make(
               AiGatewayProtocolStreamEventKind.usage,
               usage: {
-                if (usage['promptTokens'] is num)
-                  'input_tokens': usage['promptTokens'],
-                if (usage['completionTokens'] is num)
-                  'output_tokens': usage['completionTokens'],
-                if (usage['totalTokens'] is num)
-                  'total_tokens': usage['totalTokens'],
+                if (inputTokens is num) 'input_tokens': inputTokens,
+                if (outputTokens is num) 'output_tokens': outputTokens,
+                if (totalTokens is num) 'total_tokens': totalTokens,
               },
             ),
           );

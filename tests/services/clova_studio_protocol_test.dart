@@ -143,14 +143,14 @@ void main() {
           'event: token\ndata: {"message":{"content":"world"}}\n\n',
         );
         final terminal = parser.addFrame(
-          'event: result\ndata: {"status":{"code":"20000"},"result":{"message":{"content":"hello world"},"finishReason":"stop","usage":{"promptTokens":3,"completionTokens":2,"totalTokens":5}}}\n\n',
+          'event: result\ndata: {"status":{"code":"20000"},"result":{"message":{"content":"hello world"},"stopReason":"length","inputLength":3,"outputLength":2}}\n\n',
         );
 
         expect(first.textDelta, 'hello ');
         expect(second.textDelta, 'world');
         expect(terminal.textDelta, isNull);
         expect(terminal.done, isTrue);
-        expect(terminal.finishReason, 'stop');
+        expect(terminal.finishReason, 'length');
         expect(terminal.usage, {
           'input_tokens': 3,
           'output_tokens': 2,
