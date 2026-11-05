@@ -8553,6 +8553,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get browserCookiePersistenceDisabled => 'Cookie persistence disabled';
 
   @override
+  String get browserSniffPanelHideTooltip => 'Hide sniff panel';
+
+  @override
+  String get browserSniffPanelShowTooltip => 'Show sniff panel';
+
+  @override
   String get browserAdd => 'Add';
 
   @override
@@ -17232,6 +17238,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get browserCookiePersistenceDisabled => 'Cookie persistence disabled';
+
+  @override
+  String get browserSniffPanelHideTooltip => 'Hide sniff panel';
+
+  @override
+  String get browserSniffPanelShowTooltip => 'Show sniff panel';
 
   @override
   String get browserAdd => 'Add';

@@ -922,7 +922,9 @@ class _BrowserPageState extends State<BrowserPage> {
                   BlendMode.srcIn,
                 ),
               ),
-              tooltip: _catCatchPanelVisible ? '隐藏嗅探面板' : '显示嗅探面板',
+              tooltip: _catCatchPanelVisible
+                  ? l10n.browserSniffPanelHideTooltip
+                  : l10n.browserSniffPanelShowTooltip,
               onPressed: () {
                 setState(() {
                   _catCatchPanelVisible = !_catCatchPanelVisible;
