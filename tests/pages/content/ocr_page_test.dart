@@ -1856,6 +1856,11 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );
+      // Generation-aware publication persists while holding the shared cache
+      // lock; drain it before the next test starts another migration.
+      await tester.runAsync(
+        () => OcrRetryStorage.withCacheMaintenanceLock(() async {}),
+      );
 
       expect(
         notifier.tasksForTest.single.retryData?['version'],
