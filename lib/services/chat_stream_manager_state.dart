@@ -202,26 +202,37 @@ class _ConversationStreamState {
 
   // Shared because this detector runs on each incoming text event.
   static final RegExp _markdownBlockStart = RegExp(
-      r'^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)',
-      multiLine: true);
-  static final RegExp _markdownIndentedLine =
-      RegExp(r'^(?: {4,}|\t)\S', multiLine: true);
+    r'^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)',
+    multiLine: true,
+  );
+  static final RegExp _markdownIndentedLine = RegExp(
+    r'^(?: {4,}|\t)\S',
+    multiLine: true,
+  );
   static final RegExp _markdownThematicBreak = RegExp(
-      r'^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$',
-      multiLine: true);
-  static final RegExp _markdownSetextHeading =
-      RegExp(r'^\s{0,3}=+\s*$', multiLine: true);
+    r'^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$',
+    multiLine: true,
+  );
+  static final RegExp _markdownSetextHeading = RegExp(
+    r'^\s{0,3}=+\s*$',
+    multiLine: true,
+  );
   static final RegExp _markdownTableDivider = RegExp(
-      r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$',
-      multiLine: true);
-  static final RegExp _markdownTableCellDivider =
-      RegExp(r'\|\s*:?-{3,}:?\s*\|');
-  static final RegExp _markdownMath =
-      RegExp(r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})');
-  static final RegExp _markdownUrl =
-      RegExp(r'(?<!\w)(https?://|www\.)\S+');
-  static final RegExp _markdownHtmlEntity =
-      RegExp(r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);');
+    r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$',
+    multiLine: true,
+  );
+  static final RegExp _markdownTableCellDivider = RegExp(
+    r'\|\s*:?-{3,}:?\s*\|',
+  );
+  static final RegExp _markdownMath = RegExp(
+    r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})',
+  );
+  static final RegExp _markdownUrl = RegExp(
+    r'(?<!\w)(https?://|www\.)\S+',
+  );
+  static final RegExp _markdownHtmlEntity = RegExp(
+    r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);',
+  );
   static final RegExp _markdownHtmlTag = RegExp(r'<[/?!]?[A-Za-z][^>]*>');
   static final RegExp _markdownGenericUrl = RegExp(r'\b\w+://\S+');
 
