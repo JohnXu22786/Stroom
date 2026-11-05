@@ -1590,10 +1590,7 @@ String _legacyOcrOpenMaskPrefixPattern(String prefix) {
   final variants = <String>[escapedPrefix];
   if (RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prefix)) {
     variants.add(
-      prefix
-          .split('')
-          .map(RegExp.escape)
-          .join(r'(?:[\r\n]+[ \t]*)?'),
+      prefix.split('').map(RegExp.escape).join(r'(?:[\r\n]+[ \t]*)?'),
     );
   }
   if (RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
