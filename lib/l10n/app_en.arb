@@ -3550,7 +3550,7 @@
   "audioFiles": "Audio files",
   "noAudioSelected": "No audio files selected",
   "supportedAudioFormats": "Supports common audio formats such as WAV, MP3, M4A, and OGG",
-  "asrSelectedAudioCount": "{count, plural, =0{No audio files selected} one{# audio file selected} other{# audio files selected}}",
+  "asrSelectedAudioCount": "{count, plural, =0{No audio files selected} one{{count} audio file selected} other{{count} audio files selected}}",
   "@asrSelectedAudioCount": {
     "placeholders": {
       "count": {
@@ -3558,7 +3558,7 @@
       }
     }
   },
-  "asrSelectedAudioCountShort": "{count, plural, one{# audio file selected} other{# audio files selected}}",
+  "asrSelectedAudioCountShort": "{count, plural, one{{count} audio file selected} other{{count} audio files selected}}",
   "@asrSelectedAudioCountShort": {
     "placeholders": {
       "count": {
@@ -3592,7 +3592,7 @@
   },
   "chooseInAppRecording": "Choose in-app recordings",
   "noRecordings": "No recordings",
-  "durationSeconds": "{seconds, plural, one{# sec} other{# secs}}",
+  "durationSeconds": "{seconds, plural, one{{seconds} sec} other{{seconds} secs}}",
   "@durationSeconds": {
     "placeholders": {
       "seconds": {
@@ -3618,7 +3618,7 @@
   "cancel": "Cancel",
   "add": "Add",
   "ttsPageTitle": "Audio",
-  "ttsAudioImportedCount": "{count, plural, one{# audio file imported} other{# audio files imported}}",
+  "ttsAudioImportedCount": "{count, plural, one{{count} audio file imported} other{{count} audio files imported}}",
   "@ttsAudioImportedCount": {
     "placeholders": {
       "count": {
@@ -3673,7 +3673,7 @@
   },
   "ttsChooseExportFolder": "Choose export folder",
   "ttsExportAudio": "Export audio",
-  "ttsExportedCount": "{count, plural, one{# file exported} other{# files exported}}",
+  "ttsExportedCount": "{count, plural, one{{count} file exported} other{{count} files exported}}",
   "@ttsExportedCount": {
     "placeholders": {
       "count": {
@@ -3755,7 +3755,7 @@
   "voiceBatchFieldOrder": "Field order:",
   "voiceBatchNameThenId": "1st = name, 2nd = ID",
   "voiceBatchIdThenName": "1st = ID, 2nd = name",
-  "voiceBatchColumnChoice": "{count, plural, one{Detected 1 column. Choose the starting column for the name/ID:} other{Detected # columns. Choose the starting column for the name/ID:}}",
+  "voiceBatchColumnChoice": "{count, plural, one{Detected {count} column. Choose the starting column for the name/ID:} other{Detected {count} columns. Choose the starting column for the name/ID:}}",
   "@voiceBatchColumnChoice": {
     "placeholders": {
       "count": {
@@ -3790,7 +3790,7 @@
       }
     }
   },
-  "voiceDuplicateIds": "{count, plural, one{# duplicate ID found: {ids}} other{# duplicate IDs found: {ids}}}",
+  "voiceDuplicateIds": "{count, plural, one{{count} duplicate ID found: {ids}} other{{count} duplicate IDs found: {ids}}}",
   "@voiceDuplicateIds": {
     "placeholders": {
       "count": {
@@ -3816,7 +3816,7 @@
   "voiceDuplicateResolution": "The following voice IDs are duplicated. Choose how to handle each one:",
   "update": "Update",
   "skip": "Skip",
-  "voiceDuplicatesRemaining": "{count, plural, one{# duplicate remains} other{# duplicates remain}}",
+  "voiceDuplicatesRemaining": "{count, plural, one{{count} duplicate remains} other{{count} duplicates remain}}",
   "@voiceDuplicatesRemaining": {
     "placeholders": {
       "count": {

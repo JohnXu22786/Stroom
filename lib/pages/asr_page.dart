@@ -395,6 +395,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       } else {
         final audiosData = data['audios'] as List<dynamic>?;
         for (final audioData in audiosData ?? const []) {
+          if (!mounted) return;
           if (audioData is! Map) {
             _retrySourcesIncomplete = true;
             _errorMessage =
@@ -419,6 +420,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             bytesStr,
             checkCanceled: () => throwIfAsrAudioCanceled(_retryLoadCancelToken),
           );
+          if (!mounted) return;
           throwIfAsrAudioCanceled(_retryLoadCancelToken);
           if (byteLength == null) {
             _retrySourcesIncomplete = true;

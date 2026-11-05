@@ -3550,7 +3550,7 @@
   "audioFiles": "音频文件",
   "noAudioSelected": "暂未选择音频文件",
   "supportedAudioFormats": "支持 wav、mp3、m4a、ogg 等常见音频格式",
-  "asrSelectedAudioCount": "{count, plural, one{已选择 # 个音频文件} other{已选择 # 个音频文件}}",
+  "asrSelectedAudioCount": "{count, plural, one{已选择 {count} 个音频文件} other{已选择 {count} 个音频文件}}",
   "@asrSelectedAudioCount": {
     "placeholders": {
       "count": {
@@ -3558,7 +3558,7 @@
       }
     }
   },
-  "asrSelectedAudioCountShort": "{count, plural, one{已选 # 个音频} other{已选 # 个音频}}",
+  "asrSelectedAudioCountShort": "{count, plural, one{已选 {count} 个音频} other{已选 {count} 个音频}}",
   "@asrSelectedAudioCountShort": {
     "placeholders": {
       "count": {
@@ -3592,7 +3592,7 @@
   },
   "chooseInAppRecording": "选择应用内录音",
   "noRecordings": "暂无录音",
-  "durationSeconds": "{seconds, plural, one{#秒} other{#秒}}",
+  "durationSeconds": "{seconds, plural, one{{seconds}秒} other{{seconds}秒}}",
   "@durationSeconds": {
     "placeholders": {
       "seconds": {
@@ -3618,7 +3618,7 @@
   "cancel": "取消",
   "add": "添加",
   "ttsPageTitle": "音频",
-  "ttsAudioImportedCount": "{count, plural, one{已导入 # 个音频文件} other{已导入 # 个音频文件}}",
+  "ttsAudioImportedCount": "{count, plural, one{已导入 {count} 个音频文件} other{已导入 {count} 个音频文件}}",
   "@ttsAudioImportedCount": {
     "placeholders": {
       "count": {
@@ -3673,7 +3673,7 @@
   },
   "ttsChooseExportFolder": "选择导出目录",
   "ttsExportAudio": "导出音频",
-  "ttsExportedCount": "{count, plural, one{已导出 # 个文件} other{已导出 # 个文件}}",
+  "ttsExportedCount": "{count, plural, one{已导出 {count} 个文件} other{已导出 {count} 个文件}}",
   "@ttsExportedCount": {
     "placeholders": {
       "count": {
@@ -3755,7 +3755,7 @@
   "voiceBatchFieldOrder": "字段顺序：",
   "voiceBatchNameThenId": "第1个=名称, 第2个=ID",
   "voiceBatchIdThenName": "第1个=ID, 第2个=名称",
-  "voiceBatchColumnChoice": "{count, plural, one{检测到 1 列，请选择作为名称/ID的起始列：} other{检测到 # 列，请选择作为名称/ID的起始列：}}",
+  "voiceBatchColumnChoice": "{count, plural, one{检测到 1 列，请选择作为名称/ID的起始列：} other{检测到 {count} 列，请选择作为名称/ID的起始列：}}",
   "@voiceBatchColumnChoice": {
     "placeholders": {
       "count": {
@@ -3790,7 +3790,7 @@
       }
     }
   },
-  "voiceDuplicateIds": "{count, plural, one{发现 # 个重复ID: {ids}} other{发现 # 个重复ID: {ids}}}",
+  "voiceDuplicateIds": "{count, plural, one{发现 {count} 个重复ID: {ids}} other{发现 {count} 个重复ID: {ids}}}",
   "@voiceDuplicateIds": {
     "placeholders": {
       "count": {
@@ -3816,7 +3816,7 @@
   "voiceDuplicateResolution": "发现以下重复音色ID，逐条选择处理方式：",
   "update": "更新",
   "skip": "跳过",
-  "voiceDuplicatesRemaining": "{count, plural, one{还有 # 个重复未处理} other{还有 # 个重复未处理}}",
+  "voiceDuplicatesRemaining": "{count, plural, one{还有 {count} 个重复未处理} other{还有 {count} 个重复未处理}}",
   "@voiceDuplicatesRemaining": {
     "placeholders": {
       "count": {

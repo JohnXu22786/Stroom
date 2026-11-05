@@ -6244,8 +6244,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已选择 # 个音频文件',
-      one: '已选择 # 个音频文件',
+      other: '已选择 $count 个音频文件',
+      one: '已选择 $count 个音频文件',
     );
     return '$_temp0';
   }
@@ -6255,8 +6255,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已选 # 个音频',
-      one: '已选 # 个音频',
+      other: '已选 $count 个音频',
+      one: '已选 $count 个音频',
     );
     return '$_temp0';
   }
@@ -6325,8 +6325,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       seconds,
       locale: localeName,
-      other: '#秒',
-      one: '#秒',
+      other: '$seconds秒',
+      one: '$seconds秒',
     );
     return '$_temp0';
   }
@@ -6371,8 +6371,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已导入 # 个音频文件',
-      one: '已导入 # 个音频文件',
+      other: '已导入 $count 个音频文件',
+      one: '已导入 $count 个音频文件',
     );
     return '$_temp0';
   }
@@ -6428,8 +6428,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已导出 # 个文件',
-      one: '已导出 # 个文件',
+      other: '已导出 $count 个文件',
+      one: '已导出 $count 个文件',
     );
     return '$_temp0';
   }
@@ -6586,7 +6586,7 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '检测到 # 列，请选择作为名称/ID的起始列：',
+      other: '检测到 $count 列，请选择作为名称/ID的起始列：',
       one: '检测到 1 列，请选择作为名称/ID的起始列：',
     );
     return '$_temp0';
@@ -6631,8 +6631,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '发现 # 个重复ID: $ids',
-      one: '发现 # 个重复ID: $ids',
+      other: '发现 $count 个重复ID: $ids',
+      one: '发现 $count 个重复ID: $ids',
     );
     return '$_temp0';
   }
@@ -6687,8 +6687,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '还有 # 个重复未处理',
-      one: '还有 # 个重复未处理',
+      other: '还有 $count 个重复未处理',
+      one: '还有 $count 个重复未处理',
     );
     return '$_temp0';
   }
@@ -12968,8 +12968,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已选择 # 个音频文件',
-      one: '已选择 # 个音频文件',
+      other: '已选择 $count 个音频文件',
+      one: '已选择 $count 个音频文件',
     );
     return '$_temp0';
   }
@@ -12979,8 +12979,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已选 # 个音频',
-      one: '已选 # 个音频',
+      other: '已选 $count 个音频',
+      one: '已选 $count 个音频',
     );
     return '$_temp0';
   }
@@ -13049,8 +13049,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       seconds,
       locale: localeName,
-      other: '#秒',
-      one: '#秒',
+      other: '$seconds秒',
+      one: '$seconds秒',
     );
     return '$_temp0';
   }
@@ -13095,8 +13095,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已导入 # 个音频文件',
-      one: '已导入 # 个音频文件',
+      other: '已导入 $count 个音频文件',
+      one: '已导入 $count 个音频文件',
     );
     return '$_temp0';
   }
@@ -13152,8 +13152,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '已导出 # 个文件',
-      one: '已导出 # 个文件',
+      other: '已导出 $count 个文件',
+      one: '已导出 $count 个文件',
     );
     return '$_temp0';
   }
@@ -13310,7 +13310,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '检测到 # 列，请选择作为名称/ID的起始列：',
+      other: '检测到 $count 列，请选择作为名称/ID的起始列：',
       one: '检测到 1 列，请选择作为名称/ID的起始列：',
     );
     return '$_temp0';
@@ -13355,8 +13355,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '发现 # 个重复ID: $ids',
-      one: '发现 # 个重复ID: $ids',
+      other: '发现 $count 个重复ID: $ids',
+      one: '发现 $count 个重复ID: $ids',
     );
     return '$_temp0';
   }
@@ -13411,8 +13411,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '还有 # 个重复未处理',
-      one: '还有 # 个重复未处理',
+      other: '还有 $count 个重复未处理',
+      one: '还有 $count 个重复未处理',
     );
     return '$_temp0';
   }

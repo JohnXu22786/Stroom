@@ -6546,8 +6546,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files selected',
-      one: '# audio file selected',
+      other: '$count audio files selected',
+      one: '$count audio file selected',
       zero: 'No audio files selected',
     );
     return '$_temp0';
@@ -6558,8 +6558,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files selected',
-      one: '# audio file selected',
+      other: '$count audio files selected',
+      one: '$count audio file selected',
     );
     return '$_temp0';
   }
@@ -6628,8 +6628,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       seconds,
       locale: localeName,
-      other: '# secs',
-      one: '# sec',
+      other: '$seconds secs',
+      one: '$seconds sec',
     );
     return '$_temp0';
   }
@@ -6680,8 +6680,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files imported',
-      one: '# audio file imported',
+      other: '$count audio files imported',
+      one: '$count audio file imported',
     );
     return '$_temp0';
   }
@@ -6738,8 +6738,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# files exported',
-      one: '# file exported',
+      other: '$count files exported',
+      one: '$count file exported',
     );
     return '$_temp0';
   }
@@ -6900,8 +6900,10 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Detected # columns. Choose the starting column for the name/ID:',
-      one: 'Detected 1 column. Choose the starting column for the name/ID:',
+      other:
+          'Detected $count columns. Choose the starting column for the name/ID:',
+      one:
+          'Detected $count column. Choose the starting column for the name/ID:',
     );
     return '$_temp0';
   }
@@ -6947,8 +6949,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# duplicate IDs found: $ids',
-      one: '# duplicate ID found: $ids',
+      other: '$count duplicate IDs found: $ids',
+      one: '$count duplicate ID found: $ids',
     );
     return '$_temp0';
   }
@@ -7005,8 +7007,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# duplicates remain',
-      one: '# duplicate remains',
+      other: '$count duplicates remain',
+      one: '$count duplicate remains',
     );
     return '$_temp0';
   }
@@ -13593,8 +13595,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files selected',
-      one: '# audio file selected',
+      other: '$count audio files selected',
+      one: '$count audio file selected',
       zero: 'No audio files selected',
     );
     return '$_temp0';
@@ -13605,8 +13607,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files selected',
-      one: '# audio file selected',
+      other: '$count audio files selected',
+      one: '$count audio file selected',
     );
     return '$_temp0';
   }
@@ -13675,8 +13677,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       seconds,
       locale: localeName,
-      other: '# secs',
-      one: '# sec',
+      other: '$seconds secs',
+      one: '$seconds sec',
     );
     return '$_temp0';
   }
@@ -13727,8 +13729,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# audio files imported',
-      one: '# audio file imported',
+      other: '$count audio files imported',
+      one: '$count audio file imported',
     );
     return '$_temp0';
   }
@@ -13785,8 +13787,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# files exported',
-      one: '# file exported',
+      other: '$count files exported',
+      one: '$count file exported',
     );
     return '$_temp0';
   }
@@ -13947,8 +13949,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Detected # columns. Choose the starting column for the name/ID:',
-      one: 'Detected 1 column. Choose the starting column for the name/ID:',
+      other:
+          'Detected $count columns. Choose the starting column for the name/ID:',
+      one:
+          'Detected $count column. Choose the starting column for the name/ID:',
     );
     return '$_temp0';
   }
@@ -13994,8 +13998,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# duplicate IDs found: $ids',
-      one: '# duplicate ID found: $ids',
+      other: '$count duplicate IDs found: $ids',
+      one: '$count duplicate ID found: $ids',
     );
     return '$_temp0';
   }
@@ -14052,8 +14056,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# duplicates remain',
-      one: '# duplicate remains',
+      other: '$count duplicates remain',
+      one: '$count duplicate remains',
     );
     return '$_temp0';
   }

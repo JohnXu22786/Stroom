@@ -11131,13 +11131,13 @@ abstract class AppLocalizations {
   /// No description provided for @asrSelectedAudioCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =0{No audio files selected} one{# audio file selected} other{# audio files selected}}'**
+  /// **'{count, plural, =0{No audio files selected} one{{count} audio file selected} other{{count} audio files selected}}'**
   String asrSelectedAudioCount(int count);
 
   /// No description provided for @asrSelectedAudioCountShort.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{# audio file selected} other{# audio files selected}}'**
+  /// **'{count, plural, one{{count} audio file selected} other{{count} audio files selected}}'**
   String asrSelectedAudioCountShort(int count);
 
   /// No description provided for @asrReselect.
@@ -11257,7 +11257,7 @@ abstract class AppLocalizations {
   /// No description provided for @durationSeconds.
   ///
   /// In en, this message translates to:
-  /// **'{seconds, plural, one{# sec} other{# secs}}'**
+  /// **'{seconds, plural, one{{seconds} sec} other{{seconds} secs}}'**
   String durationSeconds(int seconds);
 
   /// No description provided for @asrNeedsProvider.
@@ -11329,7 +11329,7 @@ abstract class AppLocalizations {
   /// No description provided for @ttsAudioImportedCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{# audio file imported} other{# audio files imported}}'**
+  /// **'{count, plural, one{{count} audio file imported} other{{count} audio files imported}}'**
   String ttsAudioImportedCount(int count);
 
   /// No description provided for @ttsImportFailed.
@@ -11407,7 +11407,7 @@ abstract class AppLocalizations {
   /// No description provided for @ttsExportedCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{# file exported} other{# files exported}}'**
+  /// **'{count, plural, one{{count} file exported} other{{count} files exported}}'**
   String ttsExportedCount(int count);
 
   /// No description provided for @ttsFolderExport.
@@ -11695,7 +11695,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceBatchColumnChoice.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{Detected 1 column. Choose the starting column for the name/ID:} other{Detected # columns. Choose the starting column for the name/ID:}}'**
+  /// **'{count, plural, one{Detected {count} column. Choose the starting column for the name/ID:} other{Detected {count} columns. Choose the starting column for the name/ID:}}'**
   String voiceBatchColumnChoice(int count);
 
   /// No description provided for @voiceBatchColumn.
@@ -11761,7 +11761,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceDuplicateIds.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{# duplicate ID found: {ids}} other{# duplicate IDs found: {ids}}}'**
+  /// **'{count, plural, one{{count} duplicate ID found: {ids}} other{{count} duplicate IDs found: {ids}}}'**
   String voiceDuplicateIds(int count, String ids);
 
   /// No description provided for @voiceInsufficientColumnData.
@@ -11857,7 +11857,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceDuplicatesRemaining.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{# duplicate remains} other{# duplicates remain}}'**
+  /// **'{count, plural, one{{count} duplicate remains} other{{count} duplicates remain}}'**
   String voiceDuplicatesRemaining(int count);
 
   /// No description provided for @continueEditing.
