@@ -1042,7 +1042,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
     mermaidFenceIndex: openMermaidFenceIndex,
     mermaidFenceCount: mermaidFenceCount,
     tailStart: tailStart,
-    tailSourceStart: !includeTail && hasUnfencedIndentedCode
+    tailSourceStart: shouldCacheTail && needsContainerTransform
         ? _sourceOffsetForNormalizedOffset(text, tailStart)
         : 0,
     fenceChar: fenceChar,
