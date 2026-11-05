@@ -2153,7 +2153,20 @@ void main() {
                       statusCode: 503,
                       data: {
                         'error': {'message': 'service unavailable'},
+                        'api_key': 'opaque-response-secret-96',
+                        'request_id': 'opaque-response-secret-96',
+                        'requestId': 'req-safe-after-response-body-96',
+                        'choices': [
+                          {'finish_reason': 'stop'},
+                        ],
                       },
+                      headers: Headers.fromMap({
+                        'x-api-key': ['opaque-response-header-secret-96'],
+                        'x-request-id': [
+                          'opaque-response-header-secret-96',
+                          'req-safe-after-response-header-96',
+                        ],
+                      }),
                     ),
                   ),
                 ),
@@ -2174,6 +2187,19 @@ void main() {
 
         expect(service.lastResponseStatusCode, 503);
         expect(service.diagnosticResponse()['errorType'], 'badResponse');
+        expect(service.diagnosticResponse()['finishReason'], 'stop');
+        expect(
+          service.diagnosticResponse()['requestId'],
+          'req-safe-after-response-header-96',
+        );
+        expect(
+          jsonEncode(service.diagnosticResponse()),
+          isNot(contains('opaque-response-secret-96')),
+        );
+        expect(
+          jsonEncode(service.diagnosticResponse()),
+          isNot(contains('opaque-response-header-secret-96')),
+        );
       });
 
       test('recognize captures non-map response body in diagnostics', () async {
@@ -2414,6 +2440,71 @@ void main() {
           final firstRequest = service.recognize(imageBytes: imageBytes);
           await firstRequestStarted.future;
           dio.options.headers['Authorization'] = 'Bearer $secondCredential';
+          await service.recognize(imageBytes: imageBytes);
+          finishFirstRequest.complete();
+          await firstRequest;
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(firstCredential)));
+        },
+      );
+
+      test(
+        'overlapping OCR requests keep body credential exclusions paired',
+        () async {
+          const firstCredential = 'req-overlapping-body-credential-a-95';
+          const secondCredential = 'req-overlapping-body-credential-b-95';
+          const safeRequestId = 'req-safe-after-overlapping-body-credential-95';
+          final customParam = CustomParam(
+            paramName: 'api_key',
+            defaultValue: firstCredential,
+          );
+          final firstRequestStarted = Completer<void>();
+          final finishFirstRequest = Completer<void>();
+          final dio = Dio()..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                final body = options.data as Map;
+                final isFirstRequest = body['api_key'] == firstCredential;
+                final credential =
+                    isFirstRequest ? firstCredential : secondCredential;
+                final response = Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'request_id': credential,
+                    'id': safeRequestId,
+                    'choices': [
+                      {
+                        'message': {'content': 'recognized'},
+                      },
+                    ],
+                  },
+                  headers: Headers.fromMap({
+                    'x-request-id': [credential, safeRequestId],
+                  }),
+                );
+                if (isFirstRequest) {
+                  firstRequestStarted.complete();
+                  finishFirstRequest.future.then(
+                    (_) => handler.resolve(response),
+                  );
+                } else {
+                  handler.resolve(response);
+                }
+              },
+            ),
+          );
+          final service = OcrService(
+            config: _testOcrConfig.copyWith(customParams: [customParam]),
+            dio: dio,
+          );
+          final imageBytes = Uint8List.fromList([1, 2, 3]);
+
+          final firstRequest = service.recognize(imageBytes: imageBytes);
+          await firstRequestStarted.future;
+          customParam.defaultValue = secondCredential;
           await service.recognize(imageBytes: imageBytes);
           finishFirstRequest.complete();
           await firstRequest;

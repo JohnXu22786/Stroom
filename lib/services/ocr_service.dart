@@ -360,7 +360,7 @@ class OcrService {
       '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节',
     );
     final stopwatch = Stopwatch()..start();
-    final requestCredentialValues = _beginDiagnosticCapture(
+    var requestCredentialValues = _beginDiagnosticCapture(
       1,
       imageBytes.length,
     );
@@ -379,6 +379,13 @@ class OcrService {
 
       final body = _buildRequestBody(contents);
       final encodedBytes = _ensureRequestWithinSizeBudget(body);
+      requestCredentialValues = {
+        ...requestCredentialValues,
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'url': _chatUrl,
+          'body': body,
+        }),
+      }.toList(growable: false);
 
       lastRequestBody = body;
       final response = await _dio.post(
@@ -395,6 +402,12 @@ class OcrService {
       final responseCredentialValues = {
         ...requestCredentialValues,
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
+        ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
+          response.headers.map,
+        ),
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'body': response.data,
+        }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
@@ -461,7 +474,7 @@ class OcrService {
     }
 
     final stopwatch = Stopwatch()..start();
-    final requestCredentialValues = _beginDiagnosticCapture(
+    var requestCredentialValues = _beginDiagnosticCapture(
       imageBytesList.length,
       imageBytesList.fold<int>(0, (sum, image) => sum + image.$1.length),
     );
@@ -482,6 +495,13 @@ class OcrService {
 
       final body = _buildRequestBody(contents);
       final encodedBytes = _ensureRequestWithinSizeBudget(body);
+      requestCredentialValues = {
+        ...requestCredentialValues,
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'url': _chatUrl,
+          'body': body,
+        }),
+      }.toList(growable: false);
 
       lastRequestBody = body;
       final response = await _dio.post(
@@ -498,6 +518,12 @@ class OcrService {
       final responseCredentialValues = {
         ...requestCredentialValues,
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
+        ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
+          response.headers.map,
+        ),
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'body': response.data,
+        }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
@@ -631,6 +657,12 @@ class OcrService {
     final responseCredentialValues = {
       ...requestCredentialValues,
       ..._credentialValuesFromHeaders(e.requestOptions.headers),
+      ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
+        e.response?.headers.map,
+      ),
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'body': e.response?.data,
+      }),
     }.toList(growable: false);
     if (e.response?.data is Map) {
       lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
@@ -649,6 +681,10 @@ class OcrService {
           e.response?.data,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         );
+    _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'data': e.response?.data},
+      excludedValues: [config.apiKey, ...responseCredentialValues],
+    )?['finishReason'] as String?;
     _lastErrorType = e.type.name;
   }
 
