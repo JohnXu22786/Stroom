@@ -404,6 +404,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               assistantId: c.assistantId,
               draftText: c.draftText,
               draftAttachments: c.draftAttachments,
+              todoItems: c.todoItems,
               enabledMcpToolNames: c.enabledMcpToolNames,
               hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
               contextSummary: c.contextSummary,

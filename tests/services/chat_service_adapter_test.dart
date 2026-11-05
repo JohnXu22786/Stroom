@@ -1088,6 +1088,40 @@ void main() {
       expect(names, contains('searxng_search'));
     });
 
+    test('media tools are exposed only for configured providers', () {
+      adapter.initializeBuiltinTools(const ProviderEntriesState());
+      var names =
+          adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
+      expect(names, contains('stroom_media_list'));
+      expect(names, isNot(contains('stroom_ocr')));
+      expect(names, isNot(contains('stroom_asr')));
+      expect(names, isNot(contains('stroom_tts')));
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            for (final type in ['ocr', 'asr', 'tts'])
+              ProviderEntry(
+                type: type,
+                name: 'Configured $type',
+                configs: [
+                  ProviderConfigItem(
+                    providerName: 'Test $type',
+                    host: 'https://example.test/$type',
+                    key: 'test-key',
+                    models: [
+                      ModelConfig(name: 'Test model', modelId: 'test-model'),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
+      );
+      names = adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
+      expect(names, containsAll(['stroom_ocr', 'stroom_asr', 'stroom_tts']));
+    });
+
     test('MCP master switch filters all search tool definitions', () {
       const searchToolNames = {
         'brave_web_search',

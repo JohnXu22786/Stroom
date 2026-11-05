@@ -10,9 +10,12 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
-import '../utils/provider_models.dart' show resolveProviderModel;
+import '../utils/provider_models.dart'
+    show flattenProviderModels, resolveProviderModel;
 import 'chat_protocol.dart';
 import 'chat_service.dart';
+import 'chat_media_tool_service.dart';
+import 'chat_task_flow_tool_service.dart';
 import 'http_tool_service.dart';
 import 'mcp_client.dart';
 import 'todo_tool_service.dart';
