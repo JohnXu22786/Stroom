@@ -3383,16 +3383,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       previousPresetId is String ? previousPresetId : null,
     );
     if (selectedPreset != null) {
-      endpointConfig['providerPresetId'] = selectedPreset.id;
-      endpointConfig['apiProtocol'] = selectedPreset.defaultApiProtocol;
-      if (selectedPreset.modelsUrl != null) {
-        endpointConfig['modelsUrl'] = selectedPreset.modelsUrl;
-      } else if (endpointConfig['modelsUrl'] == previousPreset?.modelsUrl &&
-          previousPreset?.modelsUrl != null) {
-        endpointConfig.remove('modelsUrl');
-      }
+      final appliedPresetConfig =
+          selectedPreset.applyToEndpointConfig(endpointConfig);
+      endpointConfig
+        ..clear()
+        ..addAll(appliedPresetConfig);
     } else {
-      endpointConfig.remove('providerPresetId');
+      final customEndpointConfig =
+          LlmProviderPreset.clearFromEndpointConfig(endpointConfig);
+      endpointConfig
+        ..clear()
+        ..addAll(customEndpointConfig);
       if (endpointConfig['modelsUrl'] == previousPreset?.modelsUrl &&
           previousPreset?.modelsUrl != null) {
         endpointConfig.remove('modelsUrl');
