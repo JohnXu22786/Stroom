@@ -64,6 +64,8 @@ class ChatStreamManager {
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
+  final Map<String, Future<void> Function(ChatMessage)>
+      _pendingContinuationHandlers = {};
 
   /// Pages currently displaying a specific stream. A completed stream only
   /// needs its provider buffers retained while at least one page is attached.
@@ -278,7 +280,6 @@ class ChatStreamManager {
     required List<ChatMessage> history,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
-    Future<void> Function(ChatMessage continuation)? onContinuation,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -316,6 +317,7 @@ class ChatStreamManager {
     final resultCompleter = Completer<StreamResult>();
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
+    state.onContinuation = _pendingContinuationHandlers.remove(convId);
     state.history = List.from(history);
     state.historyOnSuccess = historyOnSuccess == null
         ? null
@@ -544,7 +546,7 @@ class ChatStreamManager {
           state.history.add(continuation);
           state.historyOnSuccess?.add(continuation);
           try {
-            await onContinuation?.call(continuation);
+            await state.onContinuation?.call(continuation);
           } catch (callbackError) {
             debugPrint(
                 '[ChatStreamManager] continuation display callback failed: $callbackError');
@@ -599,6 +601,20 @@ class ChatStreamManager {
       streamError: streamError,
       snappedChatService: snappedChatService,
     );
+  }
+
+  /// Registers a conversation-scoped handler for displaying an automatically
+  /// sent continuation. Call immediately before [startStreaming].
+  void setContinuationHandler(
+    String convId,
+    Future<void> Function(ChatMessage continuation) handler,
+  ) {
+    final activeState = _streams[convId];
+    if (activeState != null) {
+      activeState.onContinuation = handler;
+    } else {
+      _pendingContinuationHandlers[convId] = handler;
+    }
   }
 
   /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。

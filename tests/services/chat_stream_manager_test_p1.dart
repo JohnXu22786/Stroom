@@ -56,12 +56,15 @@ void chatStreamManagerGroup1() {
         ..errorAfterYield = networkFailure;
       manager.adapter.forceService(_makeChatService(provider));
       final displayedContinuations = <ChatMessage>[];
+      manager.setContinuationHandler(
+        'conv-network-continue',
+        (message) async => displayedContinuations.add(message),
+      );
 
       final result = await manager.startStreaming(
         text: 'Hi',
         convId: 'conv-network-continue',
         history: [_userMsg('Hi', 'u-original')],
-        onContinuation: (message) async => displayedContinuations.add(message),
       );
 
       expect(provider.callCount, 2);

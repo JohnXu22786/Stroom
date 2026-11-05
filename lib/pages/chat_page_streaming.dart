@@ -358,33 +358,34 @@ extension _ChatPageStreamingExt on _ChatPageState {
     ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
+    manager.setContinuationHandler(effectiveConvId, (continuation) async {
+      if (!mounted ||
+          ref.read(activeConversationIdProvider) != effectiveConvId) {
+        return;
+      }
+      // Keep the user continuation before the active assistant placeholder
+      // so the visible message order matches the request history.
+      await streamController?.removeMessage(placeholder);
+      try {
+        await streamController?.insertMessage(
+          Message.text(
+            id: continuation.id,
+            authorId: _currentUser.id,
+            text: continuation.content,
+            createdAt: continuation.createdAt,
+          ),
+        );
+      } finally {
+        await streamController?.insertMessage(placeholder);
+      }
+    });
+
     final streamFuture = manager.startStreaming(
       text: text,
       convId: effectiveConvId,
       history: histBefore,
       requestHistoryOverride: requestHistoryOverride,
       historyOnSuccess: historyOnSuccess,
-      onContinuation: (continuation) async {
-        if (!mounted ||
-            ref.read(activeConversationIdProvider) != effectiveConvId) {
-          return;
-        }
-        // Keep the user continuation before the active assistant placeholder
-        // so the visible message order matches the request history.
-        await streamController?.removeMessage(placeholder);
-        try {
-          await streamController?.insertMessage(
-            Message.text(
-              id: continuation.id,
-              authorId: _currentUser.id,
-              text: continuation.content,
-              createdAt: continuation.createdAt,
-            ),
-          );
-        } finally {
-          await streamController?.insertMessage(placeholder);
-        }
-      },
       tools: filteredTools,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,

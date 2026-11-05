@@ -71,6 +71,7 @@ class _ConversationStreamState {
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
   String? streamingMsgId;
+  Future<void> Function(ChatMessage continuation)? onContinuation;
   final StringBuffer _fullReply = StringBuffer();
   String get fullReply => _fullReply.toString();
   set fullReply(String value) {
