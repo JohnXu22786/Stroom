@@ -3365,6 +3365,42 @@ void main() {
         expect(serializedRetryData['instructionContent'], '[redacted]');
         expect(persisted, isNot(contains(apiKey)));
         expect(persisted, isNot(contains('abcdef123456')));
+
+        const punctuatedInstruction = 'password\nabcdef123456-SECRET';
+        final punctuatedTask = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-password-newline-punctuated-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer password…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': punctuatedInstruction},
+                  ],
+                },
+              ],
+            },
+          },
+          'retryData': OcrRetrySnapshot.capture(
+            images: const [],
+            instructionContent: punctuatedInstruction,
+          ).toMap(),
+        });
+        final punctuatedPersisted = jsonEncode(punctuatedTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(punctuatedTask.retryData!)
+              .instructionContent,
+          '[redacted]',
+        );
+        expect(punctuatedPersisted, isNot(contains('abcdef123456')));
+        expect(punctuatedPersisted, isNot(contains('SECRET')));
       },
     );
 

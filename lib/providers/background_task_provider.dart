@@ -1437,13 +1437,15 @@ String? _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
     final pattern = RegExp(
       '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
       r'[\r\n]+[ \t]*'
-      r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
-      r'(?=(?:[a-zA-Z]*[0-9]){4}))'
-      r'([a-zA-Z0-9]{10,})(?=$|[^a-zA-Z0-9])',
+      r'([a-zA-Z0-9_./+=~-]{10,})(?=$|[^a-zA-Z0-9_./+=~-])',
       caseSensitive: false,
     );
     final match = pattern.firstMatch(text);
-    if (match != null) {
+    final token = match?.group(2);
+    if (match != null &&
+        token != null &&
+        RegExp(r'[a-zA-Z]').allMatches(token).length >= 4 &&
+        RegExp(r'[0-9]').allMatches(token).length >= 4) {
       return text.replaceRange(
         match.start,
         match.end,
