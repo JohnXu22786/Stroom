@@ -1974,7 +1974,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             upstreamModelId: '${preset.modelIdPrefix}${model.id}',
             displayName: model.displayName,
             capabilities: model.capabilities,
-            config: const {'catalogSource': 'pinned-provider-preset'},
+            config: {
+              'catalogSource': 'pinned-provider-preset',
+              if (model.apiProtocolOverride != null)
+                'apiProtocolOverride': model.apiProtocolOverride,
+            },
           ),
       ];
     }
@@ -2028,7 +2032,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             upstreamModelId: '${preset.modelIdPrefix}${model.id}',
             displayName: model.displayName,
             capabilities: model.capabilities,
-            config: const {'catalogSource': 'pinned-provider-preset'},
+            config: {
+              'catalogSource': 'pinned-provider-preset',
+              if (model.apiProtocolOverride != null)
+                'apiProtocolOverride': model.apiProtocolOverride,
+            },
           ),
       ];
     });

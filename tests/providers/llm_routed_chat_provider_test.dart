@@ -365,6 +365,76 @@ void main() {
       isNot(contains('qoder')),
     );
   });
+  test(
+    'CheaperInference model protocol defaults and overrides are independent',
+    () {
+      final account = AiGatewayAccount(
+        id: 'cheaperinference-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'CheaperInference',
+        endpointConfig: const {
+          'providerPresetId': 'cheaperinference',
+          'apiProtocol': 'openai.chat_completions',
+        },
+        models: [
+          AiGatewayUpstreamModel(
+            id: 'gpt-5.4-model',
+            upstreamModelId: 'gpt-5.4',
+            displayName: 'GPT-5.4',
+            config: {'apiProtocolOverride': 'openai.responses'},
+          ),
+          AiGatewayUpstreamModel(
+            id: 'chat-model',
+            upstreamModelId: 'gpt-5.4-mini',
+            displayName: 'GPT-5.4 Mini',
+            config: {'apiProtocolOverride': 'openai.chat_completions'},
+          ),
+          AiGatewayUpstreamModel(
+            id: 'other-model',
+            upstreamModelId: 'other-model',
+            displayName: 'Other model',
+          ),
+        ],
+      );
+
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'gpt-5.4',
+          endpointType: 'openai.chat_completions',
+        ),
+        'openai.responses',
+      );
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'gpt-5.4-mini',
+          endpointType: 'openai.chat_completions',
+        ),
+        'openai.chat_completions',
+        reason: 'a saved model override can keep a tagged model on Chat',
+      );
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'other-model',
+          endpointType: 'openai.chat_completions',
+        ),
+        'openai.chat_completions',
+      );
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'gpt-5.4',
+          endpointType: 'openai.chat_completions',
+          apiProtocolOverride: 'openai.chat_completions',
+        ),
+        'openai.chat_completions',
+        reason: 'an explicit selection overrides the pinned Responses default',
+      );
+    },
+  );
   test('UncloseAI Chat route accepts only the source-supported protocol', () {
     final account = AiGatewayAccount(
       id: 'uncloseai-account',

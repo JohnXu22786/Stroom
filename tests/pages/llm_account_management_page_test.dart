@@ -129,6 +129,7 @@ void main() {
         'bigmodel',
         'bazaarlink',
         'beatapi',
+        'cheaperinference',
         'byteplus',
         'cerebras',
         'chutes',
@@ -177,6 +178,70 @@ void main() {
       contains('accounts/fireworks/models/deepseek-v4-flash'),
     );
   });
+
+  testWidgets(
+    'CheaperInference preset seeds Responses models on API-key account',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              widget.decoration.labelText == '服务商预设',
+        ),
+      );
+      preset.onChanged!('cheaperinference');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '凭据',
+        ),
+        'cheaperinference-test-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.connectorType, 'openai-compatibility');
+      expect(saved.endpointConfig['providerPresetId'], 'cheaperinference');
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(
+        saved.endpointConfig['baseUrl'],
+        'https://api.cheaperinference.com/v1/chat/completions',
+      );
+      expect(
+        saved.models.map((model) => model.upstreamModelId),
+        orderedEquals([
+          'gpt-5.4',
+          'gpt-5.4-mini',
+          'gpt-5.5',
+          'gpt-5.6-luna',
+          'gpt-5.6-sol',
+          'gpt-5.6-terra',
+        ]),
+      );
+      expect(
+        saved.models.map((model) => model.config['apiProtocolOverride']),
+        everyElement('openai.responses'),
+      );
+      expect(credentials.values.values, ['cheaperinference-test-key']);
+    },
+  );
 
   testWidgets('changing OpenAI provider preset requires a replacement key', (
     tester,

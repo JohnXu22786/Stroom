@@ -3914,6 +3914,14 @@ class LlmAccountConnectorService {
               .trim()
               .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
               .replaceFirst(RegExp(r'^models/'), '');
+          final modelType = map['type'];
+          if (account.connectorType == 'openai-compatibility' &&
+              account.endpointConfig['providerPresetId'] ==
+                  'cheaperinference' &&
+              modelType is String &&
+              modelType.toLowerCase() == 'image') {
+            continue;
+          }
           if (account.connectorType == 'kilocode' &&
               account.authType == 'none' &&
               !kKiloCodeAnonymousFreeModelIds.contains(modelId)) {
@@ -6196,6 +6204,23 @@ class LlmNativeRequestBuilder {
       }
       requestBody = Map<String, dynamic>.from(baseRequestBody)
         ..['model'] = modelId;
+    }
+    if (account.connectorType == 'openai-compatibility' &&
+        config['providerPresetId'] == 'cheaperinference' &&
+        (nativeFormat == 'responses' || nativeFormat == null)) {
+      if (requestBody is! Map) {
+        throw const LlmAccountConnectorException();
+      }
+      final payload = Map<String, dynamic>.from(requestBody);
+      if (nativeFormat == 'responses') {
+        // CheaperInference's Responses surface is stateless and rejects both
+        // a missing store field and store:true.
+        payload['store'] = false;
+      } else {
+        // The Chat Completions surface rejects this Responses-only option.
+        payload.remove('store');
+      }
+      requestBody = payload;
     }
 
     var requestHeaders = headers;

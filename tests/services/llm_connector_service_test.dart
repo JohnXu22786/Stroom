@@ -6946,6 +6946,164 @@ void main() {
   group('LlmNativeRequestBuilder', () {
     final builder = LlmNativeRequestBuilder();
 
+    test('CheaperInference discovery keeps text models and excludes images',
+        () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': [
+                {'id': 'gpt-5.4', 'type': 'text'},
+                {'id': 'deepseek-v4-pro', 'type': 'text'},
+                {'id': 'image-generator', 'type': 'image'},
+              ],
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'cheaperinference-catalog',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'CheaperInference',
+          endpointConfig: const {
+            'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
+            'modelsUrl': 'https://api.cheaperinference.com/v1/models',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'cheaperinference',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'gpt-5.4-local',
+              upstreamModelId: 'gpt-5.4',
+              displayName: 'GPT-5.4',
+              config: {'apiProtocolOverride': 'openai.responses'},
+            ),
+          ],
+        ),
+        secret: 'cheaperinference-catalog-key',
+      );
+
+      final discovered = await accounts.discoverModels(
+        account,
+        refreshRemote: true,
+      );
+
+      expect(captured?.uri,
+          Uri.parse('https://api.cheaperinference.com/v1/models'));
+      expect(
+        captured?.headers['Authorization'],
+        'Bearer cheaperinference-catalog-key',
+      );
+      expect(
+        discovered.map((model) => model.upstreamModelId),
+        ['gpt-5.4', 'deepseek-v4-pro'],
+      );
+      expect(
+          discovered.first.config['apiProtocolOverride'], 'openai.responses');
+      expect(discovered.last.config['apiProtocolOverride'], isNull);
+    });
+
+    test(
+      'CheaperInference selects protocol-specific URL and stateless body',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({'output_text': 'ok'}),
+              200,
+              headers: const {
+                'content-type': ['application/json']
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          _account(
+            'cheaperinference-http',
+            'openai-compatibility',
+            endpointConfig: const {
+              'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
+              'apiProtocol': 'openai.chat_completions',
+              'providerPresetId': 'cheaperinference',
+            },
+            models: const [
+              LlmUpstreamModel(
+                id: 'cheaperinference-gpt-5.4',
+                upstreamModelId: 'gpt-5.4',
+                displayName: 'GPT-5.4',
+                config: {'apiProtocolOverride': 'openai.responses'},
+              ),
+            ],
+          ),
+          secret: 'cheaperinference-secret',
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+
+        await client.request(
+          account: account,
+          modelId: 'gpt-5.4',
+          body: const {'model': 'gpt-5.4', 'input': [], 'store': true},
+          nativeFormat: 'responses',
+        );
+        expect(
+          captured?.uri,
+          Uri.parse('https://api.cheaperinference.com/v1/responses'),
+        );
+        expect((captured?.data as Map)['store'], isFalse);
+        expect((captured?.data as Map)['model'], 'gpt-5.4');
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer cheaperinference-secret',
+        );
+
+        await client.request(
+          account: account,
+          modelId: 'gpt-5.4',
+          body: const {'model': 'gpt-5.4', 'input': []},
+          nativeFormat: 'responses',
+        );
+        expect((captured?.data as Map)['store'], isFalse);
+
+        await client.request(
+          account: account,
+          modelId: 'gpt-5.4',
+          body: const {
+            'model': 'gpt-5.4',
+            'messages': [],
+            'store': true,
+          },
+        );
+        expect(
+          captured?.uri,
+          Uri.parse(
+            'https://api.cheaperinference.com/v1/chat/completions',
+          ),
+        );
+        expect((captured?.data as Map).containsKey('store'), isFalse);
+        expect((captured?.data as Map)['messages'], isEmpty);
+      },
+    );
+
     test(
         'Azure deployment requests use the configured deployment and key header',
         () {
