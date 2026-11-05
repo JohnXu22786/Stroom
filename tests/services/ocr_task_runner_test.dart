@@ -517,6 +517,42 @@ void main() {
     expect(notifier.state.single.status, TaskStatus.completed);
   });
 
+  test('per-image upload label resets after upload completes', () async {
+    final progressAdapter = _OutOfOrderAdapter();
+    final progressRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png')
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 1,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = progressAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = progressRunner.run();
+    await progressAdapter.firstRequest.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    final request = progressAdapter.requestOptionsByImageId[1]!;
+    request.onSendProgress!(10, 10);
+
+    expect(notifier.state.single.steps[2].running, isTrue);
+    expect(notifier.state.single.steps[1].label, '上传图片');
+
+    progressAdapter.complete(1, text: 'page text');
+    await running;
+  });
+
   test(
     'service setup failure terminalizes the running page outcome',
     () async {
