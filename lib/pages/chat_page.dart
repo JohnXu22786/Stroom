@@ -640,7 +640,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               _pendingInitialScrollAdjustment)
                             Positioned.fill(
                               child: TickerMode(
-                                enabled: ChatTabVisibility.of(context),
+                                enabled: TickerMode.of(context) &&
+                                    ChatTabVisibility.of(context),
                                 child: const Center(
                                   child: CircularProgressIndicator(),
                                 ),

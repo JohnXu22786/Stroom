@@ -414,7 +414,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 Expanded(
                   child: isLoading
                       ? TickerMode(
-                          enabled: ChatTabVisibility.of(context),
+                          enabled: TickerMode.of(context) &&
+                              ChatTabVisibility.of(context),
                           child: const Center(
                             child: CircularProgressIndicator(),
                           ),
