@@ -6205,6 +6205,534 @@ class AppLocalizationsZh extends AppLocalizations {
   String ankiSyncSchemaStatus(int schema, int usn, String modified) {
     return '结构版本戳 $schema · USN $usn · 修改时间 $modified';
   }
+
+  @override
+  String get asrPageTitle => '音频转写';
+
+  @override
+  String get clear => '清空';
+
+  @override
+  String get configure => '去配置';
+
+  @override
+  String get asrModel => '识别模型';
+
+  @override
+  String get reselectModel => '请重新选择模型';
+
+  @override
+  String get selectAsrModel => '选择识别模型';
+
+  @override
+  String get enterPublicAudioUrl => '输入公网音频链接';
+
+  @override
+  String get recordingSelection => '录音选择';
+
+  @override
+  String get audioFiles => '音频文件';
+
+  @override
+  String get noAudioSelected => '暂未选择音频文件';
+
+  @override
+  String get supportedAudioFormats => '支持 wav、mp3、m4a、ogg 等常见音频格式';
+
+  @override
+  String asrSelectedAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选择 # 个音频文件',
+      one: '已选择 # 个音频文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String asrSelectedAudioCountShort(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 # 个音频',
+      one: '已选 # 个音频',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrReselect => '重新选择';
+
+  @override
+  String get asrUrlLabel => 'URL  |  公网链接';
+
+  @override
+  String get asrErrorDetails => '查看详细错误';
+
+  @override
+  String get asrResultSaved => '识别结果已保存';
+
+  @override
+  String get asrWorking => '识别中...';
+
+  @override
+  String get asrStart => '开始识别';
+
+  @override
+  String get saveTo => '保存至';
+
+  @override
+  String get rootFolder => '根目录';
+
+  @override
+  String get chooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get linkAlreadyAdded => '该链接已在列表中';
+
+  @override
+  String get chooseAudioSource => '选择音频来源';
+
+  @override
+  String get inAppRecordings => '应用内录音';
+
+  @override
+  String get chooseGeneratedRecordings => '从已生成的录音中选择';
+
+  @override
+  String get systemAudioFiles => '系统音频文件';
+
+  @override
+  String get chooseDeviceAudioFiles => '从设备文件中选择';
+
+  @override
+  String get cannotReadAudioFile => '无法读取音频文件';
+
+  @override
+  String chooseAudioFileFailed(String details) {
+    return '选择音频文件失败: $details';
+  }
+
+  @override
+  String get chooseInAppRecording => '选择应用内录音';
+
+  @override
+  String get noRecordings => '暂无录音';
+
+  @override
+  String durationSeconds(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '#秒',
+      one: '#秒',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrNeedsProvider => '请先在设置中配置音频转写供应商和模型';
+
+  @override
+  String get asrModelUnavailable => '原识别模型已失效或无法确认，请重新选择识别模型';
+
+  @override
+  String get asrUrlProviderRemoveFiles => '当前供应商使用 URL 上传方式，请移除本地音频文件后重试';
+
+  @override
+  String get asrFileProviderRemoveUrls => '当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试';
+
+  @override
+  String asrTaskStartFailed(String details) {
+    return '任务启动失败: $details';
+  }
+
+  @override
+  String get asrInvalidUrl => '无效链接，必须以 http:// 或 https:// 开头';
+
+  @override
+  String get asrEnterAudioUrl => '输入音频链接';
+
+  @override
+  String get asrUrlProviderHelp => '当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get add => '添加';
+
+  @override
+  String get ttsPageTitle => '音频';
+
+  @override
+  String ttsAudioImportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已导入 # 个音频文件',
+      one: '已导入 # 个音频文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String ttsImportFailed(String details) {
+    return '导入失败: $details';
+  }
+
+  @override
+  String get ttsFileReadFailed => '文件数据读取失败';
+
+  @override
+  String get ttsExportAudioFile => '导出音频文件';
+
+  @override
+  String ttsExportedTo(String path) {
+    return '已导出到: $path';
+  }
+
+  @override
+  String ttsExportFailed(String details) {
+    return '导出失败: $details';
+  }
+
+  @override
+  String get ttsConfirmRegenerate => '确认重新生成';
+
+  @override
+  String ttsRegenerateConfirmFile(String fileName) {
+    return '确定要重新生成音频 “$fileName” 吗？';
+  }
+
+  @override
+  String get ttsRegenerateOverwrite => '重新生成后将覆盖原音频文件。';
+
+  @override
+  String get ttsRegenerate => '确认重新生成';
+
+  @override
+  String ttsCopiedFailed(String details) {
+    return '复制失败: $details';
+  }
+
+  @override
+  String get ttsChooseExportFolder => '选择导出目录';
+
+  @override
+  String get ttsExportAudio => '导出音频';
+
+  @override
+  String ttsExportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已导出 # 个文件',
+      one: '已导出 # 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ttsFolderExport => '文件夹导出';
+
+  @override
+  String get ttsWebFolderExportHelp => '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get ttsDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String get ttsExportAudioFolder => '导出音频文件夹';
+
+  @override
+  String get ttsRecord => '录音';
+
+  @override
+  String get ttsImport => '导入';
+
+  @override
+  String get ttsPlay => '播放';
+
+  @override
+  String get ttsExportLocal => '导出到本地';
+
+  @override
+  String get ttsRegenerateQuestion => '重新生成';
+
+  @override
+  String get ttsNeedsProvider => '请先在设置中配置语音合成供应商和模型';
+
+  @override
+  String get ttsAddedToTasks => '已添加到任务列表，后台生成中…';
+
+  @override
+  String get ttsCreateTitle => '语音合成';
+
+  @override
+  String get ttsOriginalTitle => '录音标题';
+
+  @override
+  String get ttsUseOriginalTitle => '使用原标题';
+
+  @override
+  String get ttsAudioFileNameHint => '保存的音频文件名（可选）';
+
+  @override
+  String get ttsTextToConvert => '转换文本';
+
+  @override
+  String get ttsSpeechContent => '语音内容';
+
+  @override
+  String get ttsTextHint => '请输入要转换为语音的文本...';
+
+  @override
+  String get ttsFullscreenEdit => '全屏编辑';
+
+  @override
+  String ttsTextLimitWarning(int limit) {
+    return '文字超出限制（最多 $limit 字）';
+  }
+
+  @override
+  String get ttsSynthesisConfig => '合成配置';
+
+  @override
+  String get ttsVoiceAndSoundHelp => '调整音色与声音表现';
+
+  @override
+  String get ttsProviderSettingsLead => '在';
+
+  @override
+  String get ttsProviderSettings => 'TTS供应商设置';
+
+  @override
+  String get ttsProviderSettingsTail => '页面设置更多参数';
+
+  @override
+  String get ttsEditText => '编辑文本';
+
+  @override
+  String get ttsClose => '关闭';
+
+  @override
+  String get ttsVoice => '音色';
+
+  @override
+  String get ttsSelectVoice => '选择音色';
+
+  @override
+  String get ttsSpeed => '语速';
+
+  @override
+  String get ttsNormal => '正常';
+
+  @override
+  String get ttsVolume => '音量';
+
+  @override
+  String get ttsInstruction => '语气指令（instruction）';
+
+  @override
+  String get ttsInstructionHint => '例如: Speak in a cheerful and excited tone';
+
+  @override
+  String get ttsCustomParams => '自定义参数';
+
+  @override
+  String ttsDefaultValue(Object value) {
+    return '默认: $value';
+  }
+
+  @override
+  String get ttsGenerateRecording => '生成录音';
+
+  @override
+  String ttsSaveAs(String path, String name, String format) {
+    return '将保存为: $path/$name.$format';
+  }
+
+  @override
+  String get ttsChooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get ttsFillTextError => '请输入要转换的文本';
+
+  @override
+  String get voiceBatchTitle => '批量添加音色';
+
+  @override
+  String get voiceBatchConfirm => '确认添加';
+
+  @override
+  String get voiceBatchSeparator => '分隔符：';
+
+  @override
+  String get voiceBatchCustomSeparatorHint => '请输入自定义分隔符';
+
+  @override
+  String get voiceBatchFieldOrder => '字段顺序：';
+
+  @override
+  String get voiceBatchNameThenId => '第1个=名称, 第2个=ID';
+
+  @override
+  String get voiceBatchIdThenName => '第1个=ID, 第2个=名称';
+
+  @override
+  String voiceBatchColumnChoice(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '检测到 # 列，请选择作为名称/ID的起始列：',
+      one: '检测到 1 列，请选择作为名称/ID的起始列：',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceBatchColumn(int index, String sample) {
+    return '第$index列：$sample';
+  }
+
+  @override
+  String get voiceBatchSingleColumn => '识别到单列数据，将全部作为ID处理（名称 = ID）';
+
+  @override
+  String get voiceBatchInputHint => '支持 Tab / 逗号 / 分号 / 竖线 作为分隔符，每行两个内容';
+
+  @override
+  String get voiceBatchNoPreview => '暂无解析结果';
+
+  @override
+  String get voiceName => '音色名称';
+
+  @override
+  String get voiceId => '音色ID';
+
+  @override
+  String get status => '状态';
+
+  @override
+  String get voiceNew => '✅ 新增';
+
+  @override
+  String get voiceIdExists => '⚠️ ID已存在';
+
+  @override
+  String voiceFormatError(String details) {
+    return '❌ 格式错误$details';
+  }
+
+  @override
+  String voiceDuplicateIds(int count, String ids) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '发现 # 个重复ID: $ids',
+      one: '发现 # 个重复ID: $ids',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get voiceInsufficientColumnData => '所选列数据不足';
+
+  @override
+  String get voiceCustomSeparator => '自定义...';
+
+  @override
+  String get voiceCommaSeparator => '逗号 (,)';
+
+  @override
+  String get voiceSemicolonSeparator => '分号 (;)';
+
+  @override
+  String get voicePipeSeparator => '竖线 (|)';
+
+  @override
+  String get voiceTabSeparator => 'Tab';
+
+  @override
+  String get voiceEditorTitle => '音色编辑';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get voiceAddRow => '添加一行';
+
+  @override
+  String get voiceBatchAdd => '批量添加';
+
+  @override
+  String get voiceNoneAdd => '暂无音色，请添加';
+
+  @override
+  String get delete => '删除';
+
+  @override
+  String get voiceDuplicateResolution => '发现以下重复音色ID，逐条选择处理方式：';
+
+  @override
+  String get update => '更新';
+
+  @override
+  String get skip => '跳过';
+
+  @override
+  String voiceDuplicatesRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '还有 # 个重复未处理',
+      one: '还有 # 个重复未处理',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get continueEditing => '继续编辑';
+
+  @override
+  String get asrRetryIncomplete => '重试音频不完整，请清空后重新选择全部音频';
+
+  @override
+  String asrRetryAudioUnreadable(String details) {
+    return '重试音频数据无法读取，请重新选择音频: $details';
+  }
+
+  @override
+  String get asrLegacyRetryUnavailable => '旧版重试音频不可用，请重新选择音频';
+
+  @override
+  String get asrRetryDataUnreadable => '重试数据无法读取，请重新选择音频';
+
+  @override
+  String get ttsSynthesisModel => '合成模型';
+
+  @override
+  String get asrRetryUnavailable => '重试音频不可用，请重新选择音频';
+
+  @override
+  String get chatRequest => '请求 (Request)';
+
+  @override
+  String get chatResponse => '响应 (Response)';
+
+  @override
+  String get chatNoErrorDetails => '无详细数据';
+
+  @override
+  String get ttsBackgroundInterrupted => '应用进入后台，合成中断';
+
+  @override
+  String get ttsAppExitedInterrupted => '应用已退出，合成中断';
+
+  @override
+  String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -12407,4 +12935,532 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String ankiSyncSchemaStatus(int schema, int usn, String modified) {
     return '结构版本戳 $schema · USN $usn · 修改时间 $modified';
   }
+
+  @override
+  String get asrPageTitle => '音频转写';
+
+  @override
+  String get clear => '清空';
+
+  @override
+  String get configure => '去配置';
+
+  @override
+  String get asrModel => '识别模型';
+
+  @override
+  String get reselectModel => '请重新选择模型';
+
+  @override
+  String get selectAsrModel => '选择识别模型';
+
+  @override
+  String get enterPublicAudioUrl => '输入公网音频链接';
+
+  @override
+  String get recordingSelection => '录音选择';
+
+  @override
+  String get audioFiles => '音频文件';
+
+  @override
+  String get noAudioSelected => '暂未选择音频文件';
+
+  @override
+  String get supportedAudioFormats => '支持 wav、mp3、m4a、ogg 等常见音频格式';
+
+  @override
+  String asrSelectedAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选择 # 个音频文件',
+      one: '已选择 # 个音频文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String asrSelectedAudioCountShort(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 # 个音频',
+      one: '已选 # 个音频',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrReselect => '重新选择';
+
+  @override
+  String get asrUrlLabel => 'URL  |  公网链接';
+
+  @override
+  String get asrErrorDetails => '查看详细错误';
+
+  @override
+  String get asrResultSaved => '识别结果已保存';
+
+  @override
+  String get asrWorking => '识别中...';
+
+  @override
+  String get asrStart => '开始识别';
+
+  @override
+  String get saveTo => '保存至';
+
+  @override
+  String get rootFolder => '根目录';
+
+  @override
+  String get chooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get linkAlreadyAdded => '该链接已在列表中';
+
+  @override
+  String get chooseAudioSource => '选择音频来源';
+
+  @override
+  String get inAppRecordings => '应用内录音';
+
+  @override
+  String get chooseGeneratedRecordings => '从已生成的录音中选择';
+
+  @override
+  String get systemAudioFiles => '系统音频文件';
+
+  @override
+  String get chooseDeviceAudioFiles => '从设备文件中选择';
+
+  @override
+  String get cannotReadAudioFile => '无法读取音频文件';
+
+  @override
+  String chooseAudioFileFailed(String details) {
+    return '选择音频文件失败: $details';
+  }
+
+  @override
+  String get chooseInAppRecording => '选择应用内录音';
+
+  @override
+  String get noRecordings => '暂无录音';
+
+  @override
+  String durationSeconds(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '#秒',
+      one: '#秒',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrNeedsProvider => '请先在设置中配置音频转写供应商和模型';
+
+  @override
+  String get asrModelUnavailable => '原识别模型已失效或无法确认，请重新选择识别模型';
+
+  @override
+  String get asrUrlProviderRemoveFiles => '当前供应商使用 URL 上传方式，请移除本地音频文件后重试';
+
+  @override
+  String get asrFileProviderRemoveUrls => '当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试';
+
+  @override
+  String asrTaskStartFailed(String details) {
+    return '任务启动失败: $details';
+  }
+
+  @override
+  String get asrInvalidUrl => '无效链接，必须以 http:// 或 https:// 开头';
+
+  @override
+  String get asrEnterAudioUrl => '输入音频链接';
+
+  @override
+  String get asrUrlProviderHelp => '当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get add => '添加';
+
+  @override
+  String get ttsPageTitle => '音频';
+
+  @override
+  String ttsAudioImportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已导入 # 个音频文件',
+      one: '已导入 # 个音频文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String ttsImportFailed(String details) {
+    return '导入失败: $details';
+  }
+
+  @override
+  String get ttsFileReadFailed => '文件数据读取失败';
+
+  @override
+  String get ttsExportAudioFile => '导出音频文件';
+
+  @override
+  String ttsExportedTo(String path) {
+    return '已导出到: $path';
+  }
+
+  @override
+  String ttsExportFailed(String details) {
+    return '导出失败: $details';
+  }
+
+  @override
+  String get ttsConfirmRegenerate => '确认重新生成';
+
+  @override
+  String ttsRegenerateConfirmFile(String fileName) {
+    return '确定要重新生成音频 “$fileName” 吗？';
+  }
+
+  @override
+  String get ttsRegenerateOverwrite => '重新生成后将覆盖原音频文件。';
+
+  @override
+  String get ttsRegenerate => '确认重新生成';
+
+  @override
+  String ttsCopiedFailed(String details) {
+    return '复制失败: $details';
+  }
+
+  @override
+  String get ttsChooseExportFolder => '选择导出目录';
+
+  @override
+  String get ttsExportAudio => '导出音频';
+
+  @override
+  String ttsExportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已导出 # 个文件',
+      one: '已导出 # 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ttsFolderExport => '文件夹导出';
+
+  @override
+  String get ttsWebFolderExportHelp => '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get ttsDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String get ttsExportAudioFolder => '导出音频文件夹';
+
+  @override
+  String get ttsRecord => '录音';
+
+  @override
+  String get ttsImport => '导入';
+
+  @override
+  String get ttsPlay => '播放';
+
+  @override
+  String get ttsExportLocal => '导出到本地';
+
+  @override
+  String get ttsRegenerateQuestion => '重新生成';
+
+  @override
+  String get ttsNeedsProvider => '请先在设置中配置语音合成供应商和模型';
+
+  @override
+  String get ttsAddedToTasks => '已添加到任务列表，后台生成中…';
+
+  @override
+  String get ttsCreateTitle => '语音合成';
+
+  @override
+  String get ttsOriginalTitle => '录音标题';
+
+  @override
+  String get ttsUseOriginalTitle => '使用原标题';
+
+  @override
+  String get ttsAudioFileNameHint => '保存的音频文件名（可选）';
+
+  @override
+  String get ttsTextToConvert => '转换文本';
+
+  @override
+  String get ttsSpeechContent => '语音内容';
+
+  @override
+  String get ttsTextHint => '请输入要转换为语音的文本...';
+
+  @override
+  String get ttsFullscreenEdit => '全屏编辑';
+
+  @override
+  String ttsTextLimitWarning(int limit) {
+    return '文字超出限制（最多 $limit 字）';
+  }
+
+  @override
+  String get ttsSynthesisConfig => '合成配置';
+
+  @override
+  String get ttsVoiceAndSoundHelp => '调整音色与声音表现';
+
+  @override
+  String get ttsProviderSettingsLead => '在';
+
+  @override
+  String get ttsProviderSettings => 'TTS供应商设置';
+
+  @override
+  String get ttsProviderSettingsTail => '页面设置更多参数';
+
+  @override
+  String get ttsEditText => '编辑文本';
+
+  @override
+  String get ttsClose => '关闭';
+
+  @override
+  String get ttsVoice => '音色';
+
+  @override
+  String get ttsSelectVoice => '选择音色';
+
+  @override
+  String get ttsSpeed => '语速';
+
+  @override
+  String get ttsNormal => '正常';
+
+  @override
+  String get ttsVolume => '音量';
+
+  @override
+  String get ttsInstruction => '语气指令（instruction）';
+
+  @override
+  String get ttsInstructionHint => '例如: Speak in a cheerful and excited tone';
+
+  @override
+  String get ttsCustomParams => '自定义参数';
+
+  @override
+  String ttsDefaultValue(Object value) {
+    return '默认: $value';
+  }
+
+  @override
+  String get ttsGenerateRecording => '生成录音';
+
+  @override
+  String ttsSaveAs(String path, String name, String format) {
+    return '将保存为: $path/$name.$format';
+  }
+
+  @override
+  String get ttsChooseSaveFolder => '选择保存文件夹';
+
+  @override
+  String get ttsFillTextError => '请输入要转换的文本';
+
+  @override
+  String get voiceBatchTitle => '批量添加音色';
+
+  @override
+  String get voiceBatchConfirm => '确认添加';
+
+  @override
+  String get voiceBatchSeparator => '分隔符：';
+
+  @override
+  String get voiceBatchCustomSeparatorHint => '请输入自定义分隔符';
+
+  @override
+  String get voiceBatchFieldOrder => '字段顺序：';
+
+  @override
+  String get voiceBatchNameThenId => '第1个=名称, 第2个=ID';
+
+  @override
+  String get voiceBatchIdThenName => '第1个=ID, 第2个=名称';
+
+  @override
+  String voiceBatchColumnChoice(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '检测到 # 列，请选择作为名称/ID的起始列：',
+      one: '检测到 1 列，请选择作为名称/ID的起始列：',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceBatchColumn(int index, String sample) {
+    return '第$index列：$sample';
+  }
+
+  @override
+  String get voiceBatchSingleColumn => '识别到单列数据，将全部作为ID处理（名称 = ID）';
+
+  @override
+  String get voiceBatchInputHint => '支持 Tab / 逗号 / 分号 / 竖线 作为分隔符，每行两个内容';
+
+  @override
+  String get voiceBatchNoPreview => '暂无解析结果';
+
+  @override
+  String get voiceName => '音色名称';
+
+  @override
+  String get voiceId => '音色ID';
+
+  @override
+  String get status => '状态';
+
+  @override
+  String get voiceNew => '✅ 新增';
+
+  @override
+  String get voiceIdExists => '⚠️ ID已存在';
+
+  @override
+  String voiceFormatError(String details) {
+    return '❌ 格式错误$details';
+  }
+
+  @override
+  String voiceDuplicateIds(int count, String ids) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '发现 # 个重复ID: $ids',
+      one: '发现 # 个重复ID: $ids',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get voiceInsufficientColumnData => '所选列数据不足';
+
+  @override
+  String get voiceCustomSeparator => '自定义...';
+
+  @override
+  String get voiceCommaSeparator => '逗号 (,)';
+
+  @override
+  String get voiceSemicolonSeparator => '分号 (;)';
+
+  @override
+  String get voicePipeSeparator => '竖线 (|)';
+
+  @override
+  String get voiceTabSeparator => 'Tab';
+
+  @override
+  String get voiceEditorTitle => '音色编辑';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get voiceAddRow => '添加一行';
+
+  @override
+  String get voiceBatchAdd => '批量添加';
+
+  @override
+  String get voiceNoneAdd => '暂无音色，请添加';
+
+  @override
+  String get delete => '删除';
+
+  @override
+  String get voiceDuplicateResolution => '发现以下重复音色ID，逐条选择处理方式：';
+
+  @override
+  String get update => '更新';
+
+  @override
+  String get skip => '跳过';
+
+  @override
+  String voiceDuplicatesRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '还有 # 个重复未处理',
+      one: '还有 # 个重复未处理',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get continueEditing => '继续编辑';
+
+  @override
+  String get asrRetryIncomplete => '重试音频不完整，请清空后重新选择全部音频';
+
+  @override
+  String asrRetryAudioUnreadable(String details) {
+    return '重试音频数据无法读取，请重新选择音频: $details';
+  }
+
+  @override
+  String get asrLegacyRetryUnavailable => '旧版重试音频不可用，请重新选择音频';
+
+  @override
+  String get asrRetryDataUnreadable => '重试数据无法读取，请重新选择音频';
+
+  @override
+  String get ttsSynthesisModel => '合成模型';
+
+  @override
+  String get asrRetryUnavailable => '重试音频不可用，请重新选择音频';
+
+  @override
+  String get chatRequest => '请求 (Request)';
+
+  @override
+  String get chatResponse => '响应 (Response)';
+
+  @override
+  String get chatNoErrorDetails => '无详细数据';
+
+  @override
+  String get ttsBackgroundInterrupted => '应用进入后台，合成中断';
+
+  @override
+  String get ttsAppExitedInterrupted => '应用已退出，合成中断';
+
+  @override
+  String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';
 }

@@ -3538,5 +3538,310 @@
         "type": "String"
       }
     }
-  }
+  },
+  "asrPageTitle": "Audio Transcription",
+  "clear": "Clear",
+  "configure": "Configure",
+  "asrModel": "Recognition model",
+  "reselectModel": "Please select a model again",
+  "selectAsrModel": "Select a recognition model",
+  "enterPublicAudioUrl": "Enter a public audio URL",
+  "recordingSelection": "Recordings",
+  "audioFiles": "Audio files",
+  "noAudioSelected": "No audio files selected",
+  "supportedAudioFormats": "Supports common audio formats such as WAV, MP3, M4A, and OGG",
+  "asrSelectedAudioCount": "{count, plural, =0{No audio files selected} one{# audio file selected} other{# audio files selected}}",
+  "@asrSelectedAudioCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrSelectedAudioCountShort": "{count, plural, one{# audio file selected} other{# audio files selected}}",
+  "@asrSelectedAudioCountShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrReselect": "Select again",
+  "asrUrlLabel": "URL | Public link",
+  "asrErrorDetails": "View error details",
+  "asrResultSaved": "Transcription result saved",
+  "asrWorking": "Transcribing…",
+  "asrStart": "Start transcription",
+  "saveTo": "Save to",
+  "rootFolder": "Root folder",
+  "chooseSaveFolder": "Choose a folder",
+  "linkAlreadyAdded": "This link is already in the list",
+  "chooseAudioSource": "Choose an audio source",
+  "inAppRecordings": "In-app recordings",
+  "chooseGeneratedRecordings": "Choose from generated recordings",
+  "systemAudioFiles": "System audio files",
+  "chooseDeviceAudioFiles": "Choose files from your device",
+  "cannotReadAudioFile": "Could not read the audio file",
+  "chooseAudioFileFailed": "Could not select audio file: {details}",
+  "@chooseAudioFileFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseInAppRecording": "Choose in-app recordings",
+  "noRecordings": "No recordings",
+  "durationSeconds": "{seconds, plural, one{# sec} other{# secs}}",
+  "@durationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "asrNeedsProvider": "Configure an audio transcription provider and model in Settings first",
+  "asrModelUnavailable": "The original recognition model is unavailable or cannot be verified. Please select a model again.",
+  "asrUrlProviderRemoveFiles": "This provider uploads audio by URL. Remove local audio files and try again.",
+  "asrFileProviderRemoveUrls": "This provider uploads audio files and does not support transcription by link. Remove links and try again.",
+  "asrTaskStartFailed": "Could not start the task: {details}",
+  "@asrTaskStartFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrInvalidUrl": "Invalid URL. It must start with http:// or https://",
+  "asrEnterAudioUrl": "Enter an audio URL",
+  "asrUrlProviderHelp": "This provider uploads audio by URL. Enter a public audio URL (http/https).",
+  "cancel": "Cancel",
+  "add": "Add",
+  "ttsPageTitle": "Audio",
+  "ttsAudioImportedCount": "{count, plural, one{# audio file imported} other{# audio files imported}}",
+  "@ttsAudioImportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsImportFailed": "Import failed: {details}",
+  "@ttsImportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsFileReadFailed": "Could not read file data",
+  "ttsExportAudioFile": "Export audio file",
+  "ttsExportedTo": "Exported to: {path}",
+  "@ttsExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsExportFailed": "Export failed: {details}",
+  "@ttsExportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsConfirmRegenerate": "Confirm regeneration",
+  "ttsRegenerateConfirmFile": "Regenerate audio “{fileName}”?",
+  "@ttsRegenerateConfirmFile": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRegenerateOverwrite": "The original audio file will be replaced after regeneration.",
+  "ttsRegenerate": "Regenerate audio",
+  "ttsCopiedFailed": "Could not copy: {details}",
+  "@ttsCopiedFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseExportFolder": "Choose export folder",
+  "ttsExportAudio": "Export audio",
+  "ttsExportedCount": "{count, plural, one{# file exported} other{# files exported}}",
+  "@ttsExportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsFolderExport": "Export folder",
+  "ttsWebFolderExportHelp": "Your browser cannot choose an export folder. A ZIP file will be downloaded with the folder structure preserved.",
+  "ttsDownloadZip": "Download ZIP file",
+  "ttsExportAudioFolder": "Export audio folder",
+  "ttsRecord": "Record",
+  "ttsImport": "Import",
+  "ttsPlay": "Play",
+  "ttsExportLocal": "Export to device",
+  "ttsRegenerateQuestion": "Regenerate",
+  "ttsNeedsProvider": "Configure a speech synthesis provider and model in Settings first",
+  "ttsAddedToTasks": "Added to the task list. Generating in the background…",
+  "ttsCreateTitle": "Speech Synthesis",
+  "ttsOriginalTitle": "Recording title",
+  "ttsUseOriginalTitle": "Use original title",
+  "ttsAudioFileNameHint": "Saved audio file name (optional)",
+  "ttsTextToConvert": "Text to convert",
+  "ttsSpeechContent": "Speech content",
+  "ttsTextHint": "Enter text to convert to speech…",
+  "ttsFullscreenEdit": "Edit in full screen",
+  "ttsTextLimitWarning": "Text exceeds the limit (maximum {limit} characters)",
+  "@ttsTextLimitWarning": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsSynthesisConfig": "Synthesis settings",
+  "ttsVoiceAndSoundHelp": "Adjust the voice and sound",
+  "ttsProviderSettingsLead": "in",
+  "ttsProviderSettings": "TTS provider settings",
+  "ttsProviderSettingsTail": "to configure more parameters",
+  "ttsEditText": "Edit text",
+  "ttsClose": "Close",
+  "ttsVoice": "Voice",
+  "ttsSelectVoice": "Select a voice",
+  "ttsSpeed": "Speed",
+  "ttsNormal": "Normal",
+  "ttsVolume": "Volume",
+  "ttsInstruction": "Speaking style instruction (instruction)",
+  "ttsInstructionHint": "For example: Speak in a cheerful and excited tone",
+  "ttsCustomParams": "Custom parameters",
+  "ttsDefaultValue": "Default: {value}",
+  "@ttsDefaultValue": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "ttsGenerateRecording": "Generate recording",
+  "ttsSaveAs": "Save as: {path}/{name}.{format}",
+  "@ttsSaveAs": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseSaveFolder": "Choose a folder",
+  "ttsFillTextError": "Enter text to convert",
+  "voiceBatchTitle": "Add voices in bulk",
+  "voiceBatchConfirm": "Add selected voices",
+  "voiceBatchSeparator": "Separator:",
+  "voiceBatchCustomSeparatorHint": "Enter a custom separator",
+  "voiceBatchFieldOrder": "Field order:",
+  "voiceBatchNameThenId": "1st = name, 2nd = ID",
+  "voiceBatchIdThenName": "1st = ID, 2nd = name",
+  "voiceBatchColumnChoice": "{count, plural, one{Detected 1 column. Choose the starting column for the name/ID:} other{Detected # columns. Choose the starting column for the name/ID:}}",
+  "@voiceBatchColumnChoice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceBatchColumn": "Column {index}: {sample}",
+  "@voiceBatchColumn": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "sample": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceBatchSingleColumn": "One column detected. All values will be used as IDs (name = ID).",
+  "voiceBatchInputHint": "Separate name and ID with Tab, commas, semicolons, or vertical bars (one pair per line)",
+  "voiceBatchNoPreview": "Nothing to preview",
+  "voiceName": "Voice name",
+  "voiceId": "Voice ID",
+  "status": "Status",
+  "voiceNew": "✅ New",
+  "voiceIdExists": "⚠️ ID already exists",
+  "voiceFormatError": "❌ Format error{details}",
+  "@voiceFormatError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceDuplicateIds": "{count, plural, one{# duplicate ID found: {ids}} other{# duplicate IDs found: {ids}}}",
+  "@voiceDuplicateIds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceInsufficientColumnData": "Not enough data in the selected columns",
+  "voiceCustomSeparator": "Custom…",
+  "voiceCommaSeparator": "Comma (,)",
+  "voiceSemicolonSeparator": "Semicolon (;)",
+  "voicePipeSeparator": "Vertical bar (|)",
+  "voiceTabSeparator": "Tab",
+  "voiceEditorTitle": "Edit voices",
+  "save": "Save",
+  "voiceAddRow": "Add row",
+  "voiceBatchAdd": "Add in bulk",
+  "voiceNoneAdd": "No voices yet. Add one to get started.",
+  "delete": "Delete",
+  "voiceDuplicateResolution": "The following voice IDs are duplicated. Choose how to handle each one:",
+  "update": "Update",
+  "skip": "Skip",
+  "voiceDuplicatesRemaining": "{count, plural, one{# duplicate remains} other{# duplicates remain}}",
+  "@voiceDuplicatesRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "continueEditing": "Continue editing",
+  "asrRetryIncomplete": "Retry audio is incomplete. Clear the list and select all audio again.",
+  "asrRetryAudioUnreadable": "Retry audio data could not be read. Select the audio again: {details}",
+  "asrLegacyRetryUnavailable": "Legacy retry audio is unavailable. Select the audio again.",
+  "asrRetryDataUnreadable": "Retry data could not be read. Select the audio again.",
+  "ttsSynthesisModel": "Synthesis model",
+  "@asrRetryAudioUnreadable": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrRetryUnavailable": "Retry audio is unavailable. Select the audio again.",
+  "chatRequest": "Request",
+  "chatResponse": "Response",
+  "chatNoErrorDetails": "No details available",
+  "ttsBackgroundInterrupted": "Synthesis interrupted because the app entered the background",
+  "ttsAppExitedInterrupted": "Synthesis interrupted because the app exited",
+  "ttsInstructionDescription": "Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly."
 }
