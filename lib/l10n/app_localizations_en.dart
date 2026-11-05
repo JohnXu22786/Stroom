@@ -6822,7 +6822,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ttsProviderSettings => 'TTS provider settings';
 
   @override
-  String get ttsProviderSettingsTail => 'to configure more parameters';
+  String get ttsProviderSettingsTail => ' to configure more parameters';
 
   @override
   String get ttsEditText => 'Edit text';
@@ -13869,7 +13869,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get ttsProviderSettings => 'TTS provider settings';
 
   @override
-  String get ttsProviderSettingsTail => 'to configure more parameters';
+  String get ttsProviderSettingsTail => ' to configure more parameters';
 
   @override
   String get ttsEditText => 'Edit text';

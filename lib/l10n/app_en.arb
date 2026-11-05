@@ -3712,7 +3712,7 @@
   "ttsVoiceAndSoundHelp": "Adjust the voice and sound",
   "ttsProviderSettingsLead": "in ",
   "ttsProviderSettings": "TTS provider settings",
-  "ttsProviderSettingsTail": "to configure more parameters",
+  "ttsProviderSettingsTail": " to configure more parameters",
   "ttsEditText": "Edit text",
   "ttsClose": "Close",
   "ttsVoice": "Voice",

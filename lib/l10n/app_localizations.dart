@@ -11557,7 +11557,7 @@ abstract class AppLocalizations {
   /// No description provided for @ttsProviderSettingsTail.
   ///
   /// In en, this message translates to:
-  /// **'to configure more parameters'**
+  /// **' to configure more parameters'**
   String get ttsProviderSettingsTail;
 
   /// No description provided for @ttsEditText.

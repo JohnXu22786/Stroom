@@ -255,6 +255,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   bool _retryLoading = false;
   bool _retrySourcesIncomplete = false;
   String? _retryTaskId;
+  bool _retryDataLoadStarted = false;
   String? _errorMessage;
   String? _transcriptionResult;
   Map<String, String>? _selectedModelReference;
@@ -276,6 +277,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   void initState() {
     super.initState();
     _retryTaskId = widget.retryTaskId;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_retryDataLoadStarted) return;
+    _retryDataLoadStarted = true;
     unawaited(_loadRetryData());
   }
 
