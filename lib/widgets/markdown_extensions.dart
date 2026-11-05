@@ -879,7 +879,9 @@ class StreamingFenceInfoCache {
     if (text.length == _textLength) return cached;
 
     var appended = text.substring(_textLength);
-    if (_textEndedWithCarriageReturn && appended.startsWith('\n')) {
+    final completesCarriageReturnPair =
+        _textEndedWithCarriageReturn && appended.startsWith('\n');
+    if (completesCarriageReturnPair) {
       // A CR at the end of the previous chunk was already treated as one
       // normalized newline. If this chunk completes CRLF, its LF adds no
       // second newline.
@@ -888,9 +890,18 @@ class StreamingFenceInfoCache {
     final normalizedAppended =
         appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     _textEndedWithCarriageReturn = text.endsWith('\r');
+    final tailSourceStart = cached.tailSourceStart +
+        (completesCarriageReturnPair && cached.tailSourceStart == _textLength
+            ? 1
+            : 0);
     if (normalizedAppended.isEmpty) {
-      _textLength = text.length;
-      return cached;
+      return _rememberIncrementalUpdate(
+        text,
+        normalizedAppended,
+        cached,
+        _pendingClosingPrefix,
+        tailSourceStart: tailSourceStart,
+      );
     }
 
     if (cached.fenceChar == null) {
@@ -922,6 +933,7 @@ class StreamingFenceInfoCache {
         normalizedAppended,
         cached,
         firstLine.prefix,
+        tailSourceStart: tailSourceStart,
       );
     }
 
@@ -966,6 +978,7 @@ class StreamingFenceInfoCache {
         cached.fenceChar!,
         cached.fenceLength,
       ),
+      tailSourceStart: tailSourceStart,
     );
   }
 
@@ -974,19 +987,19 @@ class StreamingFenceInfoCache {
     String normalizedAppended,
     _MermaidFenceInfo cached,
     _ClosingFencePrefix? pendingClosingPrefix,
-  ) {
+    {
+    int? tailSourceStart,
+  }) {
     final updated = (
       tail: null,
-      tailSource: cached.hasUnfencedIndentedCode
-          ? text
-          : null,
+      tailSource: cached.hasUnfencedIndentedCode ? text : null,
       isCached: true,
       hasUnfencedIndentedCode: cached.hasUnfencedIndentedCode,
       openFenceIndex: cached.openFenceIndex,
       mermaidFenceIndex: cached.mermaidFenceIndex,
       mermaidFenceCount: cached.mermaidFenceCount,
       tailStart: cached.tailStart,
-      tailSourceStart: cached.tailSourceStart,
+      tailSourceStart: tailSourceStart ?? cached.tailSourceStart,
       fenceChar: cached.fenceChar,
       fenceLength: cached.fenceLength,
       fenceQuoteDepth: cached.fenceQuoteDepth,
