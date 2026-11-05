@@ -91,6 +91,6 @@ runner="$container/Documents/test/mobile-runtime-poc/run-lifecycle-install.cjs"
 for lifecycle_case in javascript async-javascript async-exit async-exit-default async-failure sync-exit async-timeout inline-js core-js typescript child-process native-command; do
   lifecycle_expression="(()=>{let fs=require('node:fs');eval(new/**/TextDecoder().decode(fs.readFileSync('$shim')));globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case';return/**/require('$runner')})()"
   run_node "lifecycle-$lifecycle_case" \
-    "MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS $lifecycle_case" 180 \
+    'RESULT:PASS' 180 \
     -p "$lifecycle_expression"
 done

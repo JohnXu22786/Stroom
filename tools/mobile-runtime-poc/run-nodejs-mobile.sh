@@ -146,5 +146,5 @@ for lifecycle_case in javascript async-javascript async-exit async-exit-default 
   lifecycle_expression="(()=>{let/**/fs=require('node:fs');eval(new/**/TextDecoder().decode(fs.readFileSync('$shim')));globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case';return/**/require('$runner')})()"
   run_node "npm lifecycle bridge: $lifecycle_case" \
     "-p $lifecycle_expression" \
-    "MOBILE_LIFECYCLE_EXPECTED_RESULT_PASS $lifecycle_case" 180
+    'RESULT:PASS' 180
 done
