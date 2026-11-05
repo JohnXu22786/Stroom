@@ -8104,6 +8104,167 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get notificationSettingsPermissionBlockedIos =>
       'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.';
+
+  @override
+  String get textPreviewDiscardEditsTitle => 'Discard edits?';
+
+  @override
+  String get textPreviewUnsavedChangesConfirm =>
+      'You have unsaved changes. Are you sure you want to discard them?';
+
+  @override
+  String get textPreviewCancel => 'Cancel';
+
+  @override
+  String get textPreviewDiscard => 'Discard';
+
+  @override
+  String get textPreviewFontSize => 'Adjust font size';
+
+  @override
+  String get textPreviewRestoreDefault => 'Restore default';
+
+  @override
+  String get textPreviewClose => 'Close';
+
+  @override
+  String textPreviewSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get textPreviewUndo => 'Undo';
+
+  @override
+  String get textPreviewRedo => 'Redo';
+
+  @override
+  String get textPreviewSave => 'Save';
+
+  @override
+  String get textPreviewEdit => 'Edit';
+
+  @override
+  String get textPreviewChartEdit => 'Edit chart';
+
+  @override
+  String textStorageSkipUnsupportedFormat(String format) {
+    return 'Skipped unsupported format: $format';
+  }
+
+  @override
+  String textStorageImportSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# text files',
+      one: '# text file',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String textStorageImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get textStorageSaved => 'Text saved';
+
+  @override
+  String get textStorageLoadFailed => 'Unable to load text content';
+
+  @override
+  String get textStorageReadFailed => 'Failed to read file data';
+
+  @override
+  String get textStorageExportTitle => 'Export text';
+
+  @override
+  String textStorageExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String textStorageExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get textStorageChooseExportDirectory => 'Choose export directory';
+
+  @override
+  String get textStorageFolderExportTitle => 'Export folder';
+
+  @override
+  String get textStorageWebFolderExportInfo =>
+      'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.';
+
+  @override
+  String get textStorageCancel => 'Cancel';
+
+  @override
+  String get textStorageDownloadZip => 'Download ZIP file';
+
+  @override
+  String textStorageExportedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# files',
+      one: '# file',
+    );
+    return 'Exported $_temp0';
+  }
+
+  @override
+  String get textStorageExportFolderTitle => 'Export text folder';
+
+  @override
+  String textStorageCopyFailed(String error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get textStorageCreateNew => 'New';
+
+  @override
+  String get textStorageImport => 'Import';
+
+  @override
+  String get textStorageTitle => 'Text';
+
+  @override
+  String get textStorageExportToLocal => 'Export to local';
+
+  @override
+  String get textCreateEnterTitle => 'Please enter a title';
+
+  @override
+  String textCreateSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get textCreateNewTitle => 'New';
+
+  @override
+  String get textCreateSave => 'Save';
+
+  @override
+  String get textCreateTitleLabel => 'Title';
+
+  @override
+  String get textCreateTitleHint => 'Enter text title';
+
+  @override
+  String get textCreateFormatLabel => 'Format';
+
+  @override
+  String get textCreateContentLabel => 'Text content';
+
+  @override
+  String get textCreateContentHint => 'Enter text content...';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -16205,4 +16366,165 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get notificationSettingsPermissionBlockedIos =>
       'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.';
+
+  @override
+  String get textPreviewDiscardEditsTitle => 'Discard edits?';
+
+  @override
+  String get textPreviewUnsavedChangesConfirm =>
+      'You have unsaved changes. Are you sure you want to discard them?';
+
+  @override
+  String get textPreviewCancel => 'Cancel';
+
+  @override
+  String get textPreviewDiscard => 'Discard';
+
+  @override
+  String get textPreviewFontSize => 'Adjust font size';
+
+  @override
+  String get textPreviewRestoreDefault => 'Restore default';
+
+  @override
+  String get textPreviewClose => 'Close';
+
+  @override
+  String textPreviewSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get textPreviewUndo => 'Undo';
+
+  @override
+  String get textPreviewRedo => 'Redo';
+
+  @override
+  String get textPreviewSave => 'Save';
+
+  @override
+  String get textPreviewEdit => 'Edit';
+
+  @override
+  String get textPreviewChartEdit => 'Edit chart';
+
+  @override
+  String textStorageSkipUnsupportedFormat(String format) {
+    return 'Skipped unsupported format: $format';
+  }
+
+  @override
+  String textStorageImportSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# text files',
+      one: '# text file',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String textStorageImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get textStorageSaved => 'Text saved';
+
+  @override
+  String get textStorageLoadFailed => 'Unable to load text content';
+
+  @override
+  String get textStorageReadFailed => 'Failed to read file data';
+
+  @override
+  String get textStorageExportTitle => 'Export text';
+
+  @override
+  String textStorageExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String textStorageExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get textStorageChooseExportDirectory => 'Choose export directory';
+
+  @override
+  String get textStorageFolderExportTitle => 'Export folder';
+
+  @override
+  String get textStorageWebFolderExportInfo =>
+      'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.';
+
+  @override
+  String get textStorageCancel => 'Cancel';
+
+  @override
+  String get textStorageDownloadZip => 'Download ZIP file';
+
+  @override
+  String textStorageExportedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# files',
+      one: '# file',
+    );
+    return 'Exported $_temp0';
+  }
+
+  @override
+  String get textStorageExportFolderTitle => 'Export text folder';
+
+  @override
+  String textStorageCopyFailed(String error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get textStorageCreateNew => 'New';
+
+  @override
+  String get textStorageImport => 'Import';
+
+  @override
+  String get textStorageTitle => 'Text';
+
+  @override
+  String get textStorageExportToLocal => 'Export to local';
+
+  @override
+  String get textCreateEnterTitle => 'Please enter a title';
+
+  @override
+  String textCreateSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get textCreateNewTitle => 'New';
+
+  @override
+  String get textCreateSave => 'Save';
+
+  @override
+  String get textCreateTitleLabel => 'Title';
+
+  @override
+  String get textCreateTitleHint => 'Enter text title';
+
+  @override
+  String get textCreateFormatLabel => 'Format';
+
+  @override
+  String get textCreateContentLabel => 'Text content';
+
+  @override
+  String get textCreateContentHint => 'Enter text content...';
 }

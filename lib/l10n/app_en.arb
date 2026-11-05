@@ -4286,5 +4286,222 @@
   "backupRestoreOtherSelectedRestored": "The other selected data was restored. Restart the app for the changes to take effect.",
   "notificationSettingsPermissionBlockedGuide": "Notifications are blocked. Open system settings and allow notifications for Stroom.",
   "notificationSettingsPermissionBlockedAndroid": "Notifications are blocked. Go to System Settings → Apps → Stroom → Notification Management and allow notifications.",
-  "notificationSettingsPermissionBlockedIos": "Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications."
+  "notificationSettingsPermissionBlockedIos": "Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.",
+  "textPreviewDiscardEditsTitle": "Discard edits?",
+  "textPreviewUnsavedChangesConfirm": "You have unsaved changes. Are you sure you want to discard them?",
+  "textPreviewCancel": "Cancel",
+  "textPreviewDiscard": "Discard",
+  "textPreviewFontSize": "Adjust font size",
+  "textPreviewRestoreDefault": "Restore default",
+  "textPreviewClose": "Close",
+  "textPreviewSaveFailed": "Save failed: {error}",
+  "@textPreviewSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textPreviewSaveFailed."
+  },
+  "textPreviewUndo": "Undo",
+  "textPreviewRedo": "Redo",
+  "textPreviewSave": "Save",
+  "textPreviewEdit": "Edit",
+  "textPreviewChartEdit": "Edit chart",
+  "textStorageSkipUnsupportedFormat": "Skipped unsupported format: {format}",
+  "@textStorageSkipUnsupportedFormat": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat."
+  },
+  "textStorageImportSuccess": "Imported {count, plural, =1{# text file} other{# text files}}",
+  "@textStorageImportSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportSuccess."
+  },
+  "textStorageImportFailed": "Import failed: {error}",
+  "@textStorageImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportFailed."
+  },
+  "textStorageSaved": "Text saved",
+  "textStorageLoadFailed": "Unable to load text content",
+  "textStorageReadFailed": "Failed to read file data",
+  "textStorageExportTitle": "Export text",
+  "textStorageExportedTo": "Exported to: {path}",
+  "@textStorageExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedTo."
+  },
+  "textStorageExportFailed": "Export failed: {error}",
+  "@textStorageExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportFailed."
+  },
+  "textStorageChooseExportDirectory": "Choose export directory",
+  "textStorageFolderExportTitle": "Export folder",
+  "textStorageWebFolderExportInfo": "The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.",
+  "textStorageCancel": "Cancel",
+  "textStorageDownloadZip": "Download ZIP file",
+  "textStorageExportedFiles": "Exported {count, plural, =1{# file} other{# files}}",
+  "@textStorageExportedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedFiles."
+  },
+  "textStorageExportFolderTitle": "Export text folder",
+  "textStorageCopyFailed": "Copy failed: {error}",
+  "@textStorageCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageCopyFailed."
+  },
+  "textStorageCreateNew": "New",
+  "textStorageImport": "Import",
+  "textStorageTitle": "Text",
+  "textStorageExportToLocal": "Export to local",
+  "textCreateEnterTitle": "Please enter a title",
+  "textCreateSaveFailed": "Save failed: {error}",
+  "@textCreateSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textCreateSaveFailed."
+  },
+  "textCreateNewTitle": "New",
+  "textCreateSave": "Save",
+  "textCreateTitleLabel": "Title",
+  "textCreateTitleHint": "Enter text title",
+  "textCreateFormatLabel": "Format",
+  "textCreateContentLabel": "Text content",
+  "textCreateContentHint": "Enter text content...",
+  "@textPreviewDiscardEditsTitle": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscardEditsTitle."
+  },
+  "@textPreviewUnsavedChangesConfirm": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUnsavedChangesConfirm."
+  },
+  "@textPreviewCancel": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewCancel."
+  },
+  "@textPreviewDiscard": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscard."
+  },
+  "@textPreviewFontSize": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewFontSize."
+  },
+  "@textPreviewRestoreDefault": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRestoreDefault."
+  },
+  "@textPreviewClose": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewClose."
+  },
+  "@textPreviewUndo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUndo."
+  },
+  "@textPreviewRedo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRedo."
+  },
+  "@textPreviewSave": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewSave."
+  },
+  "@textPreviewEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewEdit."
+  },
+  "@textPreviewChartEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewChartEdit."
+  },
+  "@textStorageSaved": {
+    "description": "User-facing text for the text preview or storage interface: textStorageSaved."
+  },
+  "@textStorageLoadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageLoadFailed."
+  },
+  "@textStorageReadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageReadFailed."
+  },
+  "@textStorageExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportTitle."
+  },
+  "@textStorageChooseExportDirectory": {
+    "description": "User-facing text for the text preview or storage interface: textStorageChooseExportDirectory."
+  },
+  "@textStorageFolderExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageFolderExportTitle."
+  },
+  "@textStorageWebFolderExportInfo": {
+    "description": "User-facing text for the text preview or storage interface: textStorageWebFolderExportInfo."
+  },
+  "@textStorageCancel": {
+    "description": "User-facing text for the text preview or storage interface: textStorageCancel."
+  },
+  "@textStorageDownloadZip": {
+    "description": "User-facing text for the text preview or storage interface: textStorageDownloadZip."
+  },
+  "@textStorageExportFolderTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportFolderTitle."
+  },
+  "@textStorageCreateNew": {
+    "description": "User-facing text for the text preview or storage interface: textStorageCreateNew."
+  },
+  "@textStorageImport": {
+    "description": "User-facing text for the text preview or storage interface: textStorageImport."
+  },
+  "@textStorageTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageTitle."
+  },
+  "@textStorageExportToLocal": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportToLocal."
+  },
+  "@textCreateEnterTitle": {
+    "description": "User-facing text for the text preview or storage interface: textCreateEnterTitle."
+  },
+  "@textCreateNewTitle": {
+    "description": "User-facing text for the text preview or storage interface: textCreateNewTitle."
+  },
+  "@textCreateSave": {
+    "description": "User-facing text for the text preview or storage interface: textCreateSave."
+  },
+  "@textCreateTitleLabel": {
+    "description": "User-facing text for the text preview or storage interface: textCreateTitleLabel."
+  },
+  "@textCreateTitleHint": {
+    "description": "User-facing text for the text preview or storage interface: textCreateTitleHint."
+  },
+  "@textCreateFormatLabel": {
+    "description": "User-facing text for the text preview or storage interface: textCreateFormatLabel."
+  },
+  "@textCreateContentLabel": {
+    "description": "User-facing text for the text preview or storage interface: textCreateContentLabel."
+  },
+  "@textCreateContentHint": {
+    "description": "User-facing text for the text preview or storage interface: textCreateContentHint."
+  }
 }

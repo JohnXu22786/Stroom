@@ -39,7 +39,8 @@ void main() {
           expect(value, isNotEmpty);
         }
       }
-      final placeholder = RegExp(r'\{([A-Za-z][A-Za-z0-9_]*)\}');
+      // Match simple ARB arguments and the outer argument in ICU plural/select forms.
+      final placeholder = RegExp(r'\{([A-Za-z][A-Za-z0-9_]*)(?:\s*,|\})');
       for (final key in templateKeys.where((key) => !key.startsWith('@'))) {
         final english = placeholder
             .allMatches(resources[1][key] as String)
