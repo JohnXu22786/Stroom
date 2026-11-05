@@ -2380,6 +2380,171 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     baseUrl: 'https://api.poixe.com/v1/chat/completions',
     modelsUrl: 'https://api.poixe.com/v1/models',
   ),
+  // Registry audit pinned at OmniRoute d1ba822: Poolside uses bearer auth,
+  // authenticated /v1/models discovery, and two static Preview models.
+  // Evidence: registry/poolside/index.ts:22-45.
+  LlmProviderPreset(
+    id: 'poolside',
+    displayName: 'Poolside',
+    baseUrl: 'https://inference.poolside.ai/v1/chat/completions',
+    modelsUrl: 'https://inference.poolside.ai/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'poolside/laguna-xs-2.1',
+        displayName: 'Laguna XS 2.1',
+        capabilities: {
+          'toolCalling': true,
+          'reasoning': true,
+          'contextLength': 262144,
+          'maxOutputTokens': 32768,
+        },
+      ),
+      LlmProviderPresetModel(
+        'poolside/laguna-s-2.1',
+        displayName: 'Laguna S 2.1',
+        capabilities: {
+          'toolCalling': true,
+          'reasoning': true,
+          'contextLength': 262144,
+          'maxOutputTokens': 32768,
+        },
+      ),
+    ],
+  ),
+  // PublicAI's pinned runtime uses the default Bearer Chat Completions
+  // executor and the provider's static OpenAI-compatible model list.
+  // Evidence: registry/publicai/index.ts:4-12; shared.ts:490-498.
+  LlmProviderPreset(
+    id: 'publicai',
+    displayName: 'PublicAI',
+    baseUrl: 'https://api.publicai.co/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('swiss-ai/apertus-70b-instruct'),
+      LlmProviderPresetModel('swiss-ai/Apertus-8B-Instruct-2509'),
+      LlmProviderPresetModel('aisingapore/Qwen-SEA-LION-v4-32B-IT'),
+      LlmProviderPresetModel('aisingapore/Gemma-SEA-LION-v4-27B-IT'),
+      LlmProviderPresetModel('allenai/Olmo-3-32B-Think'),
+      LlmProviderPresetModel('allenai/Olmo-3-7B-Instruct'),
+      LlmProviderPresetModel('utter-project/EuroLLM-22B-Instruct-2512'),
+    ],
+  ),
+  // Regolo declares live /v1/models discovery and no static model seeds.
+  // Evidence: registry/regolo/index.ts:4-16.
+  LlmProviderPreset(
+    id: 'regolo',
+    displayName: 'Regolo AI',
+    baseUrl: 'https://api.regolo.ai/v1/chat/completions',
+    modelsUrl: 'https://api.regolo.ai/v1/models',
+  ),
+  // Reka's pinned static catalog includes the model-specific reasoning and
+  // output-token metadata declared by its default Chat Completions registry.
+  // Evidence: registry/reka/index.ts:3-18.
+  LlmProviderPreset(
+    id: 'reka',
+    displayName: 'Reka',
+    baseUrl: 'https://api.reka.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'reka-flash-3',
+        displayName: 'Reka Flash 3',
+        capabilities: {
+          'reasoning': true,
+          'alwaysReasons': true,
+          'maxOutputTokens': 8192,
+        },
+      ),
+      LlmProviderPresetModel('reka-flash', displayName: 'Reka Flash'),
+      LlmProviderPresetModel('reka-edge-2603', displayName: 'Reka Edge 2603'),
+    ],
+  ),
+  // Requesty uses the default Bearer Chat Completions executor and a live
+  // /v1/models catalog with passthrough model IDs and no static seeds.
+  // Evidence: registry/requesty/index.ts:4-11.
+  LlmProviderPreset(
+    id: 'requesty',
+    displayName: 'Requesty',
+    baseUrl: 'https://router.requesty.ai/v1/chat/completions',
+    modelsUrl: 'https://router.requesty.ai/v1/models',
+  ),
+  // SambaNova's pinned runtime uses the default Bearer Chat Completions
+  // executor and a source-declared static catalog.
+  // Evidence: registry/sambanova/index.ts:4-12; shared.ts:437-445.
+  LlmProviderPreset(
+    id: 'sambanova',
+    displayName: 'SambaNova',
+    baseUrl: 'https://api.sambanova.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('MiniMax-M2.7'),
+      LlmProviderPresetModel('DeepSeek-V3.2'),
+      LlmProviderPresetModel('Llama-4-Maverick-17B-128E-Instruct'),
+      LlmProviderPresetModel('Meta-Llama-3.3-70B-Instruct'),
+      LlmProviderPresetModel('gpt-oss-120b'),
+      LlmProviderPresetModel('DeepSeek-V3.1'),
+      LlmProviderPresetModel('gemma-4-31B-it'),
+    ],
+  ),
+  // Sarvam's pinned runtime uses Bearer Chat Completions and two static models.
+  // Evidence: registry/sarvam/index.ts:3-15.
+  LlmProviderPreset(
+    id: 'sarvam',
+    displayName: 'Sarvam AI',
+    baseUrl: 'https://api.sarvam.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'sarvam-105b',
+        displayName: 'Sarvam 105B',
+        capabilities: {'contextLength': 131072},
+      ),
+      LlmProviderPresetModel(
+        'sarvam-30b',
+        displayName: 'Sarvam 30B',
+        capabilities: {'contextLength': 65536},
+      ),
+    ],
+  ),
+  // Scaleway's pinned runtime uses Bearer Chat Completions and a static list;
+  // it declares no discovery URL or additional model capabilities.
+  // Evidence: registry/scaleway/index.ts:3-20.
+  LlmProviderPreset(
+    id: 'scaleway',
+    displayName: 'Scaleway AI',
+    baseUrl: 'https://api.scaleway.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'qwen3-235b-a22b-instruct-2507',
+        displayName: 'Qwen3 235B A22B (1M free tok 🆓)',
+      ),
+      LlmProviderPresetModel(
+        'llama-3.1-70b-instruct',
+        displayName: 'Llama 3.1 70B (🆓 EU)',
+      ),
+      LlmProviderPresetModel(
+        'llama-3.1-8b-instruct',
+        displayName: 'Llama 3.1 8B (🆓 EU)',
+      ),
+      LlmProviderPresetModel(
+        'mistral-small-3.2-24b-instruct-2506',
+        displayName: 'Mistral Small 3.2 (🆓 EU)',
+      ),
+      LlmProviderPresetModel(
+        'deepseek-v3-0324',
+        displayName: 'DeepSeek V3 (🆓 EU)',
+      ),
+      LlmProviderPresetModel(
+        'gpt-oss-120b',
+        displayName: 'GPT-OSS 120B (🆓 EU)',
+      ),
+    ],
+  ),
+  // M45 deferred: Pollinations is dispatched to a dedicated executor and uses
+  // optional API-key auth (registry/pollinations/index.ts:8-22;
+  // executors/index.ts:70); Predibase's pinned endpoint is recorded as
+  // unresolved/discontinued by the M33 2026-06-19 DNS audit despite its static
+  // registry declaration (registry/predibase/index.ts:4-12); Qiniu declares
+  // defaultContextLength 128000, which the current preset cannot attach to
+  // discovered models (registry/qiniu/index.ts:3-14); Routeway requires a fixed
+  // User-Agent header (registry/routeway/index.ts:12-18); SAP has no per-ID
+  // provider registry entry or verified runtime adapter at this pin (M33 audit).
   // Deferred from M44: the pinned 1min.ai executor translates OpenAI messages
   // to its promptObject/SSE API and authenticates with `API-KEY`; see registry
   // oneminai/index.ts:3-28 and executors/index.ts:68-69.
