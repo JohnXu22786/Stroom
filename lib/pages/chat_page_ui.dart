@@ -864,7 +864,20 @@ extension _ChatPageUiExt on _ChatPageState {
       showRawData: isAi && hasRawData,
       showJsonInspection: isAi && hasRawData && _developerMode,
       onCopy: () {
-        Clipboard.setData(ClipboardData(text: message.text));
+        final liveConvId = ref.read(activeConversationIdProvider);
+        final manager = ref.read(chatStreamManagerProvider);
+        final isCurrentStream =
+            liveConvId != null && _streamingMsgId == message.id;
+        final copyText = !isCurrentStream
+            ? message.text
+            : manager.isStreamingFor(liveConvId!)
+                ? manager.fullReplyFor(liveConvId!)
+                : _chatSegments[message.id]
+                        ?.whereType<TextSegment>()
+                        .map((segment) => segment.text)
+                        .join() ??
+                    message.text;
+        Clipboard.setData(ClipboardData(text: copyText));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(AppLocalizations.of(context)!.chatCopied),

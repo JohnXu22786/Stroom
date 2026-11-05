@@ -78,6 +78,7 @@ extension _ChatPageListenersExt on _ChatPageState {
         // Empty text chunks are published at tool-round boundaries. Keep the
         // TextStream placeholder so tool-only rounds render through their
         // live segments without prematurely switching bubble builders.
+        _isReasoningCompletedForMsg[msgId] = true;
         _rebuildLiveSegments(msgId);
         return;
       }
