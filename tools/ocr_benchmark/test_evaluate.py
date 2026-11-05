@@ -2760,6 +2760,58 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_latex_fraction_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-fraction",
+                    "gold_text": "((a)+(b))/c",
+                    "formula_text": "((a)+(b))/c",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-fraction",
+                    "text": r"$\frac{(a)+(b)}{c}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_sqrt_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-root",
+                    "gold_text": "√((a)+(b))",
+                    "formula_text": "√((a)+(b))",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-root",
+                    "text": r"$\sqrt{(a)+(b)}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_latex_fraction_normalizes_nested_exponent_braces(self):
         manifest = {
             "fixtures": [
