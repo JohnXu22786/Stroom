@@ -2674,6 +2674,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (modelOptions.isEmpty) {
       setState(() {
         _errorMessage = AppLocalizations.of(context)!.ocrConfigureProviderModel;
+        _clearOcrErrorDetails();
       });
       return;
     }

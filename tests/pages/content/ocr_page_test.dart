@@ -222,6 +222,24 @@ class _CapturingOcrAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+class _FailingOcrAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    '{"error":{"message":"provider request failed"}}',
+    500,
+    headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    },
+  );
+
+  @override
+  void close({bool force = false}) {}
+}
+
 // ============================================================================
 // Helper: Create a sample OCR provider entry with models
 // ============================================================================
@@ -1377,6 +1395,43 @@ void main() {
       expect(find.textContaining('FormatException'), findsOneWidget);
       expect(find.textContaining('StateError'), findsNothing);
       expect(find.textContaining('test-key'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('clears previous request details when no model is available', (
+      tester,
+    ) async {
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [_createOcrEntry(withModels: true)],
+        );
+      final adapter = _FailingOcrAdapter();
+      await tester.pumpWidget(
+        _buildTestApp(
+          testProviderEntriesNotifier: providerNotifier,
+          testImages: [_createValidOcrTestImage()],
+          testOcrServiceFactory: (config) => OcrService(
+            config: config,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await _pumpUntil(
+        tester,
+        () => find.text('查看详细错误').evaluate().isNotEmpty,
+      );
+      expect(find.text('查看详细错误'), findsOneWidget);
+
+      providerNotifier.state = const ProviderEntriesState(entries: []);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('配置'), findsWidgets);
+      expect(find.text('查看详细错误'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
