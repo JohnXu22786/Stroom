@@ -228,7 +228,7 @@ test("DSH Markdown preserves safe extensions, tools and incomplete streaming fen
             status: "completed",
             result: "输出",
           },
-          { type: "text", text: "```html\n<h1>标题</h1>", streaming: true },
+          { type: "text", text: "```html-preview\n<h1>标题</h1>", streaming: true },
         ],
         { streaming: true },
       ),
@@ -245,11 +245,12 @@ test("DSH Markdown preserves safe extensions, tools and incomplete streaming fen
     ),
     ["text", "reasoning", "tool_call", "text"],
   );
-  assert.equal(doc.querySelector('[data-action="html"]')?.disabled, true);
+  assert.equal(doc.querySelector('[data-action="html"]'), null);
+  assert.equal(doc.querySelector('[role="status"]')?.textContent, '正在生成可视化内容…');
   v.receive(
     snapshot("a", [
       message("m", [
-        { type: "text", text: "```html\n<h1>标题</h1>\n```\n\n$\\ce{H2O}$" },
+        { type: "text", text: "```html-preview\n<h1>标题</h1>\n```\n\n$\\ce{H2O}$" },
       ]),
     ]),
   );
@@ -806,7 +807,7 @@ test("inline HTML waits for a closed fence and compares height with the transcri
         }),
       );
     update(
-      "```HTML\n<script>document.body.dataset.previewRan = 'yes'</script>\n<h1>short</h1>\n```\t\n\nmore prose",
+      "```HTML-PREVIEW\n<script>document.body.dataset.previewRan = 'yes'</script>\n<h1>short</h1>\n```\t\n\nmore prose",
       true,
     );
     await wait();
@@ -861,7 +862,7 @@ test("inline HTML waits for a closed fence and compares height with the transcri
     v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
     await wait();
     assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "fullscreen fallback stays after the viewport grows so HTML scripts do not rerun");
-    update("```HTML\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
+    update("```HTML-PREVIEW\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
     await wait();
     assert.ok(doc.querySelector("iframe.stroom-html-preview"), "CRLF fence renders inline");
     iframe = doc.querySelector("iframe.stroom-html-preview");
@@ -874,14 +875,14 @@ test("inline HTML waits for a closed fence and compares height with the transcri
     sendPreviewMessage(iframe, "height", 300, 200);
     await wait();
     assert.ok(doc.querySelector('.html-fullscreen-fallback [data-action="html"]'), "shrinking the transcript below the measured height selects fullscreen");
-    update("> ```HTML\n> <h1>quoted</h1>\n> ```\n\nmore", true);
+    update("> ```HTML-PREVIEW\n> <h1>quoted</h1>\n> ```\n\nmore", true);
     await wait();
     assert.ok(doc.querySelector("iframe.stroom-html-preview"), "quoted fence renders inline");
-    update("```html\n<h1>tail</h1>", true);
+    update("```html-preview\n<h1>tail</h1>", true);
     await wait();
-    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "open streaming fence stays as code");
-    assert.ok(doc.querySelector(".md-code-block"));
-    update("```html\n<h1>tail</h1>", false);
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "open streaming preview fence stays inert");
+    assert.equal(doc.querySelector(".md-code-block"), null);
+    update("```html-preview\n<h1>tail</h1>", false);
     await wait();
     assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "an unclosed fence never executes, even after streaming ends");
 
@@ -889,11 +890,12 @@ test("inline HTML waits for a closed fence and compares height with the transcri
       "first paragraph\n\nsecond paragraph\n\nthird paragraph\n\n";
     update(prefix, true);
     await wait();
-    const openTail = `${prefix}\`\`\`html\n<h1>tail</h1>`;
+    const openTail = `${prefix}\`\`\`html-preview\n<h1>tail</h1>`;
     update(openTail, true);
     await wait();
     assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
-    assert.ok(doc.querySelector(".md-code-block"));
+    assert.equal(doc.querySelector(".md-code-block"), null);
+    assert.ok(doc.querySelector('[role="status"]'));
 
     const closedTail = `${openTail}\n\`\`\``;
     update(closedTail, true);
@@ -942,13 +944,26 @@ test("generated renderer CSP allows network resources used by sandboxed HTML", (
   }
 });
 
+test("ordinary html fences remain source code and do not execute", async () => {
+  const v = await view();
+  v.receive(snapshot("ordinary-html", [
+    message("m", [{ type: "text", text: "```html\n<script>window.ran = true</script>\n```" }]),
+  ]));
+  await wait();
+  const doc = v.dom.window.document;
+  assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+  assert.ok(doc.querySelector(".md-code-block"), "plain html keeps the DSH code block");
+  assert.equal(v.dom.window.ran, undefined, "ordinary examples never execute");
+  v.dom.window.close();
+});
+
 test("inline HTML execution errors fall back to the DSH code block", async () => {
   const v = await view();
   try {
     v.receive(
       snapshot("a", [
         message("m", [
-          { type: "text", text: "```html\n<script>throw new Error('preview failed')</script>\n```" },
+          { type: "text", text: "```html-preview\n<script>throw new Error('preview failed')</script>\n```" },
         ]),
       ]),
     );
@@ -969,6 +984,8 @@ test("inline HTML execution errors fall back to the DSH code block", async () =>
     await wait();
     assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
     assert.ok(doc.querySelector(".md-code-block"));
+    doc.querySelector('[data-action="html"]').click();
+    assert.equal(v.events.at(-1).action, "html");
   } finally {
     v.dom.window.close();
   }
@@ -992,7 +1009,7 @@ test("a previous Mermaid source toggle does not suppress an updated HTML preview
     await wait();
     assert.ok(doc.querySelector(".md-code-block"), "the source toggle shows Mermaid source");
 
-    update("```html\n<h1>Inline preview</h1>\n```");
+    update("```html-preview\n<h1>Inline preview</h1>\n```");
     await wait();
     assert.ok(
       doc.querySelector("iframe.stroom-html-preview"),
