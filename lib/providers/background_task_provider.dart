@@ -1424,7 +1424,7 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
   ).hasMatch(text);
 }
 
-bool _legacyOcrHasPasswordCredentialEchoAcrossLineBreak(
+String? _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
   String text,
   Iterable<String> credentialValues,
 ) {
@@ -1434,18 +1434,24 @@ bool _legacyOcrHasPasswordCredentialEchoAcrossLineBreak(
     final prefix =
         value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
     if (prefix.toLowerCase() != 'password') continue;
-    if (RegExp(
+    final pattern = RegExp(
       '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
       r'[\r\n]+[ \t]*'
       r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
-      r'(?=(?:[a-zA-Z]*[0-9]){4})'
-      r'[a-zA-Z0-9]{10,}(?=$|[^a-zA-Z0-9]))',
+      r'(?=(?:[a-zA-Z]*[0-9]){4}))'
+      r'([a-zA-Z0-9]{10,})(?=$|[^a-zA-Z0-9])',
       caseSensitive: false,
-    ).hasMatch(text)) {
-      return true;
+    );
+    final match = pattern.firstMatch(text);
+    if (match != null) {
+      return text.replaceRange(
+        match.start,
+        match.end,
+        '${match.group(1)}[redacted]',
+      );
     }
   }
-  return false;
+  return null;
 }
 
 const _legacyOcrNaturalCarefulInstructionActions = {
@@ -3404,15 +3410,10 @@ Map<String, dynamic>? _retryDataFromTaskMap(
               )) {
             final safeLegacyInstruction = _legacyOcrInstructionContent(request);
             final redactedPasswordEcho =
-                _legacyOcrHasPasswordCredentialEchoAcrossLineBreak(
+                _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
               instructionContent,
               credentialValues,
-            )
-                    ? _legacyOcrRedactMaskedCredentialEchoes(
-                        instructionContent,
-                        credentialValues,
-                      )
-                    : null;
+            );
             if (safeLegacyInstruction == null &&
                 redactedPasswordEcho != null &&
                 redactedPasswordEcho != instructionContent &&
