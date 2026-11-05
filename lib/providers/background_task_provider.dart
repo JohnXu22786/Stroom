@@ -1770,6 +1770,7 @@ bool _legacyOcrTextContainsMaskedCredential(
               textWithoutPartMarkers,
               match,
               naturalWord,
+              openMaskPrefix: prefix,
               hasCredentialUseContext: _legacyOcrHasCredentialUseContext(
                 textWithoutPartMarkers,
                 match,
@@ -2790,6 +2791,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   String text,
   Match match,
   String naturalWord, {
+  String openMaskPrefix = '',
   required bool hasCredentialUseContext,
   required bool isNaturalWordContinuation,
   required bool isNaturalSecretPlural,
@@ -2811,12 +2813,15 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         'enumerate',
         'determine',
         'highlight',
+        'authenticate',
         'summarize',
         'translate',
         'transcribe',
         'understand',
       }.contains(naturalWord) &&
-      before.isEmpty &&
+      (naturalWord != 'authenticate' ||
+          openMaskPrefix.toLowerCase().startsWith('authenticat')) &&
+      RegExp(r'^(?:please\s*)?$', caseSensitive: false).hasMatch(before) &&
       RegExp(
         r'^(?:the|this|that|these|those|a|an)\b',
         caseSensitive: false,
@@ -3013,6 +3018,7 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
         sanitized,
         match,
         naturalWord,
+        openMaskPrefix: prefix,
         hasCredentialUseContext: hasCredentialUseContext,
         isNaturalWordContinuation: _legacyOcrHasNaturalWordContinuation(
           prefix,

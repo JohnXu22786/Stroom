@@ -13042,12 +13042,12 @@ void main() {
           ),
           'authenticat': (
             'Please authenticate the receipt',
-            'Please [redacted] the receipt',
+            'Please authenticate the receipt',
           ),
           'cooperat': ('Please cooperate.', 'Please [redacted].'),
           'translat': (
             'Please translate this receipt',
-            'Please [redacted] this receipt',
+            'Please translate this receipt',
           ),
           'bookkeeper': (
             'Review the bookkeepers on this page',
