@@ -1701,6 +1701,11 @@ void main() {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 100)),
           );
+          // Wait for the migration's orphan cleanup to leave the cache lock
+          // before the next widget test starts another migration.
+          await tester.runAsync(
+            () => OcrRetryStorage.withCacheMaintenanceLock(() async {}),
+          );
 
           expect(notifier.tasksForTest.single.retryData, replacementRetryData);
           expect(migratedReference, isNotNull);
@@ -1784,6 +1789,11 @@ void main() {
         await _pumpUntil(tester, () => cacheStarted.isCompleted);
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        // The rejected migration cleans up while holding this lock. Drain it
+        // before the next test attempts a cache write.
+        await tester.runAsync(
+          () => OcrRetryStorage.withCacheMaintenanceLock(() async {}),
         );
 
         expect(notifier.tasksForTest.single.retryData, replacementRetryData);
