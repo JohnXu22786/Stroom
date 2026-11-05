@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../providers/provider_config.dart';
 import '../utils/model_order.dart';
 import 'asr_model_config_page.dart';
@@ -73,8 +75,9 @@ class _ProviderConfigDetailPageState
     final remaining = List<ModelConfig>.of(models);
     final ordered = <ModelConfig>[];
     for (final name in orderedNames) {
-      final i = remaining
-          .indexWhere((m) => _modelDisplayName(m, config.providerName) == name);
+      final i = remaining.indexWhere(
+        (m) => _modelDisplayName(m, config.providerName) == name,
+      );
       if (i >= 0) ordered.add(remaining.removeAt(i));
     }
     ordered.addAll(remaining);
@@ -185,10 +188,9 @@ class _ProviderConfigDetailPageState
             name: currentEntry.name,
             configs: configs,
           );
-          await ref.read(providerEntriesProvider.notifier).update(
-                currentEntry.id,
-                updated,
-              );
+          await ref
+              .read(providerEntriesProvider.notifier)
+              .update(currentEntry.id, updated);
         }
       } else {
         // For new config, save to provider and stay on this page
@@ -215,10 +217,9 @@ class _ProviderConfigDetailPageState
             name: currentEntry.name,
             configs: configs,
           );
-          await ref.read(providerEntriesProvider.notifier).update(
-                currentEntry.id,
-                updated,
-              );
+          await ref
+              .read(providerEntriesProvider.notifier)
+              .update(currentEntry.id, updated);
           // 新建配置保存后不返回供应商列表，而是留在本页：切换到新配置
           // （configs[0]）的模型列表视图，方便继续添加模型。
           if (mounted) {
@@ -259,9 +260,7 @@ class _ProviderConfigDetailPageState
         {
           final result = await Navigator.push<ModelConfig>(
             context,
-            MaterialPageRoute(
-              builder: (_) => const AsrModelConfigPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const AsrModelConfigPage()),
           );
           if (result != null && mounted) {
             await _insertModelResult(result);
@@ -293,9 +292,7 @@ class _ProviderConfigDetailPageState
         {
           final result = await Navigator.push<ModelConfig>(
             context,
-            MaterialPageRoute(
-              builder: (_) => const SimpleModelConfigPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const SimpleModelConfigPage()),
           );
           if (result != null && mounted) {
             await _insertModelResult(result);
@@ -341,10 +338,7 @@ class _ProviderConfigDetailPageState
         providerName: base.providerName,
         host: base.host,
         key: base.key,
-        models: [
-          ...base.models,
-          result,
-        ],
+        models: [...base.models, result],
         typeConfig: base.typeConfig,
         customParams: base.customParams,
         reasoningParams: base.reasoningParams,
@@ -426,9 +420,8 @@ class _ProviderConfigDetailPageState
             final result = await Navigator.push<ModelConfig>(
               context,
               MaterialPageRoute(
-                builder: (_) => AsrModelConfigPage(
-                  model: config.models[modelIndex].copy(),
-                ),
+                builder: (_) =>
+                    AsrModelConfigPage(model: config.models[modelIndex].copy()),
               ),
             );
             if (result != null && mounted) {
@@ -675,17 +668,17 @@ class _ProviderConfigDetailPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除模型'),
-        content: const Text('确定要删除此模型吗？'),
+        title: Text(AppLocalizations.of(context)!.providerDeleteModel),
+        content: Text(AppLocalizations.of(context)!.providerDeleteModelConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),
@@ -742,17 +735,15 @@ class _ProviderConfigDetailPageState
     final title = _isExistingConfig
         ? (_providerNameController.text.isNotEmpty
             ? _providerNameController.text
-            : '编辑配置')
-        : '新建$entryName配置';
+            : AppLocalizations.of(context)!.providerEditConfig)
+        : AppLocalizations.of(context)!.providerCreateNamedConfig(entryName);
 
     final models = _displayModels;
     final reorderable = _enableModelReorder;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -765,10 +756,7 @@ class _ProviderConfigDetailPageState
             decoration: BoxDecoration(
               color: cs.primaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: cs.primaryContainer,
-                width: 0.5,
-              ),
+              border: Border.all(color: cs.primaryContainer, width: 0.5),
             ),
             child: Row(
               children: [
@@ -789,7 +777,7 @@ class _ProviderConfigDetailPageState
                       Text(
                         _providerNameController.text.isNotEmpty
                             ? _providerNameController.text
-                            : '（未命名）',
+                            : AppLocalizations.of(context)!.providerUnnamed,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: cs.onSurface,
@@ -810,7 +798,7 @@ class _ProviderConfigDetailPageState
                 ),
                 IconButton(
                   icon: const Icon(Icons.tune, size: 20),
-                  tooltip: '编辑供应商设置',
+                  tooltip: AppLocalizations.of(context)!.providerEditSettings,
                   onPressed: () => _openSettingsPanel(),
                 ),
               ],
@@ -820,22 +808,25 @@ class _ProviderConfigDetailPageState
           // ==========================================================
           // 模型列表
           // ==========================================================
-          _buildSectionHeader('模型列表'),
+          _buildSectionHeader(AppLocalizations.of(context)!.providerModelList),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
               icon: const Icon(Icons.add),
-              label: const Text('添加'),
+              label: Text(AppLocalizations.of(context)!.builtInPromptAdd),
               onPressed: _addModel,
             ),
           ),
           const SizedBox(height: 8),
           if (models.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: Text('暂无模型', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  AppLocalizations.of(context)!.providerNoModels,
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             )
           else if (reorderable)
@@ -881,15 +872,21 @@ class _ProviderConfigDetailPageState
               child: Icon(Icons.drag_handle, color: Colors.grey),
             )
           : const Icon(Icons.smart_toy),
-      title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
-      subtitle: Text('ID: ${model.modelId}'),
+      title: Text(
+        model.name.isNotEmpty
+            ? model.name
+            : AppLocalizations.of(context)!.providerUnnamed,
+      ),
+      subtitle: Text(
+        AppLocalizations.of(context)!.providerModelId(model.modelId),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
             icon: const Icon(Icons.delete, color: Colors.red),
             onPressed: () => _deleteModel(storageIndex),
-            tooltip: '删除模型',
+            tooltip: AppLocalizations.of(context)!.providerDeleteModel,
           ),
           const Icon(Icons.chevron_right),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/pages/provider_config_detail_page.dart';
@@ -87,6 +88,9 @@ extension on WidgetTester {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: ProviderConfigDetailPage(
             entryId: 'test_entry_id',
             configIndex: configIndex,
@@ -303,8 +307,9 @@ void main() {
   });
 
   group('LLM model drag-sort sync with chat order', () {
-    testWidgets('llm model list is reorderable and follows the saved order',
-        (tester) async {
+    testWidgets('llm model list is reorderable and follows the saved order', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });
@@ -322,8 +327,9 @@ void main() {
       expect(modelTileTitles(tester), ['model-2', 'model-1']);
     });
 
-    testWidgets('non-llm pages keep the plain non-reorderable model list',
-        (tester) async {
+    testWidgets('non-llm pages keep the plain non-reorderable model list', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(
         entryType: 'tts',
         entryName: 'TTS供应商',
@@ -379,6 +385,9 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: const ProviderConfigDetailPage(
               entryId: 'test_entry_id',
               configIndex: 0,
@@ -412,8 +421,9 @@ void main() {
       ]);
     });
 
-    testWidgets('delete after reorder removes the right stored model',
-        (tester) async {
+    testWidgets('delete after reorder removes the right stored model', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });

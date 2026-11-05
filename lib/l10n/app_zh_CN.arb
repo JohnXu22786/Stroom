@@ -2011,5 +2011,1267 @@
         "type": "String"
       }
     }
+  },
+  "assistantParamValueTypeString": "字符串",
+  "assistantParamValueTypeNumber": "数字",
+  "assistantParamValueTypeBoolean": "布尔值",
+  "assistantParamValueTypeJson": "JSON",
+  "providerRequiredFields": "供应商名称、API 地址和密钥均为必填项。",
+  "providerJsonSizePositive": "请求 JSON 大小必须是大于 0 的 MiB 数值。",
+  "providerCustomParamRequired": "自定义参数的名称和值不能为空。",
+  "providerParamNameInvalid": "参数名格式不正确（点号分段不能为空）：{name}",
+  "providerParamAlreadyExists": "参数已存在：{name}",
+  "providerParamInvalidJson": "参数“{name}”的默认值不是合法 JSON：{value}",
+  "providerParamOptionsRequired": "参数“{name}”的数值选项不能为空。",
+  "providerParamInvalidNumber": "参数“{name}”的值不是合法数字：{value}",
+  "providerReasoningIncomplete": "请先完整填写推理开关，其他推理参数才能生效。",
+  "providerReasoningError": "推理参数错误：{error}",
+  "providerParamNameConflict": "推理参数与自定义参数重名：{name}",
+  "providerMaxTokensMissing": "已启用最大输出 Token 数，但未填写数值。",
+  "providerMaxTokensPositive": "最大输出 Token 数必须为正整数。",
+  "providerSeedInteger": "随机种子必须为整数。",
+  "providerNotConfigured": "未设置",
+  "providerAudioChunkingTitle": "音频切块",
+  "providerAudioChunkingHint": "智能切块会分析音频和候选切点，优先在句末切分；各片段不会重叠。",
+  "providerChunkingMode": "切块方式",
+  "providerChunkNone": "不切块",
+  "providerChunkSmart": "智能切块（推荐）",
+  "providerChunkFixedDuration": "固定时长切块",
+  "providerChunkFixedSize": "固定大小切块",
+  "providerCompressionTitle": "压缩编码",
+  "providerCompressionHint": "启用后，通用兜底会先压缩完整 WAV；若编码文件或请求体仍超限，再切分源 PCM 并逐块编码。",
+  "providerCompressionMode": "压缩方式",
+  "providerCompressionNone": "无（原样发送）",
+  "providerCompressionAdpcm": "ADPCM（约 4 倍压缩）",
+  "providerCompressionFlac": "FLAC（无损，约 2 倍）",
+  "providerCompressionAdpcmDescription": "IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。",
+  "providerCompressionFlacDescription": "FLAC 无损压缩，纯 Dart 实现，体积约缩小一半。",
+  "providerCompressionWavDescription": "不压缩，以 WAV 文件原样发送。",
+  "providerLlmParams": "LLM 参数",
+  "providerEnabledParamsHelp": "开启的参数将作为默认值发送到 API 请求中。",
+  "providerTemperatureLabel": "温度",
+  "providerTemperatureHelp": "控制输出的随机性，值越高越有创造性。",
+  "providerTopPHelp": "核采样参数，控制词汇选择的累积概率。",
+  "providerFrequencyPenaltyLabel": "频率惩罚",
+  "providerFrequencyPenaltyHelp": "减少重复词，负值会增加重复。",
+  "providerPresencePenaltyLabel": "存在惩罚",
+  "providerPresencePenaltyHelp": "鼓励讨论新话题，负值会鼓励重复话题。",
+  "providerMaxOutputTokensLabel": "最大输出 Token 数",
+  "providerOptionalExample": "可选，例如 {example}",
+  "providerResponseTokensHelp": "每次响应最多生成的 Token 数。",
+  "providerSeedLabel": "随机种子",
+  "providerSeedHelp": "设置后可使输出结果可复现。",
+  "providerChunkSmartDescription": "分析音频和候选切点，优先在句末或长静音处切分且不重叠。默认最短 20 秒、目标 45 秒、最长 60 秒。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkDurationDescription": "每 N 秒切分一次（默认 60 秒）。方式简单，但可能截断语句。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkSizeDescription": "先按音频数据大小初步切分，再根据编码文件和请求体大小细分。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkNoneDescription": "不切块。完整压缩后仍超出限制时，将拒绝该文件。",
+  "providerNameLabel": "供应商名称",
+  "providerNameHint": "输入供应商名称",
+  "providerApiUrlLabel": "API 地址",
+  "providerApiUrlHint": "输入完整的 API 端点地址",
+  "providerApiKeyHint": "提示：{hint}",
+  "providerEndpointTypeLabel": "端点类型",
+  "providerEndpointOpenAi": "兼容 OpenAI（Chat Completions）",
+  "providerEndpointAnthropic": "Anthropic 格式（Messages API）",
+  "providerAnthropicEndpointHelp": "使用官方 Anthropic Messages API 格式（x-api-key 请求头）。API 地址示例：https://api.anthropic.com/v1/messages",
+  "providerOpenAiEndpointHelp": "使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头）。API 地址示例：https://api.openai.com/v1/chat/completions",
+  "providerRequestJsonDefault": "请求 JSON 大小默认值",
+  "providerUseAppDefault": "留空则使用应用默认值",
+  "providerModelJsonBudgetHelp": "模型可单独设置覆盖值；此处和模型均未设置时，使用 20 MiB 默认值。",
+  "providerRequestParamsHelp": "请求会使用供应商和模型中所有已启用的参数。若参数重名，则以模型参数值为准。",
+  "providerUploadSettings": "上传设置",
+  "providerUploadMethodHelp": "不同供应商支持的音频上传方式和大小限制不同。",
+  "providerUploadMethod": "上传方式",
+  "providerMultipart": "Multipart（通用）",
+  "providerUrlUpload": "URL（链接）",
+  "providerMaxUploadSize": "最大上传大小",
+  "providerFallbackStrategy": "兜底策略",
+  "providerFallbackMethod": "兜底方式",
+  "providerPreprocessing": "音频预处理",
+  "providerPreprocessingHelp": "降低音频文件大小，不影响转写准确率。",
+  "providerPreprocessingMethod": "预处理方式",
+  "@providerParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamAlreadyExists": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidJson": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamOptionsRequired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidNumber": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamNameConflict": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerOptionalExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerUploadMultipartHelp": "直接以 multipart/form-data 上传。请求体包括音频、表单字段和分段边界。",
+  "providerUploadBase64Help": "以 JSON 发送 Base64，可绕过部分供应商对 multipart 的专属限制。Base64 膨胀和 JSON 字段均计入上传上限。",
+  "providerUploadUrlHelp": "提供公网 URL，由供应商下载。支持较大的文件（例如 Together AI 的 1 GB）。",
+  "providerUploadBudgetHelp": "此值用于触发原始音频兜底并限制最终请求体。应用会分别检查原始音频、编码文件和上传大小。Multipart 计入表单字段和边界；Base64 JSON 计入编码膨胀和字段。默认 25 MB 与 OpenAI 音频 API 上限一致。",
+  "providerFallbackTriggerHelp": "原始音频或完整请求体超出上限时触发。特定兜底（Base64）优先于通用兜底（压缩/切块）。",
+  "providerFallbackNone": "无（直接拒绝）",
+  "providerFallbackSpecific": "特定兜底（Base64）",
+  "providerFallbackGeneric": "通用兜底（压缩/切块）",
+  "providerFallbackAll": "全部尝试（推荐）",
+  "providerFallbackSpecificHelp": "尝试 Base64 JSON。只有计入 Base64 膨胀和 JSON 字段后的请求体未超限时才发送。",
+  "providerFallbackGenericHelp": "若已启用压缩，则先压缩完整 WAV。仍超限且已启用切块时，再切分源 PCM 并逐块编码。仅支持 PCM WAV。",
+  "providerFallbackAllHelp": "先尝试符合请求体上限的 Base64；然后在启用压缩时压缩完整 WAV。若仍超限且已启用切块，则切分源 PCM 并逐块编码。仅支持 PCM WAV。",
+  "providerFallbackRejectHelp": "文件超出限制时直接拒绝，不尝试兜底。",
+  "providerPreprocessNone": "无",
+  "providerPreprocessResample": "WAV 优化（16 kHz 单声道）",
+  "providerPreprocessResampleHelp": "重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。",
+  "providerPreprocessNoneHelp": "不进行预处理，原样发送。",
+  "assistantDefaultsScopeHelp": "默认模型和工具仅用于在此助手下新建的话题。现有话题保留各自设置。工具结果截断适用于全部话题。",
+  "assistantDefaultModelTitle": "默认模型",
+  "assistantDefaultModelHelp": "新话题使用的模型；留空则不指定默认模型。",
+  "assistantNoDefault": "暂不设置",
+  "assistantNoModelsAvailable": "暂无可用模型，请在设置中配置 LLM 供应商。",
+  "assistantDefaultToolsTitle": "默认启用工具",
+  "assistantDisabledToolsHelp": "已关闭的工具不会在新话题中自动启用。",
+  "assistantUnconfiguredToolsHelp": "尚未配置默认工具；新话题将自动启用全部工具。",
+  "assistantEnableAll": "全部启用",
+  "assistantDisableAll": "全部关闭",
+  "assistantNoToolsAvailable": "暂无可用工具",
+  "assistantTruncateToolOutput": "工具结果截断",
+  "assistantTruncateToolOutputHelp": "发送给模型前，单个工具结果的最大字符数。适用于此助手下的全部话题。",
+  "assistantEnableTruncation": "启用截断",
+  "assistantTruncatedTo": "超长结果将截断至 {count} 个字符",
+  "@assistantTruncatedTo": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantSendFullResult": "完整发送（仍受 50 KB 存储上限约束）",
+  "assistantMaxCharacters": "最大字符数",
+  "assistantCharactersNotTokens": "单位：字符（不是 token）",
+  "assistantDefaultCharacterCount": "默认值：{count}",
+  "@assistantDefaultCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantCharacterRange": "有效范围：{minimum}–{maximum} 个字符",
+  "@assistantCharacterRange": {
+    "placeholders": {
+      "minimum": {
+        "type": "String"
+      },
+      "maximum": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantNewConversationPreview": "新建话题效果",
+  "assistantEnabledToolCount": "已启用 {enabled} / {total} 个",
+  "@assistantEnabledToolCount": {
+    "placeholders": {
+      "enabled": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantAllToolsAutoEnabled": "全部自动启用（未配置）",
+  "assistantMoreActions": "更多操作",
+  "assistantChooseEmoji": "选择表情",
+  "assistantNameLabel": "助手名称",
+  "assistantDescriptionOptional": "描述（可选）",
+  "assistantSelectionTitle": "选择助手",
+  "assistantMarketTooltip": "助手市场",
+  "assistantCreateNew": "新建助手",
+  "assistantEmptyState": "暂无助手，请先创建。",
+  "assistantCreate": "创建",
+  "assistantReorderHint": "长按并拖动即可调整助手顺序",
+  "assistantNewNameHint": "输入助手名称",
+  "assistantNewDescriptionHint": "简要描述此助手的功能",
+  "assistantDeleteTitle": "删除助手",
+  "assistantDeleteConfirmation": "确定要删除助手“{name}”吗？此操作无法撤销。",
+  "@assistantDeleteConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantEditTitle": "编辑助手",
+  "assistantBasicTab": "基本设置",
+  "assistantParametersTab": "参数设置",
+  "assistantDefaultsTab": "默认设置",
+  "assistantAddCustomParameter": "添加自定义参数",
+  "assistantEditCustomParameter": "编辑自定义参数",
+  "assistantParameterName": "参数名",
+  "assistantParameterNameHint": "例如 top_k 或 provider.only",
+  "assistantParameterNameInvalid": "参数名格式不正确（点号分段不能为空）",
+  "assistantParameterType": "类型",
+  "assistantValue": "值",
+  "assistantTrueFalseHint": "true 或 false",
+  "assistantNumberHint": "输入数字",
+  "assistantJsonHint": "例如：{example}",
+  "assistantValueHint": "输入值",
+  "assistantCancel": "取消",
+  "assistantSave": "保存",
+  "assistantParamOverrideHelp": "启用时助手参数会覆盖模型参数；关闭时使用模型参数。",
+  "assistantTemperature": "温度 (Temperature)",
+  "assistantMaxTokens": "最大 Token 数",
+  "assistantMaxToolCalls": "工具调用上限",
+  "assistantRounds": "{count} 轮",
+  "@assistantRounds": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantUnlimited": "无限制",
+  "assistantStreamOutput": "流式输出",
+  "assistantFrequencyPenalty": "频率惩罚",
+  "assistantPresencePenalty": "存在惩罚",
+  "assistantRandomSeed": "随机种子",
+  "assistantNotSet": "未设置",
+  "assistantSeedValue": "种子值",
+  "assistantIntegerSeedHint": "输入整数种子",
+  "assistantWebSearch": "联网搜索",
+  "assistantAddParameter": "添加参数",
+  "assistantNoCustomParameters": "暂无自定义参数",
+  "@assistantJsonHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantRoundsLabel": "轮数",
+  "modelCreateTitle": "添加模型",
+  "modelEditTitle": "编辑模型",
+  "modelDiscardTitle": "放弃修改？",
+  "modelDiscardBody": "当前有未保存的修改，确定要放弃吗？",
+  "modelNameLabel": "模型名称",
+  "modelNameHint": "输入显示名称（可选）",
+  "modelIdLabel": "模型 ID",
+  "modelIdExample": "例如 {id}",
+  "@modelIdExample": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelIdRequired": "模型 ID 为必填项。",
+  "modelCustomParamRequired": "自定义参数的参数名和默认值不能为空。",
+  "modelParamDuplicate": "参数已存在：{name}",
+  "@modelParamDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamName": "参数名",
+  "modelParamDefaultValue": "默认参数值",
+  "modelParamDelete": "删除参数",
+  "modelParamJsonInvalid": "参数“{name}”的默认值不是合法 JSON：{value}",
+  "@modelParamJsonInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddParameter": "添加参数",
+  "modelNoCustomParams": "暂无自定义参数",
+  "modelBasicSettings": "基本设置",
+  "modelDiscardCancel": "取消",
+  "modelSave": "保存",
+  "modelUnsavedMaxTokens": "最大输出 Token 数已启用但未填写。",
+  "modelMaxTokensPositive": "最大输出 Token 数必须为正整数。",
+  "modelSeedInteger": "随机种子必须为整数。",
+  "modelContextLengthRequired": "上下文长度为必填项。",
+  "modelContextLengthPositive": "上下文长度必须为正整数。",
+  "modelAsrLanguageCode": "语言代码（Language）",
+  "modelAsrLanguageHint": "例如 zh、en、ja",
+  "modelAsrLanguageHelp": "ISO-639-1 语言代码；留空则由模型自动检测。",
+  "modelTemperature": "温度",
+  "modelTemperatureHelp": "控制输出的随机性，建议使用较低的值。",
+  "modelAsrPrompt": "提示词",
+  "modelAsrPromptHint": "输入上下文提示词（可选）",
+  "modelAsrPromptHelp": "提供上下文以提高转写准确性，例如专业术语列表。",
+  "modelAsrParams": "ASR 参数",
+  "modelEnabledParamsHelp": "开启的参数将作为默认值发送到 API 请求中。",
+  "modelAsrResponseFormat": "响应格式",
+  "modelAsrResponseHelp": "转写结果的返回格式。",
+  "modelAsrTimestampGranularity": "时间戳粒度",
+  "modelAsrVerboseHelp": "仅在 response_format 为 verbose_json 时生效。",
+  "modelNoTrim": "不裁切",
+  "modelAudioTrimTitle": "音频裁切",
+  "modelAudioTrimHelp": "选择音频裁切方式。",
+  "modelDeleteTrimPreset": "删除裁切预设",
+  "modelDeleteTrimConfirmation": "确定要删除裁切预设“{name}”吗？",
+  "@modelDeleteTrimConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddTrimPreset": "添加自定义裁切",
+  "modelPlayTestAudio": "播放测试音频",
+  "modelPlayingTestAudio": "播放中...",
+  "modelParamExists": "该参数已存在",
+  "asrModelIdExample": "例如 whisper-1",
+  "asrPromptLabel": "提示词",
+  "asrResponseFormatJson": "json – JSON 格式",
+  "asrResponseFormatText": "text – 纯文本",
+  "asrResponseFormatSrt": "srt – 字幕",
+  "asrResponseFormatVtt": "vtt – 字幕",
+  "asrResponseFormatVerbose": "verbose_json – 详细 JSON（含时间戳）",
+  "asrVerboseTimestampHelp": "选择 verbose_json 后可启用下方时间戳粒度选项。",
+  "asrTimestampSegment": "segment – 段落级",
+  "asrTimestampWord": "word – 单词级",
+  "asrWordTimestampHelp": "单词级时间戳的准确性可能低于段落级。",
+  "reasoningAddOptionValue": "添加选项值",
+  "reasoningEditOptionValue": "编辑选项值",
+  "reasoningOptionExample": "例如 low、medium、high",
+  "reasoningOptionSelectionHelp": "点按选项块可选中或取消。选中的值会发送；拖动可排序。供应商提供的值不能删除，但可以取消选中来隐藏。",
+  "reasoningAddOption": "添加选项",
+  "reasoningCurrentProvider": "当前：供应商",
+  "reasoningCurrentModel": "当前：模型自定义",
+  "reasoningAddEffortValue": "添加推理力度值",
+  "reasoningEffortExample": "例如 max、ultra、deep",
+  "reasoningAddToggle": "添加推理开关",
+  "reasoningToggle": "推理开关",
+  "reasoningResetParameter": "还原此参数",
+  "reasoningDisableToggle": "停用推理开关",
+  "reasoningEnableToggle": "启用推理开关",
+  "reasoningParameterNameSource": "参数名（{source}）",
+  "@reasoningParameterNameSource": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningNameExample": "例如 thinking.type、reasoning",
+  "reasoningBooleanHelp": "布尔参数无需配置值；聊天面板提供开关。",
+  "reasoningOnValue": "开启时的值",
+  "reasoningOnExample": "例如 enabled、true",
+  "reasoningOffValue": "关闭时的值",
+  "reasoningOffExample": "例如 disabled、false",
+  "reasoningToggleValuesHelp": "开启时发送“{onValue}”，关闭时发送“{offValue}”。",
+  "@reasoningToggleValuesHelp": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningAddEffort": "添加推理力度",
+  "reasoningFillToggleFirst": "请先完整填写推理开关",
+  "reasoningFillToggleBeforeEffort": "请先完整填写推理开关，再配置推理力度。",
+  "reasoningAddValue": "添加值",
+  "reasoningJsonValue": "JSON 值",
+  "reasoningJsonExample": "例如 {example}",
+  "@reasoningJsonExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningSelectedChipHelp": "点按选项块可选中或取消。选中的值会显示在聊天推理面板；拖动可排序。供应商提供的值不能删除，但可以隐藏。",
+  "reasoningAddParameter": "添加推理参数",
+  "reasoningToggleIncomplete": "请先完整填写推理开关，再配置推理力度。",
+  "llmContextLength": "上下文长度",
+  "llmContextHint": "输入上下文长度",
+  "llmContextHelp": "模型的最大上下文窗口大小（Token 数）。",
+  "llmReasoningParams": "推理参数",
+  "llmReasoningHelp": "配置聊天推理参数。推理开关用于设置参数名和开关值；可添加、排序推理力度选项，并选择显示在聊天面板中的值。打开本页时会同步供应商提供的值。这些设置控制模型参数；聊天面板中的推理开关独立管理。",
+  "llmAddReasoningParam": "添加推理参数",
+  "llmCustomEndpointType": "自定义端点类型",
+  "llmInheritEndpointType": "关闭时使用供应商设置的端点类型。",
+  "llmEndpointType": "端点类型",
+  "llmEndpointOpenAi": "兼容 OpenAI（Chat Completions）",
+  "llmEndpointAnthropic": "Anthropic 格式（Messages API）",
+  "llmEndpointHelp": "端点类型必须与供应商 API 地址匹配。更改后，此模型的新对话会使用相应格式。",
+  "llmTopPHelp": "核采样参数，用于控制词汇选择的累积概率。",
+  "llmFrequencyPenaltyLabel": "频率惩罚",
+  "llmFrequencyPenaltyHelp": "减少重复，负值会增加重复。",
+  "llmPresencePenaltyLabel": "存在惩罚",
+  "llmPresencePenaltyHelp": "鼓励讨论新话题，负值会鼓励重复话题。",
+  "llmMaxTokensHint": "可选，例如 4096",
+  "llmTokensPerResponse": "每次响应最多生成的 Token 数。",
+  "llmSeedLabel": "随机种子（Seed）",
+  "llmSeedHint": "可选，例如 42",
+  "llmSeedHelp": "设置后可使输出结果可复现。",
+  "llmInheritedCustomHelp": "供应商已配置的自定义参数会显示在此处，并在每次打开页面时同步。",
+  "llmBooleanParamHelp": "布尔类型无需配置参数值。",
+  "modelContextReq": "上下文长度为必填项。",
+  "modelContextPositive": "上下文长度必须为正整数。",
+  "modelParamNameInvalid": "参数名格式不正确（点号分段不能为空）：{name}",
+  "@modelParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamFinite": "参数“{name}”的{valueLabel}必须是有限数字：{value}",
+  "@modelParamFinite": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "valueLabel": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningIncomplete": "请先完整填写推理开关，其他推理参数才能生效。",
+  "modelReasoningOptionsRequired": "推理参数必须至少添加一个选项值。",
+  "modelReasoningError": "推理参数错误：{error}",
+  "@modelReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningDuplicate": "推理参数重名：{name}",
+  "@modelReasoningDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningCustomDuplicate": "推理参数与自定义参数重名：{name}",
+  "@modelReasoningCustomDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSeedRequired": "随机种子已启用但未填写。",
+  "ocrParamsTitle": "OCR 参数",
+  "ocrParamsHelp": "使用兼容 OpenAI 的视觉 Chat Completions 格式。以下参数均为可选；未填写或未启用的参数不会发送。供应商特有参数可在下方添加（需接口支持）。",
+  "ocrRequestSizeOverride": "请求 JSON 大小覆盖值",
+  "ocrInheritProvider": "留空则继承供应商设置",
+  "ocrBudgetDefault": "留空时继承供应商设置；供应商也未设置时使用 20 MiB 默认值。",
+  "ocrBudgetValue": "留空时继承供应商设置（{size} MiB）；供应商也未设置时使用 20 MiB 默认值。",
+  "@ocrBudgetValue": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimDirection": "裁切{direction} {seconds} 秒",
+  "@audioTrimDirection": {
+    "placeholders": {
+      "direction": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimBeginning": "裁切开头 {seconds} 秒",
+  "@audioTrimBeginning": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimNone": "不裁切音频",
+  "trimNameLabel": "裁切方式名称 *",
+  "trimNameHint": "例如静音裁切",
+  "trimDurationLabel": "裁切时长（秒）*",
+  "trimDurationHint": "例如 0.123",
+  "trimNameAndDurationRequired": "名称和时长为必填项。",
+  "trimDurationInvalid": "请输入有效的正数时长。",
+  "testAudioHostMissing": "尚未配置 Host。",
+  "testAudioKeyMissing": "尚未配置 Key。",
+  "testAudioContentTypeError": "响应 Content-Type 为 {contentType}，不是音频数据。",
+  "@testAudioContentTypeError": {
+    "placeholders": {
+      "contentType": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioEmpty": "服务器返回了空音频数据。",
+  "testAudioTimeoutConnection": "连接超时，请检查网络。{details}",
+  "@testAudioTimeoutConnection": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioTimeoutReceive": "接收超时，服务器响应过慢。{details}",
+  "@testAudioTimeoutReceive": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioRequestCancelled": "请求已取消。{details}",
+  "@testAudioRequestCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNetworkError": "网络错误：{message}",
+  "@testAudioNetworkError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNoBody": "无响应体",
+  "testAudioCorsHelp": "无法连接到服务器。Web 端可能因 CORS 限制或 API 地址错误导致；请检查供应商 API 地址及服务器跨域设置。{details}",
+  "@testAudioCorsHelp": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "trimModelNameHint": "用于显示和识别的易读名称，例如“GPT-4o Mini TTS”。同一供应商下的模型可用名称区分。",
+  "trimModelIdHelp": "API 调用使用的唯一标识符，例如“gpt-4o-mini-tts”。必须与供应商提供的模型 ID 一致。",
+  "ttsVoiceRangeTitle": "音量范围",
+  "ttsMinVolume": "最小音量",
+  "ttsMaxVolume": "最大音量",
+  "ttsSpeedRangeTitle": "语速范围",
+  "ttsMinSpeed": "最小语速",
+  "ttsMaxSpeed": "最大语速",
+  "ttsMaxAudioLength": "单次最长音频字数 *",
+  "ttsAudioLengthHint": "例如 1000",
+  "ttsNoVoices": "暂无音色，点击进入编辑",
+  "ttsInstructionSupported": "模型是否支持 instruction 参数",
+  "ttsInstructionHelp": "启用后可在 TTS 请求中附加语气、情绪、语速等指令描述。",
+  "ttsStreamSupported": "模型是否支持流式输出",
+  "ttsStreamHelp": "启用后此模型可用于需要流式输出的场景；请先确认模型支持流式输出。",
+  "modelParamBooleanExpected": "参数“{name}”的值必须是 true 或 false：{value}",
+  "@modelParamBooleanExpected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsMaxAudioLengthRequired": "单次最长音频字数为必填项，请输入大于 0 的整数。",
+  "asrLanguageExample": "例如 zh、en、ja",
+  "llmReasoningFullHelp": "推理开关控制是否发送推理参数，并允许设置参数名和开关值。推理力度参数只有一个，可选择值并拖动排序；选中的值会显示在聊天推理面板中。可在下方添加其他推理参数。参数名支持点号嵌套，例如 thinking.type 会转换为嵌套 JSON 对象。打开本页时会同步供应商配置的推理参数。此处开关控制模型参数；聊天中的推理开关独立控制。",
+  "llmTemperatureHelp": "控制输出的随机性，值越高越有创造性。",
+  "llmBooleanValueHelp": "布尔类型无需配置参数值。",
+  "reasoningDisableEffort": "停用推理力度",
+  "reasoningEnableEffort": "启用推理力度",
+  "ocrJsonSizePositive": "请求 JSON 大小必须是大于 0 的 MiB 数值。",
+  "ttsRangePair": "最小和最大{kind}必须同时填写，或同时留空。",
+  "@ttsRangePair": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsEditTrimTitle": "编辑自定义裁切",
+  "ttsVoicesCount": "音色 ({count})",
+  "@ttsVoicesCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRequestFormatExample": "在请求格式中生成：{syntax}",
+  "@ttsRequestFormatExample": {
+    "placeholders": {
+      "syntax": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpServerNameRequired": "请输入 MCP 服务器名称。",
+  "@mcpServerNameRequired": {
+    "placeholders": {}
+  },
+  "mcpStdioCommandRequired": "stdio 模式需要指定命令。",
+  "@mcpStdioCommandRequired": {
+    "placeholders": {}
+  },
+  "mcpSseUrlRequired": "SSE 模式需要指定 URL。",
+  "@mcpSseUrlRequired": {
+    "placeholders": {}
+  },
+  "mcpEditServerTitle": "编辑 MCP 服务器",
+  "@mcpEditServerTitle": {
+    "placeholders": {}
+  },
+  "mcpCreateServerTitle": "新建 MCP 服务器",
+  "@mcpCreateServerTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesTitle": "未保存的更改",
+  "@mcpUnsavedChangesTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesConfirm": "有未保存的更改，确定要放弃吗？",
+  "@mcpUnsavedChangesConfirm": {
+    "placeholders": {}
+  },
+  "mcpTransportType": "传输方式",
+  "@mcpTransportType": {
+    "placeholders": {}
+  },
+  "mcpServerName": "服务器名称",
+  "@mcpServerName": {
+    "placeholders": {}
+  },
+  "mcpServerNameHint": "输入 MCP 服务器名称",
+  "@mcpServerNameHint": {
+    "placeholders": {}
+  },
+  "mcpCommand": "命令",
+  "@mcpCommand": {
+    "placeholders": {}
+  },
+  "mcpCommandExample": "例如：npx",
+  "@mcpCommandExample": {
+    "placeholders": {}
+  },
+  "mcpArguments": "参数",
+  "@mcpArguments": {
+    "placeholders": {}
+  },
+  "mcpArgumentsHint": "用逗号分隔参数，例如：-y, @modelcontextprotocol/server-filesystem, /tmp",
+  "@mcpArgumentsHint": {
+    "placeholders": {}
+  },
+  "mcpSseUrlExample": "例如：http://localhost:3001/sse",
+  "@mcpSseUrlExample": {
+    "placeholders": {}
+  },
+  "mcpApiKey": "API 密钥",
+  "@mcpApiKey": {
+    "placeholders": {}
+  },
+  "mcpApiKeyHint": "输入 API Key（可选）",
+  "@mcpApiKeyHint": {
+    "placeholders": {}
+  },
+  "mcpShowKey": "显示密钥",
+  "@mcpShowKey": {
+    "placeholders": {}
+  },
+  "mcpHideKey": "隐藏密钥",
+  "@mcpHideKey": {
+    "placeholders": {}
+  },
+  "mcpDescriptionHint": "输入此 MCP 服务器的描述信息（可选）",
+  "@mcpDescriptionHint": {
+    "placeholders": {}
+  },
+  "mcpStdioDescription": "stdio 会在本地启动子进程作为 MCP 服务器，并通过标准输入/输出通信。适用于本地工具。",
+  "@mcpStdioDescription": {
+    "placeholders": {}
+  },
+  "mcpSseDescription": "SSE 通过 HTTP SSE 连接远程 MCP 服务器。适用于远程服务。",
+  "@mcpSseDescription": {
+    "placeholders": {}
+  },
+  "mcpLocalStdio": "本地 (stdio)",
+  "@mcpLocalStdio": {
+    "placeholders": {}
+  },
+  "mcpRemoteSse": "远程 (SSE)",
+  "@mcpRemoteSse": {
+    "placeholders": {}
+  },
+  "mcpSaving": "保存中…",
+  "@mcpSaving": {
+    "placeholders": {}
+  },
+  "providerTestSafetyNote": "此测试会向对应服务发送真实请求。MCP 仅调用只读的 tools/list；HTTP 和网页搜索会执行一次查询。Todo 默认读取清单；为保护当前数据，请省略 todos 参数或将其设为 null。",
+  "@providerTestSafetyNote": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigTitle": "删除配置",
+  "@providerDeleteConfigTitle": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigConfirm": "确定要删除此供应商配置及其所有模型吗？",
+  "@providerDeleteConfigConfirm": {
+    "placeholders": {}
+  },
+  "providerCreateGroup": "新建组别",
+  "@providerCreateGroup": {
+    "placeholders": {}
+  },
+  "providerEditGroup": "编辑组别",
+  "@providerEditGroup": {
+    "placeholders": {}
+  },
+  "providerGroupName": "组别名称",
+  "@providerGroupName": {
+    "placeholders": {}
+  },
+  "providerGroupNameExists": "组别名称已存在。",
+  "@providerGroupNameExists": {
+    "placeholders": {}
+  },
+  "providerDeleteGroup": "删除组别",
+  "@providerDeleteGroup": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupConfirm": "删除“{groupName}”后，其中的配置会移到“其他 MCP 服务”。",
+  "@providerDeleteGroupConfirm": {
+    "placeholders": {
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
+  "providerMoveToGroup": "移动到组别",
+  "@providerMoveToGroup": {
+    "placeholders": {}
+  },
+  "providerUnnamed": "（未命名）",
+  "@providerUnnamed": {
+    "placeholders": {}
+  },
+  "providerHttpSearch": "HTTP 搜索",
+  "@providerHttpSearch": {
+    "placeholders": {}
+  },
+  "providerHttpToolSubtitle": "HTTP 工具：{url}",
+  "@providerHttpToolSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerLocalStdioSubtitle": "本地 (stdio)：{command}",
+  "@providerLocalStdioSubtitle": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "providerRemoteSseSubtitle": "远程 (SSE)：{url}",
+  "@providerRemoteSseSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerServices": "服务配置",
+  "@providerServices": {
+    "placeholders": {}
+  },
+  "providerServicesDescription": "按组管理远程连接、本地 stdio 与 HTTP 搜索",
+  "@providerServicesDescription": {
+    "placeholders": {}
+  },
+  "providerCreateGroupAction": "新建组别",
+  "@providerCreateGroupAction": {
+    "placeholders": {}
+  },
+  "providerGroupEmpty": "此组暂无配置，点击“添加”加入内容。",
+  "@providerGroupEmpty": {
+    "placeholders": {}
+  },
+  "providerBuiltinTools": "内置工具",
+  "@providerBuiltinTools": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolsDescription": "Stroom 提供的本地工具接口；网页搜索归入对应服务组。",
+  "@providerBuiltinToolsDescription": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolInterface": "内置工具接口",
+  "@providerBuiltinToolInterface": {
+    "placeholders": {}
+  },
+  "providerViewInterface": "查看接口",
+  "@providerViewInterface": {
+    "placeholders": {}
+  },
+  "providerConfigTitle": "配置",
+  "@providerConfigTitle": {
+    "placeholders": {}
+  },
+  "providerNotFound": "供应商未找到",
+  "@providerNotFound": {
+    "placeholders": {}
+  },
+  "providerConfigurationHeading": "供应商配置",
+  "@providerConfigurationHeading": {
+    "placeholders": {}
+  },
+  "providerBuiltinWebSearchEmpty": "内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。",
+  "@providerBuiltinWebSearchEmpty": {
+    "placeholders": {}
+  },
+  "providerNoConfigsAdd": "暂无供应商配置，请点击“添加”创建。",
+  "@providerNoConfigsAdd": {
+    "placeholders": {}
+  },
+  "providerNoHost": "(未设置 Host)",
+  "@providerNoHost": {
+    "placeholders": {}
+  },
+  "providerServicesAndTools": "服务与工具",
+  "@providerServicesAndTools": {
+    "placeholders": {}
+  },
+  "providerManageServicesDescription": "管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。",
+  "@providerManageServicesDescription": {
+    "placeholders": {}
+  },
+  "providerNoServices": "还没有服务配置",
+  "@providerNoServices": {
+    "placeholders": {}
+  },
+  "providerAddServiceDescription": "添加 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。",
+  "@providerAddServiceDescription": {
+    "placeholders": {}
+  },
+  "providerAddService": "添加服务",
+  "@providerAddService": {
+    "placeholders": {}
+  },
+  "providerBuiltinBadge": "内置",
+  "@providerBuiltinBadge": {
+    "placeholders": {}
+  },
+  "@providerApiKeyHint": {
+    "placeholders": {
+      "hint": {
+        "type": "String"
+      }
+    }
+  },
+  "providerConnectivityTest": "连通性测试",
+  "@providerConnectivityTest": {
+    "placeholders": {}
+  },
+  "providerMoveGroupTooltip": "移动到组别",
+  "@providerMoveGroupTooltip": {
+    "placeholders": {}
+  },
+  "providerDeleteTooltip": "删除配置",
+  "@providerDeleteTooltip": {
+    "placeholders": {}
+  },
+  "providerGroupItemCount": "{count, plural, other{# 项内容}}",
+  "@providerGroupItemCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "providerGroupActions": "组别操作",
+  "@providerGroupActions": {
+    "placeholders": {}
+  },
+  "providerEditGroupAction": "编辑组别",
+  "@providerEditGroupAction": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupAction": "删除组别",
+  "@providerDeleteGroupAction": {
+    "placeholders": {}
+  },
+  "providerAddItem": "添加内容",
+  "@providerAddItem": {
+    "placeholders": {}
+  },
+  "providerMcpMasterLabel": "MCP 服务器",
+  "@providerMcpMasterLabel": {
+    "placeholders": {}
+  },
+  "providerMcpMasterDescription": "控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。",
+  "@providerMcpMasterDescription": {
+    "placeholders": {}
+  },
+  "providerEnabled": "已启用",
+  "@providerEnabled": {
+    "placeholders": {}
+  },
+  "providerDisabled": "已停用",
+  "@providerDisabled": {
+    "placeholders": {}
+  },
+  "providerEditSettings": "编辑供应商设置",
+  "@providerEditSettings": {
+    "placeholders": {}
+  },
+  "providerModelList": "模型列表",
+  "@providerModelList": {
+    "placeholders": {}
+  },
+  "providerNoModels": "暂无模型",
+  "@providerNoModels": {
+    "placeholders": {}
+  },
+  "providerDeleteModel": "删除模型",
+  "@providerDeleteModel": {
+    "placeholders": {}
+  },
+  "providerDeleteModelConfirm": "确定要删除此模型吗？",
+  "@providerDeleteModelConfirm": {
+    "placeholders": {}
+  },
+  "providerEditConfig": "编辑配置",
+  "@providerEditConfig": {
+    "placeholders": {}
+  },
+  "providerCreateNamedConfig": "新建{entryName}配置",
+  "@providerCreateNamedConfig": {
+    "placeholders": {
+      "entryName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolHttpSearchType": "接入类型：HTTP 搜索",
+  "@toolHttpSearchType": {
+    "placeholders": {}
+  },
+  "toolInterface": "工具接口：{name}",
+  "@toolInterface": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolParameterDefinitions": "参数定义",
+  "@toolParameterDefinitions": {
+    "placeholders": {}
+  },
+  "toolHttpAddress": "HTTP 接口地址",
+  "@toolHttpAddress": {
+    "placeholders": {}
+  },
+  "toolInvalidHttpUrl": "请输入有效的 HTTP 或 HTTPS 地址。",
+  "@toolInvalidHttpUrl": {
+    "placeholders": {}
+  },
+  "toolBuiltinType": "接入类型：Stroom 内置工具",
+  "@toolBuiltinType": {
+    "placeholders": {}
+  },
+  "toolBuiltinEnableHelp": "是否在助手中启用，由该助手的默认工具设置管理。",
+  "@toolBuiltinEnableHelp": {
+    "placeholders": {}
+  },
+  "mcpSseUrlLabel": "SSE URL",
+  "@mcpSseUrlLabel": {
+    "placeholders": {}
+  },
+  "mcpUrlLabel": "URL",
+  "@mcpUrlLabel": {
+    "placeholders": {}
+  },
+  "providerModelId": "模型 ID：{modelId}",
+  "@providerModelId": {
+    "placeholders": {
+      "modelId": {
+        "type": "String"
+      }
+    }
+  },
+  "providerValueNotSet": "（未设置）",
+  "@providerValueNotSet": {
+    "placeholders": {}
+  },
+  "providerApiKeyInputHint": "输入 API 密钥",
+  "@providerApiKeyInputHint": {
+    "placeholders": {}
+  },
+  "providerSettingsTitle": "供应商配置",
+  "@providerSettingsTitle": {
+    "placeholders": {}
+  },
+  "providerBasicInfoTab": "基本信息",
+  "@providerBasicInfoTab": {
+    "placeholders": {}
+  },
+  "providerParameterSettingsTab": "参数设置",
+  "@providerParameterSettingsTab": {
+    "placeholders": {}
+  },
+  "providerOptionValuesReorderHelp": "选项值（长按把手拖拽排序）",
+  "@providerOptionValuesReorderHelp": {
+    "placeholders": {}
+  },
+  "providerOptionIndexLabel": "选项 {index}",
+  "@providerOptionIndexLabel": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "providerOptionExampleHint": "如 {example}",
+  "@providerOptionExampleHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerDeleteOptionTooltip": "删除选项",
+  "@providerDeleteOptionTooltip": {
+    "placeholders": {}
+  },
+  "providerAddOption": "添加选项",
+  "@providerAddOption": {
+    "placeholders": {}
+  },
+  "providerAddCustomParam": "添加参数",
+  "@providerAddCustomParam": {
+    "placeholders": {}
+  },
+  "providerNoCustomParams": "暂无自定义参数",
+  "@providerNoCustomParams": {
+    "placeholders": {}
+  },
+  "providerParamNameLabel": "参数名",
+  "@providerParamNameLabel": {
+    "placeholders": {}
+  },
+  "providerParamDefaultValueLabel": "默认参数值",
+  "@providerParamDefaultValueLabel": {
+    "placeholders": {}
+  },
+  "providerBooleanParamNoValue": "布尔类型无需配置参数值，聊天面板提供开/关切换。",
+  "@providerBooleanParamNoValue": {
+    "placeholders": {}
+  },
+  "providerReasoningParamsHeading": "推理参数",
+  "@providerReasoningParamsHeading": {
+    "placeholders": {}
+  },
+  "providerReasoningSettingsHelp": "推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。推理力度参数最多配置一个，参数名必填，选项值可选；仅填参数名时，参数值由模型配置提供。您还可以通过底部按钮添加额外的推理参数。参数名支持点号嵌套，例如 {parameterName} 会展开为 {jsonExample}。",
+  "@providerReasoningSettingsHelp": {
+    "placeholders": {
+      "parameterName": {
+        "type": "String"
+      },
+      "jsonExample": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningParam": "添加推理参数",
+  "@providerAddReasoningParam": {
+    "placeholders": {}
+  },
+  "providerAddReasoningToggle": "添加推理开关",
+  "@providerAddReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerReasoningToggle": "推理开关",
+  "@providerReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningToggle": "删除推理开关",
+  "@providerDeleteReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerParamNameHint": "如 {examples}",
+  "@providerParamNameHint": {
+    "placeholders": {
+      "examples": {
+        "type": "String"
+      }
+    }
+  },
+  "providerReasoningBooleanHelp": "布尔类型无需配置参数值，聊天面板提供开/关切换。",
+  "@providerReasoningBooleanHelp": {
+    "placeholders": {}
+  },
+  "providerToggleOnValueLabel": "开启时值",
+  "@providerToggleOnValueLabel": {
+    "placeholders": {}
+  },
+  "providerToggleOffValueLabel": "关闭时值",
+  "@providerToggleOffValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningToggleSummary": "推理开关打开时发送「{onValue}」，关闭时发送「{offValue}」。",
+  "@providerReasoningToggleSummary": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningEffort": "添加推理力度",
+  "@providerAddReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningEffort": "删除推理力度参数",
+  "@providerDeleteReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerReasoningEffortLockedHint": "请先完整填写推理开关后再配置推理力度。",
+  "@providerReasoningEffortLockedHint": {
+    "placeholders": {}
+  },
+  "providerJsonValueLabel": "JSON 值",
+  "@providerJsonValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningOptionsHelp": "选项值（可选，仅填参数名时参数值由模型配置提供；长按把手拖拽排序）",
+  "@providerReasoningOptionsHelp": {
+    "placeholders": {}
+  },
+  "providerParamNameNestedLabel": "参数名（支持点号嵌套）",
+  "@providerParamNameNestedLabel": {
+    "placeholders": {}
+  },
+  "providerToggleEffortPrerequisite": "请先完整填写推理开关后再配置推理力度。",
+  "@providerToggleEffortPrerequisite": {
+    "placeholders": {}
+  },
+  "providerToggleRequiredHint": "请先填写推理开关",
+  "@providerToggleRequiredHint": {
+    "placeholders": {}
+  },
+  "providerDeleteCustomParam": "删除参数",
+  "@providerDeleteCustomParam": {
+    "placeholders": {}
+  },
+  "modelSaveSuccess": "模型已保存",
+  "@modelSaveSuccess": {
+    "placeholders": {}
+  },
+  "modelSaving": "保存中…",
+  "@modelSaving": {
+    "placeholders": {}
+  },
+  "modelOriginalError": "原始错误：{error}",
+  "@modelOriginalError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "paramTypeStringLabel": "字符串",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "数字",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "布尔",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "例如: cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "例如: 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "例如: true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "例如: ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
   }
 }

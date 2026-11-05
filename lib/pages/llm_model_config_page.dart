@@ -1,10 +1,14 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
 part 'llm_model_config_page_reasoning.dart';
@@ -147,9 +151,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         widget.provider?.reasoningParams ?? [],
         const [],
       ).map((p) => p.copy()).toList();
-      final initialEffort = initialReasoning
-          .cast<ReasoningParam?>()
-          .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+      final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
+            (p) => p?.isEffortParam ?? false,
+            orElse: () => null,
+          );
       if (initialEffort != null) {
         _normalizeBaselineEffort(initialEffort, const []);
       }
@@ -274,9 +279,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 保存的 options 按块顺序归一化（模型无力度参数时为空）——与
     // initState 的块勾选初始值一致。boolean 清空 options/order，json
     // 保留 options（与 sync 一致）。
-    final initialEffort = initialReasoning
-        .cast<ReasoningParam?>()
-        .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+    final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
+          (p) => p?.isEffortParam ?? false,
+          orElse: () => null,
+        );
     if (initialEffort != null) {
       _normalizeBaselineEffort(initialEffort, m.reasoningParams);
     }
@@ -299,8 +305,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 中移除。基线比较必须镜像工作副本的同一处理，否则打开未修改
   /// 的页面也会弹「放弃修改」。
   void _removeNameOnlyProviderEffort(List<ReasoningParam> params) {
-    final providerEffort =
-        findEffortParam(widget.provider?.reasoningParams ?? []);
+    final providerEffort = findEffortParam(
+      widget.provider?.reasoningParams ?? [],
+    );
     if (providerEffort == null || providerEffort.options.isNotEmpty) return;
     final modelEffort = findEffortParam(widget.model?.reasoningParams ?? []);
     if (modelEffort != null) return;
@@ -339,8 +346,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       effort.optionOrder = const [];
       return;
     }
-    final providerEffort =
-        findEffortParam(widget.provider?.reasoningParams ?? []);
+    final providerEffort = findEffortParam(
+      widget.provider?.reasoningParams ?? [],
+    );
     final savedEffort = findEffortParam(modelParams);
     final savedOptions = savedEffort?.options ?? const <String>[];
     effort.optionOrder = mergeOptionBlocks(
@@ -385,7 +393,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
     p.options = savedOptions.isNotEmpty
         ? selectedInBlockOrder(
-            blocks: p.optionOrder, savedOptions: savedOptions)
+            blocks: p.optionOrder,
+            savedOptions: savedOptions,
+          )
         : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
   }
 
@@ -430,7 +440,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         // 空 options + 非空 optionOrder 表示明确取消了全部勾选。
         p.options = savedOptions.isNotEmpty
             ? selectedInBlockOrder(
-                blocks: p.optionOrder, savedOptions: savedOptions)
+                blocks: p.optionOrder,
+                savedOptions: savedOptions,
+              )
             : _hasSavedCustomParamOptionSelection(p)
                 ? const []
                 : p.optionOrder
@@ -607,9 +619,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
 
     // 初始快照（reset 还原用）
-    _initialParamSnapshots = {
-      for (final p in _reasoningParams) p: p.copy(),
-    };
+    _initialParamSnapshots = {for (final p in _reasoningParams) p: p.copy()};
     _initialBlockValues = List.of(_effortBlockValues);
     _initialSelectedValues = {..._effortSelectedValues};
 
@@ -662,8 +672,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
-        : '添加模型';
+        ? (widget.model!.name.isNotEmpty
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
     return PopScope(
@@ -673,17 +685,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -698,7 +710,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: const Text('保存'),
+              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
             ),
           ],
         ),

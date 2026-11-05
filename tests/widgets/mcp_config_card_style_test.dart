@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/mcp.dart';
+import 'package:stroom/pages/provider_config_tool_dialogs.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -68,10 +70,7 @@ void main() {
                 ModelConfig(
                   name: 'My Files',
                   modelId: 'stdio',
-                  typeConfig: {
-                    'transport': 'stdio',
-                    'command': 'npx',
-                  },
+                  typeConfig: {'transport': 'stdio', 'command': 'npx'},
                 ),
               ],
             ),
@@ -97,6 +96,9 @@ void main() {
           }),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
@@ -133,10 +135,7 @@ void main() {
   }
 
   Future<void> revealHttpSearchCard(WidgetTester tester) async {
-    await tester.drag(
-      find.byType(CustomScrollView),
-      const Offset(0, -300),
-    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
   }
 
@@ -154,76 +153,91 @@ void main() {
     return container.decoration! as BoxDecoration;
   }
 
-  testWidgets('all MCP config cards share one unified style (light)',
-      (tester) async {
+  testWidgets('all MCP config cards share one unified style (light)', (
+    tester,
+  ) async {
     await pumpPage(tester, Brightness.light);
-    final cs = Theme.of(
-      tester.element(find.byType(ProviderConfigPage)),
-    ).colorScheme;
+    final cs =
+        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
 
     final expectedBg = cs.surfaceContainerLow;
     for (var i = 0; i < 3; i++) {
       final d = await cardDecoration(tester, i);
-      expect(d.color, expectedBg,
-          reason: 'vendor and user-added cards must use the same background '
-              '(matching the LLM provider page) — no primaryContainer tint');
-      expect(d.border, isNull,
-          reason: 'MCP rows use a simple borderless settings style');
+      expect(
+        d.color,
+        expectedBg,
+        reason: 'vendor and user-added cards must use the same background '
+            '(matching the LLM provider page) — no primaryContainer tint',
+      );
+      expect(
+        d.border,
+        isNull,
+        reason: 'MCP rows use a simple borderless settings style',
+      );
     }
   });
 
-  testWidgets('all MCP config cards share one unified style (dark)',
-      (tester) async {
+  testWidgets('all MCP config cards share one unified style (dark)', (
+    tester,
+  ) async {
     await pumpPage(tester, Brightness.dark);
-    final cs = Theme.of(
-      tester.element(find.byType(ProviderConfigPage)),
-    ).colorScheme;
+    final cs =
+        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
 
     final expectedBg = cs.surfaceContainerHigh;
     for (var i = 0; i < 3; i++) {
       final d = await cardDecoration(tester, i);
-      expect(d.color, expectedBg,
-          reason: 'dark mode must use the same adaptive background for every '
-              'card, no vendor tint');
-      expect(d.border, isNull,
-          reason: 'dark MCP rows also use a simple borderless settings style');
+      expect(
+        d.color,
+        expectedBg,
+        reason: 'dark mode must use the same adaptive background for every '
+            'card, no vendor tint',
+      );
+      expect(
+        d.border,
+        isNull,
+        reason: 'dark MCP rows also use a simple borderless settings style',
+      );
     }
   });
 
   testWidgets(
-      'Search group toggle leaves the MCP entry and other group enabled',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await pumpPage(tester, Brightness.light);
+    'Search group toggle leaves the MCP entry and other group enabled',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await pumpPage(tester, Brightness.light);
 
-    final searchGroupTitle = find.text('搜索').first;
-    final searchGroupCard = find
-        .ancestor(of: searchGroupTitle, matching: find.byType(Container))
-        .first;
-    final groupSwitch =
-        find.descendant(of: searchGroupCard, matching: find.byType(Switch));
-    expect(groupSwitch, findsOneWidget);
+      final searchGroupTitle = find.text('搜索').first;
+      final searchGroupCard = find
+          .ancestor(of: searchGroupTitle, matching: find.byType(Container))
+          .first;
+      final groupSwitch = find.descendant(
+        of: searchGroupCard,
+        matching: find.byType(Switch),
+      );
+      expect(groupSwitch, findsOneWidget);
 
-    await tester.tap(groupSwitch);
-    await tester.pumpAndSettle();
+      await tester.tap(groupSwitch);
+      await tester.pumpAndSettle();
 
-    final state = ProviderScope.containerOf(
-      tester.element(find.byType(ProviderConfigPage)),
-    ).read(providerEntriesProvider);
-    expect(
-      state.mcpGroups
-          .firstWhere((group) => group.id == builtinSearchMcpGroupId)
-          .enabled,
-      isFalse,
-    );
-    expect(
-      state.mcpGroups
-          .firstWhere((group) => group.id == builtinMcpServicesGroupId)
-          .enabled,
-      isTrue,
-    );
-    expect(state.entries.single.enabled, isTrue);
-  });
+      final state = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigPage)),
+      ).read(providerEntriesProvider);
+      expect(
+        state.mcpGroups
+            .firstWhere((group) => group.id == builtinSearchMcpGroupId)
+            .enabled,
+        isFalse,
+      );
+      expect(
+        state.mcpGroups
+            .firstWhere((group) => group.id == builtinMcpServicesGroupId)
+            .enabled,
+        isTrue,
+      );
+      expect(state.entries.single.enabled, isTrue);
+    },
+  );
 
   testWidgets('built-in MCP group accepts newly added content', (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -259,8 +273,9 @@ void main() {
     expect(added.groupId, builtinMcpServicesGroupId);
   });
 
-  testWidgets('editing an MCP config preserves its group and saved test',
-      (tester) async {
+  testWidgets('editing an MCP config preserves its group and saved test', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final state = mixedState();
     final config = state.entries.single.configs[2];
@@ -290,33 +305,36 @@ void main() {
 
     final updated = ProviderScope.containerOf(
       tester.element(find.byType(ProviderConfigPage)),
-    ).read(providerEntriesProvider).entries.single.configs.singleWhere(
-          (item) => item.providerName == 'My Files',
-        );
+    )
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs
+        .singleWhere((item) => item.providerName == 'My Files');
     expect(updated.id, configId);
     expect(updated.groupId, builtinMcpServicesGroupId);
     expect(updated.models[0].typeConfig['connectivityTest'], savedTest);
   });
 
-  testWidgets('MCP master switch renders and toggles the entry enabled flag',
-      (tester) async {
+  testWidgets('MCP master switch renders and toggles the entry enabled flag', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
 
     // 总开关卡片渲染在配置列表顶部，状态徽标和开关对应 entry.enabled。
     final masterCard = find
-        .ancestor(
-          of: find.text('MCP 服务器'),
-          matching: find.byType(Container),
-        )
+        .ancestor(of: find.text('MCP 服务器'), matching: find.byType(Container))
         .first;
     final switchFinder = find.descendant(
       of: masterCard,
       matching: find.byType(Switch),
     );
     expect(switchFinder, findsOneWidget);
-    expect(find.descendant(of: masterCard, matching: find.text('已启用')),
-        findsOneWidget);
+    expect(
+      find.descendant(of: masterCard, matching: find.text('已启用')),
+      findsOneWidget,
+    );
     expect(tester.widget<Switch>(switchFinder).value, isTrue);
 
     // 点击后写入 enabled=false，provider 状态同步更新。
@@ -324,65 +342,64 @@ void main() {
     await tester.pumpAndSettle();
 
     final container = tester.element(switchFinder);
-    final entries = ProviderScope.containerOf(container).read(
-      providerEntriesProvider,
-    );
+    final entries =
+        ProviderScope.containerOf(container).read(providerEntriesProvider);
     final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
     expect(mcpEntry.enabled, isFalse);
   });
 
-  testWidgets('catalog separates integrations and opens the HTTP search editor',
-      (tester) async {
-    await pumpPage(tester, Brightness.light);
+  testWidgets(
+    'catalog separates integrations and opens the HTTP search editor',
+    (tester) async {
+      await pumpPage(tester, Brightness.light);
 
-    final serverCard = find.byKey(const ValueKey('config_test_mcp_0'));
-    final httpSearchCard = find.byKey(const ValueKey('config_test_mcp_1'));
-    final builtinSearchCard =
-        find.byKey(const ValueKey('builtin_tool_web_search'));
-    expect(serverCard, findsOneWidget);
-    expect(httpSearchCard, findsOneWidget);
-    expect(
-      find.descendant(of: serverCard, matching: find.text('MCP · SSE')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
-      findsOneWidget,
-    );
-    await revealHttpSearchCard(tester);
-    await tester.tap(httpSearchCard);
-    await tester.pumpAndSettle();
+      final serverCard = find.byKey(const ValueKey('config_test_mcp_0'));
+      final httpSearchCard = find.byKey(const ValueKey('config_test_mcp_1'));
+      final builtinSearchCard = find.byKey(
+        const ValueKey('builtin_tool_web_search'),
+      );
+      expect(serverCard, findsOneWidget);
+      expect(httpSearchCard, findsOneWidget);
+      expect(
+        find.descendant(of: serverCard, matching: find.text('MCP · SSE')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
+        findsOneWidget,
+      );
+      await revealHttpSearchCard(tester);
+      await tester.tap(httpSearchCard);
+      await tester.pumpAndSettle();
 
-    expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
-    expect(find.text('工具接口：brave_web_search'), findsOneWidget);
-    final fields = tester.widgetList<TextField>(find.byType(TextField));
-    expect(
-      fields.first.readOnly,
-      isTrue,
-      reason: 'the Brave endpoint remains fixed to its provider URL',
-    );
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
+      expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
+      expect(find.text('工具接口：brave_web_search'), findsOneWidget);
+      final fields = tester.widgetList<TextField>(find.byType(TextField));
+      expect(
+        fields.first.readOnly,
+        isTrue,
+        reason: 'the Brave endpoint remains fixed to its provider URL',
+      );
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      builtinSearchCard,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(builtinSearchCard, findsOneWidget);
-    expect(
-      find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
-      findsOneWidget,
-    );
-  });
+      await tester.scrollUntilVisible(
+        builtinSearchCard,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(builtinSearchCard, findsOneWidget);
+      expect(
+        find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('built-in Web Search settings entry remains read-only',
-      (tester) async {
-    await pumpPage(
-      tester,
-      Brightness.light,
-      entryId: kBuiltinWebSearchEntryId,
-    );
+  testWidgets('built-in Web Search settings entry remains read-only', (
+    tester,
+  ) async {
+    await pumpPage(tester, Brightness.light, entryId: kBuiltinWebSearchEntryId);
 
     expect(find.text(kBuiltinWebSearchEntryName), findsOneWidget);
     expect(find.text('内置工具'), findsOneWidget);
@@ -393,14 +410,12 @@ void main() {
     expect(find.text('添加'), findsNothing);
     expect(find.byType(Switch), findsNothing);
     expect(find.text('服务与工具'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('builtin_tool_web_search')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('builtin_tool_web_search')), findsNothing);
   });
 
-  testWidgets('clearing HTTP search API key removes stale credential headers',
-      (tester) async {
+  testWidgets('clearing HTTP search API key removes stale credential headers', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final state = mixedState();
     final braveConfig = state.entries.single.configs[1];
@@ -416,6 +431,7 @@ void main() {
     await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
+    expect(find.byType(HttpToolConfigDialog), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
@@ -431,18 +447,16 @@ void main() {
         .models[0]
         .typeConfig;
     expect(updatedTypeConfig, isNot(contains('apiKey')));
-    expect(
-      updatedTypeConfig['headers'],
-      {'X-Subscription-Token': ''},
-    );
+    expect(updatedTypeConfig['headers'], {'X-Subscription-Token': ''});
     expect(
       McpServerConfig.extractApiKeyFromTypeConfig(updatedTypeConfig),
       isEmpty,
     );
   });
 
-  testWidgets('updating HTTP search API key preserves unrelated headers',
-      (tester) async {
+  testWidgets('updating HTTP search API key preserves unrelated headers', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final state = mixedState();
     final braveConfig = state.entries.single.configs[1];
@@ -475,14 +489,11 @@ void main() {
         .configs[1]
         .models[0]
         .typeConfig;
-    expect(
-      updatedTypeConfig['headers'],
-      {
-        'X-Subscription-Token': 'replacement-key',
-        'X-Custom-Optional': '',
-        'X-Custom-Metadata': 'old-explicit-key',
-      },
-    );
+    expect(updatedTypeConfig['headers'], {
+      'X-Subscription-Token': 'replacement-key',
+      'X-Custom-Optional': '',
+      'X-Custom-Metadata': 'old-explicit-key',
+    });
   });
 
   testWidgets('Searxng editor rejects URLs without a host', (tester) async {
@@ -507,7 +518,7 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址'), findsOneWidget);
+    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址。'), findsOneWidget);
     expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
     expect(
       state.entries.single.configs[1].host,

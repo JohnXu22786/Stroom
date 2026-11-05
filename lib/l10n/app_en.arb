@@ -2011,5 +2011,1267 @@
         "type": "String"
       }
     }
+  },
+  "assistantParamValueTypeString": "String",
+  "assistantParamValueTypeNumber": "Number",
+  "assistantParamValueTypeBoolean": "Boolean",
+  "assistantParamValueTypeJson": "JSON",
+  "providerRequiredFields": "Provider name, API URL, and key are required.",
+  "providerJsonSizePositive": "Request JSON size must be a positive MiB value.",
+  "providerCustomParamRequired": "Custom parameter name and value are required.",
+  "providerParamNameInvalid": "Parameter name is invalid (dot-separated segments cannot be empty): {name}",
+  "providerParamAlreadyExists": "Parameter already exists: {name}",
+  "providerParamInvalidJson": "Default value for parameter \"{name}\" is not valid JSON: {value}",
+  "providerParamOptionsRequired": "Numeric options for parameter \"{name}\" cannot be empty.",
+  "providerParamInvalidNumber": "Value for parameter \"{name}\" is not a valid number: {value}",
+  "providerReasoningIncomplete": "Complete the reasoning toggle before enabling other reasoning parameters.",
+  "providerReasoningError": "Reasoning parameter error: {error}",
+  "providerParamNameConflict": "Reasoning and custom parameters have the same name: {name}",
+  "providerMaxTokensMissing": "Maximum output tokens is enabled, but no value was entered.",
+  "providerMaxTokensPositive": "Maximum output tokens must be a positive integer.",
+  "providerSeedInteger": "Random seed must be an integer.",
+  "providerNotConfigured": "Not set",
+  "providerAudioChunkingTitle": "Audio chunking",
+  "providerAudioChunkingHint": "Smart chunking analyzes the audio and candidate cuts, preferring sentence endings. Chunks do not overlap.",
+  "providerChunkingMode": "Chunking method",
+  "providerChunkNone": "No chunking",
+  "providerChunkSmart": "Smart chunking (recommended)",
+  "providerChunkFixedDuration": "Fixed-duration chunks",
+  "providerChunkFixedSize": "Fixed-size chunks",
+  "providerCompressionTitle": "Compression encoding",
+  "providerCompressionHint": "When enabled, the general fallback first compresses the full WAV. If the encoded file or request body still exceeds the limit, the source PCM is chunked and encoded.",
+  "providerCompressionMode": "Compression method",
+  "providerCompressionNone": "None (send as is)",
+  "providerCompressionAdpcm": "ADPCM (~4x compression)",
+  "providerCompressionFlac": "FLAC (lossless, ~2x)",
+  "providerCompressionAdpcmDescription": "IMA ADPCM, lossy 4:1 compression. Pure Dart implementation; audio quality suits transcription.",
+  "providerCompressionFlacDescription": "Lossless FLAC compression, implemented in pure Dart. Reduces size by about half.",
+  "providerCompressionWavDescription": "No compression; send as a WAV file.",
+  "providerLlmParams": "LLM parameters",
+  "providerEnabledParamsHelp": "Enabled parameters are sent as defaults in API requests.",
+  "providerTemperatureLabel": "Temperature",
+  "providerTemperatureHelp": "Controls output randomness; higher values are more creative.",
+  "providerTopPHelp": "Nucleus sampling parameter that controls cumulative probability for word selection.",
+  "providerFrequencyPenaltyLabel": "Frequency penalty",
+  "providerFrequencyPenaltyHelp": "Reduces repeated words; negative values increase repetition.",
+  "providerPresencePenaltyLabel": "Presence penalty",
+  "providerPresencePenaltyHelp": "Encourages new topics; negative values encourage returning to previous topics.",
+  "providerMaxOutputTokensLabel": "Maximum output tokens",
+  "providerOptionalExample": "Optional, e.g. {example}",
+  "providerResponseTokensHelp": "Maximum number of tokens generated per response.",
+  "providerSeedLabel": "Random seed",
+  "providerSeedHelp": "Set this to make output reproducible.",
+  "providerChunkSmartDescription": "Analyzes audio and candidate cuts, preferring sentence endings or long silences without overlap. Defaults: 20s minimum / 45s target / 60s maximum. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkDurationDescription": "Splits every N seconds (60 by default). Simple, but may cut off speech. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkSizeDescription": "Initially splits by audio data size, then refines by encoded file and request body size. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkNoneDescription": "No chunking. The file is rejected if it exceeds the limit after full compression.",
+  "providerNameLabel": "Provider name",
+  "providerNameHint": "Enter provider name",
+  "providerApiUrlLabel": "API URL",
+  "providerApiUrlHint": "Enter the full API endpoint URL",
+  "providerApiKeyHint": "Hint: {hint}",
+  "providerEndpointTypeLabel": "Endpoint type",
+  "providerEndpointOpenAi": "OpenAI compatible (Chat Completions)",
+  "providerEndpointAnthropic": "Anthropic format (Messages API)",
+  "providerAnthropicEndpointHelp": "Uses the official Anthropic Messages API format (x-api-key header). API URL example: https://api.anthropic.com/v1/messages",
+  "providerOpenAiEndpointHelp": "Uses the official OpenAI Chat Completions compatible format (Bearer header). API URL example: https://api.openai.com/v1/chat/completions",
+  "providerRequestJsonDefault": "Default request JSON size",
+  "providerUseAppDefault": "Leave empty to use the app default",
+  "providerModelJsonBudgetHelp": "Models can override this value. If neither the provider nor model sets it, the default is 20 MiB.",
+  "providerRequestParamsHelp": "Requests use all enabled provider and model parameters. When names overlap, the model value takes precedence.",
+  "providerUploadSettings": "Upload settings",
+  "providerUploadMethodHelp": "Audio upload methods and size limits vary by provider.",
+  "providerUploadMethod": "Upload method",
+  "providerMultipart": "Multipart (general)",
+  "providerUrlUpload": "URL",
+  "providerMaxUploadSize": "Maximum upload size",
+  "providerFallbackStrategy": "Fallback strategy",
+  "providerFallbackMethod": "Fallback method",
+  "providerPreprocessing": "Audio preprocessing",
+  "providerPreprocessingHelp": "Reduces audio file size without affecting transcription accuracy.",
+  "providerPreprocessingMethod": "Preprocessing method",
+  "@providerParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamAlreadyExists": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidJson": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamOptionsRequired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidNumber": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamNameConflict": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerOptionalExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerUploadMultipartHelp": "Direct multipart/form-data upload. The request body includes audio, form fields, and multipart boundaries.",
+  "providerUploadBase64Help": "Sends Base64 in JSON, which can bypass some providers’ multipart-specific limits. Base64 expansion and JSON fields count toward the upload limit.",
+  "providerUploadUrlHelp": "Provide a public URL for the provider to download. Supports very large files (e.g. Together AI 1 GB).",
+  "providerUploadBudgetHelp": "This value triggers raw-audio fallback and limits the final request body. The app checks raw audio, encoded files, and upload size. Multipart includes form fields and boundaries; Base64 JSON includes encoding expansion and fields. The 25 MB default matches the OpenAI audio API limit.",
+  "providerFallbackTriggerHelp": "Triggered when raw audio or the complete request body exceeds its limit. Specific fallback (Base64) takes priority over general fallback (compression/chunking).",
+  "providerFallbackNone": "None (reject immediately)",
+  "providerFallbackSpecific": "Specific fallback (Base64)",
+  "providerFallbackGeneric": "General fallback (compression/chunking)",
+  "providerFallbackAll": "Try all (recommended)",
+  "providerFallbackSpecificHelp": "Try Base64 JSON. Send only if the request body, including Base64 expansion and JSON fields, fits the limit.",
+  "providerFallbackGenericHelp": "If enabled, compress the full WAV first. If it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.",
+  "providerFallbackAllHelp": "Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.",
+  "providerFallbackRejectHelp": "Reject the file if it exceeds the limit; do not try a fallback.",
+  "providerPreprocessNone": "None",
+  "providerPreprocessResample": "WAV optimization (16 kHz mono)",
+  "providerPreprocessResampleHelp": "Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.",
+  "providerPreprocessNoneHelp": "No preprocessing; send as is.",
+  "assistantDefaultsScopeHelp": "Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.",
+  "assistantDefaultModelTitle": "Default model",
+  "assistantDefaultModelHelp": "Model used for new conversations; leave unset to let the conversation choose.",
+  "assistantNoDefault": "Not set",
+  "assistantNoModelsAvailable": "No models available. Configure an LLM provider in Settings.",
+  "assistantDefaultToolsTitle": "Default enabled tools",
+  "assistantDisabledToolsHelp": "Disabled tools will not be enabled automatically in new conversations.",
+  "assistantUnconfiguredToolsHelp": "Default tools are not configured. New conversations will enable all tools automatically.",
+  "assistantEnableAll": "Enable all",
+  "assistantDisableAll": "Disable all",
+  "assistantNoToolsAvailable": "No tools available",
+  "assistantTruncateToolOutput": "Tool output truncation",
+  "assistantTruncateToolOutputHelp": "Maximum characters in each tool result before it is sent to the model. Applies to all conversations under this assistant.",
+  "assistantEnableTruncation": "Enable truncation",
+  "assistantTruncatedTo": "Long results are truncated to {count} characters",
+  "@assistantTruncatedTo": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantSendFullResult": "Send full result (subject to the 50 KB storage limit)",
+  "assistantMaxCharacters": "Maximum characters",
+  "assistantCharactersNotTokens": "Unit: characters (not tokens)",
+  "assistantDefaultCharacterCount": "Default: {count}",
+  "@assistantDefaultCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantCharacterRange": "Valid range: {minimum}–{maximum} characters",
+  "@assistantCharacterRange": {
+    "placeholders": {
+      "minimum": {
+        "type": "String"
+      },
+      "maximum": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantNewConversationPreview": "New conversation preview",
+  "assistantEnabledToolCount": "{enabled} / {total} enabled",
+  "@assistantEnabledToolCount": {
+    "placeholders": {
+      "enabled": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantAllToolsAutoEnabled": "All tools are enabled automatically (not configured)",
+  "assistantMoreActions": "More actions",
+  "assistantChooseEmoji": "Choose emoji",
+  "assistantNameLabel": "Assistant name",
+  "assistantDescriptionOptional": "Description (optional)",
+  "assistantSelectionTitle": "Choose an assistant",
+  "assistantMarketTooltip": "Assistant marketplace",
+  "assistantCreateNew": "Create assistant",
+  "assistantEmptyState": "No assistants yet. Create one to get started.",
+  "assistantCreate": "Create",
+  "assistantReorderHint": "Long-press and drag to reorder assistants",
+  "assistantNewNameHint": "Enter assistant name",
+  "assistantNewDescriptionHint": "Briefly describe what this assistant does",
+  "assistantDeleteTitle": "Delete assistant",
+  "assistantDeleteConfirmation": "Delete assistant “{name}”? This action cannot be undone.",
+  "@assistantDeleteConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantEditTitle": "Edit assistant",
+  "assistantBasicTab": "Basic settings",
+  "assistantParametersTab": "Parameters",
+  "assistantDefaultsTab": "Defaults",
+  "assistantAddCustomParameter": "Add custom parameter",
+  "assistantEditCustomParameter": "Edit custom parameter",
+  "assistantParameterName": "Parameter name",
+  "assistantParameterNameHint": "e.g. top_k or provider.only",
+  "assistantParameterNameInvalid": "Invalid parameter name (dot-separated segments cannot be empty)",
+  "assistantParameterType": "Type",
+  "assistantValue": "Value",
+  "assistantTrueFalseHint": "true or false",
+  "assistantNumberHint": "Enter a number",
+  "assistantJsonHint": "e.g. {example}",
+  "assistantValueHint": "Enter a value",
+  "assistantCancel": "Cancel",
+  "assistantSave": "Save",
+  "assistantParamOverrideHelp": "When enabled, assistant parameters override model parameters; when disabled, model parameters are used.",
+  "assistantTemperature": "Temperature",
+  "assistantMaxTokens": "Maximum tokens",
+  "assistantMaxToolCalls": "Maximum tool calls",
+  "assistantRounds": "{count} rounds",
+  "@assistantRounds": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantUnlimited": "Unlimited",
+  "assistantStreamOutput": "Stream output",
+  "assistantFrequencyPenalty": "Frequency penalty",
+  "assistantPresencePenalty": "Presence penalty",
+  "assistantRandomSeed": "Random seed",
+  "assistantNotSet": "Not set",
+  "assistantSeedValue": "Seed value",
+  "assistantIntegerSeedHint": "Enter an integer seed",
+  "assistantWebSearch": "Web search",
+  "assistantAddParameter": "Add parameter",
+  "assistantNoCustomParameters": "No custom parameters",
+  "@assistantJsonHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantRoundsLabel": "Rounds",
+  "modelCreateTitle": "Add model",
+  "modelEditTitle": "Edit model",
+  "modelDiscardTitle": "Discard changes?",
+  "modelDiscardBody": "You have unsaved changes. Discard them?",
+  "modelNameLabel": "Model name",
+  "modelNameHint": "Enter a display name (optional)",
+  "modelIdLabel": "Model ID",
+  "modelIdExample": "e.g. {id}",
+  "@modelIdExample": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelIdRequired": "Model ID is required.",
+  "modelCustomParamRequired": "Custom parameter name and default value are required.",
+  "modelParamDuplicate": "Parameter already exists: {name}",
+  "@modelParamDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamName": "Parameter name",
+  "modelParamDefaultValue": "Default parameter value",
+  "modelParamDelete": "Delete parameter",
+  "modelParamJsonInvalid": "Default value for parameter \"{name}\" is not valid JSON: {value}",
+  "@modelParamJsonInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddParameter": "Add parameter",
+  "modelNoCustomParams": "No custom parameters",
+  "modelBasicSettings": "Basic settings",
+  "modelDiscardCancel": "Cancel",
+  "modelSave": "Save",
+  "modelUnsavedMaxTokens": "Maximum output tokens is enabled but has no value.",
+  "modelMaxTokensPositive": "Maximum output tokens must be a positive integer.",
+  "modelSeedInteger": "Random seed must be an integer.",
+  "modelContextLengthRequired": "Context length is required.",
+  "modelContextLengthPositive": "Context length must be a positive integer.",
+  "modelAsrLanguageCode": "Language code (Language)",
+  "modelAsrLanguageHint": "e.g. zh, en, ja",
+  "modelAsrLanguageHelp": "ISO-639-1 language code; leave empty for automatic detection.",
+  "modelTemperature": "Temperature",
+  "modelTemperatureHelp": "Controls output randomness; a lower value is recommended.",
+  "modelAsrPrompt": "Prompt",
+  "modelAsrPromptHint": "Enter a context prompt (optional)",
+  "modelAsrPromptHelp": "Provide context to improve transcription accuracy, such as a list of specialist terms.",
+  "modelAsrParams": "ASR parameters",
+  "modelEnabledParamsHelp": "Enabled parameters are sent as defaults in API requests.",
+  "modelAsrResponseFormat": "Response format",
+  "modelAsrResponseHelp": "Format of the returned transcription.",
+  "modelAsrTimestampGranularity": "Timestamp granularity",
+  "modelAsrVerboseHelp": "Available only when response_format is verbose_json.",
+  "modelNoTrim": "No trimming",
+  "modelAudioTrimTitle": "Audio trimming",
+  "modelAudioTrimHelp": "Choose how to trim the audio.",
+  "modelDeleteTrimPreset": "Delete trim preset",
+  "modelDeleteTrimConfirmation": "Delete trim preset \"{name}\"?",
+  "@modelDeleteTrimConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddTrimPreset": "Add custom trim",
+  "modelPlayTestAudio": "Play test audio",
+  "modelPlayingTestAudio": "Playing...",
+  "modelParamExists": "Parameter already exists",
+  "asrModelIdExample": "e.g. whisper-1",
+  "asrPromptLabel": "Prompt",
+  "asrResponseFormatJson": "json – JSON",
+  "asrResponseFormatText": "text – Plain text",
+  "asrResponseFormatSrt": "srt – Subtitles",
+  "asrResponseFormatVtt": "vtt – Subtitles",
+  "asrResponseFormatVerbose": "verbose_json – Detailed JSON (includes timestamps)",
+  "asrVerboseTimestampHelp": "Selecting verbose_json enables the timestamp granularity option below.",
+  "asrTimestampSegment": "segment – Segment level",
+  "asrTimestampWord": "word – Word level",
+  "asrWordTimestampHelp": "Word-level timestamps may be less accurate than segment-level timestamps.",
+  "reasoningAddOptionValue": "Add option value",
+  "reasoningEditOptionValue": "Edit option value",
+  "reasoningOptionExample": "e.g. low, medium, high",
+  "reasoningOptionSelectionHelp": "Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.",
+  "reasoningAddOption": "Add option",
+  "reasoningCurrentProvider": "Current: provider",
+  "reasoningCurrentModel": "Current: model custom",
+  "reasoningAddEffortValue": "Add reasoning effort value",
+  "reasoningEffortExample": "e.g. max, ultra, deep",
+  "reasoningAddToggle": "Add reasoning toggle",
+  "reasoningToggle": "Reasoning toggle",
+  "reasoningResetParameter": "Reset this parameter",
+  "reasoningDisableToggle": "Disable reasoning toggle",
+  "reasoningEnableToggle": "Enable reasoning toggle",
+  "reasoningParameterNameSource": "Parameter name ({source})",
+  "@reasoningParameterNameSource": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningNameExample": "e.g. thinking.type, reasoning",
+  "reasoningBooleanHelp": "Boolean parameters need no value; the chat panel provides an on/off switch.",
+  "reasoningOnValue": "Value when enabled",
+  "reasoningOnExample": "e.g. enabled, true",
+  "reasoningOffValue": "Value when disabled",
+  "reasoningOffExample": "e.g. disabled, false",
+  "reasoningToggleValuesHelp": "When enabled, sends “{onValue}”; when disabled, sends “{offValue}”.",
+  "@reasoningToggleValuesHelp": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningAddEffort": "Add reasoning effort",
+  "reasoningFillToggleFirst": "Complete the reasoning toggle first",
+  "reasoningFillToggleBeforeEffort": "Complete the reasoning toggle before configuring reasoning effort.",
+  "reasoningAddValue": "Add value",
+  "reasoningJsonValue": "JSON value",
+  "reasoningJsonExample": "e.g. {example}",
+  "@reasoningJsonExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningSelectedChipHelp": "Tap a chip to select or clear it. Selected values appear in the chat reasoning panel; drag to reorder. Provider values cannot be deleted, but can be hidden.",
+  "reasoningAddParameter": "Add reasoning parameter",
+  "reasoningToggleIncomplete": "Complete the reasoning toggle before configuring reasoning effort.",
+  "llmContextLength": "Context length",
+  "llmContextHint": "Enter context length",
+  "llmContextHelp": "Maximum context window size for the model (tokens).",
+  "llmReasoningParams": "Reasoning parameters",
+  "llmReasoningHelp": "Configure reasoning parameters for chat. The reasoning toggle controls its parameter name and on/off values. Add reasoning effort values, reorder them, and select which values appear in the chat panel. Provider values are synchronized when this page opens. These settings control model parameter availability; the chat panel toggle is managed separately.",
+  "llmAddReasoningParam": "Add reasoning parameter",
+  "llmCustomEndpointType": "Custom endpoint type",
+  "llmInheritEndpointType": "When disabled, use the endpoint type from provider settings.",
+  "llmEndpointType": "Endpoint type",
+  "llmEndpointOpenAi": "OpenAI compatible (Chat Completions)",
+  "llmEndpointAnthropic": "Anthropic format (Messages API)",
+  "llmEndpointHelp": "The endpoint type must match the provider API URL. Changing it affects the format used for new conversations with this model.",
+  "llmTopPHelp": "Nucleus sampling parameter; controls cumulative probability for word selection.",
+  "llmFrequencyPenaltyLabel": "Frequency penalty",
+  "llmFrequencyPenaltyHelp": "Reduces repetition; negative values increase it.",
+  "llmPresencePenaltyLabel": "Presence penalty",
+  "llmPresencePenaltyHelp": "Encourages new topics; negative values encourage repetition.",
+  "llmMaxTokensHint": "Optional, e.g. 4096",
+  "llmTokensPerResponse": "Maximum tokens generated per response.",
+  "llmSeedLabel": "Random seed (Seed)",
+  "llmSeedHint": "Optional, e.g. 42",
+  "llmSeedHelp": "Setting this makes output reproducible.",
+  "llmInheritedCustomHelp": "Provider custom parameters are shown here and synchronized whenever this page opens.",
+  "llmBooleanParamHelp": "Boolean parameters do not need a value.",
+  "modelContextReq": "Context length is required.",
+  "modelContextPositive": "Context length must be a positive integer.",
+  "modelParamNameInvalid": "Invalid parameter name (dot-separated segments cannot be empty): {name}",
+  "@modelParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamFinite": "Parameter \"{name}\" {valueLabel} must be a finite number: {value}",
+  "@modelParamFinite": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "valueLabel": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningIncomplete": "Complete the reasoning toggle before enabling other reasoning parameters.",
+  "modelReasoningOptionsRequired": "Add at least one option value to the reasoning parameter.",
+  "modelReasoningError": "Reasoning parameter error: {error}",
+  "@modelReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningDuplicate": "Duplicate reasoning parameter: {name}",
+  "@modelReasoningDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningCustomDuplicate": "Reasoning and custom parameters share the name: {name}",
+  "@modelReasoningCustomDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSeedRequired": "Random seed is enabled but empty.",
+  "ocrParamsTitle": "OCR parameters",
+  "ocrParamsHelp": "Uses the OpenAI-compatible vision Chat Completions format. Parameters below are optional; unset or disabled parameters are not sent. Add provider-specific parameters below if supported by its API.",
+  "ocrRequestSizeOverride": "Request JSON size override",
+  "ocrInheritProvider": "Leave empty to inherit provider settings",
+  "ocrBudgetDefault": "When empty, inherits provider settings; if the provider has no value, the default is 20 MiB.",
+  "ocrBudgetValue": "When empty, inherits provider settings ({size} MiB); if the provider has no value, the default is 20 MiB.",
+  "@ocrBudgetValue": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimDirection": "Trim {direction} {seconds}s",
+  "@audioTrimDirection": {
+    "placeholders": {
+      "direction": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimBeginning": "Trim the first {seconds}s",
+  "@audioTrimBeginning": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimNone": "Do not trim audio",
+  "trimNameLabel": "Trim method name *",
+  "trimNameHint": "e.g. silence trimming",
+  "trimDurationLabel": "Trim duration (seconds) *",
+  "trimDurationHint": "e.g. 0.123",
+  "trimNameAndDurationRequired": "Name and duration are required.",
+  "trimDurationInvalid": "Enter a valid positive duration.",
+  "testAudioHostMissing": "Host is not configured.",
+  "testAudioKeyMissing": "Key is not configured.",
+  "testAudioContentTypeError": "Response Content-Type is {contentType}, not audio.",
+  "@testAudioContentTypeError": {
+    "placeholders": {
+      "contentType": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioEmpty": "The server returned empty audio data.",
+  "testAudioTimeoutConnection": "Connection timed out. Check your network. {details}",
+  "@testAudioTimeoutConnection": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioTimeoutReceive": "Receive timed out; the server responded too slowly. {details}",
+  "@testAudioTimeoutReceive": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioRequestCancelled": "Request cancelled. {details}",
+  "@testAudioRequestCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNetworkError": "Network error: {message}",
+  "@testAudioNetworkError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNoBody": "No response body",
+  "testAudioCorsHelp": "Unable to connect to server. On web, this may be caused by CORS or an incorrect API URL. Check the provider API URL and whether the server allows cross-origin requests. {details}",
+  "@testAudioCorsHelp": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "trimModelNameHint": "A friendly name for display and identification, e.g. \"GPT-4o Mini TTS\". Use different names to distinguish models from the same provider.",
+  "trimModelIdHelp": "Unique identifier used in API calls, e.g. \"gpt-4o-mini-tts\". It must match the model ID provided by the vendor.",
+  "ttsVoiceRangeTitle": "Volume range",
+  "ttsMinVolume": "Minimum volume",
+  "ttsMaxVolume": "Maximum volume",
+  "ttsSpeedRangeTitle": "Speed range",
+  "ttsMinSpeed": "Minimum speed",
+  "ttsMaxSpeed": "Maximum speed",
+  "ttsMaxAudioLength": "Maximum audio length per request *",
+  "ttsAudioLengthHint": "e.g. 1000",
+  "ttsNoVoices": "No voices. Tap to edit.",
+  "ttsInstructionSupported": "Model supports the instruction parameter",
+  "ttsInstructionHelp": "When enabled, TTS requests can include instructions for tone, emotion, speaking speed, and more.",
+  "ttsStreamSupported": "Model supports streaming output",
+  "ttsStreamHelp": "Enables this model for streaming scenarios. Confirm the model supports streaming before enabling.",
+  "modelParamBooleanExpected": "Parameter “{name}” must be true or false: {value}",
+  "@modelParamBooleanExpected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsMaxAudioLengthRequired": "Maximum audio length per request is required; enter a positive integer.",
+  "asrLanguageExample": "e.g. zh, en, ja",
+  "llmReasoningFullHelp": "The reasoning toggle controls whether reasoning is sent and lets you define the parameter name and on/off values. There is one reasoning-effort parameter. Select values and drag to reorder them; selected values appear in the chat reasoning panel. Add other reasoning parameters below. Parameter names support dot notation such as thinking.type, which becomes a nested JSON object. Provider reasoning parameters synchronize when this page opens. The switches here control model parameters; the chat reasoning toggle is separate.",
+  "llmTemperatureHelp": "Controls output randomness; higher values are more creative.",
+  "llmBooleanValueHelp": "Boolean parameters do not need a value.",
+  "reasoningDisableEffort": "Disable reasoning effort",
+  "reasoningEnableEffort": "Enable reasoning effort",
+  "ocrJsonSizePositive": "Request JSON size must be a positive MiB value.",
+  "ttsRangePair": "Enter both the minimum and maximum {kind}, or leave both empty.",
+  "@ttsRangePair": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsEditTrimTitle": "Edit custom trim",
+  "ttsVoicesCount": "Voices ({count})",
+  "@ttsVoicesCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRequestFormatExample": "Generated in the request format: {syntax}",
+  "@ttsRequestFormatExample": {
+    "placeholders": {
+      "syntax": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpServerNameRequired": "Please enter an MCP server name.",
+  "@mcpServerNameRequired": {
+    "placeholders": {}
+  },
+  "mcpStdioCommandRequired": "stdio mode requires a command.",
+  "@mcpStdioCommandRequired": {
+    "placeholders": {}
+  },
+  "mcpSseUrlRequired": "SSE mode requires a URL.",
+  "@mcpSseUrlRequired": {
+    "placeholders": {}
+  },
+  "mcpEditServerTitle": "Edit MCP server",
+  "@mcpEditServerTitle": {
+    "placeholders": {}
+  },
+  "mcpCreateServerTitle": "New MCP server",
+  "@mcpCreateServerTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesTitle": "Unsaved changes",
+  "@mcpUnsavedChangesTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesConfirm": "You have unsaved changes. Discard them?",
+  "@mcpUnsavedChangesConfirm": {
+    "placeholders": {}
+  },
+  "mcpTransportType": "Transport type",
+  "@mcpTransportType": {
+    "placeholders": {}
+  },
+  "mcpServerName": "Server name",
+  "@mcpServerName": {
+    "placeholders": {}
+  },
+  "mcpServerNameHint": "Enter an MCP server name",
+  "@mcpServerNameHint": {
+    "placeholders": {}
+  },
+  "mcpCommand": "Command",
+  "@mcpCommand": {
+    "placeholders": {}
+  },
+  "mcpCommandExample": "Example: npx",
+  "@mcpCommandExample": {
+    "placeholders": {}
+  },
+  "mcpArguments": "Arguments",
+  "@mcpArguments": {
+    "placeholders": {}
+  },
+  "mcpArgumentsHint": "Separate arguments with commas, for example: -y, @modelcontextprotocol/server-filesystem, /tmp",
+  "@mcpArgumentsHint": {
+    "placeholders": {}
+  },
+  "mcpSseUrlExample": "Example: http://localhost:3001/sse",
+  "@mcpSseUrlExample": {
+    "placeholders": {}
+  },
+  "mcpApiKey": "API key",
+  "@mcpApiKey": {
+    "placeholders": {}
+  },
+  "mcpApiKeyHint": "Enter an API key (optional)",
+  "@mcpApiKeyHint": {
+    "placeholders": {}
+  },
+  "mcpShowKey": "Show key",
+  "@mcpShowKey": {
+    "placeholders": {}
+  },
+  "mcpHideKey": "Hide key",
+  "@mcpHideKey": {
+    "placeholders": {}
+  },
+  "mcpDescriptionHint": "Enter a description for this MCP server (optional)",
+  "@mcpDescriptionHint": {
+    "placeholders": {}
+  },
+  "mcpStdioDescription": "stdio starts a local child process as an MCP server and communicates through standard input/output. Recommended for local tools.",
+  "@mcpStdioDescription": {
+    "placeholders": {}
+  },
+  "mcpSseDescription": "SSE connects to a remote MCP server over HTTP SSE. Recommended for remote services.",
+  "@mcpSseDescription": {
+    "placeholders": {}
+  },
+  "mcpLocalStdio": "Local (stdio)",
+  "@mcpLocalStdio": {
+    "placeholders": {}
+  },
+  "mcpRemoteSse": "Remote (SSE)",
+  "@mcpRemoteSse": {
+    "placeholders": {}
+  },
+  "mcpSaving": "Saving…",
+  "@mcpSaving": {
+    "placeholders": {}
+  },
+  "providerTestSafetyNote": "This test sends a real request to the selected service. MCP only calls the read-only tools/list method; HTTP and web search run one query. Todo reads the list by default; to protect current data, omit the todos parameter or set it to null.",
+  "@providerTestSafetyNote": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigTitle": "Delete configuration",
+  "@providerDeleteConfigTitle": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigConfirm": "Delete this provider configuration and all of its models?",
+  "@providerDeleteConfigConfirm": {
+    "placeholders": {}
+  },
+  "providerCreateGroup": "New group",
+  "@providerCreateGroup": {
+    "placeholders": {}
+  },
+  "providerEditGroup": "Edit group",
+  "@providerEditGroup": {
+    "placeholders": {}
+  },
+  "providerGroupName": "Group name",
+  "@providerGroupName": {
+    "placeholders": {}
+  },
+  "providerGroupNameExists": "A group with this name already exists.",
+  "@providerGroupNameExists": {
+    "placeholders": {}
+  },
+  "providerDeleteGroup": "Delete group",
+  "@providerDeleteGroup": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupConfirm": "Deleting “{groupName}” will move its configurations to “Other MCP services”.",
+  "@providerDeleteGroupConfirm": {
+    "placeholders": {
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
+  "providerMoveToGroup": "Move to group",
+  "@providerMoveToGroup": {
+    "placeholders": {}
+  },
+  "providerUnnamed": "(Unnamed)",
+  "@providerUnnamed": {
+    "placeholders": {}
+  },
+  "providerHttpSearch": "HTTP search",
+  "@providerHttpSearch": {
+    "placeholders": {}
+  },
+  "providerHttpToolSubtitle": "HTTP tool: {url}",
+  "@providerHttpToolSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerLocalStdioSubtitle": "Local (stdio): {command}",
+  "@providerLocalStdioSubtitle": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "providerRemoteSseSubtitle": "Remote (SSE): {url}",
+  "@providerRemoteSseSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerServices": "Service configurations",
+  "@providerServices": {
+    "placeholders": {}
+  },
+  "providerServicesDescription": "Manage remote connections, local stdio, and HTTP search by group",
+  "@providerServicesDescription": {
+    "placeholders": {}
+  },
+  "providerCreateGroupAction": "New group",
+  "@providerCreateGroupAction": {
+    "placeholders": {}
+  },
+  "providerGroupEmpty": "This group has no configurations. Select “Add” to add an item.",
+  "@providerGroupEmpty": {
+    "placeholders": {}
+  },
+  "providerBuiltinTools": "Built-in tools",
+  "@providerBuiltinTools": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolsDescription": "Stroom-provided local tool interfaces. Web search is listed in its service group.",
+  "@providerBuiltinToolsDescription": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolInterface": "Built-in tool interface",
+  "@providerBuiltinToolInterface": {
+    "placeholders": {}
+  },
+  "providerViewInterface": "View interface",
+  "@providerViewInterface": {
+    "placeholders": {}
+  },
+  "providerConfigTitle": "Configuration",
+  "@providerConfigTitle": {
+    "placeholders": {}
+  },
+  "providerNotFound": "Provider not found",
+  "@providerNotFound": {
+    "placeholders": {}
+  },
+  "providerConfigurationHeading": "Provider configuration",
+  "@providerConfigurationHeading": {
+    "placeholders": {}
+  },
+  "providerBuiltinWebSearchEmpty": "Built-in web search supports Google, Bing, and Baidu. Its model tool name is web_search.",
+  "@providerBuiltinWebSearchEmpty": {
+    "placeholders": {}
+  },
+  "providerNoConfigsAdd": "No provider configurations yet. Select “Add” to create one.",
+  "@providerNoConfigsAdd": {
+    "placeholders": {}
+  },
+  "providerNoHost": "(Host not set)",
+  "@providerNoHost": {
+    "placeholders": {}
+  },
+  "providerServicesAndTools": "Services and tools",
+  "@providerServicesAndTools": {
+    "placeholders": {}
+  },
+  "providerManageServicesDescription": "Manage MCP servers, HTTP search, and Stroom built-in tools.",
+  "@providerManageServicesDescription": {
+    "placeholders": {}
+  },
+  "providerNoServices": "No service configurations yet",
+  "@providerNoServices": {
+    "placeholders": {}
+  },
+  "providerAddServiceDescription": "Add an MCP service or HTTP search interface to use it in assistants.",
+  "@providerAddServiceDescription": {
+    "placeholders": {}
+  },
+  "providerAddService": "Add service",
+  "@providerAddService": {
+    "placeholders": {}
+  },
+  "providerBuiltinBadge": "Built-in",
+  "@providerBuiltinBadge": {
+    "placeholders": {}
+  },
+  "@providerApiKeyHint": {
+    "placeholders": {
+      "hint": {
+        "type": "String"
+      }
+    }
+  },
+  "providerConnectivityTest": "Connectivity test",
+  "@providerConnectivityTest": {
+    "placeholders": {}
+  },
+  "providerMoveGroupTooltip": "Move to group",
+  "@providerMoveGroupTooltip": {
+    "placeholders": {}
+  },
+  "providerDeleteTooltip": "Delete configuration",
+  "@providerDeleteTooltip": {
+    "placeholders": {}
+  },
+  "providerGroupItemCount": "{count, plural, =0{No items} one{# item} other{# items}}",
+  "@providerGroupItemCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "providerGroupActions": "Group actions",
+  "@providerGroupActions": {
+    "placeholders": {}
+  },
+  "providerEditGroupAction": "Edit group",
+  "@providerEditGroupAction": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupAction": "Delete group",
+  "@providerDeleteGroupAction": {
+    "placeholders": {}
+  },
+  "providerAddItem": "Add item",
+  "@providerAddItem": {
+    "placeholders": {}
+  },
+  "providerMcpMasterLabel": "MCP servers",
+  "@providerMcpMasterLabel": {
+    "placeholders": {}
+  },
+  "providerMcpMasterDescription": "Controls whether MCP servers and built-in search tools are available in assistants and chats.",
+  "@providerMcpMasterDescription": {
+    "placeholders": {}
+  },
+  "providerEnabled": "Enabled",
+  "@providerEnabled": {
+    "placeholders": {}
+  },
+  "providerDisabled": "Disabled",
+  "@providerDisabled": {
+    "placeholders": {}
+  },
+  "providerEditSettings": "Edit provider settings",
+  "@providerEditSettings": {
+    "placeholders": {}
+  },
+  "providerModelList": "Models",
+  "@providerModelList": {
+    "placeholders": {}
+  },
+  "providerNoModels": "No models yet",
+  "@providerNoModels": {
+    "placeholders": {}
+  },
+  "providerDeleteModel": "Delete model",
+  "@providerDeleteModel": {
+    "placeholders": {}
+  },
+  "providerDeleteModelConfirm": "Are you sure you want to delete this model?",
+  "@providerDeleteModelConfirm": {
+    "placeholders": {}
+  },
+  "providerEditConfig": "Edit configuration",
+  "@providerEditConfig": {
+    "placeholders": {}
+  },
+  "providerCreateNamedConfig": "New {entryName} configuration",
+  "@providerCreateNamedConfig": {
+    "placeholders": {
+      "entryName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolHttpSearchType": "Connection type: HTTP search",
+  "@toolHttpSearchType": {
+    "placeholders": {}
+  },
+  "toolInterface": "Tool interface: {name}",
+  "@toolInterface": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolParameterDefinitions": "Parameter definitions",
+  "@toolParameterDefinitions": {
+    "placeholders": {}
+  },
+  "toolHttpAddress": "HTTP endpoint URL",
+  "@toolHttpAddress": {
+    "placeholders": {}
+  },
+  "toolInvalidHttpUrl": "Enter a valid HTTP or HTTPS URL.",
+  "@toolInvalidHttpUrl": {
+    "placeholders": {}
+  },
+  "toolBuiltinType": "Connection type: Stroom built-in tool",
+  "@toolBuiltinType": {
+    "placeholders": {}
+  },
+  "toolBuiltinEnableHelp": "Enable this tool for an assistant in that assistant’s default tool settings.",
+  "@toolBuiltinEnableHelp": {
+    "placeholders": {}
+  },
+  "mcpSseUrlLabel": "SSE URL",
+  "@mcpSseUrlLabel": {
+    "placeholders": {}
+  },
+  "mcpUrlLabel": "URL",
+  "@mcpUrlLabel": {
+    "placeholders": {}
+  },
+  "providerModelId": "Model ID: {modelId}",
+  "@providerModelId": {
+    "placeholders": {
+      "modelId": {
+        "type": "String"
+      }
+    }
+  },
+  "providerValueNotSet": "(Not set)",
+  "@providerValueNotSet": {
+    "placeholders": {}
+  },
+  "providerApiKeyInputHint": "Enter an API key",
+  "@providerApiKeyInputHint": {
+    "placeholders": {}
+  },
+  "providerSettingsTitle": "Provider configuration",
+  "@providerSettingsTitle": {
+    "placeholders": {}
+  },
+  "providerBasicInfoTab": "Basic information",
+  "@providerBasicInfoTab": {
+    "placeholders": {}
+  },
+  "providerParameterSettingsTab": "Parameter settings",
+  "@providerParameterSettingsTab": {
+    "placeholders": {}
+  },
+  "providerOptionValuesReorderHelp": "Option values (hold the handle to drag and reorder)",
+  "@providerOptionValuesReorderHelp": {
+    "placeholders": {}
+  },
+  "providerOptionIndexLabel": "Option {index}",
+  "@providerOptionIndexLabel": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "providerOptionExampleHint": "e.g. {example}",
+  "@providerOptionExampleHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerDeleteOptionTooltip": "Delete option",
+  "@providerDeleteOptionTooltip": {
+    "placeholders": {}
+  },
+  "providerAddOption": "Add option",
+  "@providerAddOption": {
+    "placeholders": {}
+  },
+  "providerAddCustomParam": "Add parameter",
+  "@providerAddCustomParam": {
+    "placeholders": {}
+  },
+  "providerNoCustomParams": "No custom parameters yet",
+  "@providerNoCustomParams": {
+    "placeholders": {}
+  },
+  "providerParamNameLabel": "Parameter name",
+  "@providerParamNameLabel": {
+    "placeholders": {}
+  },
+  "providerParamDefaultValueLabel": "Default parameter value",
+  "@providerParamDefaultValueLabel": {
+    "placeholders": {}
+  },
+  "providerBooleanParamNoValue": "Boolean parameters do not need a value. The chat panel provides an on/off toggle.",
+  "@providerBooleanParamNoValue": {
+    "placeholders": {}
+  },
+  "providerReasoningParamsHeading": "Reasoning parameters",
+  "@providerReasoningParamsHeading": {
+    "placeholders": {}
+  },
+  "providerReasoningSettingsHelp": "The reasoning toggle turns reasoning on or off in chat; you choose its parameter name and on/off values. You can configure one reasoning effort parameter with a required name and optional choices. If you enter only a name, the model configuration can provide the values. Use the buttons below to add other reasoning parameters. Parameter names support dot nesting, for example {parameterName} expands to {jsonExample}.",
+  "@providerReasoningSettingsHelp": {
+    "placeholders": {
+      "parameterName": {
+        "type": "String"
+      },
+      "jsonExample": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningParam": "Add reasoning parameter",
+  "@providerAddReasoningParam": {
+    "placeholders": {}
+  },
+  "providerAddReasoningToggle": "Add reasoning toggle",
+  "@providerAddReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerReasoningToggle": "Reasoning toggle",
+  "@providerReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningToggle": "Delete reasoning toggle",
+  "@providerDeleteReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerParamNameHint": "e.g. {examples}",
+  "@providerParamNameHint": {
+    "placeholders": {
+      "examples": {
+        "type": "String"
+      }
+    }
+  },
+  "providerReasoningBooleanHelp": "Boolean parameters do not need a value. The chat panel provides an on/off toggle.",
+  "@providerReasoningBooleanHelp": {
+    "placeholders": {}
+  },
+  "providerToggleOnValueLabel": "On value",
+  "@providerToggleOnValueLabel": {
+    "placeholders": {}
+  },
+  "providerToggleOffValueLabel": "Off value",
+  "@providerToggleOffValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningToggleSummary": "When reasoning is on, send “{onValue}”; when it is off, send “{offValue}”.",
+  "@providerReasoningToggleSummary": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningEffort": "Add reasoning effort",
+  "@providerAddReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningEffort": "Delete reasoning effort parameter",
+  "@providerDeleteReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerReasoningEffortLockedHint": "Complete the reasoning toggle before configuring reasoning effort.",
+  "@providerReasoningEffortLockedHint": {
+    "placeholders": {}
+  },
+  "providerJsonValueLabel": "JSON value",
+  "@providerJsonValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningOptionsHelp": "Option values (optional; if only the parameter name is entered, the model configuration supplies the value). Hold the handle to drag and reorder.",
+  "@providerReasoningOptionsHelp": {
+    "placeholders": {}
+  },
+  "providerParamNameNestedLabel": "Parameter name (supports dot nesting)",
+  "@providerParamNameNestedLabel": {
+    "placeholders": {}
+  },
+  "providerToggleEffortPrerequisite": "Complete the reasoning toggle before configuring reasoning effort.",
+  "@providerToggleEffortPrerequisite": {
+    "placeholders": {}
+  },
+  "providerToggleRequiredHint": "Complete the reasoning toggle first.",
+  "@providerToggleRequiredHint": {
+    "placeholders": {}
+  },
+  "providerDeleteCustomParam": "Delete parameter",
+  "@providerDeleteCustomParam": {
+    "placeholders": {}
+  },
+  "modelSaveSuccess": "Model saved",
+  "@modelSaveSuccess": {
+    "placeholders": {}
+  },
+  "modelSaving": "Saving…",
+  "@modelSaving": {
+    "placeholders": {}
+  },
+  "modelOriginalError": "Original error: {error}",
+  "@modelOriginalError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "paramTypeStringLabel": "String",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "Number",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "Boolean",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "e.g. cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "e.g. 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "e.g. true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "e.g. ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
   }
 }

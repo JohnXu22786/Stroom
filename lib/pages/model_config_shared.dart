@@ -1,8 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tts_models.dart';
 import '../providers/tts_config.dart';
+
+/// Localized presentation for custom-parameter types; persisted values stay
+/// in [ParamType.value].
+String localizedParamTypeLabel(AppLocalizations l10n, ParamType type) {
+  return switch (type) {
+    ParamType.string => l10n.paramTypeStringLabel,
+    ParamType.number => l10n.paramTypeNumberLabel,
+    ParamType.boolean => l10n.paramTypeBooleanLabel,
+    ParamType.json => l10n.paramTypeJsonLabel,
+    _ => l10n.paramTypeStringLabel,
+  };
+}
+
+/// Localized examples for the custom-parameter value field.
+String localizedParamTypeDefaultValueHint(
+  AppLocalizations l10n,
+  ParamType type,
+) {
+  return switch (type) {
+    ParamType.string => l10n.paramTypeStringHint,
+    ParamType.number => l10n.paramTypeNumberHint,
+    ParamType.boolean => l10n.paramTypeBooleanHint,
+    ParamType.json => '${l10n.paramTypeJsonHint}{"key": "value"}',
+    _ => '',
+  };
+}
 
 // ============================================================================
 // ToggleButton — reusable toggle button with selected/unselected styling
@@ -97,13 +124,15 @@ class TrimSection extends ConsumerWidget {
       for (final p in all) {
         if (p['id'] == presetId) {
           final direction = p['direction'] as String;
-          final dirLabel = direction == 'head' ? '开头' : '结尾';
+          final dirLabel = direction == 'head'
+              ? AppLocalizations.of(context)!.batchRuleBeginning
+              : AppLocalizations.of(context)!.batchRuleEnd;
           final name = p['name'] as String;
           final duration = p['durationSeconds'] as double;
           return Text('$name（$dirLabel，${duration.toStringAsFixed(3)}s）');
         }
       }
-      return const Text('不裁切');
+      return Text(AppLocalizations.of(context)!.modelNoTrim);
     }
 
     return Card(
@@ -116,15 +145,18 @@ class TrimSection extends ConsumerWidget {
               children: [
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
-                const Text('裁切设置',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                Text(
+                  AppLocalizations.of(context)!.modelAudioTrimTitle,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
                 const Spacer(),
                 if (selectedPresetId != null &&
                     selectedPresetId != BuiltinTrimPresetIds.none)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.orange[100],
                       borderRadius: BorderRadius.circular(4),
@@ -137,8 +169,10 @@ class TrimSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('选择对音频进行裁切的方式',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              AppLocalizations.of(context)!.modelAudioTrimHelp,
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 12),
 
             // 内置预设
@@ -148,8 +182,10 @@ class TrimSection extends ConsumerWidget {
                 title: Text(preset['name'] as String),
                 subtitle: Text(
                   presetId == BuiltinTrimPresetIds.none
-                      ? '不对音频做任何裁切'
-                      : '裁切开头 ${preset['durationSeconds']}s',
+                      ? AppLocalizations.of(context)!.audioTrimNone
+                      : AppLocalizations.of(context)!.audioTrimBeginning(
+                          preset['durationSeconds'].toString(),
+                        ),
                   style: const TextStyle(fontSize: 12),
                 ),
                 value: preset['id'] as String,
@@ -169,7 +205,9 @@ class TrimSection extends ConsumerWidget {
             if (customPresets.isNotEmpty)
               ...customPresets.asMap().entries.map((entry) {
                 final preset = entry.value;
-                final dirLabel = preset.direction == 'head' ? '开头' : '结尾';
+                final dirLabel = preset.direction == 'head'
+                    ? AppLocalizations.of(context)!.batchRuleBeginning
+                    : AppLocalizations.of(context)!.batchRuleEnd;
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -180,10 +218,15 @@ class TrimSection extends ConsumerWidget {
                     // ignore: deprecated_member_use
                     onChanged: (v) => onPresetChanged(v),
                   ),
-                  title:
-                      Text(preset.name, style: const TextStyle(fontSize: 14)),
+                  title: Text(
+                    preset.name,
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   subtitle: Text(
-                    '裁切$dirLabel ${preset.durationSeconds.toStringAsFixed(3)}s',
+                    AppLocalizations.of(context)!.audioTrimDirection(
+                      dirLabel,
+                      preset.durationSeconds.toStringAsFixed(3),
+                    ),
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: Row(
@@ -192,30 +235,48 @@ class TrimSection extends ConsumerWidget {
                       IconButton(
                         icon: const Icon(Icons.edit, size: 18),
                         onPressed: () => onEditPreset(preset),
-                        tooltip: '编辑',
+                        tooltip: AppLocalizations.of(context)!.imagePreviewEdit,
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete,
-                            size: 18, color: Colors.red),
+                        icon: const Icon(
+                          Icons.delete,
+                          size: 18,
+                          color: Colors.red,
+                        ),
                         onPressed: () async {
                           final confirm = await showDialog<bool>(
                             context: context,
                             builder: (ctx) => AlertDialog(
-                              title: const Text('删除裁切预设'),
-                              content: Text('确定要删除裁切预设"${preset.name}"吗？'),
+                              title: Text(
+                                AppLocalizations.of(context)!
+                                    .modelDeleteTrimPreset,
+                              ),
+                              content: Text(
+                                AppLocalizations.of(context)!
+                                    .modelDeleteTrimConfirmation(preset.name),
+                              ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('取消'),
+                                  child: Text(
+                                    AppLocalizations.of(context)!
+                                        .batchDlgCancel,
+                                  ),
                                 ),
                                 TextButton(
                                   onPressed: () => Navigator.pop(ctx, true),
                                   style: TextButton.styleFrom(
-                                      foregroundColor: Colors.red),
-                                  child: const Text('删除'),
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: Text(
+                                    AppLocalizations.of(context)!
+                                        .fileManagerDelete,
+                                  ),
                                 ),
                               ],
                             ),
@@ -224,10 +285,13 @@ class TrimSection extends ConsumerWidget {
                             await onDeletePreset(preset);
                           }
                         },
-                        tooltip: '删除',
+                        tooltip:
+                            AppLocalizations.of(context)!.fileManagerDelete,
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
                       ),
                     ],
                   ),
@@ -240,7 +304,7 @@ class TrimSection extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加自定义裁切'),
+                label: Text(AppLocalizations.of(context)!.modelAddTrimPreset),
                 onPressed: onAddPreset,
               ),
             ),
@@ -253,10 +317,16 @@ class TrimSection extends ConsumerWidget {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.play_arrow, size: 18),
-                label: Text(isTestingAudio ? '播放中...' : '播放测试音频'),
+                label: Text(
+                  isTestingAudio
+                      ? AppLocalizations.of(context)!.modelPlayingTestAudio
+                      : AppLocalizations.of(context)!.modelPlayTestAudio,
+                ),
                 onPressed: isTestingAudio ? null : onPlayTestAudio,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),

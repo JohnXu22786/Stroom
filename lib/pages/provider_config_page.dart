@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
@@ -179,7 +180,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           config,
           isHttpTool: isHttpTool,
         ),
-        note: _connectivityTestNote,
+        note: AppLocalizations.of(context)!.providerTestSafetyNote,
         onSave: (content) =>
             _saveProviderConnectivityTest(configIndex, content),
         onRun: (content) => ConnectivityTestService.runProviderTest(
@@ -234,7 +235,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       builder: (_) => ConnectivityTestDialog(
         title: definition.name,
         initialContent: initialContent,
-        note: _connectivityTestNote,
+        note: AppLocalizations.of(context)!.providerTestSafetyNote,
         onSave: (content) => ConnectivityTestService.saveBuiltinTestContent(
           definition.name,
           content,
@@ -246,10 +247,6 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       ),
     );
   }
-
-  static const _connectivityTestNote =
-      '测试会向对应服务发出真实请求。MCP 仅调用只读 tools/list，HTTP/网页搜索会执行一次查询；'
-      'Todo 默认读取清单；为保护当前数据，todos 参数必须省略或设置为 null。';
 
   Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
     final entry = _entry;
@@ -280,17 +277,19 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除配置'),
-        content: const Text('确定要删除此供应商配置及其所有模型吗？'),
+        title: Text(AppLocalizations.of(context)!.providerDeleteConfigTitle),
+        content: Text(
+          AppLocalizations.of(context)!.providerDeleteConfigConfirm,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),
@@ -380,22 +379,28 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(initialName == null ? '新建组别' : '编辑组别'),
+        title: Text(
+          initialName == null
+              ? AppLocalizations.of(context)!.providerCreateGroup
+              : AppLocalizations.of(context)!.providerEditGroup,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 30,
-          decoration: const InputDecoration(labelText: '组别名称'),
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context)!.providerGroupName,
+          ),
           onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('保存'),
+            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
           ),
         ],
       ),
@@ -409,8 +414,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (name == null || name.isEmpty || !mounted) return;
     final groups = ref.read(providerEntriesProvider).mcpGroups;
     if (groups.any((group) => group.name.toLowerCase() == name.toLowerCase())) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.providerGroupNameExists),
+        ),
+      );
       return;
     }
     await ref
@@ -428,8 +436,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       (item) =>
           item.id != group.id && item.name.toLowerCase() == name.toLowerCase(),
     )) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.providerGroupNameExists),
+        ),
+      );
       return;
     }
     await ref
@@ -443,17 +454,19 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除组别'),
-        content: Text('删除“${group.name}”后，其中的配置会移到“其他 MCP 服务”。'),
+        title: Text(AppLocalizations.of(context)!.providerDeleteGroup),
+        content: Text(
+          AppLocalizations.of(context)!.providerDeleteGroupConfirm(group.name),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除组别'),
+            child: Text(AppLocalizations.of(context)!.providerDeleteGroup),
           ),
         ],
       ),
@@ -470,7 +483,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final targetGroupId = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('移动到组别'),
+        title: Text(AppLocalizations.of(context)!.providerMoveToGroup),
         children: [
           for (final group in groups.where((g) => g.id != currentGroupId))
             SimpleDialogOption(
@@ -532,15 +545,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     int groupIndex,
   ) {
     final fullIndex = entry.configs.indexOf(config);
-    final providerName =
-        config.providerName.isNotEmpty ? config.providerName : '（未命名）';
+    final providerName = config.providerName.isNotEmpty
+        ? config.providerName
+        : AppLocalizations.of(context)!.providerUnnamed;
     final typeConfig =
         config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
     final integrationType = isHttpTool
-        ? 'HTTP 搜索'
+        ? AppLocalizations.of(context)!.providerHttpSearch
         : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}';
     late final String subtitle;
     late final IconData leadIcon;
@@ -549,16 +563,25 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       final url = typeConfig?['url'] as String? ?? '';
       leadIcon = Icons.http;
       iconColor = Colors.orange;
-      subtitle = 'HTTP 工具: ${url.isNotEmpty ? url : '(未设置)'}';
+      subtitle = AppLocalizations.of(context)!.providerHttpToolSubtitle(
+        url.isNotEmpty
+            ? url
+            : AppLocalizations.of(context)!.providerValueNotSet,
+      );
     } else if (transport == 'stdio') {
       leadIcon = Icons.desktop_windows;
       iconColor = Colors.purple;
-      subtitle = '本地(stdio): ${typeConfig?['command'] as String? ?? ''}';
+      subtitle = AppLocalizations.of(context)!
+          .providerLocalStdioSubtitle(typeConfig?['command'] as String? ?? '');
     } else {
       final url = typeConfig?['url'] as String? ?? config.host;
       leadIcon = Icons.cloud;
       iconColor = Colors.blue;
-      subtitle = '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
+      subtitle = AppLocalizations.of(context)!.providerRemoteSseSubtitle(
+        url.isNotEmpty
+            ? url
+            : AppLocalizations.of(context)!.providerValueNotSet,
+      );
     }
     return _McpConfigCard(
       // The full entry index stays unique across groups and preserves the
@@ -622,8 +645,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   ),
                   const SizedBox(height: 24),
                   _McpSectionHeader(
-                    title: '服务配置',
-                    description: '按组管理远程连接、本地 stdio 与 HTTP 搜索',
+                    title: AppLocalizations.of(context)!.providerServices,
+                    description: AppLocalizations.of(context)!
+                        .providerServicesDescription,
                     count: entry.configs.length,
                     action: FilledButton.tonalIcon(
                       onPressed: _createMcpGroup,
@@ -631,7 +655,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         Icons.create_new_folder_outlined,
                         size: 18,
                       ),
-                      label: const Text('新建组别'),
+                      label: Text(
+                        AppLocalizations.of(context)!.providerCreateGroupAction,
+                      ),
                     ),
                   ),
                 ],
@@ -677,7 +703,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text(
-                      '此组暂无配置，点击“添加”加入内容。',
+                      AppLocalizations.of(context)!.providerGroupEmpty,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
@@ -714,8 +740,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             sliver: SliverToBoxAdapter(
               child: _McpSectionHeader(
-                title: '内置工具',
-                description: 'Stroom 提供的本地工具接口；网页搜索归入对应服务组。',
+                title: AppLocalizations.of(context)!.providerBuiltinTools,
+                description: AppLocalizations.of(context)!
+                    .providerBuiltinToolsDescription,
                 count: _builtinToolDefinitions.length - 1,
               ),
             ),
@@ -742,16 +769,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       key: ValueKey('builtin_tool_${definition.name}'),
       isMcp: true,
       isVendor: false,
-      integrationType: '内置工具',
+      integrationType: AppLocalizations.of(context)!.providerBuiltinTools,
       providerName: definition.name,
       leadIcon: Icons.build_outlined,
       iconColor: Colors.deepPurple,
-      subtitle: 'Stroom 工具接口',
+      subtitle: AppLocalizations.of(context)!.providerBuiltinToolInterface,
       apiKeyHint: null,
       mcpDescription: definition.description,
       dragHandle: const SizedBox(width: 32),
       settingsIcon: Icons.info_outline,
-      settingsTooltip: '查看接口',
+      settingsTooltip: AppLocalizations.of(context)!.providerViewInterface,
       onSettings: () => _showBuiltinToolDetails(definition),
       onDelete: null,
       onTest: () => _testBuiltinTool(definition),
@@ -767,8 +794,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         : entriesState.entries.where((e) => e.id == widget.entryId).firstOrNull;
     if (entry == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('配置')),
-        body: const Center(child: Text('供应商未找到')),
+        appBar: AppBar(
+          title: Text(AppLocalizations.of(context)!.providerConfigTitle),
+        ),
+        body: Center(
+          child: Text(AppLocalizations.of(context)!.providerNotFound),
+        ),
       );
     }
     if (entry.type == 'mcp') {
@@ -788,7 +819,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 Row(
                   children: [
                     Text(
-                      isBuiltinWebSearch ? '内置工具' : '供应商配置',
+                      isBuiltinWebSearch
+                          ? AppLocalizations.of(context)!.providerBuiltinTools
+                          : AppLocalizations.of(context)!
+                              .providerConfigurationHeading,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -799,7 +833,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     if (!isBuiltinWebSearch)
                       TextButton.icon(
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('添加'),
+                        label: Text(
+                          AppLocalizations.of(context)!.builtInPromptAdd,
+                        ),
                         onPressed: _addConfig,
                       ),
                   ],
@@ -815,8 +851,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 child: Center(
                   child: Text(
                     isBuiltinWebSearch
-                        ? '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'
-                        : '暂无供应商配置，请点击"添加"创建',
+                        ? AppLocalizations.of(context)!
+                            .providerBuiltinWebSearchEmpty
+                        : AppLocalizations.of(context)!.providerNoConfigsAdd,
                     style: const TextStyle(color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
@@ -838,7 +875,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   final config = entry.configs[index];
                   final providerName = config.providerName.isNotEmpty
                       ? config.providerName
-                      : '（未命名）';
+                      : AppLocalizations.of(context)!.providerUnnamed;
                   return _McpConfigCard(
                     key: ValueKey('config_${widget.entryId}_$index'),
                     isMcp: false,
@@ -847,8 +884,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     providerName: providerName,
                     leadIcon: Icons.dns,
                     iconColor: Colors.teal,
-                    subtitle:
-                        config.host.isNotEmpty ? config.host : '(未设置 Host)',
+                    subtitle: config.host.isNotEmpty
+                        ? config.host
+                        : AppLocalizations.of(context)!.providerNoHost,
                     apiKeyHint: null,
                     mcpDescription: null,
                     dragHandle: ReorderableDragStartListener(
@@ -880,14 +918,15 @@ class _McpPageIntro extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '服务与工具',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+          AppLocalizations.of(context)!.providerServicesAndTools,
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(color: colorScheme.onSurface),
         ),
         const SizedBox(height: 4),
         Text(
-          '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
+          AppLocalizations.of(context)!.providerManageServicesDescription,
           style: Theme.of(context)
               .textTheme
               .bodySmall
@@ -990,7 +1029,7 @@ class _McpEmptyState extends StatelessWidget {
           Icon(Icons.hub_outlined, size: 30, color: cs.onSurfaceVariant),
           const SizedBox(height: 10),
           Text(
-            '还没有服务配置',
+            AppLocalizations.of(context)!.providerNoServices,
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -998,7 +1037,7 @@ class _McpEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '添加一个 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。',
+            AppLocalizations.of(context)!.providerAddServiceDescription,
             textAlign: TextAlign.center,
             style: Theme.of(context)
                 .textTheme
@@ -1009,7 +1048,7 @@ class _McpEmptyState extends StatelessWidget {
           FilledButton.tonalIcon(
             onPressed: onAdd,
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('添加服务'),
+            label: Text(AppLocalizations.of(context)!.providerAddService),
           ),
         ],
       ),
@@ -1040,7 +1079,7 @@ class _McpConfigCard extends StatelessWidget {
   final Widget dragHandle;
   final VoidCallback? onSettings;
   final IconData settingsIcon;
-  final String settingsTooltip;
+  final String? settingsTooltip;
   final VoidCallback? onDelete;
   final VoidCallback? onTest;
   final VoidCallback? onMove;
@@ -1060,7 +1099,7 @@ class _McpConfigCard extends StatelessWidget {
     required this.dragHandle,
     required this.onSettings,
     this.settingsIcon = Icons.tune,
-    this.settingsTooltip = '设置',
+    this.settingsTooltip,
     required this.onDelete,
     this.onTest,
     this.onMove,
@@ -1124,7 +1163,8 @@ class _McpConfigCard extends StatelessWidget {
                             if (isVendor) ...[
                               const SizedBox(width: 6),
                               Text(
-                                '内置',
+                                AppLocalizations.of(context)!
+                                    .providerBuiltinBadge,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: cs.onSurfaceVariant,
@@ -1156,7 +1196,8 @@ class _McpConfigCard extends StatelessWidget {
                         if (apiKeyHint != null && apiKeyHint!.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            '提示: $apiKeyHint',
+                            AppLocalizations.of(context)!
+                                .providerApiKeyHint(apiKeyHint!),
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -1190,7 +1231,8 @@ class _McpConfigCard extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                       onPressed: onSettings,
-                      tooltip: settingsTooltip,
+                      tooltip: settingsTooltip ??
+                          AppLocalizations.of(context)!.appSettings,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -1198,7 +1240,8 @@ class _McpConfigCard extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.network_check, size: 20),
                       onPressed: onTest,
-                      tooltip: '连通性测试',
+                      tooltip: AppLocalizations.of(context)!
+                          .providerConnectivityTest,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -1211,7 +1254,8 @@ class _McpConfigCard extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                       onPressed: onMove,
-                      tooltip: '移动到组别',
+                      tooltip: AppLocalizations.of(context)!
+                          .providerMoveGroupTooltip,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -1225,7 +1269,8 @@ class _McpConfigCard extends StatelessWidget {
                         color: cs.error,
                       ),
                       onPressed: onDelete,
-                      tooltip: '删除配置',
+                      tooltip:
+                          AppLocalizations.of(context)!.providerDeleteTooltip,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -1296,7 +1341,7 @@ class _McpGroupHeaderCard extends StatelessWidget {
                       if (group.isBuiltin) ...[
                         const SizedBox(width: 6),
                         Text(
-                          '内置',
+                          AppLocalizations.of(context)!.providerBuiltinBadge,
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
@@ -1307,7 +1352,8 @@ class _McpGroupHeaderCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$itemCount 项内容',
+                    AppLocalizations.of(context)!
+                        .providerGroupItemCount(itemCount),
                     style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                   ),
                 ],
@@ -1315,7 +1361,7 @@ class _McpGroupHeaderCard extends StatelessWidget {
             ),
             if (onEdit != null || onDelete != null)
               PopupMenuButton<String>(
-                tooltip: '组别操作',
+                tooltip: AppLocalizations.of(context)!.providerGroupActions,
                 onSelected: (action) {
                   if (action == 'edit') {
                     onEdit?.call();
@@ -1325,16 +1371,26 @@ class _McpGroupHeaderCard extends StatelessWidget {
                 },
                 itemBuilder: (context) => [
                   if (onEdit != null)
-                    const PopupMenuItem(value: 'edit', child: Text('编辑组别')),
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Text(
+                        AppLocalizations.of(context)!.providerEditGroupAction,
+                      ),
+                    ),
                   if (onEdit != null && onDelete != null)
                     const PopupMenuDivider(),
                   if (onDelete != null)
-                    const PopupMenuItem(value: 'delete', child: Text('删除组别')),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        AppLocalizations.of(context)!.providerDeleteGroupAction,
+                      ),
+                    ),
                 ],
               ),
             IconButton(
               onPressed: onAdd,
-              tooltip: '添加内容',
+              tooltip: AppLocalizations.of(context)!.providerAddItem,
               icon: const Icon(Icons.add_circle_outline),
             ),
             Switch(value: group.enabled, onChanged: onEnabledChanged),
@@ -1399,7 +1455,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                'MCP 服务器',
+                                AppLocalizations.of(context)!
+                                    .providerMcpMasterLabel,
                                 style: Theme.of(context)
                                     .textTheme
                                     .titleSmall
@@ -1415,7 +1472,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。',
+                          AppLocalizations.of(context)!
+                              .providerMcpMasterDescription,
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -1445,10 +1503,13 @@ class _McpStatusLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Text(
-      enabled ? '已启用' : '已停用',
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: cs.onSurfaceVariant,
-          ),
+      enabled
+          ? AppLocalizations.of(context)!.providerEnabled
+          : AppLocalizations.of(context)!.providerDisabled,
+      style: Theme.of(context)
+          .textTheme
+          .labelSmall
+          ?.copyWith(color: cs.onSurfaceVariant),
     );
   }
 }

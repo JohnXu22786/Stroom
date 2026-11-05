@@ -1,4 +1,5 @@
 part of 'llm_model_config_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -14,8 +15,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     final modelId = _modelIdController.text.trim();
     if (modelId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入模型 ID'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelIdRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -25,8 +26,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     final contextStr = _contextController.text.trim();
     if (contextStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('上下文长度为必填项'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelContextReq),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -35,8 +36,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     final contextValue = int.tryParse(contextStr);
     if (contextValue == null || contextValue <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('上下文长度必须为正整数'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelContextPositive),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -64,8 +65,10 @@ extension _SaveExt on _LlmModelConfigPageState {
                   param.defaultValue.trim().isNotEmpty);
       if (name.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -76,7 +79,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (!isValidParamName(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('参数名格式不正确（点号分段不能为空）: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamNameInvalid(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -85,7 +90,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -94,13 +101,18 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (param.type == 'number') {
         final values =
             param.options.isNotEmpty ? param.options : [param.defaultValue];
-        final valueLabel = param.options.isNotEmpty ? '选项值' : '默认值';
+        final valueLabel = param.options.isNotEmpty
+            ? AppLocalizations.of(context)!.assistantValue
+            : AppLocalizations.of(context)!.modelParamDefaultValue;
         for (final value in values) {
           final parsed = double.tryParse(value.trim());
           if (parsed == null || !parsed.isFinite) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('参数 "$name" 的$valueLabel必须是有限数字：$value'),
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .modelParamFinite(name, valueLabel, value),
+                ),
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -115,7 +127,10 @@ extension _SaveExt on _LlmModelConfigPageState {
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .modelParamJsonInvalid(name, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -134,8 +149,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     if (hasNonToggleParams &&
         (toggleParam == null || !toggleParam.isFilledToggle)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('推理开关必须先填写完整，其他推理参数才能生效'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelReasoningIncomplete),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -152,8 +167,10 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (param.type == 'boolean') continue;
       if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('推理参数必须至少添加一个选项值'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningOptionsRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -168,7 +185,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('推理参数错误：$error'),
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningError(error),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -186,7 +205,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (!reasoningSeenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('推理参数存在重名: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -203,7 +224,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       if (seenNames.contains(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('推理参数与自定义参数存在重名: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningCustomDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -249,8 +272,8 @@ extension _SaveExt on _LlmModelConfigPageState {
       final maxTokens = int.tryParse(maxTokensStr);
       if (maxTokens == null || maxTokens <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最大输出 Token 数必须为正整数'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.modelMaxTokensPositive),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -261,8 +284,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     } else if (_enableMaxTokens) {
       // If enabled but empty, show error
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最大输出 Token 数已启用但未填写'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelUnsavedMaxTokens),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -276,8 +299,8 @@ extension _SaveExt on _LlmModelConfigPageState {
       final seed = int.tryParse(seedStr);
       if (seed == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('随机种子必须为整数'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.modelSeedInteger),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -287,8 +310,8 @@ extension _SaveExt on _LlmModelConfigPageState {
       typeConfig['seed'] = seed;
     } else if (_enableSeed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('随机种子已启用但未填写'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelSeedRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );

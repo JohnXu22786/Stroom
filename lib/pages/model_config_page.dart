@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -239,15 +241,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('添加自定义裁切'),
+          title: Text(AppLocalizations.of(context)!.modelAddTrimPreset),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '切割方式名称 *',
-                  hintText: '例如: 静音裁切',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.trimNameLabel,
+                  hintText: AppLocalizations.of(context)!.trimNameHint,
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -255,25 +257,28 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               const SizedBox(height: 12),
               TextField(
                 controller: durationCtrl,
-                decoration: const InputDecoration(
-                  labelText: '切割时长（秒） *',
-                  hintText: '例如: 0.123',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
+                  hintText: AppLocalizations.of(context)!.trimDurationHint,
                   border: OutlineInputBorder(),
                 ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   ChoiceChip(
-                    label: const Text('开头'),
+                    label: Text(
+                      AppLocalizations.of(context)!.batchRuleBeginning,
+                    ),
                     selected: direction == 'head',
                     onSelected: (_) => setDlgState(() => direction = 'head'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('结尾'),
+                    label: Text(AppLocalizations.of(context)!.batchRuleEnd),
                     selected: direction == 'tail',
                     onSelected: (_) => setDlgState(() => direction = 'tail'),
                   ),
@@ -284,7 +289,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -292,8 +297,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 final durationText = durationCtrl.text.trim();
                 if (name.isEmpty || durationText.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('名称和时长为必填项'),
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!
+                            .trimNameAndDurationRequired,
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -302,8 +310,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 final duration = double.tryParse(durationText);
                 if (duration == null || duration <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('请输入有效的时长（正数）'),
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!.trimDurationInvalid,
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -318,7 +328,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
-              child: const Text('添加'),
+              child: Text(AppLocalizations.of(context)!.builtInPromptAdd),
             ),
           ],
         ),
@@ -337,14 +347,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('编辑自定义裁切'),
+          title: Text(AppLocalizations.of(context)!.ttsEditTrimTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '切割方式名称 *',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.trimNameLabel,
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -352,24 +362,27 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               const SizedBox(height: 12),
               TextField(
                 controller: durationCtrl,
-                decoration: const InputDecoration(
-                  labelText: '切割时长（秒） *',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
                   border: OutlineInputBorder(),
                 ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   ChoiceChip(
-                    label: const Text('开头'),
+                    label: Text(
+                      AppLocalizations.of(context)!.batchRuleBeginning,
+                    ),
                     selected: direction == 'head',
                     onSelected: (_) => setDlgState(() => direction = 'head'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('结尾'),
+                    label: Text(AppLocalizations.of(context)!.batchRuleEnd),
                     selected: direction == 'tail',
                     onSelected: (_) => setDlgState(() => direction = 'tail'),
                   ),
@@ -380,7 +393,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -388,8 +401,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 final durationText = durationCtrl.text.trim();
                 if (name.isEmpty || durationText.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('名称和时长为必填项'),
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!
+                            .trimNameAndDurationRequired,
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -398,8 +414,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 final duration = double.tryParse(durationText);
                 if (duration == null || duration <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('请输入有效的时长（正数）'),
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!.trimDurationInvalid,
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -417,7 +435,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
-              child: const Text('保存'),
+              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
             ),
           ],
         ),
@@ -444,6 +462,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   // ----------------------------------------------------------------
 
   Future<void> _playTestAudio() async {
+    final strings = AppLocalizations.of(context)!;
     final entry = _entry;
     if (entry == null) return;
     if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) {
@@ -462,14 +481,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
       if (host.isEmpty) {
         setState(() {
-          _testAudioError = 'Host 未配置';
+          _testAudioError = strings.testAudioHostMissing;
           _isTestingAudio = false;
         });
         return;
       }
       if (key.isEmpty) {
         setState(() {
-          _testAudioError = 'Key 未配置';
+          _testAudioError = strings.testAudioKeyMissing;
           _isTestingAudio = false;
         });
         return;
@@ -484,15 +503,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         body['voice'] = _voices.first.id;
       }
 
-      final dio = Dio(BaseOptions(
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $key',
-          ...openRouterAppHeaders,
-        },
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+            ...openRouterAppHeaders,
+          },
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
 
       final response = await dio.post(
         host,
@@ -512,7 +533,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         try {
           errorBody = utf8.decode(response.data);
         } catch (_) {
-          errorBody = '响应 Content-Type 为 $contentType，非音频数据';
+          errorBody = strings.testAudioContentTypeError(contentType);
         }
         setState(() {
           _testAudioError = errorBody;
@@ -524,7 +545,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       final audioData = Uint8List.fromList(response.data);
       if (audioData.isEmpty) {
         setState(() {
-          _testAudioError = '服务器返回了空的音频数据';
+          _testAudioError = strings.testAudioEmpty;
           _isTestingAudio = false;
         });
         return;
@@ -564,14 +585,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       }
     } on DioException catch (e) {
       final String origMsg = e.message ?? '';
-      final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
+      final String extra =
+          origMsg.isNotEmpty ? '\n${strings.modelOriginalError(origMsg)}' : '';
       String errorMsg;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          errorMsg = '连接超时，请检查网络$extra';
+          errorMsg = strings.testAudioTimeoutConnection(extra);
           break;
         case DioExceptionType.receiveTimeout:
-          errorMsg = '接收超时，服务器响应过慢$extra';
+          errorMsg = strings.testAudioTimeoutReceive(extra);
           break;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
@@ -584,19 +606,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               bodyStr = body.toString();
             }
           } else {
-            bodyStr = body?.toString() ?? '无响应体';
+            bodyStr = body?.toString() ?? strings.testAudioNoBody;
           }
           errorMsg = 'HTTP $statusCode: $bodyStr$extra';
           break;
         case DioExceptionType.cancel:
-          errorMsg = '请求已取消$extra';
+          errorMsg = strings.testAudioRequestCancelled(extra);
           break;
         default:
           if (e.type == DioExceptionType.connectionError && kIsWeb) {
-            errorMsg =
-                '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+            errorMsg = strings.testAudioCorsHelp(extra);
           } else {
-            errorMsg = '网络错误: ${e.message}';
+            errorMsg = strings.testAudioNetworkError(e.message ?? '');
           }
       }
       if (mounted) {
@@ -624,7 +645,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('知道了'),
+            child: Text(AppLocalizations.of(ctx)!.batchDlgHelpDismiss),
           ),
         ],
       ),
@@ -643,8 +664,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final modelId = _modelIdController.text.trim();
     if (modelId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('模型ID为必填项'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelIdRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -656,8 +677,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final maxWords = int.tryParse(maxWordsText);
     if (maxWordsText.isEmpty || maxWords == null || maxWords <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('单次最长音频字数为必填项，请输入大于0的整数'),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.ttsMaxAudioLengthRequired,
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -672,8 +695,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       final name = param.paramName.trim();
       if (name.isEmpty || param.defaultValue.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -682,7 +707,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -695,7 +722,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .modelParamJsonInvalid(name, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -709,8 +739,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final volMaxText = _volumeMaxController.text.trim();
     if (volMinText.isNotEmpty != volMaxText.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('音量范围必须成对填写（最小音量和最大音量），或者同时留空'),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!
+                .ttsRangePair(AppLocalizations.of(context)!.ttsVoiceRangeTitle),
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -723,8 +756,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final spdMaxText = _speedMaxController.text.trim();
     if (spdMinText.isNotEmpty != spdMaxText.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('语速范围必须成对填写（最小语速和最大语速），或者同时留空'),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!
+                .ttsRangePair(AppLocalizations.of(context)!.ttsSpeedRangeTitle),
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -810,8 +846,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (!mounted) return;
     setState(() => _isSaving = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('模型已保存'),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.modelSaveSuccess),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -821,8 +857,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (_nameController.text.isNotEmpty ? _nameController.text : '编辑模型')
-        : '新建模型';
+        ? (_nameController.text.isNotEmpty
+            ? _nameController.text
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
 
     return PopScope(
       canPop: !_hasUnsavedChanges,
@@ -831,17 +869,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -863,7 +901,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save, size: 20),
-              label: Text(_isSaving ? '保存中...' : '保存'),
+              label: Text(
+                _isSaving
+                    ? AppLocalizations.of(context)!.modelSaving
+                    : AppLocalizations.of(context)!.mermaidSaveButton,
+              ),
             ),
           ],
         ),
@@ -875,16 +917,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                const Text('模型名称',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  AppLocalizations.of(context)!.modelNameLabel,
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.info_outline, size: 18),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showInfoDialog(
-                    '模型名称',
-                    '模型名称是用于显示和识别的友好名称，例如"GPT-4o Mini TTS"。\n\n同一个供应商下多个模型时，通过名称可以快速区分它们。',
+                    AppLocalizations.of(context)!.modelNameLabel,
+                    AppLocalizations.of(context)!.trimModelNameHint,
                   ),
                 ),
               ],
@@ -892,8 +936,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                hintText: '输入模型名称',
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context)!.modelNameHint,
                 border: OutlineInputBorder(),
               ),
             ),
@@ -904,16 +948,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                const Text('模型ID *',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '${AppLocalizations.of(context)!.modelIdLabel} *',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.info_outline, size: 18),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showInfoDialog(
-                    '模型ID',
-                    '模型ID是调用API时使用的唯一标识符，例如"gpt-4o-mini-tts"。\n\nAPI请求时以此ID指定要使用的模型，必须与供应商提供的模型ID一致。',
+                    AppLocalizations.of(context)!.modelIdLabel,
+                    AppLocalizations.of(context)!.trimModelIdHelp,
                   ),
                 ),
               ],
@@ -921,8 +967,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _modelIdController,
-              decoration: const InputDecoration(
-                hintText: '输入模型ID',
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context)!.modelIdLabel,
                 border: OutlineInputBorder(),
               ),
             ),
@@ -931,28 +977,31 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // 音量范围
             // ==========================================================
-            const Text('音量范围', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              AppLocalizations.of(context)!.ttsVoiceRangeTitle,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _volumeMinController,
-                    decoration: const InputDecoration(
-                      labelText: '最小音量',
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context)!.ttsMinVolume,
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text('~'),
+                Text('~'),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _volumeMaxController,
-                    decoration: const InputDecoration(
-                      labelText: '最大音量',
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context)!.ttsMaxVolume,
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -965,28 +1014,31 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // 语速范围
             // ==========================================================
-            const Text('语速范围', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              AppLocalizations.of(context)!.ttsSpeedRangeTitle,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _speedMinController,
-                    decoration: const InputDecoration(
-                      labelText: '最小语速',
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context)!.ttsMinSpeed,
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text('~'),
+                Text('~'),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _speedMaxController,
-                    decoration: const InputDecoration(
-                      labelText: '最大语速',
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context)!.ttsMaxSpeed,
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1001,9 +1053,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             TextField(
               controller: _maxWordsController,
-              decoration: const InputDecoration(
-                labelText: '单次最长音频字数 *',
-                hintText: '例如: 1000',
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.ttsMaxAudioLength,
+                hintText: AppLocalizations.of(context)!.ttsAudioLengthHint,
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
@@ -1016,10 +1068,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.record_voice_over, size: 24),
-                title: Text('音色 (${_voices.length})'),
+                title: Text(
+                  AppLocalizations.of(context)!
+                      .ttsVoicesCount(_voices.length.toString()),
+                ),
                 subtitle: Text(
                   _voices.isEmpty
-                      ? '暂无音色，点击进入编辑'
+                      ? AppLocalizations.of(context)!.ttsNoVoices
                       : _voices.take(3).map((v) => v.name).join('、') +
                           (_voices.length > 3 ? '…' : ''),
                   style: const TextStyle(fontSize: 12),
@@ -1047,12 +1102,16 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                const Text('自定义参数',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  AppLocalizations.of(context)!.chatCustomParameters,
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加参数'),
+                  label: Text(
+                    AppLocalizations.of(context)!.assistantAddParameter,
+                  ),
                   onPressed: _addCustomParam,
                 ),
               ],
@@ -1060,10 +1119,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             const SizedBox(height: 8),
 
             if (_customParams.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Center(
-                  child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    AppLocalizations.of(context)!.assistantNoCustomParameters,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               )
             else
@@ -1072,8 +1134,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 // 检查当前参数名是否与其他参数重复
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
-                    _customParams
-                            .indexWhere((p) => p.paramName.trim() == name) !=
+                    _customParams.indexWhere(
+                          (p) => p.paramName.trim() == name,
+                        ) !=
                         i;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -1087,10 +1150,16 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: '参数名',
+                                  labelText: AppLocalizations.of(context)!
+                                      .assistantParameterName,
                                   border: const OutlineInputBorder(),
                                   isDense: true,
-                                  errorText: isDuplicate ? '已存在该参数' : null,
+                                  errorText: isDuplicate
+                                      ? AppLocalizations.of(context)!
+                                          .modelParamDuplicate(
+                                          param.paramName.trim(),
+                                        )
+                                      : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
                                 onChanged: (v) {
@@ -1107,22 +1176,31 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 border: Border.all(color: Colors.grey.shade400),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  dropdownColor:
-                                      StroomMenuStyle.surface(context),
+                                  dropdownColor: StroomMenuStyle.surface(
+                                    context,
+                                  ),
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
                                   items: ParamType.values
-                                      .map((t) => DropdownMenuItem(
-                                            value: t.value,
-                                            child: Text(t.label,
-                                                style: const TextStyle(
-                                                    fontSize: 13)),
-                                          ))
+                                      .map(
+                                        (t) => DropdownMenuItem(
+                                          value: t.value,
+                                          child: Text(
+                                            localizedParamTypeLabel(
+                                                AppLocalizations.of(context)!,
+                                                t),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      )
                                       .toList(),
                                   onChanged: (v) {
                                     if (v != null) {
@@ -1134,10 +1212,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             ),
                             const SizedBox(width: 4),
                             IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.red, size: 20),
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                                size: 20,
+                              ),
                               onPressed: () => _removeCustomParam(i),
-                              tooltip: '删除参数',
+                              tooltip: AppLocalizations.of(context)!
+                                  .modelParamDelete,
                             ),
                           ],
                         ),
@@ -1145,8 +1227,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         TextFormField(
                           initialValue: param.defaultValue,
                           decoration: InputDecoration(
-                            labelText: '默认参数值',
-                            hintText: param.paramType.defaultValueHint,
+                            labelText: AppLocalizations.of(context)!
+                                .modelParamDefaultValue,
+                            hintText: localizedParamTypeDefaultValueHint(
+                                AppLocalizations.of(context)!, param.paramType),
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -1157,8 +1241,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             param.paramType.needsQuotes
-                                ? '在请求格式中生成: "{{${param.paramName}}}"'
-                                : '在请求格式中生成: {{${param.paramName}}}',
+                                ? AppLocalizations.of(context)!
+                                    .ttsRequestFormatExample(
+                                    '"{{${param.paramName}}}"',
+                                  )
+                                : AppLocalizations.of(context)!
+                                    .ttsRequestFormatExample(
+                                    '{{${param.paramName}}}',
+                                  ),
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey[500],
@@ -1179,8 +1269,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Card(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -1191,9 +1283,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('模型是否支持 instruction 参数'),
                           Text(
-                            '开启后可在TTS请求中附加指令描述语气、情绪、语速等',
+                            AppLocalizations.of(context)!
+                                .ttsInstructionSupported,
+                          ),
+                          Text(
+                            AppLocalizations.of(context)!.ttsInstructionHelp,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
@@ -1204,14 +1299,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                     ),
                     const SizedBox(width: 12),
                     ToggleButton(
-                      label: '是',
+                      label: AppLocalizations.of(context)!.taskFlowUiYes,
                       value: true,
                       currentValue: _supportInstruction,
                       onChanged: (v) => setState(() => _supportInstruction = v),
                     ),
                     const SizedBox(width: 8),
                     ToggleButton(
-                      label: '否',
+                      label: AppLocalizations.of(context)!.taskFlowUiNo,
                       value: false,
                       currentValue: _supportInstruction,
                       onChanged: (v) => setState(() => _supportInstruction = v),
@@ -1227,8 +1322,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Card(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -1239,9 +1336,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('模型是否支持流式输出'),
                           Text(
-                            '开启后部分需要流式输出的场景将可以使用该模型，请确认模型支持流式输出再开启',
+                            AppLocalizations.of(context)!.ttsStreamSupported,
+                          ),
+                          Text(
+                            AppLocalizations.of(context)!.ttsStreamHelp,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
@@ -1252,14 +1351,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                     ),
                     const SizedBox(width: 12),
                     ToggleButton(
-                      label: '是',
+                      label: AppLocalizations.of(context)!.taskFlowUiYes,
                       value: true,
                       currentValue: _supportStream,
                       onChanged: (v) => setState(() => _supportStream = v),
                     ),
                     const SizedBox(width: 8),
                     ToggleButton(
-                      label: '否',
+                      label: AppLocalizations.of(context)!.taskFlowUiNo,
                       value: false,
                       currentValue: _supportStream,
                       onChanged: (v) => setState(() => _supportStream = v),

@@ -4416,6 +4416,1677 @@ class AppLocalizationsEn extends AppLocalizations {
   String taskFlowValidationTextEncodingFailed(String index) {
     return 'Input $index: The text attachment is not valid UTF-8. Convert it and try again.';
   }
+
+  @override
+  String get assistantParamValueTypeString => 'String';
+
+  @override
+  String get assistantParamValueTypeNumber => 'Number';
+
+  @override
+  String get assistantParamValueTypeBoolean => 'Boolean';
+
+  @override
+  String get assistantParamValueTypeJson => 'JSON';
+
+  @override
+  String get providerRequiredFields =>
+      'Provider name, API URL, and key are required.';
+
+  @override
+  String get providerJsonSizePositive =>
+      'Request JSON size must be a positive MiB value.';
+
+  @override
+  String get providerCustomParamRequired =>
+      'Custom parameter name and value are required.';
+
+  @override
+  String providerParamNameInvalid(String name) {
+    return 'Parameter name is invalid (dot-separated segments cannot be empty): $name';
+  }
+
+  @override
+  String providerParamAlreadyExists(String name) {
+    return 'Parameter already exists: $name';
+  }
+
+  @override
+  String providerParamInvalidJson(String name, String value) {
+    return 'Default value for parameter \"$name\" is not valid JSON: $value';
+  }
+
+  @override
+  String providerParamOptionsRequired(String name) {
+    return 'Numeric options for parameter \"$name\" cannot be empty.';
+  }
+
+  @override
+  String providerParamInvalidNumber(String name, String value) {
+    return 'Value for parameter \"$name\" is not a valid number: $value';
+  }
+
+  @override
+  String get providerReasoningIncomplete =>
+      'Complete the reasoning toggle before enabling other reasoning parameters.';
+
+  @override
+  String providerReasoningError(String error) {
+    return 'Reasoning parameter error: $error';
+  }
+
+  @override
+  String providerParamNameConflict(String name) {
+    return 'Reasoning and custom parameters have the same name: $name';
+  }
+
+  @override
+  String get providerMaxTokensMissing =>
+      'Maximum output tokens is enabled, but no value was entered.';
+
+  @override
+  String get providerMaxTokensPositive =>
+      'Maximum output tokens must be a positive integer.';
+
+  @override
+  String get providerSeedInteger => 'Random seed must be an integer.';
+
+  @override
+  String get providerNotConfigured => 'Not set';
+
+  @override
+  String get providerAudioChunkingTitle => 'Audio chunking';
+
+  @override
+  String get providerAudioChunkingHint =>
+      'Smart chunking analyzes the audio and candidate cuts, preferring sentence endings. Chunks do not overlap.';
+
+  @override
+  String get providerChunkingMode => 'Chunking method';
+
+  @override
+  String get providerChunkNone => 'No chunking';
+
+  @override
+  String get providerChunkSmart => 'Smart chunking (recommended)';
+
+  @override
+  String get providerChunkFixedDuration => 'Fixed-duration chunks';
+
+  @override
+  String get providerChunkFixedSize => 'Fixed-size chunks';
+
+  @override
+  String get providerCompressionTitle => 'Compression encoding';
+
+  @override
+  String get providerCompressionHint =>
+      'When enabled, the general fallback first compresses the full WAV. If the encoded file or request body still exceeds the limit, the source PCM is chunked and encoded.';
+
+  @override
+  String get providerCompressionMode => 'Compression method';
+
+  @override
+  String get providerCompressionNone => 'None (send as is)';
+
+  @override
+  String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
+
+  @override
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+
+  @override
+  String get providerCompressionAdpcmDescription =>
+      'IMA ADPCM, lossy 4:1 compression. Pure Dart implementation; audio quality suits transcription.';
+
+  @override
+  String get providerCompressionFlacDescription =>
+      'Lossless FLAC compression, implemented in pure Dart. Reduces size by about half.';
+
+  @override
+  String get providerCompressionWavDescription =>
+      'No compression; send as a WAV file.';
+
+  @override
+  String get providerLlmParams => 'LLM parameters';
+
+  @override
+  String get providerEnabledParamsHelp =>
+      'Enabled parameters are sent as defaults in API requests.';
+
+  @override
+  String get providerTemperatureLabel => 'Temperature';
+
+  @override
+  String get providerTemperatureHelp =>
+      'Controls output randomness; higher values are more creative.';
+
+  @override
+  String get providerTopPHelp =>
+      'Nucleus sampling parameter that controls cumulative probability for word selection.';
+
+  @override
+  String get providerFrequencyPenaltyLabel => 'Frequency penalty';
+
+  @override
+  String get providerFrequencyPenaltyHelp =>
+      'Reduces repeated words; negative values increase repetition.';
+
+  @override
+  String get providerPresencePenaltyLabel => 'Presence penalty';
+
+  @override
+  String get providerPresencePenaltyHelp =>
+      'Encourages new topics; negative values encourage returning to previous topics.';
+
+  @override
+  String get providerMaxOutputTokensLabel => 'Maximum output tokens';
+
+  @override
+  String providerOptionalExample(String example) {
+    return 'Optional, e.g. $example';
+  }
+
+  @override
+  String get providerResponseTokensHelp =>
+      'Maximum number of tokens generated per response.';
+
+  @override
+  String get providerSeedLabel => 'Random seed';
+
+  @override
+  String get providerSeedHelp => 'Set this to make output reproducible.';
+
+  @override
+  String get providerChunkSmartDescription =>
+      'Analyzes audio and candidate cuts, preferring sentence endings or long silences without overlap. Defaults: 20s minimum / 45s target / 60s maximum. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkDurationDescription =>
+      'Splits every N seconds (60 by default). Simple, but may cut off speech. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkSizeDescription =>
+      'Initially splits by audio data size, then refines by encoded file and request body size. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkNoneDescription =>
+      'No chunking. The file is rejected if it exceeds the limit after full compression.';
+
+  @override
+  String get providerNameLabel => 'Provider name';
+
+  @override
+  String get providerNameHint => 'Enter provider name';
+
+  @override
+  String get providerApiUrlLabel => 'API URL';
+
+  @override
+  String get providerApiUrlHint => 'Enter the full API endpoint URL';
+
+  @override
+  String providerApiKeyHint(String hint) {
+    return 'Hint: $hint';
+  }
+
+  @override
+  String get providerEndpointTypeLabel => 'Endpoint type';
+
+  @override
+  String get providerEndpointOpenAi => 'OpenAI compatible (Chat Completions)';
+
+  @override
+  String get providerEndpointAnthropic => 'Anthropic format (Messages API)';
+
+  @override
+  String get providerAnthropicEndpointHelp =>
+      'Uses the official Anthropic Messages API format (x-api-key header). API URL example: https://api.anthropic.com/v1/messages';
+
+  @override
+  String get providerOpenAiEndpointHelp =>
+      'Uses the official OpenAI Chat Completions compatible format (Bearer header). API URL example: https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get providerRequestJsonDefault => 'Default request JSON size';
+
+  @override
+  String get providerUseAppDefault => 'Leave empty to use the app default';
+
+  @override
+  String get providerModelJsonBudgetHelp =>
+      'Models can override this value. If neither the provider nor model sets it, the default is 20 MiB.';
+
+  @override
+  String get providerRequestParamsHelp =>
+      'Requests use all enabled provider and model parameters. When names overlap, the model value takes precedence.';
+
+  @override
+  String get providerUploadSettings => 'Upload settings';
+
+  @override
+  String get providerUploadMethodHelp =>
+      'Audio upload methods and size limits vary by provider.';
+
+  @override
+  String get providerUploadMethod => 'Upload method';
+
+  @override
+  String get providerMultipart => 'Multipart (general)';
+
+  @override
+  String get providerUrlUpload => 'URL';
+
+  @override
+  String get providerMaxUploadSize => 'Maximum upload size';
+
+  @override
+  String get providerFallbackStrategy => 'Fallback strategy';
+
+  @override
+  String get providerFallbackMethod => 'Fallback method';
+
+  @override
+  String get providerPreprocessing => 'Audio preprocessing';
+
+  @override
+  String get providerPreprocessingHelp =>
+      'Reduces audio file size without affecting transcription accuracy.';
+
+  @override
+  String get providerPreprocessingMethod => 'Preprocessing method';
+
+  @override
+  String get providerUploadMultipartHelp =>
+      'Direct multipart/form-data upload. The request body includes audio, form fields, and multipart boundaries.';
+
+  @override
+  String get providerUploadBase64Help =>
+      'Sends Base64 in JSON, which can bypass some providers’ multipart-specific limits. Base64 expansion and JSON fields count toward the upload limit.';
+
+  @override
+  String get providerUploadUrlHelp =>
+      'Provide a public URL for the provider to download. Supports very large files (e.g. Together AI 1 GB).';
+
+  @override
+  String get providerUploadBudgetHelp =>
+      'This value triggers raw-audio fallback and limits the final request body. The app checks raw audio, encoded files, and upload size. Multipart includes form fields and boundaries; Base64 JSON includes encoding expansion and fields. The 25 MB default matches the OpenAI audio API limit.';
+
+  @override
+  String get providerFallbackTriggerHelp =>
+      'Triggered when raw audio or the complete request body exceeds its limit. Specific fallback (Base64) takes priority over general fallback (compression/chunking).';
+
+  @override
+  String get providerFallbackNone => 'None (reject immediately)';
+
+  @override
+  String get providerFallbackSpecific => 'Specific fallback (Base64)';
+
+  @override
+  String get providerFallbackGeneric =>
+      'General fallback (compression/chunking)';
+
+  @override
+  String get providerFallbackAll => 'Try all (recommended)';
+
+  @override
+  String get providerFallbackSpecificHelp =>
+      'Try Base64 JSON. Send only if the request body, including Base64 expansion and JSON fields, fits the limit.';
+
+  @override
+  String get providerFallbackGenericHelp =>
+      'If enabled, compress the full WAV first. If it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.';
+
+  @override
+  String get providerFallbackAllHelp =>
+      'Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.';
+
+  @override
+  String get providerFallbackRejectHelp =>
+      'Reject the file if it exceeds the limit; do not try a fallback.';
+
+  @override
+  String get providerPreprocessNone => 'None';
+
+  @override
+  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+
+  @override
+  String get providerPreprocessResampleHelp =>
+      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+
+  @override
+  String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';
+
+  @override
+  String get assistantDefaultsScopeHelp =>
+      'Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.';
+
+  @override
+  String get assistantDefaultModelTitle => 'Default model';
+
+  @override
+  String get assistantDefaultModelHelp =>
+      'Model used for new conversations; leave unset to let the conversation choose.';
+
+  @override
+  String get assistantNoDefault => 'Not set';
+
+  @override
+  String get assistantNoModelsAvailable =>
+      'No models available. Configure an LLM provider in Settings.';
+
+  @override
+  String get assistantDefaultToolsTitle => 'Default enabled tools';
+
+  @override
+  String get assistantDisabledToolsHelp =>
+      'Disabled tools will not be enabled automatically in new conversations.';
+
+  @override
+  String get assistantUnconfiguredToolsHelp =>
+      'Default tools are not configured. New conversations will enable all tools automatically.';
+
+  @override
+  String get assistantEnableAll => 'Enable all';
+
+  @override
+  String get assistantDisableAll => 'Disable all';
+
+  @override
+  String get assistantNoToolsAvailable => 'No tools available';
+
+  @override
+  String get assistantTruncateToolOutput => 'Tool output truncation';
+
+  @override
+  String get assistantTruncateToolOutputHelp =>
+      'Maximum characters in each tool result before it is sent to the model. Applies to all conversations under this assistant.';
+
+  @override
+  String get assistantEnableTruncation => 'Enable truncation';
+
+  @override
+  String assistantTruncatedTo(String count) {
+    return 'Long results are truncated to $count characters';
+  }
+
+  @override
+  String get assistantSendFullResult =>
+      'Send full result (subject to the 50 KB storage limit)';
+
+  @override
+  String get assistantMaxCharacters => 'Maximum characters';
+
+  @override
+  String get assistantCharactersNotTokens => 'Unit: characters (not tokens)';
+
+  @override
+  String assistantDefaultCharacterCount(String count) {
+    return 'Default: $count';
+  }
+
+  @override
+  String assistantCharacterRange(String minimum, String maximum) {
+    return 'Valid range: $minimum–$maximum characters';
+  }
+
+  @override
+  String get assistantNewConversationPreview => 'New conversation preview';
+
+  @override
+  String assistantEnabledToolCount(String enabled, String total) {
+    return '$enabled / $total enabled';
+  }
+
+  @override
+  String get assistantAllToolsAutoEnabled =>
+      'All tools are enabled automatically (not configured)';
+
+  @override
+  String get assistantMoreActions => 'More actions';
+
+  @override
+  String get assistantChooseEmoji => 'Choose emoji';
+
+  @override
+  String get assistantNameLabel => 'Assistant name';
+
+  @override
+  String get assistantDescriptionOptional => 'Description (optional)';
+
+  @override
+  String get assistantSelectionTitle => 'Choose an assistant';
+
+  @override
+  String get assistantMarketTooltip => 'Assistant marketplace';
+
+  @override
+  String get assistantCreateNew => 'Create assistant';
+
+  @override
+  String get assistantEmptyState =>
+      'No assistants yet. Create one to get started.';
+
+  @override
+  String get assistantCreate => 'Create';
+
+  @override
+  String get assistantReorderHint =>
+      'Long-press and drag to reorder assistants';
+
+  @override
+  String get assistantNewNameHint => 'Enter assistant name';
+
+  @override
+  String get assistantNewDescriptionHint =>
+      'Briefly describe what this assistant does';
+
+  @override
+  String get assistantDeleteTitle => 'Delete assistant';
+
+  @override
+  String assistantDeleteConfirmation(String name) {
+    return 'Delete assistant “$name”? This action cannot be undone.';
+  }
+
+  @override
+  String get assistantEditTitle => 'Edit assistant';
+
+  @override
+  String get assistantBasicTab => 'Basic settings';
+
+  @override
+  String get assistantParametersTab => 'Parameters';
+
+  @override
+  String get assistantDefaultsTab => 'Defaults';
+
+  @override
+  String get assistantAddCustomParameter => 'Add custom parameter';
+
+  @override
+  String get assistantEditCustomParameter => 'Edit custom parameter';
+
+  @override
+  String get assistantParameterName => 'Parameter name';
+
+  @override
+  String get assistantParameterNameHint => 'e.g. top_k or provider.only';
+
+  @override
+  String get assistantParameterNameInvalid =>
+      'Invalid parameter name (dot-separated segments cannot be empty)';
+
+  @override
+  String get assistantParameterType => 'Type';
+
+  @override
+  String get assistantValue => 'Value';
+
+  @override
+  String get assistantTrueFalseHint => 'true or false';
+
+  @override
+  String get assistantNumberHint => 'Enter a number';
+
+  @override
+  String assistantJsonHint(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get assistantValueHint => 'Enter a value';
+
+  @override
+  String get assistantCancel => 'Cancel';
+
+  @override
+  String get assistantSave => 'Save';
+
+  @override
+  String get assistantParamOverrideHelp =>
+      'When enabled, assistant parameters override model parameters; when disabled, model parameters are used.';
+
+  @override
+  String get assistantTemperature => 'Temperature';
+
+  @override
+  String get assistantMaxTokens => 'Maximum tokens';
+
+  @override
+  String get assistantMaxToolCalls => 'Maximum tool calls';
+
+  @override
+  String assistantRounds(String count) {
+    return '$count rounds';
+  }
+
+  @override
+  String get assistantUnlimited => 'Unlimited';
+
+  @override
+  String get assistantStreamOutput => 'Stream output';
+
+  @override
+  String get assistantFrequencyPenalty => 'Frequency penalty';
+
+  @override
+  String get assistantPresencePenalty => 'Presence penalty';
+
+  @override
+  String get assistantRandomSeed => 'Random seed';
+
+  @override
+  String get assistantNotSet => 'Not set';
+
+  @override
+  String get assistantSeedValue => 'Seed value';
+
+  @override
+  String get assistantIntegerSeedHint => 'Enter an integer seed';
+
+  @override
+  String get assistantWebSearch => 'Web search';
+
+  @override
+  String get assistantAddParameter => 'Add parameter';
+
+  @override
+  String get assistantNoCustomParameters => 'No custom parameters';
+
+  @override
+  String get assistantRoundsLabel => 'Rounds';
+
+  @override
+  String get modelCreateTitle => 'Add model';
+
+  @override
+  String get modelEditTitle => 'Edit model';
+
+  @override
+  String get modelDiscardTitle => 'Discard changes?';
+
+  @override
+  String get modelDiscardBody => 'You have unsaved changes. Discard them?';
+
+  @override
+  String get modelNameLabel => 'Model name';
+
+  @override
+  String get modelNameHint => 'Enter a display name (optional)';
+
+  @override
+  String get modelIdLabel => 'Model ID';
+
+  @override
+  String modelIdExample(String id) {
+    return 'e.g. $id';
+  }
+
+  @override
+  String get modelIdRequired => 'Model ID is required.';
+
+  @override
+  String get modelCustomParamRequired =>
+      'Custom parameter name and default value are required.';
+
+  @override
+  String modelParamDuplicate(String name) {
+    return 'Parameter already exists: $name';
+  }
+
+  @override
+  String get modelParamName => 'Parameter name';
+
+  @override
+  String get modelParamDefaultValue => 'Default parameter value';
+
+  @override
+  String get modelParamDelete => 'Delete parameter';
+
+  @override
+  String modelParamJsonInvalid(String name, String value) {
+    return 'Default value for parameter \"$name\" is not valid JSON: $value';
+  }
+
+  @override
+  String get modelAddParameter => 'Add parameter';
+
+  @override
+  String get modelNoCustomParams => 'No custom parameters';
+
+  @override
+  String get modelBasicSettings => 'Basic settings';
+
+  @override
+  String get modelDiscardCancel => 'Cancel';
+
+  @override
+  String get modelSave => 'Save';
+
+  @override
+  String get modelUnsavedMaxTokens =>
+      'Maximum output tokens is enabled but has no value.';
+
+  @override
+  String get modelMaxTokensPositive =>
+      'Maximum output tokens must be a positive integer.';
+
+  @override
+  String get modelSeedInteger => 'Random seed must be an integer.';
+
+  @override
+  String get modelContextLengthRequired => 'Context length is required.';
+
+  @override
+  String get modelContextLengthPositive =>
+      'Context length must be a positive integer.';
+
+  @override
+  String get modelAsrLanguageCode => 'Language code (Language)';
+
+  @override
+  String get modelAsrLanguageHint => 'e.g. zh, en, ja';
+
+  @override
+  String get modelAsrLanguageHelp =>
+      'ISO-639-1 language code; leave empty for automatic detection.';
+
+  @override
+  String get modelTemperature => 'Temperature';
+
+  @override
+  String get modelTemperatureHelp =>
+      'Controls output randomness; a lower value is recommended.';
+
+  @override
+  String get modelAsrPrompt => 'Prompt';
+
+  @override
+  String get modelAsrPromptHint => 'Enter a context prompt (optional)';
+
+  @override
+  String get modelAsrPromptHelp =>
+      'Provide context to improve transcription accuracy, such as a list of specialist terms.';
+
+  @override
+  String get modelAsrParams => 'ASR parameters';
+
+  @override
+  String get modelEnabledParamsHelp =>
+      'Enabled parameters are sent as defaults in API requests.';
+
+  @override
+  String get modelAsrResponseFormat => 'Response format';
+
+  @override
+  String get modelAsrResponseHelp => 'Format of the returned transcription.';
+
+  @override
+  String get modelAsrTimestampGranularity => 'Timestamp granularity';
+
+  @override
+  String get modelAsrVerboseHelp =>
+      'Available only when response_format is verbose_json.';
+
+  @override
+  String get modelNoTrim => 'No trimming';
+
+  @override
+  String get modelAudioTrimTitle => 'Audio trimming';
+
+  @override
+  String get modelAudioTrimHelp => 'Choose how to trim the audio.';
+
+  @override
+  String get modelDeleteTrimPreset => 'Delete trim preset';
+
+  @override
+  String modelDeleteTrimConfirmation(String name) {
+    return 'Delete trim preset \"$name\"?';
+  }
+
+  @override
+  String get modelAddTrimPreset => 'Add custom trim';
+
+  @override
+  String get modelPlayTestAudio => 'Play test audio';
+
+  @override
+  String get modelPlayingTestAudio => 'Playing...';
+
+  @override
+  String get modelParamExists => 'Parameter already exists';
+
+  @override
+  String get asrModelIdExample => 'e.g. whisper-1';
+
+  @override
+  String get asrPromptLabel => 'Prompt';
+
+  @override
+  String get asrResponseFormatJson => 'json – JSON';
+
+  @override
+  String get asrResponseFormatText => 'text – Plain text';
+
+  @override
+  String get asrResponseFormatSrt => 'srt – Subtitles';
+
+  @override
+  String get asrResponseFormatVtt => 'vtt – Subtitles';
+
+  @override
+  String get asrResponseFormatVerbose =>
+      'verbose_json – Detailed JSON (includes timestamps)';
+
+  @override
+  String get asrVerboseTimestampHelp =>
+      'Selecting verbose_json enables the timestamp granularity option below.';
+
+  @override
+  String get asrTimestampSegment => 'segment – Segment level';
+
+  @override
+  String get asrTimestampWord => 'word – Word level';
+
+  @override
+  String get asrWordTimestampHelp =>
+      'Word-level timestamps may be less accurate than segment-level timestamps.';
+
+  @override
+  String get reasoningAddOptionValue => 'Add option value';
+
+  @override
+  String get reasoningEditOptionValue => 'Edit option value';
+
+  @override
+  String get reasoningOptionExample => 'e.g. low, medium, high';
+
+  @override
+  String get reasoningOptionSelectionHelp =>
+      'Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.';
+
+  @override
+  String get reasoningAddOption => 'Add option';
+
+  @override
+  String get reasoningCurrentProvider => 'Current: provider';
+
+  @override
+  String get reasoningCurrentModel => 'Current: model custom';
+
+  @override
+  String get reasoningAddEffortValue => 'Add reasoning effort value';
+
+  @override
+  String get reasoningEffortExample => 'e.g. max, ultra, deep';
+
+  @override
+  String get reasoningAddToggle => 'Add reasoning toggle';
+
+  @override
+  String get reasoningToggle => 'Reasoning toggle';
+
+  @override
+  String get reasoningResetParameter => 'Reset this parameter';
+
+  @override
+  String get reasoningDisableToggle => 'Disable reasoning toggle';
+
+  @override
+  String get reasoningEnableToggle => 'Enable reasoning toggle';
+
+  @override
+  String reasoningParameterNameSource(String source) {
+    return 'Parameter name ($source)';
+  }
+
+  @override
+  String get reasoningNameExample => 'e.g. thinking.type, reasoning';
+
+  @override
+  String get reasoningBooleanHelp =>
+      'Boolean parameters need no value; the chat panel provides an on/off switch.';
+
+  @override
+  String get reasoningOnValue => 'Value when enabled';
+
+  @override
+  String get reasoningOnExample => 'e.g. enabled, true';
+
+  @override
+  String get reasoningOffValue => 'Value when disabled';
+
+  @override
+  String get reasoningOffExample => 'e.g. disabled, false';
+
+  @override
+  String reasoningToggleValuesHelp(String onValue, String offValue) {
+    return 'When enabled, sends “$onValue”; when disabled, sends “$offValue”.';
+  }
+
+  @override
+  String get reasoningAddEffort => 'Add reasoning effort';
+
+  @override
+  String get reasoningFillToggleFirst => 'Complete the reasoning toggle first';
+
+  @override
+  String get reasoningFillToggleBeforeEffort =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get reasoningAddValue => 'Add value';
+
+  @override
+  String get reasoningJsonValue => 'JSON value';
+
+  @override
+  String reasoningJsonExample(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get reasoningSelectedChipHelp =>
+      'Tap a chip to select or clear it. Selected values appear in the chat reasoning panel; drag to reorder. Provider values cannot be deleted, but can be hidden.';
+
+  @override
+  String get reasoningAddParameter => 'Add reasoning parameter';
+
+  @override
+  String get reasoningToggleIncomplete =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get llmContextLength => 'Context length';
+
+  @override
+  String get llmContextHint => 'Enter context length';
+
+  @override
+  String get llmContextHelp =>
+      'Maximum context window size for the model (tokens).';
+
+  @override
+  String get llmReasoningParams => 'Reasoning parameters';
+
+  @override
+  String get llmReasoningHelp =>
+      'Configure reasoning parameters for chat. The reasoning toggle controls its parameter name and on/off values. Add reasoning effort values, reorder them, and select which values appear in the chat panel. Provider values are synchronized when this page opens. These settings control model parameter availability; the chat panel toggle is managed separately.';
+
+  @override
+  String get llmAddReasoningParam => 'Add reasoning parameter';
+
+  @override
+  String get llmCustomEndpointType => 'Custom endpoint type';
+
+  @override
+  String get llmInheritEndpointType =>
+      'When disabled, use the endpoint type from provider settings.';
+
+  @override
+  String get llmEndpointType => 'Endpoint type';
+
+  @override
+  String get llmEndpointOpenAi => 'OpenAI compatible (Chat Completions)';
+
+  @override
+  String get llmEndpointAnthropic => 'Anthropic format (Messages API)';
+
+  @override
+  String get llmEndpointHelp =>
+      'The endpoint type must match the provider API URL. Changing it affects the format used for new conversations with this model.';
+
+  @override
+  String get llmTopPHelp =>
+      'Nucleus sampling parameter; controls cumulative probability for word selection.';
+
+  @override
+  String get llmFrequencyPenaltyLabel => 'Frequency penalty';
+
+  @override
+  String get llmFrequencyPenaltyHelp =>
+      'Reduces repetition; negative values increase it.';
+
+  @override
+  String get llmPresencePenaltyLabel => 'Presence penalty';
+
+  @override
+  String get llmPresencePenaltyHelp =>
+      'Encourages new topics; negative values encourage repetition.';
+
+  @override
+  String get llmMaxTokensHint => 'Optional, e.g. 4096';
+
+  @override
+  String get llmTokensPerResponse => 'Maximum tokens generated per response.';
+
+  @override
+  String get llmSeedLabel => 'Random seed (Seed)';
+
+  @override
+  String get llmSeedHint => 'Optional, e.g. 42';
+
+  @override
+  String get llmSeedHelp => 'Setting this makes output reproducible.';
+
+  @override
+  String get llmInheritedCustomHelp =>
+      'Provider custom parameters are shown here and synchronized whenever this page opens.';
+
+  @override
+  String get llmBooleanParamHelp => 'Boolean parameters do not need a value.';
+
+  @override
+  String get modelContextReq => 'Context length is required.';
+
+  @override
+  String get modelContextPositive =>
+      'Context length must be a positive integer.';
+
+  @override
+  String modelParamNameInvalid(String name) {
+    return 'Invalid parameter name (dot-separated segments cannot be empty): $name';
+  }
+
+  @override
+  String modelParamFinite(String name, String valueLabel, String value) {
+    return 'Parameter \"$name\" $valueLabel must be a finite number: $value';
+  }
+
+  @override
+  String get modelReasoningIncomplete =>
+      'Complete the reasoning toggle before enabling other reasoning parameters.';
+
+  @override
+  String get modelReasoningOptionsRequired =>
+      'Add at least one option value to the reasoning parameter.';
+
+  @override
+  String modelReasoningError(String error) {
+    return 'Reasoning parameter error: $error';
+  }
+
+  @override
+  String modelReasoningDuplicate(String name) {
+    return 'Duplicate reasoning parameter: $name';
+  }
+
+  @override
+  String modelReasoningCustomDuplicate(String name) {
+    return 'Reasoning and custom parameters share the name: $name';
+  }
+
+  @override
+  String get modelSeedRequired => 'Random seed is enabled but empty.';
+
+  @override
+  String get ocrParamsTitle => 'OCR parameters';
+
+  @override
+  String get ocrParamsHelp =>
+      'Uses the OpenAI-compatible vision Chat Completions format. Parameters below are optional; unset or disabled parameters are not sent. Add provider-specific parameters below if supported by its API.';
+
+  @override
+  String get ocrRequestSizeOverride => 'Request JSON size override';
+
+  @override
+  String get ocrInheritProvider => 'Leave empty to inherit provider settings';
+
+  @override
+  String get ocrBudgetDefault =>
+      'When empty, inherits provider settings; if the provider has no value, the default is 20 MiB.';
+
+  @override
+  String ocrBudgetValue(String size) {
+    return 'When empty, inherits provider settings ($size MiB); if the provider has no value, the default is 20 MiB.';
+  }
+
+  @override
+  String audioTrimDirection(String direction, String seconds) {
+    return 'Trim $direction ${seconds}s';
+  }
+
+  @override
+  String audioTrimBeginning(String seconds) {
+    return 'Trim the first ${seconds}s';
+  }
+
+  @override
+  String get audioTrimNone => 'Do not trim audio';
+
+  @override
+  String get trimNameLabel => 'Trim method name *';
+
+  @override
+  String get trimNameHint => 'e.g. silence trimming';
+
+  @override
+  String get trimDurationLabel => 'Trim duration (seconds) *';
+
+  @override
+  String get trimDurationHint => 'e.g. 0.123';
+
+  @override
+  String get trimNameAndDurationRequired => 'Name and duration are required.';
+
+  @override
+  String get trimDurationInvalid => 'Enter a valid positive duration.';
+
+  @override
+  String get testAudioHostMissing => 'Host is not configured.';
+
+  @override
+  String get testAudioKeyMissing => 'Key is not configured.';
+
+  @override
+  String testAudioContentTypeError(String contentType) {
+    return 'Response Content-Type is $contentType, not audio.';
+  }
+
+  @override
+  String get testAudioEmpty => 'The server returned empty audio data.';
+
+  @override
+  String testAudioTimeoutConnection(String details) {
+    return 'Connection timed out. Check your network. $details';
+  }
+
+  @override
+  String testAudioTimeoutReceive(String details) {
+    return 'Receive timed out; the server responded too slowly. $details';
+  }
+
+  @override
+  String testAudioRequestCancelled(String details) {
+    return 'Request cancelled. $details';
+  }
+
+  @override
+  String testAudioNetworkError(String message) {
+    return 'Network error: $message';
+  }
+
+  @override
+  String get testAudioNoBody => 'No response body';
+
+  @override
+  String testAudioCorsHelp(String details) {
+    return 'Unable to connect to server. On web, this may be caused by CORS or an incorrect API URL. Check the provider API URL and whether the server allows cross-origin requests. $details';
+  }
+
+  @override
+  String get trimModelNameHint =>
+      'A friendly name for display and identification, e.g. \"GPT-4o Mini TTS\". Use different names to distinguish models from the same provider.';
+
+  @override
+  String get trimModelIdHelp =>
+      'Unique identifier used in API calls, e.g. \"gpt-4o-mini-tts\". It must match the model ID provided by the vendor.';
+
+  @override
+  String get ttsVoiceRangeTitle => 'Volume range';
+
+  @override
+  String get ttsMinVolume => 'Minimum volume';
+
+  @override
+  String get ttsMaxVolume => 'Maximum volume';
+
+  @override
+  String get ttsSpeedRangeTitle => 'Speed range';
+
+  @override
+  String get ttsMinSpeed => 'Minimum speed';
+
+  @override
+  String get ttsMaxSpeed => 'Maximum speed';
+
+  @override
+  String get ttsMaxAudioLength => 'Maximum audio length per request *';
+
+  @override
+  String get ttsAudioLengthHint => 'e.g. 1000';
+
+  @override
+  String get ttsNoVoices => 'No voices. Tap to edit.';
+
+  @override
+  String get ttsInstructionSupported =>
+      'Model supports the instruction parameter';
+
+  @override
+  String get ttsInstructionHelp =>
+      'When enabled, TTS requests can include instructions for tone, emotion, speaking speed, and more.';
+
+  @override
+  String get ttsStreamSupported => 'Model supports streaming output';
+
+  @override
+  String get ttsStreamHelp =>
+      'Enables this model for streaming scenarios. Confirm the model supports streaming before enabling.';
+
+  @override
+  String modelParamBooleanExpected(String name, String value) {
+    return 'Parameter “$name” must be true or false: $value';
+  }
+
+  @override
+  String get ttsMaxAudioLengthRequired =>
+      'Maximum audio length per request is required; enter a positive integer.';
+
+  @override
+  String get asrLanguageExample => 'e.g. zh, en, ja';
+
+  @override
+  String get llmReasoningFullHelp =>
+      'The reasoning toggle controls whether reasoning is sent and lets you define the parameter name and on/off values. There is one reasoning-effort parameter. Select values and drag to reorder them; selected values appear in the chat reasoning panel. Add other reasoning parameters below. Parameter names support dot notation such as thinking.type, which becomes a nested JSON object. Provider reasoning parameters synchronize when this page opens. The switches here control model parameters; the chat reasoning toggle is separate.';
+
+  @override
+  String get llmTemperatureHelp =>
+      'Controls output randomness; higher values are more creative.';
+
+  @override
+  String get llmBooleanValueHelp => 'Boolean parameters do not need a value.';
+
+  @override
+  String get reasoningDisableEffort => 'Disable reasoning effort';
+
+  @override
+  String get reasoningEnableEffort => 'Enable reasoning effort';
+
+  @override
+  String get ocrJsonSizePositive =>
+      'Request JSON size must be a positive MiB value.';
+
+  @override
+  String ttsRangePair(String kind) {
+    return 'Enter both the minimum and maximum $kind, or leave both empty.';
+  }
+
+  @override
+  String get ttsEditTrimTitle => 'Edit custom trim';
+
+  @override
+  String ttsVoicesCount(String count) {
+    return 'Voices ($count)';
+  }
+
+  @override
+  String ttsRequestFormatExample(String syntax) {
+    return 'Generated in the request format: $syntax';
+  }
+
+  @override
+  String get mcpServerNameRequired => 'Please enter an MCP server name.';
+
+  @override
+  String get mcpStdioCommandRequired => 'stdio mode requires a command.';
+
+  @override
+  String get mcpSseUrlRequired => 'SSE mode requires a URL.';
+
+  @override
+  String get mcpEditServerTitle => 'Edit MCP server';
+
+  @override
+  String get mcpCreateServerTitle => 'New MCP server';
+
+  @override
+  String get mcpUnsavedChangesTitle => 'Unsaved changes';
+
+  @override
+  String get mcpUnsavedChangesConfirm =>
+      'You have unsaved changes. Discard them?';
+
+  @override
+  String get mcpTransportType => 'Transport type';
+
+  @override
+  String get mcpServerName => 'Server name';
+
+  @override
+  String get mcpServerNameHint => 'Enter an MCP server name';
+
+  @override
+  String get mcpCommand => 'Command';
+
+  @override
+  String get mcpCommandExample => 'Example: npx';
+
+  @override
+  String get mcpArguments => 'Arguments';
+
+  @override
+  String get mcpArgumentsHint =>
+      'Separate arguments with commas, for example: -y, @modelcontextprotocol/server-filesystem, /tmp';
+
+  @override
+  String get mcpSseUrlExample => 'Example: http://localhost:3001/sse';
+
+  @override
+  String get mcpApiKey => 'API key';
+
+  @override
+  String get mcpApiKeyHint => 'Enter an API key (optional)';
+
+  @override
+  String get mcpShowKey => 'Show key';
+
+  @override
+  String get mcpHideKey => 'Hide key';
+
+  @override
+  String get mcpDescriptionHint =>
+      'Enter a description for this MCP server (optional)';
+
+  @override
+  String get mcpStdioDescription =>
+      'stdio starts a local child process as an MCP server and communicates through standard input/output. Recommended for local tools.';
+
+  @override
+  String get mcpSseDescription =>
+      'SSE connects to a remote MCP server over HTTP SSE. Recommended for remote services.';
+
+  @override
+  String get mcpLocalStdio => 'Local (stdio)';
+
+  @override
+  String get mcpRemoteSse => 'Remote (SSE)';
+
+  @override
+  String get mcpSaving => 'Saving…';
+
+  @override
+  String get providerTestSafetyNote =>
+      'This test sends a real request to the selected service. MCP only calls the read-only tools/list method; HTTP and web search run one query. Todo reads the list by default; to protect current data, omit the todos parameter or set it to null.';
+
+  @override
+  String get providerDeleteConfigTitle => 'Delete configuration';
+
+  @override
+  String get providerDeleteConfigConfirm =>
+      'Delete this provider configuration and all of its models?';
+
+  @override
+  String get providerCreateGroup => 'New group';
+
+  @override
+  String get providerEditGroup => 'Edit group';
+
+  @override
+  String get providerGroupName => 'Group name';
+
+  @override
+  String get providerGroupNameExists =>
+      'A group with this name already exists.';
+
+  @override
+  String get providerDeleteGroup => 'Delete group';
+
+  @override
+  String providerDeleteGroupConfirm(String groupName) {
+    return 'Deleting “$groupName” will move its configurations to “Other MCP services”.';
+  }
+
+  @override
+  String get providerMoveToGroup => 'Move to group';
+
+  @override
+  String get providerUnnamed => '(Unnamed)';
+
+  @override
+  String get providerHttpSearch => 'HTTP search';
+
+  @override
+  String providerHttpToolSubtitle(String url) {
+    return 'HTTP tool: $url';
+  }
+
+  @override
+  String providerLocalStdioSubtitle(String command) {
+    return 'Local (stdio): $command';
+  }
+
+  @override
+  String providerRemoteSseSubtitle(String url) {
+    return 'Remote (SSE): $url';
+  }
+
+  @override
+  String get providerServices => 'Service configurations';
+
+  @override
+  String get providerServicesDescription =>
+      'Manage remote connections, local stdio, and HTTP search by group';
+
+  @override
+  String get providerCreateGroupAction => 'New group';
+
+  @override
+  String get providerGroupEmpty =>
+      'This group has no configurations. Select “Add” to add an item.';
+
+  @override
+  String get providerBuiltinTools => 'Built-in tools';
+
+  @override
+  String get providerBuiltinToolsDescription =>
+      'Stroom-provided local tool interfaces. Web search is listed in its service group.';
+
+  @override
+  String get providerBuiltinToolInterface => 'Built-in tool interface';
+
+  @override
+  String get providerViewInterface => 'View interface';
+
+  @override
+  String get providerConfigTitle => 'Configuration';
+
+  @override
+  String get providerNotFound => 'Provider not found';
+
+  @override
+  String get providerConfigurationHeading => 'Provider configuration';
+
+  @override
+  String get providerBuiltinWebSearchEmpty =>
+      'Built-in web search supports Google, Bing, and Baidu. Its model tool name is web_search.';
+
+  @override
+  String get providerNoConfigsAdd =>
+      'No provider configurations yet. Select “Add” to create one.';
+
+  @override
+  String get providerNoHost => '(Host not set)';
+
+  @override
+  String get providerServicesAndTools => 'Services and tools';
+
+  @override
+  String get providerManageServicesDescription =>
+      'Manage MCP servers, HTTP search, and Stroom built-in tools.';
+
+  @override
+  String get providerNoServices => 'No service configurations yet';
+
+  @override
+  String get providerAddServiceDescription =>
+      'Add an MCP service or HTTP search interface to use it in assistants.';
+
+  @override
+  String get providerAddService => 'Add service';
+
+  @override
+  String get providerBuiltinBadge => 'Built-in';
+
+  @override
+  String get providerConnectivityTest => 'Connectivity test';
+
+  @override
+  String get providerMoveGroupTooltip => 'Move to group';
+
+  @override
+  String get providerDeleteTooltip => 'Delete configuration';
+
+  @override
+  String providerGroupItemCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# items',
+      one: '# item',
+      zero: 'No items',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get providerGroupActions => 'Group actions';
+
+  @override
+  String get providerEditGroupAction => 'Edit group';
+
+  @override
+  String get providerDeleteGroupAction => 'Delete group';
+
+  @override
+  String get providerAddItem => 'Add item';
+
+  @override
+  String get providerMcpMasterLabel => 'MCP servers';
+
+  @override
+  String get providerMcpMasterDescription =>
+      'Controls whether MCP servers and built-in search tools are available in assistants and chats.';
+
+  @override
+  String get providerEnabled => 'Enabled';
+
+  @override
+  String get providerDisabled => 'Disabled';
+
+  @override
+  String get providerEditSettings => 'Edit provider settings';
+
+  @override
+  String get providerModelList => 'Models';
+
+  @override
+  String get providerNoModels => 'No models yet';
+
+  @override
+  String get providerDeleteModel => 'Delete model';
+
+  @override
+  String get providerDeleteModelConfirm =>
+      'Are you sure you want to delete this model?';
+
+  @override
+  String get providerEditConfig => 'Edit configuration';
+
+  @override
+  String providerCreateNamedConfig(String entryName) {
+    return 'New $entryName configuration';
+  }
+
+  @override
+  String get toolHttpSearchType => 'Connection type: HTTP search';
+
+  @override
+  String toolInterface(String name) {
+    return 'Tool interface: $name';
+  }
+
+  @override
+  String get toolParameterDefinitions => 'Parameter definitions';
+
+  @override
+  String get toolHttpAddress => 'HTTP endpoint URL';
+
+  @override
+  String get toolInvalidHttpUrl => 'Enter a valid HTTP or HTTPS URL.';
+
+  @override
+  String get toolBuiltinType => 'Connection type: Stroom built-in tool';
+
+  @override
+  String get toolBuiltinEnableHelp =>
+      'Enable this tool for an assistant in that assistant’s default tool settings.';
+
+  @override
+  String get mcpSseUrlLabel => 'SSE URL';
+
+  @override
+  String get mcpUrlLabel => 'URL';
+
+  @override
+  String providerModelId(String modelId) {
+    return 'Model ID: $modelId';
+  }
+
+  @override
+  String get providerValueNotSet => '(Not set)';
+
+  @override
+  String get providerApiKeyInputHint => 'Enter an API key';
+
+  @override
+  String get providerSettingsTitle => 'Provider configuration';
+
+  @override
+  String get providerBasicInfoTab => 'Basic information';
+
+  @override
+  String get providerParameterSettingsTab => 'Parameter settings';
+
+  @override
+  String get providerOptionValuesReorderHelp =>
+      'Option values (hold the handle to drag and reorder)';
+
+  @override
+  String providerOptionIndexLabel(String index) {
+    return 'Option $index';
+  }
+
+  @override
+  String providerOptionExampleHint(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get providerDeleteOptionTooltip => 'Delete option';
+
+  @override
+  String get providerAddOption => 'Add option';
+
+  @override
+  String get providerAddCustomParam => 'Add parameter';
+
+  @override
+  String get providerNoCustomParams => 'No custom parameters yet';
+
+  @override
+  String get providerParamNameLabel => 'Parameter name';
+
+  @override
+  String get providerParamDefaultValueLabel => 'Default parameter value';
+
+  @override
+  String get providerBooleanParamNoValue =>
+      'Boolean parameters do not need a value. The chat panel provides an on/off toggle.';
+
+  @override
+  String get providerReasoningParamsHeading => 'Reasoning parameters';
+
+  @override
+  String providerReasoningSettingsHelp(
+    String parameterName,
+    String jsonExample,
+  ) {
+    return 'The reasoning toggle turns reasoning on or off in chat; you choose its parameter name and on/off values. You can configure one reasoning effort parameter with a required name and optional choices. If you enter only a name, the model configuration can provide the values. Use the buttons below to add other reasoning parameters. Parameter names support dot nesting, for example $parameterName expands to $jsonExample.';
+  }
+
+  @override
+  String get providerAddReasoningParam => 'Add reasoning parameter';
+
+  @override
+  String get providerAddReasoningToggle => 'Add reasoning toggle';
+
+  @override
+  String get providerReasoningToggle => 'Reasoning toggle';
+
+  @override
+  String get providerDeleteReasoningToggle => 'Delete reasoning toggle';
+
+  @override
+  String providerParamNameHint(String examples) {
+    return 'e.g. $examples';
+  }
+
+  @override
+  String get providerReasoningBooleanHelp =>
+      'Boolean parameters do not need a value. The chat panel provides an on/off toggle.';
+
+  @override
+  String get providerToggleOnValueLabel => 'On value';
+
+  @override
+  String get providerToggleOffValueLabel => 'Off value';
+
+  @override
+  String providerReasoningToggleSummary(String onValue, String offValue) {
+    return 'When reasoning is on, send “$onValue”; when it is off, send “$offValue”.';
+  }
+
+  @override
+  String get providerAddReasoningEffort => 'Add reasoning effort';
+
+  @override
+  String get providerDeleteReasoningEffort =>
+      'Delete reasoning effort parameter';
+
+  @override
+  String get providerReasoningEffortLockedHint =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get providerJsonValueLabel => 'JSON value';
+
+  @override
+  String get providerReasoningOptionsHelp =>
+      'Option values (optional; if only the parameter name is entered, the model configuration supplies the value). Hold the handle to drag and reorder.';
+
+  @override
+  String get providerParamNameNestedLabel =>
+      'Parameter name (supports dot nesting)';
+
+  @override
+  String get providerToggleEffortPrerequisite =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get providerToggleRequiredHint =>
+      'Complete the reasoning toggle first.';
+
+  @override
+  String get providerDeleteCustomParam => 'Delete parameter';
+
+  @override
+  String get modelSaveSuccess => 'Model saved';
+
+  @override
+  String get modelSaving => 'Saving…';
+
+  @override
+  String modelOriginalError(String error) {
+    return 'Original error: $error';
+  }
+
+  @override
+  String get paramTypeStringLabel => 'String';
+
+  @override
+  String get paramTypeNumberLabel => 'Number';
+
+  @override
+  String get paramTypeBooleanLabel => 'Boolean';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => 'e.g. cheerful';
+
+  @override
+  String get paramTypeNumberHint => 'e.g. 0.8';
+
+  @override
+  String get paramTypeBooleanHint => 'e.g. true';
+
+  @override
+  String get paramTypeJsonHint => 'e.g. ';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -8829,4 +10500,1675 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String taskFlowValidationTextEncodingFailed(String index) {
     return 'Input $index: The text attachment is not valid UTF-8. Convert it and try again.';
   }
+
+  @override
+  String get assistantParamValueTypeString => 'String';
+
+  @override
+  String get assistantParamValueTypeNumber => 'Number';
+
+  @override
+  String get assistantParamValueTypeBoolean => 'Boolean';
+
+  @override
+  String get assistantParamValueTypeJson => 'JSON';
+
+  @override
+  String get providerRequiredFields =>
+      'Provider name, API URL, and key are required.';
+
+  @override
+  String get providerJsonSizePositive =>
+      'Request JSON size must be a positive MiB value.';
+
+  @override
+  String get providerCustomParamRequired =>
+      'Custom parameter name and value are required.';
+
+  @override
+  String providerParamNameInvalid(String name) {
+    return 'Parameter name is invalid (dot-separated segments cannot be empty): $name';
+  }
+
+  @override
+  String providerParamAlreadyExists(String name) {
+    return 'Parameter already exists: $name';
+  }
+
+  @override
+  String providerParamInvalidJson(String name, String value) {
+    return 'Default value for parameter \"$name\" is not valid JSON: $value';
+  }
+
+  @override
+  String providerParamOptionsRequired(String name) {
+    return 'Numeric options for parameter \"$name\" cannot be empty.';
+  }
+
+  @override
+  String providerParamInvalidNumber(String name, String value) {
+    return 'Value for parameter \"$name\" is not a valid number: $value';
+  }
+
+  @override
+  String get providerReasoningIncomplete =>
+      'Complete the reasoning toggle before enabling other reasoning parameters.';
+
+  @override
+  String providerReasoningError(String error) {
+    return 'Reasoning parameter error: $error';
+  }
+
+  @override
+  String providerParamNameConflict(String name) {
+    return 'Reasoning and custom parameters have the same name: $name';
+  }
+
+  @override
+  String get providerMaxTokensMissing =>
+      'Maximum output tokens is enabled, but no value was entered.';
+
+  @override
+  String get providerMaxTokensPositive =>
+      'Maximum output tokens must be a positive integer.';
+
+  @override
+  String get providerSeedInteger => 'Random seed must be an integer.';
+
+  @override
+  String get providerNotConfigured => 'Not set';
+
+  @override
+  String get providerAudioChunkingTitle => 'Audio chunking';
+
+  @override
+  String get providerAudioChunkingHint =>
+      'Smart chunking analyzes the audio and candidate cuts, preferring sentence endings. Chunks do not overlap.';
+
+  @override
+  String get providerChunkingMode => 'Chunking method';
+
+  @override
+  String get providerChunkNone => 'No chunking';
+
+  @override
+  String get providerChunkSmart => 'Smart chunking (recommended)';
+
+  @override
+  String get providerChunkFixedDuration => 'Fixed-duration chunks';
+
+  @override
+  String get providerChunkFixedSize => 'Fixed-size chunks';
+
+  @override
+  String get providerCompressionTitle => 'Compression encoding';
+
+  @override
+  String get providerCompressionHint =>
+      'When enabled, the general fallback first compresses the full WAV. If the encoded file or request body still exceeds the limit, the source PCM is chunked and encoded.';
+
+  @override
+  String get providerCompressionMode => 'Compression method';
+
+  @override
+  String get providerCompressionNone => 'None (send as is)';
+
+  @override
+  String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
+
+  @override
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+
+  @override
+  String get providerCompressionAdpcmDescription =>
+      'IMA ADPCM, lossy 4:1 compression. Pure Dart implementation; audio quality suits transcription.';
+
+  @override
+  String get providerCompressionFlacDescription =>
+      'Lossless FLAC compression, implemented in pure Dart. Reduces size by about half.';
+
+  @override
+  String get providerCompressionWavDescription =>
+      'No compression; send as a WAV file.';
+
+  @override
+  String get providerLlmParams => 'LLM parameters';
+
+  @override
+  String get providerEnabledParamsHelp =>
+      'Enabled parameters are sent as defaults in API requests.';
+
+  @override
+  String get providerTemperatureLabel => 'Temperature';
+
+  @override
+  String get providerTemperatureHelp =>
+      'Controls output randomness; higher values are more creative.';
+
+  @override
+  String get providerTopPHelp =>
+      'Nucleus sampling parameter that controls cumulative probability for word selection.';
+
+  @override
+  String get providerFrequencyPenaltyLabel => 'Frequency penalty';
+
+  @override
+  String get providerFrequencyPenaltyHelp =>
+      'Reduces repeated words; negative values increase repetition.';
+
+  @override
+  String get providerPresencePenaltyLabel => 'Presence penalty';
+
+  @override
+  String get providerPresencePenaltyHelp =>
+      'Encourages new topics; negative values encourage returning to previous topics.';
+
+  @override
+  String get providerMaxOutputTokensLabel => 'Maximum output tokens';
+
+  @override
+  String providerOptionalExample(String example) {
+    return 'Optional, e.g. $example';
+  }
+
+  @override
+  String get providerResponseTokensHelp =>
+      'Maximum number of tokens generated per response.';
+
+  @override
+  String get providerSeedLabel => 'Random seed';
+
+  @override
+  String get providerSeedHelp => 'Set this to make output reproducible.';
+
+  @override
+  String get providerChunkSmartDescription =>
+      'Analyzes audio and candidate cuts, preferring sentence endings or long silences without overlap. Defaults: 20s minimum / 45s target / 60s maximum. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkDurationDescription =>
+      'Splits every N seconds (60 by default). Simple, but may cut off speech. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkSizeDescription =>
+      'Initially splits by audio data size, then refines by encoded file and request body size. Used only by the general fallback; compression chunking supports PCM WAV only.';
+
+  @override
+  String get providerChunkNoneDescription =>
+      'No chunking. The file is rejected if it exceeds the limit after full compression.';
+
+  @override
+  String get providerNameLabel => 'Provider name';
+
+  @override
+  String get providerNameHint => 'Enter provider name';
+
+  @override
+  String get providerApiUrlLabel => 'API URL';
+
+  @override
+  String get providerApiUrlHint => 'Enter the full API endpoint URL';
+
+  @override
+  String providerApiKeyHint(String hint) {
+    return 'Hint: $hint';
+  }
+
+  @override
+  String get providerEndpointTypeLabel => 'Endpoint type';
+
+  @override
+  String get providerEndpointOpenAi => 'OpenAI compatible (Chat Completions)';
+
+  @override
+  String get providerEndpointAnthropic => 'Anthropic format (Messages API)';
+
+  @override
+  String get providerAnthropicEndpointHelp =>
+      'Uses the official Anthropic Messages API format (x-api-key header). API URL example: https://api.anthropic.com/v1/messages';
+
+  @override
+  String get providerOpenAiEndpointHelp =>
+      'Uses the official OpenAI Chat Completions compatible format (Bearer header). API URL example: https://api.openai.com/v1/chat/completions';
+
+  @override
+  String get providerRequestJsonDefault => 'Default request JSON size';
+
+  @override
+  String get providerUseAppDefault => 'Leave empty to use the app default';
+
+  @override
+  String get providerModelJsonBudgetHelp =>
+      'Models can override this value. If neither the provider nor model sets it, the default is 20 MiB.';
+
+  @override
+  String get providerRequestParamsHelp =>
+      'Requests use all enabled provider and model parameters. When names overlap, the model value takes precedence.';
+
+  @override
+  String get providerUploadSettings => 'Upload settings';
+
+  @override
+  String get providerUploadMethodHelp =>
+      'Audio upload methods and size limits vary by provider.';
+
+  @override
+  String get providerUploadMethod => 'Upload method';
+
+  @override
+  String get providerMultipart => 'Multipart (general)';
+
+  @override
+  String get providerUrlUpload => 'URL';
+
+  @override
+  String get providerMaxUploadSize => 'Maximum upload size';
+
+  @override
+  String get providerFallbackStrategy => 'Fallback strategy';
+
+  @override
+  String get providerFallbackMethod => 'Fallback method';
+
+  @override
+  String get providerPreprocessing => 'Audio preprocessing';
+
+  @override
+  String get providerPreprocessingHelp =>
+      'Reduces audio file size without affecting transcription accuracy.';
+
+  @override
+  String get providerPreprocessingMethod => 'Preprocessing method';
+
+  @override
+  String get providerUploadMultipartHelp =>
+      'Direct multipart/form-data upload. The request body includes audio, form fields, and multipart boundaries.';
+
+  @override
+  String get providerUploadBase64Help =>
+      'Sends Base64 in JSON, which can bypass some providers’ multipart-specific limits. Base64 expansion and JSON fields count toward the upload limit.';
+
+  @override
+  String get providerUploadUrlHelp =>
+      'Provide a public URL for the provider to download. Supports very large files (e.g. Together AI 1 GB).';
+
+  @override
+  String get providerUploadBudgetHelp =>
+      'This value triggers raw-audio fallback and limits the final request body. The app checks raw audio, encoded files, and upload size. Multipart includes form fields and boundaries; Base64 JSON includes encoding expansion and fields. The 25 MB default matches the OpenAI audio API limit.';
+
+  @override
+  String get providerFallbackTriggerHelp =>
+      'Triggered when raw audio or the complete request body exceeds its limit. Specific fallback (Base64) takes priority over general fallback (compression/chunking).';
+
+  @override
+  String get providerFallbackNone => 'None (reject immediately)';
+
+  @override
+  String get providerFallbackSpecific => 'Specific fallback (Base64)';
+
+  @override
+  String get providerFallbackGeneric =>
+      'General fallback (compression/chunking)';
+
+  @override
+  String get providerFallbackAll => 'Try all (recommended)';
+
+  @override
+  String get providerFallbackSpecificHelp =>
+      'Try Base64 JSON. Send only if the request body, including Base64 expansion and JSON fields, fits the limit.';
+
+  @override
+  String get providerFallbackGenericHelp =>
+      'If enabled, compress the full WAV first. If it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.';
+
+  @override
+  String get providerFallbackAllHelp =>
+      'Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.';
+
+  @override
+  String get providerFallbackRejectHelp =>
+      'Reject the file if it exceeds the limit; do not try a fallback.';
+
+  @override
+  String get providerPreprocessNone => 'None';
+
+  @override
+  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+
+  @override
+  String get providerPreprocessResampleHelp =>
+      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+
+  @override
+  String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';
+
+  @override
+  String get assistantDefaultsScopeHelp =>
+      'Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.';
+
+  @override
+  String get assistantDefaultModelTitle => 'Default model';
+
+  @override
+  String get assistantDefaultModelHelp =>
+      'Model used for new conversations; leave unset to let the conversation choose.';
+
+  @override
+  String get assistantNoDefault => 'Not set';
+
+  @override
+  String get assistantNoModelsAvailable =>
+      'No models available. Configure an LLM provider in Settings.';
+
+  @override
+  String get assistantDefaultToolsTitle => 'Default enabled tools';
+
+  @override
+  String get assistantDisabledToolsHelp =>
+      'Disabled tools will not be enabled automatically in new conversations.';
+
+  @override
+  String get assistantUnconfiguredToolsHelp =>
+      'Default tools are not configured. New conversations will enable all tools automatically.';
+
+  @override
+  String get assistantEnableAll => 'Enable all';
+
+  @override
+  String get assistantDisableAll => 'Disable all';
+
+  @override
+  String get assistantNoToolsAvailable => 'No tools available';
+
+  @override
+  String get assistantTruncateToolOutput => 'Tool output truncation';
+
+  @override
+  String get assistantTruncateToolOutputHelp =>
+      'Maximum characters in each tool result before it is sent to the model. Applies to all conversations under this assistant.';
+
+  @override
+  String get assistantEnableTruncation => 'Enable truncation';
+
+  @override
+  String assistantTruncatedTo(String count) {
+    return 'Long results are truncated to $count characters';
+  }
+
+  @override
+  String get assistantSendFullResult =>
+      'Send full result (subject to the 50 KB storage limit)';
+
+  @override
+  String get assistantMaxCharacters => 'Maximum characters';
+
+  @override
+  String get assistantCharactersNotTokens => 'Unit: characters (not tokens)';
+
+  @override
+  String assistantDefaultCharacterCount(String count) {
+    return 'Default: $count';
+  }
+
+  @override
+  String assistantCharacterRange(String minimum, String maximum) {
+    return 'Valid range: $minimum–$maximum characters';
+  }
+
+  @override
+  String get assistantNewConversationPreview => 'New conversation preview';
+
+  @override
+  String assistantEnabledToolCount(String enabled, String total) {
+    return '$enabled / $total enabled';
+  }
+
+  @override
+  String get assistantAllToolsAutoEnabled =>
+      'All tools are enabled automatically (not configured)';
+
+  @override
+  String get assistantMoreActions => 'More actions';
+
+  @override
+  String get assistantChooseEmoji => 'Choose emoji';
+
+  @override
+  String get assistantNameLabel => 'Assistant name';
+
+  @override
+  String get assistantDescriptionOptional => 'Description (optional)';
+
+  @override
+  String get assistantSelectionTitle => 'Choose an assistant';
+
+  @override
+  String get assistantMarketTooltip => 'Assistant marketplace';
+
+  @override
+  String get assistantCreateNew => 'Create assistant';
+
+  @override
+  String get assistantEmptyState =>
+      'No assistants yet. Create one to get started.';
+
+  @override
+  String get assistantCreate => 'Create';
+
+  @override
+  String get assistantReorderHint =>
+      'Long-press and drag to reorder assistants';
+
+  @override
+  String get assistantNewNameHint => 'Enter assistant name';
+
+  @override
+  String get assistantNewDescriptionHint =>
+      'Briefly describe what this assistant does';
+
+  @override
+  String get assistantDeleteTitle => 'Delete assistant';
+
+  @override
+  String assistantDeleteConfirmation(String name) {
+    return 'Delete assistant “$name”? This action cannot be undone.';
+  }
+
+  @override
+  String get assistantEditTitle => 'Edit assistant';
+
+  @override
+  String get assistantBasicTab => 'Basic settings';
+
+  @override
+  String get assistantParametersTab => 'Parameters';
+
+  @override
+  String get assistantDefaultsTab => 'Defaults';
+
+  @override
+  String get assistantAddCustomParameter => 'Add custom parameter';
+
+  @override
+  String get assistantEditCustomParameter => 'Edit custom parameter';
+
+  @override
+  String get assistantParameterName => 'Parameter name';
+
+  @override
+  String get assistantParameterNameHint => 'e.g. top_k or provider.only';
+
+  @override
+  String get assistantParameterNameInvalid =>
+      'Invalid parameter name (dot-separated segments cannot be empty)';
+
+  @override
+  String get assistantParameterType => 'Type';
+
+  @override
+  String get assistantValue => 'Value';
+
+  @override
+  String get assistantTrueFalseHint => 'true or false';
+
+  @override
+  String get assistantNumberHint => 'Enter a number';
+
+  @override
+  String assistantJsonHint(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get assistantValueHint => 'Enter a value';
+
+  @override
+  String get assistantCancel => 'Cancel';
+
+  @override
+  String get assistantSave => 'Save';
+
+  @override
+  String get assistantParamOverrideHelp =>
+      'When enabled, assistant parameters override model parameters; when disabled, model parameters are used.';
+
+  @override
+  String get assistantTemperature => 'Temperature';
+
+  @override
+  String get assistantMaxTokens => 'Maximum tokens';
+
+  @override
+  String get assistantMaxToolCalls => 'Maximum tool calls';
+
+  @override
+  String assistantRounds(String count) {
+    return '$count rounds';
+  }
+
+  @override
+  String get assistantUnlimited => 'Unlimited';
+
+  @override
+  String get assistantStreamOutput => 'Stream output';
+
+  @override
+  String get assistantFrequencyPenalty => 'Frequency penalty';
+
+  @override
+  String get assistantPresencePenalty => 'Presence penalty';
+
+  @override
+  String get assistantRandomSeed => 'Random seed';
+
+  @override
+  String get assistantNotSet => 'Not set';
+
+  @override
+  String get assistantSeedValue => 'Seed value';
+
+  @override
+  String get assistantIntegerSeedHint => 'Enter an integer seed';
+
+  @override
+  String get assistantWebSearch => 'Web search';
+
+  @override
+  String get assistantAddParameter => 'Add parameter';
+
+  @override
+  String get assistantNoCustomParameters => 'No custom parameters';
+
+  @override
+  String get assistantRoundsLabel => 'Rounds';
+
+  @override
+  String get modelCreateTitle => 'Add model';
+
+  @override
+  String get modelEditTitle => 'Edit model';
+
+  @override
+  String get modelDiscardTitle => 'Discard changes?';
+
+  @override
+  String get modelDiscardBody => 'You have unsaved changes. Discard them?';
+
+  @override
+  String get modelNameLabel => 'Model name';
+
+  @override
+  String get modelNameHint => 'Enter a display name (optional)';
+
+  @override
+  String get modelIdLabel => 'Model ID';
+
+  @override
+  String modelIdExample(String id) {
+    return 'e.g. $id';
+  }
+
+  @override
+  String get modelIdRequired => 'Model ID is required.';
+
+  @override
+  String get modelCustomParamRequired =>
+      'Custom parameter name and default value are required.';
+
+  @override
+  String modelParamDuplicate(String name) {
+    return 'Parameter already exists: $name';
+  }
+
+  @override
+  String get modelParamName => 'Parameter name';
+
+  @override
+  String get modelParamDefaultValue => 'Default parameter value';
+
+  @override
+  String get modelParamDelete => 'Delete parameter';
+
+  @override
+  String modelParamJsonInvalid(String name, String value) {
+    return 'Default value for parameter \"$name\" is not valid JSON: $value';
+  }
+
+  @override
+  String get modelAddParameter => 'Add parameter';
+
+  @override
+  String get modelNoCustomParams => 'No custom parameters';
+
+  @override
+  String get modelBasicSettings => 'Basic settings';
+
+  @override
+  String get modelDiscardCancel => 'Cancel';
+
+  @override
+  String get modelSave => 'Save';
+
+  @override
+  String get modelUnsavedMaxTokens =>
+      'Maximum output tokens is enabled but has no value.';
+
+  @override
+  String get modelMaxTokensPositive =>
+      'Maximum output tokens must be a positive integer.';
+
+  @override
+  String get modelSeedInteger => 'Random seed must be an integer.';
+
+  @override
+  String get modelContextLengthRequired => 'Context length is required.';
+
+  @override
+  String get modelContextLengthPositive =>
+      'Context length must be a positive integer.';
+
+  @override
+  String get modelAsrLanguageCode => 'Language code (Language)';
+
+  @override
+  String get modelAsrLanguageHint => 'e.g. zh, en, ja';
+
+  @override
+  String get modelAsrLanguageHelp =>
+      'ISO-639-1 language code; leave empty for automatic detection.';
+
+  @override
+  String get modelTemperature => 'Temperature';
+
+  @override
+  String get modelTemperatureHelp =>
+      'Controls output randomness; a lower value is recommended.';
+
+  @override
+  String get modelAsrPrompt => 'Prompt';
+
+  @override
+  String get modelAsrPromptHint => 'Enter a context prompt (optional)';
+
+  @override
+  String get modelAsrPromptHelp =>
+      'Provide context to improve transcription accuracy, such as a list of specialist terms.';
+
+  @override
+  String get modelAsrParams => 'ASR parameters';
+
+  @override
+  String get modelEnabledParamsHelp =>
+      'Enabled parameters are sent as defaults in API requests.';
+
+  @override
+  String get modelAsrResponseFormat => 'Response format';
+
+  @override
+  String get modelAsrResponseHelp => 'Format of the returned transcription.';
+
+  @override
+  String get modelAsrTimestampGranularity => 'Timestamp granularity';
+
+  @override
+  String get modelAsrVerboseHelp =>
+      'Available only when response_format is verbose_json.';
+
+  @override
+  String get modelNoTrim => 'No trimming';
+
+  @override
+  String get modelAudioTrimTitle => 'Audio trimming';
+
+  @override
+  String get modelAudioTrimHelp => 'Choose how to trim the audio.';
+
+  @override
+  String get modelDeleteTrimPreset => 'Delete trim preset';
+
+  @override
+  String modelDeleteTrimConfirmation(String name) {
+    return 'Delete trim preset \"$name\"?';
+  }
+
+  @override
+  String get modelAddTrimPreset => 'Add custom trim';
+
+  @override
+  String get modelPlayTestAudio => 'Play test audio';
+
+  @override
+  String get modelPlayingTestAudio => 'Playing...';
+
+  @override
+  String get modelParamExists => 'Parameter already exists';
+
+  @override
+  String get asrModelIdExample => 'e.g. whisper-1';
+
+  @override
+  String get asrPromptLabel => 'Prompt';
+
+  @override
+  String get asrResponseFormatJson => 'json – JSON';
+
+  @override
+  String get asrResponseFormatText => 'text – Plain text';
+
+  @override
+  String get asrResponseFormatSrt => 'srt – Subtitles';
+
+  @override
+  String get asrResponseFormatVtt => 'vtt – Subtitles';
+
+  @override
+  String get asrResponseFormatVerbose =>
+      'verbose_json – Detailed JSON (includes timestamps)';
+
+  @override
+  String get asrVerboseTimestampHelp =>
+      'Selecting verbose_json enables the timestamp granularity option below.';
+
+  @override
+  String get asrTimestampSegment => 'segment – Segment level';
+
+  @override
+  String get asrTimestampWord => 'word – Word level';
+
+  @override
+  String get asrWordTimestampHelp =>
+      'Word-level timestamps may be less accurate than segment-level timestamps.';
+
+  @override
+  String get reasoningAddOptionValue => 'Add option value';
+
+  @override
+  String get reasoningEditOptionValue => 'Edit option value';
+
+  @override
+  String get reasoningOptionExample => 'e.g. low, medium, high';
+
+  @override
+  String get reasoningOptionSelectionHelp =>
+      'Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.';
+
+  @override
+  String get reasoningAddOption => 'Add option';
+
+  @override
+  String get reasoningCurrentProvider => 'Current: provider';
+
+  @override
+  String get reasoningCurrentModel => 'Current: model custom';
+
+  @override
+  String get reasoningAddEffortValue => 'Add reasoning effort value';
+
+  @override
+  String get reasoningEffortExample => 'e.g. max, ultra, deep';
+
+  @override
+  String get reasoningAddToggle => 'Add reasoning toggle';
+
+  @override
+  String get reasoningToggle => 'Reasoning toggle';
+
+  @override
+  String get reasoningResetParameter => 'Reset this parameter';
+
+  @override
+  String get reasoningDisableToggle => 'Disable reasoning toggle';
+
+  @override
+  String get reasoningEnableToggle => 'Enable reasoning toggle';
+
+  @override
+  String reasoningParameterNameSource(String source) {
+    return 'Parameter name ($source)';
+  }
+
+  @override
+  String get reasoningNameExample => 'e.g. thinking.type, reasoning';
+
+  @override
+  String get reasoningBooleanHelp =>
+      'Boolean parameters need no value; the chat panel provides an on/off switch.';
+
+  @override
+  String get reasoningOnValue => 'Value when enabled';
+
+  @override
+  String get reasoningOnExample => 'e.g. enabled, true';
+
+  @override
+  String get reasoningOffValue => 'Value when disabled';
+
+  @override
+  String get reasoningOffExample => 'e.g. disabled, false';
+
+  @override
+  String reasoningToggleValuesHelp(String onValue, String offValue) {
+    return 'When enabled, sends “$onValue”; when disabled, sends “$offValue”.';
+  }
+
+  @override
+  String get reasoningAddEffort => 'Add reasoning effort';
+
+  @override
+  String get reasoningFillToggleFirst => 'Complete the reasoning toggle first';
+
+  @override
+  String get reasoningFillToggleBeforeEffort =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get reasoningAddValue => 'Add value';
+
+  @override
+  String get reasoningJsonValue => 'JSON value';
+
+  @override
+  String reasoningJsonExample(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get reasoningSelectedChipHelp =>
+      'Tap a chip to select or clear it. Selected values appear in the chat reasoning panel; drag to reorder. Provider values cannot be deleted, but can be hidden.';
+
+  @override
+  String get reasoningAddParameter => 'Add reasoning parameter';
+
+  @override
+  String get reasoningToggleIncomplete =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get llmContextLength => 'Context length';
+
+  @override
+  String get llmContextHint => 'Enter context length';
+
+  @override
+  String get llmContextHelp =>
+      'Maximum context window size for the model (tokens).';
+
+  @override
+  String get llmReasoningParams => 'Reasoning parameters';
+
+  @override
+  String get llmReasoningHelp =>
+      'Configure reasoning parameters for chat. The reasoning toggle controls its parameter name and on/off values. Add reasoning effort values, reorder them, and select which values appear in the chat panel. Provider values are synchronized when this page opens. These settings control model parameter availability; the chat panel toggle is managed separately.';
+
+  @override
+  String get llmAddReasoningParam => 'Add reasoning parameter';
+
+  @override
+  String get llmCustomEndpointType => 'Custom endpoint type';
+
+  @override
+  String get llmInheritEndpointType =>
+      'When disabled, use the endpoint type from provider settings.';
+
+  @override
+  String get llmEndpointType => 'Endpoint type';
+
+  @override
+  String get llmEndpointOpenAi => 'OpenAI compatible (Chat Completions)';
+
+  @override
+  String get llmEndpointAnthropic => 'Anthropic format (Messages API)';
+
+  @override
+  String get llmEndpointHelp =>
+      'The endpoint type must match the provider API URL. Changing it affects the format used for new conversations with this model.';
+
+  @override
+  String get llmTopPHelp =>
+      'Nucleus sampling parameter; controls cumulative probability for word selection.';
+
+  @override
+  String get llmFrequencyPenaltyLabel => 'Frequency penalty';
+
+  @override
+  String get llmFrequencyPenaltyHelp =>
+      'Reduces repetition; negative values increase it.';
+
+  @override
+  String get llmPresencePenaltyLabel => 'Presence penalty';
+
+  @override
+  String get llmPresencePenaltyHelp =>
+      'Encourages new topics; negative values encourage repetition.';
+
+  @override
+  String get llmMaxTokensHint => 'Optional, e.g. 4096';
+
+  @override
+  String get llmTokensPerResponse => 'Maximum tokens generated per response.';
+
+  @override
+  String get llmSeedLabel => 'Random seed (Seed)';
+
+  @override
+  String get llmSeedHint => 'Optional, e.g. 42';
+
+  @override
+  String get llmSeedHelp => 'Setting this makes output reproducible.';
+
+  @override
+  String get llmInheritedCustomHelp =>
+      'Provider custom parameters are shown here and synchronized whenever this page opens.';
+
+  @override
+  String get llmBooleanParamHelp => 'Boolean parameters do not need a value.';
+
+  @override
+  String get modelContextReq => 'Context length is required.';
+
+  @override
+  String get modelContextPositive =>
+      'Context length must be a positive integer.';
+
+  @override
+  String modelParamNameInvalid(String name) {
+    return 'Invalid parameter name (dot-separated segments cannot be empty): $name';
+  }
+
+  @override
+  String modelParamFinite(String name, String valueLabel, String value) {
+    return 'Parameter \"$name\" $valueLabel must be a finite number: $value';
+  }
+
+  @override
+  String get modelReasoningIncomplete =>
+      'Complete the reasoning toggle before enabling other reasoning parameters.';
+
+  @override
+  String get modelReasoningOptionsRequired =>
+      'Add at least one option value to the reasoning parameter.';
+
+  @override
+  String modelReasoningError(String error) {
+    return 'Reasoning parameter error: $error';
+  }
+
+  @override
+  String modelReasoningDuplicate(String name) {
+    return 'Duplicate reasoning parameter: $name';
+  }
+
+  @override
+  String modelReasoningCustomDuplicate(String name) {
+    return 'Reasoning and custom parameters share the name: $name';
+  }
+
+  @override
+  String get modelSeedRequired => 'Random seed is enabled but empty.';
+
+  @override
+  String get ocrParamsTitle => 'OCR parameters';
+
+  @override
+  String get ocrParamsHelp =>
+      'Uses the OpenAI-compatible vision Chat Completions format. Parameters below are optional; unset or disabled parameters are not sent. Add provider-specific parameters below if supported by its API.';
+
+  @override
+  String get ocrRequestSizeOverride => 'Request JSON size override';
+
+  @override
+  String get ocrInheritProvider => 'Leave empty to inherit provider settings';
+
+  @override
+  String get ocrBudgetDefault =>
+      'When empty, inherits provider settings; if the provider has no value, the default is 20 MiB.';
+
+  @override
+  String ocrBudgetValue(String size) {
+    return 'When empty, inherits provider settings ($size MiB); if the provider has no value, the default is 20 MiB.';
+  }
+
+  @override
+  String audioTrimDirection(String direction, String seconds) {
+    return 'Trim $direction ${seconds}s';
+  }
+
+  @override
+  String audioTrimBeginning(String seconds) {
+    return 'Trim the first ${seconds}s';
+  }
+
+  @override
+  String get audioTrimNone => 'Do not trim audio';
+
+  @override
+  String get trimNameLabel => 'Trim method name *';
+
+  @override
+  String get trimNameHint => 'e.g. silence trimming';
+
+  @override
+  String get trimDurationLabel => 'Trim duration (seconds) *';
+
+  @override
+  String get trimDurationHint => 'e.g. 0.123';
+
+  @override
+  String get trimNameAndDurationRequired => 'Name and duration are required.';
+
+  @override
+  String get trimDurationInvalid => 'Enter a valid positive duration.';
+
+  @override
+  String get testAudioHostMissing => 'Host is not configured.';
+
+  @override
+  String get testAudioKeyMissing => 'Key is not configured.';
+
+  @override
+  String testAudioContentTypeError(String contentType) {
+    return 'Response Content-Type is $contentType, not audio.';
+  }
+
+  @override
+  String get testAudioEmpty => 'The server returned empty audio data.';
+
+  @override
+  String testAudioTimeoutConnection(String details) {
+    return 'Connection timed out. Check your network. $details';
+  }
+
+  @override
+  String testAudioTimeoutReceive(String details) {
+    return 'Receive timed out; the server responded too slowly. $details';
+  }
+
+  @override
+  String testAudioRequestCancelled(String details) {
+    return 'Request cancelled. $details';
+  }
+
+  @override
+  String testAudioNetworkError(String message) {
+    return 'Network error: $message';
+  }
+
+  @override
+  String get testAudioNoBody => 'No response body';
+
+  @override
+  String testAudioCorsHelp(String details) {
+    return 'Unable to connect to server. On web, this may be caused by CORS or an incorrect API URL. Check the provider API URL and whether the server allows cross-origin requests. $details';
+  }
+
+  @override
+  String get trimModelNameHint =>
+      'A friendly name for display and identification, e.g. \"GPT-4o Mini TTS\". Use different names to distinguish models from the same provider.';
+
+  @override
+  String get trimModelIdHelp =>
+      'Unique identifier used in API calls, e.g. \"gpt-4o-mini-tts\". It must match the model ID provided by the vendor.';
+
+  @override
+  String get ttsVoiceRangeTitle => 'Volume range';
+
+  @override
+  String get ttsMinVolume => 'Minimum volume';
+
+  @override
+  String get ttsMaxVolume => 'Maximum volume';
+
+  @override
+  String get ttsSpeedRangeTitle => 'Speed range';
+
+  @override
+  String get ttsMinSpeed => 'Minimum speed';
+
+  @override
+  String get ttsMaxSpeed => 'Maximum speed';
+
+  @override
+  String get ttsMaxAudioLength => 'Maximum audio length per request *';
+
+  @override
+  String get ttsAudioLengthHint => 'e.g. 1000';
+
+  @override
+  String get ttsNoVoices => 'No voices. Tap to edit.';
+
+  @override
+  String get ttsInstructionSupported =>
+      'Model supports the instruction parameter';
+
+  @override
+  String get ttsInstructionHelp =>
+      'When enabled, TTS requests can include instructions for tone, emotion, speaking speed, and more.';
+
+  @override
+  String get ttsStreamSupported => 'Model supports streaming output';
+
+  @override
+  String get ttsStreamHelp =>
+      'Enables this model for streaming scenarios. Confirm the model supports streaming before enabling.';
+
+  @override
+  String modelParamBooleanExpected(String name, String value) {
+    return 'Parameter “$name” must be true or false: $value';
+  }
+
+  @override
+  String get ttsMaxAudioLengthRequired =>
+      'Maximum audio length per request is required; enter a positive integer.';
+
+  @override
+  String get asrLanguageExample => 'e.g. zh, en, ja';
+
+  @override
+  String get llmReasoningFullHelp =>
+      'The reasoning toggle controls whether reasoning is sent and lets you define the parameter name and on/off values. There is one reasoning-effort parameter. Select values and drag to reorder them; selected values appear in the chat reasoning panel. Add other reasoning parameters below. Parameter names support dot notation such as thinking.type, which becomes a nested JSON object. Provider reasoning parameters synchronize when this page opens. The switches here control model parameters; the chat reasoning toggle is separate.';
+
+  @override
+  String get llmTemperatureHelp =>
+      'Controls output randomness; higher values are more creative.';
+
+  @override
+  String get llmBooleanValueHelp => 'Boolean parameters do not need a value.';
+
+  @override
+  String get reasoningDisableEffort => 'Disable reasoning effort';
+
+  @override
+  String get reasoningEnableEffort => 'Enable reasoning effort';
+
+  @override
+  String get ocrJsonSizePositive =>
+      'Request JSON size must be a positive MiB value.';
+
+  @override
+  String ttsRangePair(String kind) {
+    return 'Enter both the minimum and maximum $kind, or leave both empty.';
+  }
+
+  @override
+  String get ttsEditTrimTitle => 'Edit custom trim';
+
+  @override
+  String ttsVoicesCount(String count) {
+    return 'Voices ($count)';
+  }
+
+  @override
+  String ttsRequestFormatExample(String syntax) {
+    return 'Generated in the request format: $syntax';
+  }
+
+  @override
+  String get mcpServerNameRequired => 'Please enter an MCP server name.';
+
+  @override
+  String get mcpStdioCommandRequired => 'stdio mode requires a command.';
+
+  @override
+  String get mcpSseUrlRequired => 'SSE mode requires a URL.';
+
+  @override
+  String get mcpEditServerTitle => 'Edit MCP server';
+
+  @override
+  String get mcpCreateServerTitle => 'New MCP server';
+
+  @override
+  String get mcpUnsavedChangesTitle => 'Unsaved changes';
+
+  @override
+  String get mcpUnsavedChangesConfirm =>
+      'You have unsaved changes. Discard them?';
+
+  @override
+  String get mcpTransportType => 'Transport type';
+
+  @override
+  String get mcpServerName => 'Server name';
+
+  @override
+  String get mcpServerNameHint => 'Enter an MCP server name';
+
+  @override
+  String get mcpCommand => 'Command';
+
+  @override
+  String get mcpCommandExample => 'Example: npx';
+
+  @override
+  String get mcpArguments => 'Arguments';
+
+  @override
+  String get mcpArgumentsHint =>
+      'Separate arguments with commas, for example: -y, @modelcontextprotocol/server-filesystem, /tmp';
+
+  @override
+  String get mcpSseUrlExample => 'Example: http://localhost:3001/sse';
+
+  @override
+  String get mcpApiKey => 'API key';
+
+  @override
+  String get mcpApiKeyHint => 'Enter an API key (optional)';
+
+  @override
+  String get mcpShowKey => 'Show key';
+
+  @override
+  String get mcpHideKey => 'Hide key';
+
+  @override
+  String get mcpDescriptionHint =>
+      'Enter a description for this MCP server (optional)';
+
+  @override
+  String get mcpStdioDescription =>
+      'stdio starts a local child process as an MCP server and communicates through standard input/output. Recommended for local tools.';
+
+  @override
+  String get mcpSseDescription =>
+      'SSE connects to a remote MCP server over HTTP SSE. Recommended for remote services.';
+
+  @override
+  String get mcpLocalStdio => 'Local (stdio)';
+
+  @override
+  String get mcpRemoteSse => 'Remote (SSE)';
+
+  @override
+  String get mcpSaving => 'Saving…';
+
+  @override
+  String get providerTestSafetyNote =>
+      'This test sends a real request to the selected service. MCP only calls the read-only tools/list method; HTTP and web search run one query. Todo reads the list by default; to protect current data, omit the todos parameter or set it to null.';
+
+  @override
+  String get providerDeleteConfigTitle => 'Delete configuration';
+
+  @override
+  String get providerDeleteConfigConfirm =>
+      'Delete this provider configuration and all of its models?';
+
+  @override
+  String get providerCreateGroup => 'New group';
+
+  @override
+  String get providerEditGroup => 'Edit group';
+
+  @override
+  String get providerGroupName => 'Group name';
+
+  @override
+  String get providerGroupNameExists =>
+      'A group with this name already exists.';
+
+  @override
+  String get providerDeleteGroup => 'Delete group';
+
+  @override
+  String providerDeleteGroupConfirm(String groupName) {
+    return 'Deleting “$groupName” will move its configurations to “Other MCP services”.';
+  }
+
+  @override
+  String get providerMoveToGroup => 'Move to group';
+
+  @override
+  String get providerUnnamed => '(Unnamed)';
+
+  @override
+  String get providerHttpSearch => 'HTTP search';
+
+  @override
+  String providerHttpToolSubtitle(String url) {
+    return 'HTTP tool: $url';
+  }
+
+  @override
+  String providerLocalStdioSubtitle(String command) {
+    return 'Local (stdio): $command';
+  }
+
+  @override
+  String providerRemoteSseSubtitle(String url) {
+    return 'Remote (SSE): $url';
+  }
+
+  @override
+  String get providerServices => 'Service configurations';
+
+  @override
+  String get providerServicesDescription =>
+      'Manage remote connections, local stdio, and HTTP search by group';
+
+  @override
+  String get providerCreateGroupAction => 'New group';
+
+  @override
+  String get providerGroupEmpty =>
+      'This group has no configurations. Select “Add” to add an item.';
+
+  @override
+  String get providerBuiltinTools => 'Built-in tools';
+
+  @override
+  String get providerBuiltinToolsDescription =>
+      'Stroom-provided local tool interfaces. Web search is listed in its service group.';
+
+  @override
+  String get providerBuiltinToolInterface => 'Built-in tool interface';
+
+  @override
+  String get providerViewInterface => 'View interface';
+
+  @override
+  String get providerConfigTitle => 'Configuration';
+
+  @override
+  String get providerNotFound => 'Provider not found';
+
+  @override
+  String get providerConfigurationHeading => 'Provider configuration';
+
+  @override
+  String get providerBuiltinWebSearchEmpty =>
+      'Built-in web search supports Google, Bing, and Baidu. Its model tool name is web_search.';
+
+  @override
+  String get providerNoConfigsAdd =>
+      'No provider configurations yet. Select “Add” to create one.';
+
+  @override
+  String get providerNoHost => '(Host not set)';
+
+  @override
+  String get providerServicesAndTools => 'Services and tools';
+
+  @override
+  String get providerManageServicesDescription =>
+      'Manage MCP servers, HTTP search, and Stroom built-in tools.';
+
+  @override
+  String get providerNoServices => 'No service configurations yet';
+
+  @override
+  String get providerAddServiceDescription =>
+      'Add an MCP service or HTTP search interface to use it in assistants.';
+
+  @override
+  String get providerAddService => 'Add service';
+
+  @override
+  String get providerBuiltinBadge => 'Built-in';
+
+  @override
+  String get providerConnectivityTest => 'Connectivity test';
+
+  @override
+  String get providerMoveGroupTooltip => 'Move to group';
+
+  @override
+  String get providerDeleteTooltip => 'Delete configuration';
+
+  @override
+  String providerGroupItemCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# items',
+      one: '# item',
+      zero: 'No items',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get providerGroupActions => 'Group actions';
+
+  @override
+  String get providerEditGroupAction => 'Edit group';
+
+  @override
+  String get providerDeleteGroupAction => 'Delete group';
+
+  @override
+  String get providerAddItem => 'Add item';
+
+  @override
+  String get providerMcpMasterLabel => 'MCP servers';
+
+  @override
+  String get providerMcpMasterDescription =>
+      'Controls whether MCP servers and built-in search tools are available in assistants and chats.';
+
+  @override
+  String get providerEnabled => 'Enabled';
+
+  @override
+  String get providerDisabled => 'Disabled';
+
+  @override
+  String get providerEditSettings => 'Edit provider settings';
+
+  @override
+  String get providerModelList => 'Models';
+
+  @override
+  String get providerNoModels => 'No models yet';
+
+  @override
+  String get providerDeleteModel => 'Delete model';
+
+  @override
+  String get providerDeleteModelConfirm =>
+      'Are you sure you want to delete this model?';
+
+  @override
+  String get providerEditConfig => 'Edit configuration';
+
+  @override
+  String providerCreateNamedConfig(String entryName) {
+    return 'New $entryName configuration';
+  }
+
+  @override
+  String get toolHttpSearchType => 'Connection type: HTTP search';
+
+  @override
+  String toolInterface(String name) {
+    return 'Tool interface: $name';
+  }
+
+  @override
+  String get toolParameterDefinitions => 'Parameter definitions';
+
+  @override
+  String get toolHttpAddress => 'HTTP endpoint URL';
+
+  @override
+  String get toolInvalidHttpUrl => 'Enter a valid HTTP or HTTPS URL.';
+
+  @override
+  String get toolBuiltinType => 'Connection type: Stroom built-in tool';
+
+  @override
+  String get toolBuiltinEnableHelp =>
+      'Enable this tool for an assistant in that assistant’s default tool settings.';
+
+  @override
+  String get mcpSseUrlLabel => 'SSE URL';
+
+  @override
+  String get mcpUrlLabel => 'URL';
+
+  @override
+  String providerModelId(String modelId) {
+    return 'Model ID: $modelId';
+  }
+
+  @override
+  String get providerValueNotSet => '(Not set)';
+
+  @override
+  String get providerApiKeyInputHint => 'Enter an API key';
+
+  @override
+  String get providerSettingsTitle => 'Provider configuration';
+
+  @override
+  String get providerBasicInfoTab => 'Basic information';
+
+  @override
+  String get providerParameterSettingsTab => 'Parameter settings';
+
+  @override
+  String get providerOptionValuesReorderHelp =>
+      'Option values (hold the handle to drag and reorder)';
+
+  @override
+  String providerOptionIndexLabel(String index) {
+    return 'Option $index';
+  }
+
+  @override
+  String providerOptionExampleHint(String example) {
+    return 'e.g. $example';
+  }
+
+  @override
+  String get providerDeleteOptionTooltip => 'Delete option';
+
+  @override
+  String get providerAddOption => 'Add option';
+
+  @override
+  String get providerAddCustomParam => 'Add parameter';
+
+  @override
+  String get providerNoCustomParams => 'No custom parameters yet';
+
+  @override
+  String get providerParamNameLabel => 'Parameter name';
+
+  @override
+  String get providerParamDefaultValueLabel => 'Default parameter value';
+
+  @override
+  String get providerBooleanParamNoValue =>
+      'Boolean parameters do not need a value. The chat panel provides an on/off toggle.';
+
+  @override
+  String get providerReasoningParamsHeading => 'Reasoning parameters';
+
+  @override
+  String providerReasoningSettingsHelp(
+    String parameterName,
+    String jsonExample,
+  ) {
+    return 'The reasoning toggle turns reasoning on or off in chat; you choose its parameter name and on/off values. You can configure one reasoning effort parameter with a required name and optional choices. If you enter only a name, the model configuration can provide the values. Use the buttons below to add other reasoning parameters. Parameter names support dot nesting, for example $parameterName expands to $jsonExample.';
+  }
+
+  @override
+  String get providerAddReasoningParam => 'Add reasoning parameter';
+
+  @override
+  String get providerAddReasoningToggle => 'Add reasoning toggle';
+
+  @override
+  String get providerReasoningToggle => 'Reasoning toggle';
+
+  @override
+  String get providerDeleteReasoningToggle => 'Delete reasoning toggle';
+
+  @override
+  String providerParamNameHint(String examples) {
+    return 'e.g. $examples';
+  }
+
+  @override
+  String get providerReasoningBooleanHelp =>
+      'Boolean parameters do not need a value. The chat panel provides an on/off toggle.';
+
+  @override
+  String get providerToggleOnValueLabel => 'On value';
+
+  @override
+  String get providerToggleOffValueLabel => 'Off value';
+
+  @override
+  String providerReasoningToggleSummary(String onValue, String offValue) {
+    return 'When reasoning is on, send “$onValue”; when it is off, send “$offValue”.';
+  }
+
+  @override
+  String get providerAddReasoningEffort => 'Add reasoning effort';
+
+  @override
+  String get providerDeleteReasoningEffort =>
+      'Delete reasoning effort parameter';
+
+  @override
+  String get providerReasoningEffortLockedHint =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get providerJsonValueLabel => 'JSON value';
+
+  @override
+  String get providerReasoningOptionsHelp =>
+      'Option values (optional; if only the parameter name is entered, the model configuration supplies the value). Hold the handle to drag and reorder.';
+
+  @override
+  String get providerParamNameNestedLabel =>
+      'Parameter name (supports dot nesting)';
+
+  @override
+  String get providerToggleEffortPrerequisite =>
+      'Complete the reasoning toggle before configuring reasoning effort.';
+
+  @override
+  String get providerToggleRequiredHint =>
+      'Complete the reasoning toggle first.';
+
+  @override
+  String get providerDeleteCustomParam => 'Delete parameter';
+
+  @override
+  String get modelSaveSuccess => 'Model saved';
+
+  @override
+  String get modelSaving => 'Saving…';
+
+  @override
+  String modelOriginalError(String error) {
+    return 'Original error: $error';
+  }
+
+  @override
+  String get paramTypeStringLabel => 'String';
+
+  @override
+  String get paramTypeNumberLabel => 'Number';
+
+  @override
+  String get paramTypeBooleanLabel => 'Boolean';
+
+  @override
+  String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String get paramTypeStringHint => 'e.g. cheerful';
+
+  @override
+  String get paramTypeNumberHint => 'e.g. 0.8';
+
+  @override
+  String get paramTypeBooleanHint => 'e.g. true';
+
+  @override
+  String get paramTypeJsonHint => 'e.g. ';
 }
