@@ -10,6 +10,7 @@ import '../providers/assistant_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../providers/provider_config.dart';
 import '../services/chat_adapter.dart' show resolveModelRef;
+import 'home_shared.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'assistant/assistant_defaults_tab.dart';
@@ -58,7 +59,10 @@ class AssistantSelectionPage extends ConsumerWidget {
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? TickerMode(
+              enabled: ChatTabVisibility.of(context),
+              child: const Center(child: CircularProgressIndicator()),
+            )
           : assistants.isEmpty
               ? Center(
                   child: Column(
@@ -77,66 +81,66 @@ class AssistantSelectionPage extends ConsumerWidget {
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         icon: const Icon(Icons.add),
-                        label: Text(
-                            AppLocalizations.of(context)!.assistantCreate),
+                        label:
+                            Text(AppLocalizations.of(context)!.assistantCreate),
                         onPressed: () =>
                             _showCreateAssistantDialog(context, ref),
                       ),
                     ],
                   ),
                 )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: Text(
-                        AppLocalizations.of(context)!.assistantReorderHint,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Center(
+                          child: Text(
+                            AppLocalizations.of(context)!.assistantReorderHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      DragSortArea(
+                        // 与旧 GridView 相同的几何：
+                        // SliverGridDelegateWithMaxCrossAxisExtent(
+                        //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
+                        wrap: false,
+                        grid: true,
+                        gridMaxCrossAxisExtent: 220,
+                        gridCrossAxisSpacing: 12,
+                        gridMainAxisSpacing: 12,
+                        gridChildAspectRatio: 0.85,
+                        dragDelay: const Duration(milliseconds: 600),
+                        dragHighlightColor: dragHighlightColor,
+                        draggedItemOpacity: 0.88,
+                        values: [for (final a in assistants) a.id],
+                        onReorder: (from, to) => ref
+                            .read(assistantProvider.notifier)
+                            .reorderAssistant(from, to),
+                        itemBuilder: (context, index, id) {
+                          final assistant = assistants[index];
+                          return AssistantCard(
+                            assistant: assistant,
+                            pressHighlightColor: pressHighlightColor,
+                            onTap: () =>
+                                _onAssistantSelected(context, ref, assistant),
+                            // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                            onMenu: () =>
+                                _showAssistantMenu(context, ref, assistant),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  DragSortArea(
-                    // 与旧 GridView 相同的几何：
-                    // SliverGridDelegateWithMaxCrossAxisExtent(
-                    //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
-                    wrap: false,
-                    grid: true,
-                    gridMaxCrossAxisExtent: 220,
-                    gridCrossAxisSpacing: 12,
-                    gridMainAxisSpacing: 12,
-                    gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 600),
-                    dragHighlightColor: dragHighlightColor,
-                    draggedItemOpacity: 0.88,
-                    values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) => ref
-                        .read(assistantProvider.notifier)
-                        .reorderAssistant(from, to),
-                    itemBuilder: (context, index, id) {
-                      final assistant = assistants[index];
-                      return AssistantCard(
-                        assistant: assistant,
-                        pressHighlightColor: pressHighlightColor,
-                        onTap: () =>
-                            _onAssistantSelected(context, ref, assistant),
-                        // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
-                        onMenu: () =>
-                            _showAssistantMenu(context, ref, assistant),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 
