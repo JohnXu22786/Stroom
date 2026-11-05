@@ -2921,7 +2921,6 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           capabilities: {
             'contextLength': 1048576,
             'toolCalling': true,
-            'vision': true,
             'reasoning': true
           }),
       LlmProviderPresetModel('kimi-k2.6',
@@ -2929,7 +2928,6 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           capabilities: {
             'contextLength': 1048576,
             'toolCalling': true,
-            'vision': true,
             'reasoning': true
           }),
     ],
@@ -2998,7 +2996,6 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           capabilities: {
             'contextLength': 1048576,
             'toolCalling': true,
-            'vision': true,
             'reasoning': true
           }),
       LlmProviderPresetModel('kimi-k2.6',
@@ -3006,7 +3003,6 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
           capabilities: {
             'contextLength': 1048576,
             'toolCalling': true,
-            'vision': true,
             'reasoning': true
           }),
     ],

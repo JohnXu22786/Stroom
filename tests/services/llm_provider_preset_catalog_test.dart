@@ -836,6 +836,18 @@ void main() {
       'synthetic',
       'tokenmarket',
       'tokenreply',
+      'typhoon',
+      'unifically',
+      'unorouter',
+      'upstage',
+      'v0-vercel',
+      'venice',
+      'vercel-ai-gateway',
+      'void-ai',
+      'volcengine',
+      'volcengine-agent-plan',
+      'volcengine-coding-plan',
+      'wandb',
     ]);
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
@@ -976,6 +988,21 @@ void main() {
         'synthetic': 'https://api.synthetic.new/openai/v1/chat/completions',
         'tokenmarket': 'https://api.tokensmarket.ai/v1/chat/completions',
         'tokenreply': 'https://api.tokenreply.com/v1/chat/completions',
+        'typhoon': 'https://api.opentyphoon.ai/v1/chat/completions',
+        'unifically': 'https://api.unifically.com/v1/chat/completions',
+        'unorouter': 'https://api.unorouter.com/v1/chat/completions',
+        'upstage': 'https://api.upstage.ai/v1/chat/completions',
+        'v0-vercel': 'https://api.v0.dev/v1/chat/completions',
+        'venice': 'https://api.venice.ai/api/v1/chat/completions',
+        'vercel-ai-gateway': 'https://ai-gateway.vercel.sh/v1/chat/completions',
+        'void-ai': 'https://api.voidai.app/v1/chat/completions',
+        'volcengine':
+            'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+        'volcengine-agent-plan':
+            'https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions',
+        'volcengine-coding-plan':
+            'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
+        'wandb': 'https://api.inference.wandb.ai/v1/chat/completions',
       },
     );
     expect(
@@ -3353,6 +3380,22 @@ void main() {
         'reasoning': true,
       },
     );
+    for (final presetId in [
+      'volcengine-agent-plan',
+      'volcengine-coding-plan'
+    ]) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      for (final modelId in ['minimax-m2.7', 'kimi-k2.6']) {
+        final model = preset.fallbackModels.singleWhere(
+          (model) => model.id == modelId,
+        );
+        expect(model.capabilities, {
+          'contextLength': 1048576,
+          'toolCalling': true,
+          'reasoning': true,
+        });
+      }
+    }
 
     // UC Direct requires a secret-backed X-API-Key header, which the shared
     // OpenAI-compatible account connector cannot express.
