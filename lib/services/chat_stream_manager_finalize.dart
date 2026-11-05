@@ -291,7 +291,10 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // them, and a re-entered page reloads the saved message on completion.
     // If the originating page was disposed and no page re-entered, release
     // the large stream buffers now instead of retaining them indefinitely.
-    if (!replaced && !_hasAttachedStreamPage(convId, state.streamingMsgId)) {
+    final streamingMsgId = state.streamingMsgId;
+    if (!replaced &&
+        (streamingMsgId == null ||
+            !_hasAttachedStreamPage(convId, streamingMsgId))) {
       _clearCompletedSegmentProviders(convId);
     }
 
