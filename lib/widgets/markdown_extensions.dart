@@ -575,8 +575,8 @@ _MermaidFenceInfo _unclosedFenceInfo(
   bool includeTail = true,
   String? normalizedText,
 }) {
-  final normalized = normalizedText ??
-      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final normalized =
+      normalizedText ?? text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   final lines = normalized.split('\n');
   var inFence = false;
   String? fenceChar;
