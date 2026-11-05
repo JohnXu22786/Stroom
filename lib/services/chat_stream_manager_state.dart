@@ -70,6 +70,7 @@ class _ConversationStreamState {
 
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
+  Future<void>? _periodicPersistFuture;
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
   ChatMessage? pendingContinuation;
