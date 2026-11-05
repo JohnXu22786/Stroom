@@ -227,7 +227,8 @@ class ManifestOperations<T extends FileRecord> {
       final folders = (await ManifestDatabase.getAllFolders(
         recordTable: tableName,
         forceRefresh: forceRefresh && _isTextTable,
-      )).toSet();
+      ))
+          .toSet();
       _cache = records;
       _folderCache = folders;
       _dirty = false;
@@ -342,9 +343,8 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> _deleteEntityFiles(T record) async {
     final storageName = storageNameOf(record);
-    final refCount = _cache!
-        .where((r) => storageNameOf(r) == storageName)
-        .length;
+    final refCount =
+        _cache!.where((r) => storageNameOf(r) == storageName).length;
     if (_isTextTable && _useWebFileStore) {
       await ManifestDatabase.deleteUnreferencedTextContent(hashOf(record));
     } else if (refCount <= 1) {
@@ -363,9 +363,8 @@ class ManifestOperations<T extends FileRecord> {
       await onExtraDelete?.call(record);
     }
     // Thumbnail deletion: keyed by hash, not storageName
-    final hashRefCount = _cache!
-        .where((x) => hashOf(x) == hashOf(record))
-        .length;
+    final hashRefCount =
+        _cache!.where((x) => hashOf(x) == hashOf(record)).length;
     if (hashRefCount <= 1) {
       final thumbName = _thumbFileNameOf(record);
       debugPrint(
@@ -384,10 +383,10 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
       _isTextTable
-      ? _serializeTextRecordMutation(
-          () => _deleteRecord(id, preserveFiles: preserveFiles),
-        )
-      : _deleteRecord(id, preserveFiles: preserveFiles);
+          ? _serializeTextRecordMutation(
+              () => _deleteRecord(id, preserveFiles: preserveFiles),
+            )
+          : _deleteRecord(id, preserveFiles: preserveFiles);
 
   Future<void> _deleteRecord(String id, {bool preserveFiles = false}) async {
     try {
@@ -639,9 +638,11 @@ class ManifestOperations<T extends FileRecord> {
     String expectedHash,
     Map<String, dynamic> expectedMetadata,
     T updated,
-  ) => _serializeTextRecordMutation(
-    () => _updateTextRecordIfHash(id, expectedHash, expectedMetadata, updated),
-  );
+  ) =>
+      _serializeTextRecordMutation(
+        () => _updateTextRecordIfHash(
+            id, expectedHash, expectedMetadata, updated),
+      );
 
   Future<bool> updateTextRecordIfHashWithContent(
     String id,
@@ -676,13 +677,13 @@ class ManifestOperations<T extends FileRecord> {
         }
         final changed =
             await ManifestDatabase.updateTextRecordIfHashWithContent(
-              id,
-              expectedHash,
-              expectedMetadata,
-              toMap(updated),
-              _webKey(storageNameOf(updated)),
-              contentBytes,
-            );
+          id,
+          expectedHash,
+          expectedMetadata,
+          toMap(updated),
+          _webKey(storageNameOf(updated)),
+          contentBytes,
+        );
         if (!changed) {
           invalidateCache();
           return false;
@@ -1058,18 +1059,16 @@ class ManifestOperations<T extends FileRecord> {
       final toRemoveRecords = <T>[];
 
       for (final child in descendants) {
-        final childRecords = _cache!
-            .where((r) => folderOf(r) == child)
-            .toList();
+        final childRecords =
+            _cache!.where((r) => folderOf(r) == child).toList();
         toRemoveRecords.addAll(childRecords);
         for (final record in childRecords) {
           idsToDelete.add(record.id);
         }
       }
 
-      final folderRecords = _cache!
-          .where((r) => folderOf(r) == folderName)
-          .toList();
+      final folderRecords =
+          _cache!.where((r) => folderOf(r) == folderName).toList();
       toRemoveRecords.addAll(folderRecords);
       for (final record in folderRecords) {
         idsToDelete.add(record.id);

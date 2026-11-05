@@ -504,9 +504,12 @@ class ManifestDatabase {
           for (final row in rows) {
             final path = row['path'] as String;
             for (final ft in targetFolderTables) {
-              await db.insert(ft, {
-                'path': path,
-              }, conflictAlgorithm: ConflictAlgorithm.ignore);
+              await db.insert(
+                  ft,
+                  {
+                    'path': path,
+                  },
+                  conflictAlgorithm: ConflictAlgorithm.ignore);
             }
           }
         }
@@ -1186,9 +1189,8 @@ class ManifestDatabase {
   }) async {
     try {
       if (_useJsonStore) {
-        final data = forceRefresh
-            ? await _readPersistedWebData()
-            : await _loadWebData();
+        final data =
+            forceRefresh ? await _readPersistedWebData() : await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
         return list.cast<Map<String, dynamic>>();
       }
@@ -1678,9 +1680,8 @@ class ManifestDatabase {
   }) async {
     try {
       if (_useJsonStore) {
-        final data = forceRefresh
-            ? await _readPersistedWebData()
-            : await _loadWebData();
+        final data =
+            forceRefresh ? await _readPersistedWebData() : await _loadWebData();
         if (recordTable != null) {
           final folderTable = ManifestTables.folderTableFor(recordTable);
           final list = data[folderTable] as List<dynamic>? ?? [];
@@ -1746,9 +1747,12 @@ class ManifestDatabase {
         return;
       }
       final db = await database;
-      await db.insert(folderTable, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          folderTable,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     } catch (e, stackTrace) {
       await AppLogService.error(
         'ManifestDatabase',
