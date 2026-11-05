@@ -13671,6 +13671,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.'**
   String get notificationSettingsPermissionBlockedIos;
+
+  /// User-facing text for the text preview or storage interface: textPreviewDiscardEditsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard edits?'**
+  String get textPreviewDiscardEditsTitle;
+
+  /// User-facing text for the text preview or storage interface: textPreviewUnsavedChangesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'You have unsaved changes. Are you sure you want to discard them?'**
+  String get textPreviewUnsavedChangesConfirm;
+
+  /// User-facing text for the text preview or storage interface: textPreviewCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get textPreviewCancel;
+
+  /// User-facing text for the text preview or storage interface: textPreviewDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get textPreviewDiscard;
+
+  /// User-facing text for the text preview or storage interface: textPreviewFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust font size'**
+  String get textPreviewFontSize;
+
+  /// User-facing text for the text preview or storage interface: textPreviewRestoreDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore default'**
+  String get textPreviewRestoreDefault;
+
+  /// User-facing text for the text preview or storage interface: textPreviewClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get textPreviewClose;
+
+  /// User-facing text for the text preview or storage interface: textPreviewSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String textPreviewSaveFailed(String error);
+
+  /// User-facing text for the text preview or storage interface: textPreviewUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get textPreviewUndo;
+
+  /// User-facing text for the text preview or storage interface: textPreviewRedo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get textPreviewRedo;
+
+  /// User-facing text for the text preview or storage interface: textPreviewSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get textPreviewSave;
+
+  /// User-facing text for the text preview or storage interface: textPreviewEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get textPreviewEdit;
+
+  /// User-facing text for the text preview or storage interface: textPreviewChartEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit chart'**
+  String get textPreviewChartEdit;
+
+  /// User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped unsupported format: {format}'**
+  String textStorageSkipUnsupportedFormat(String format);
+
+  /// User-facing text for the text preview or storage interface: textStorageImportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count, plural, =1{# text file} other{# text files}}'**
+  String textStorageImportSuccess(int count);
+
+  /// User-facing text for the text preview or storage interface: textStorageImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String textStorageImportFailed(String error);
+
+  /// User-facing text for the text preview or storage interface: textStorageSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Text saved'**
+  String get textStorageSaved;
+
+  /// User-facing text for the text preview or storage interface: textStorageLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load text content'**
+  String get textStorageLoadFailed;
+
+  /// User-facing text for the text preview or storage interface: textStorageReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to read file data'**
+  String get textStorageReadFailed;
+
+  /// User-facing text for the text preview or storage interface: textStorageExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export text'**
+  String get textStorageExportTitle;
+
+  /// User-facing text for the text preview or storage interface: textStorageExportedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to: {path}'**
+  String textStorageExportedTo(String path);
+
+  /// User-facing text for the text preview or storage interface: textStorageExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String textStorageExportFailed(String error);
+
+  /// User-facing text for the text preview or storage interface: textStorageChooseExportDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export directory'**
+  String get textStorageChooseExportDirectory;
+
+  /// User-facing text for the text preview or storage interface: textStorageFolderExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export folder'**
+  String get textStorageFolderExportTitle;
+
+  /// User-facing text for the text preview or storage interface: textStorageWebFolderExportInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.'**
+  String get textStorageWebFolderExportInfo;
+
+  /// User-facing text for the text preview or storage interface: textStorageCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get textStorageCancel;
+
+  /// User-facing text for the text preview or storage interface: textStorageDownloadZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download ZIP file'**
+  String get textStorageDownloadZip;
+
+  /// User-facing text for the text preview or storage interface: textStorageExportedFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {count, plural, =1{# file} other{# files}}'**
+  String textStorageExportedFiles(int count);
+
+  /// User-facing text for the text preview or storage interface: textStorageExportFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export text folder'**
+  String get textStorageExportFolderTitle;
+
+  /// User-facing text for the text preview or storage interface: textStorageCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed: {error}'**
+  String textStorageCopyFailed(String error);
+
+  /// User-facing text for the text preview or storage interface: textStorageCreateNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get textStorageCreateNew;
+
+  /// User-facing text for the text preview or storage interface: textStorageImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get textStorageImport;
+
+  /// User-facing text for the text preview or storage interface: textStorageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get textStorageTitle;
+
+  /// User-facing text for the text preview or storage interface: textStorageExportToLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Export to local'**
+  String get textStorageExportToLocal;
+
+  /// User-facing text for the text preview or storage interface: textCreateEnterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a title'**
+  String get textCreateEnterTitle;
+
+  /// User-facing text for the text preview or storage interface: textCreateSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String textCreateSaveFailed(String error);
+
+  /// User-facing text for the text preview or storage interface: textCreateNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get textCreateNewTitle;
+
+  /// User-facing text for the text preview or storage interface: textCreateSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get textCreateSave;
+
+  /// User-facing text for the text preview or storage interface: textCreateTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get textCreateTitleLabel;
+
+  /// User-facing text for the text preview or storage interface: textCreateTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text title'**
+  String get textCreateTitleHint;
+
+  /// User-facing text for the text preview or storage interface: textCreateFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get textCreateFormatLabel;
+
+  /// User-facing text for the text preview or storage interface: textCreateContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Text content'**
+  String get textCreateContentLabel;
+
+  /// User-facing text for the text preview or storage interface: textCreateContentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text content...'**
+  String get textCreateContentHint;
 }
 
 class _AppLocalizationsDelegate

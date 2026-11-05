@@ -7701,6 +7701,154 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get notificationSettingsPermissionBlockedIos =>
       '通知已被系统屏蔽。请前往系统设置 > Stroom > 通知，允许通知权限。';
+
+  @override
+  String get textPreviewDiscardEditsTitle => '放弃编辑？';
+
+  @override
+  String get textPreviewUnsavedChangesConfirm => '你有未保存的更改，确定要放弃吗？';
+
+  @override
+  String get textPreviewCancel => '取消';
+
+  @override
+  String get textPreviewDiscard => '放弃';
+
+  @override
+  String get textPreviewFontSize => '字号调整';
+
+  @override
+  String get textPreviewRestoreDefault => '恢复默认';
+
+  @override
+  String get textPreviewClose => '关闭';
+
+  @override
+  String textPreviewSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get textPreviewUndo => '撤销';
+
+  @override
+  String get textPreviewRedo => '重做';
+
+  @override
+  String get textPreviewSave => '保存';
+
+  @override
+  String get textPreviewEdit => '编辑';
+
+  @override
+  String get textPreviewChartEdit => '图表编辑';
+
+  @override
+  String textStorageSkipUnsupportedFormat(String format) {
+    return '跳过不支持的格式：$format';
+  }
+
+  @override
+  String textStorageImportSuccess(int count) {
+    return '已导入 $count 个文本文件';
+  }
+
+  @override
+  String textStorageImportFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get textStorageSaved => '文本已保存';
+
+  @override
+  String get textStorageLoadFailed => '无法加载文本内容';
+
+  @override
+  String get textStorageReadFailed => '文件数据读取失败';
+
+  @override
+  String get textStorageExportTitle => '导出文本';
+
+  @override
+  String textStorageExportedTo(String path) {
+    return '已导出到：$path';
+  }
+
+  @override
+  String textStorageExportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get textStorageChooseExportDirectory => '选择导出目录';
+
+  @override
+  String get textStorageFolderExportTitle => '文件夹导出';
+
+  @override
+  String get textStorageWebFolderExportInfo =>
+      '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get textStorageCancel => '取消';
+
+  @override
+  String get textStorageDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String textStorageExportedFiles(int count) {
+    return '已导出 $count 个文件';
+  }
+
+  @override
+  String get textStorageExportFolderTitle => '导出文本文件夹';
+
+  @override
+  String textStorageCopyFailed(String error) {
+    return '复制失败：$error';
+  }
+
+  @override
+  String get textStorageCreateNew => '新建';
+
+  @override
+  String get textStorageImport => '导入';
+
+  @override
+  String get textStorageTitle => '文本';
+
+  @override
+  String get textStorageExportToLocal => '导出到本地';
+
+  @override
+  String get textCreateEnterTitle => '请输入标题';
+
+  @override
+  String textCreateSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get textCreateNewTitle => '新建';
+
+  @override
+  String get textCreateSave => '保存';
+
+  @override
+  String get textCreateTitleLabel => '标题';
+
+  @override
+  String get textCreateTitleHint => '输入文本标题';
+
+  @override
+  String get textCreateFormatLabel => '格式';
+
+  @override
+  String get textCreateContentLabel => '文本内容';
+
+  @override
+  String get textCreateContentHint => '输入文本内容...';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -15399,4 +15547,152 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get notificationSettingsPermissionBlockedIos =>
       '通知已被系统屏蔽。请前往系统设置 > Stroom > 通知，允许通知权限。';
+
+  @override
+  String get textPreviewDiscardEditsTitle => '放弃编辑？';
+
+  @override
+  String get textPreviewUnsavedChangesConfirm => '你有未保存的更改，确定要放弃吗？';
+
+  @override
+  String get textPreviewCancel => '取消';
+
+  @override
+  String get textPreviewDiscard => '放弃';
+
+  @override
+  String get textPreviewFontSize => '字号调整';
+
+  @override
+  String get textPreviewRestoreDefault => '恢复默认';
+
+  @override
+  String get textPreviewClose => '关闭';
+
+  @override
+  String textPreviewSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get textPreviewUndo => '撤销';
+
+  @override
+  String get textPreviewRedo => '重做';
+
+  @override
+  String get textPreviewSave => '保存';
+
+  @override
+  String get textPreviewEdit => '编辑';
+
+  @override
+  String get textPreviewChartEdit => '图表编辑';
+
+  @override
+  String textStorageSkipUnsupportedFormat(String format) {
+    return '跳过不支持的格式：$format';
+  }
+
+  @override
+  String textStorageImportSuccess(int count) {
+    return '已导入 $count 个文本文件';
+  }
+
+  @override
+  String textStorageImportFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get textStorageSaved => '文本已保存';
+
+  @override
+  String get textStorageLoadFailed => '无法加载文本内容';
+
+  @override
+  String get textStorageReadFailed => '文件数据读取失败';
+
+  @override
+  String get textStorageExportTitle => '导出文本';
+
+  @override
+  String textStorageExportedTo(String path) {
+    return '已导出到：$path';
+  }
+
+  @override
+  String textStorageExportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get textStorageChooseExportDirectory => '选择导出目录';
+
+  @override
+  String get textStorageFolderExportTitle => '文件夹导出';
+
+  @override
+  String get textStorageWebFolderExportInfo =>
+      '浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。';
+
+  @override
+  String get textStorageCancel => '取消';
+
+  @override
+  String get textStorageDownloadZip => '下载 ZIP 文件';
+
+  @override
+  String textStorageExportedFiles(int count) {
+    return '已导出 $count 个文件';
+  }
+
+  @override
+  String get textStorageExportFolderTitle => '导出文本文件夹';
+
+  @override
+  String textStorageCopyFailed(String error) {
+    return '复制失败：$error';
+  }
+
+  @override
+  String get textStorageCreateNew => '新建';
+
+  @override
+  String get textStorageImport => '导入';
+
+  @override
+  String get textStorageTitle => '文本';
+
+  @override
+  String get textStorageExportToLocal => '导出到本地';
+
+  @override
+  String get textCreateEnterTitle => '请输入标题';
+
+  @override
+  String textCreateSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get textCreateNewTitle => '新建';
+
+  @override
+  String get textCreateSave => '保存';
+
+  @override
+  String get textCreateTitleLabel => '标题';
+
+  @override
+  String get textCreateTitleHint => '输入文本标题';
+
+  @override
+  String get textCreateFormatLabel => '格式';
+
+  @override
+  String get textCreateContentLabel => '文本内容';
+
+  @override
+  String get textCreateContentHint => '输入文本内容...';
 }
