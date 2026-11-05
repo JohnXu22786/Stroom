@@ -31,6 +31,7 @@ class LlmProviderPreset {
   final String authorizationHeader;
   final String authorizationScheme;
   final String defaultApiProtocol;
+  final Map<String, String> headers;
   final List<LlmProviderPresetModel> fallbackModels;
 
   const LlmProviderPreset({
@@ -43,6 +44,7 @@ class LlmProviderPreset {
     this.authorizationHeader = 'Authorization',
     this.authorizationScheme = 'Bearer',
     this.defaultApiProtocol = 'openai.chat_completions',
+    this.headers = const {},
     this.fallbackModels = const [],
   });
 
@@ -54,6 +56,10 @@ class LlmProviderPreset {
       'baseUrl': baseUrl,
       'apiProtocol': defaultApiProtocol,
     };
+    _removePreviousPresetHeaders(endpointConfig, existing);
+    endpointConfig['apiKeyHeader'] = authorizationHeader;
+    endpointConfig['apiKeyScheme'] = authorizationScheme;
+    _mergePresetHeaders(endpointConfig, headers);
     if (modelsUrl != null) {
       endpointConfig['modelsUrl'] = modelsUrl!;
     } else {
@@ -68,9 +74,102 @@ class LlmProviderPreset {
     }
     return endpointConfig;
   }
+
+  /// Removes only settings owned by the current preset for a custom endpoint.
+  static Map<String, dynamic> clearFromEndpointConfig(
+    Map<String, dynamic> existing,
+  ) {
+    final endpointConfig = Map<String, dynamic>.from(existing);
+    _removePreviousPresetHeaders(endpointConfig, existing);
+    endpointConfig.remove('providerPresetId');
+    return endpointConfig;
+  }
+
+  static void _removePreviousPresetHeaders(
+    Map<String, dynamic> endpointConfig,
+    Map<String, dynamic> existing,
+  ) {
+    final previousId = existing['providerPresetId'];
+    final previous = findLlmOpenAiProviderPreset(
+      previousId is String ? previousId : null,
+    );
+    if (previous == null) return;
+    if (endpointConfig['apiKeyHeader'] == previous.authorizationHeader) {
+      endpointConfig.remove('apiKeyHeader');
+    }
+    if (endpointConfig['apiKeyScheme'] == previous.authorizationScheme) {
+      endpointConfig.remove('apiKeyScheme');
+    }
+    final configured = endpointConfig['headers'];
+    if (configured is! Map) return;
+    final remaining = Map<String, dynamic>.from(configured);
+    for (final oldHeader in previous.headers.entries) {
+      final matchingKey = remaining.keys
+          .whereType<String>()
+          .where((key) => key.toLowerCase() == oldHeader.key.toLowerCase())
+          .firstOrNull;
+      if (matchingKey != null && remaining[matchingKey] == oldHeader.value) {
+        remaining.remove(matchingKey);
+      }
+    }
+    if (remaining.isEmpty) {
+      endpointConfig.remove('headers');
+    } else {
+      endpointConfig['headers'] = remaining;
+    }
+  }
+
+  static void _mergePresetHeaders(
+    Map<String, dynamic> endpointConfig,
+    Map<String, String> presetHeaders,
+  ) {
+    if (presetHeaders.isEmpty) return;
+    final configured = endpointConfig['headers'];
+    final merged = configured is Map
+        ? Map<String, dynamic>.from(configured)
+        : <String, dynamic>{};
+    for (final entry in presetHeaders.entries) {
+      merged.removeWhere(
+        (key, _) => key.toString().toLowerCase() == entry.key.toLowerCase(),
+      );
+      merged[entry.key] = entry.value;
+    }
+    endpointConfig['headers'] = merged;
+  }
 }
 
 const llmOpenAiProviderPresets = <LlmProviderPreset>[
+  LlmProviderPreset(
+    id: 'api-airforce',
+    displayName: 'Api.airforce',
+    baseUrl: 'https://api.airforce/v1/chat/completions',
+    modelsUrl: 'https://api.airforce/v1/models',
+    headers: {
+      'HTTP-Referer': 'https://endpoint-proxy.local',
+      'X-Title': 'Endpoint Proxy',
+    },
+  ),
+  LlmProviderPreset(
+    id: 'navy',
+    displayName: 'NavyAI',
+    baseUrl: 'https://api.navy/v1/chat/completions',
+    modelsUrl: 'https://api.navy/v1/models',
+    headers: {'User-Agent': 'OmniRoute/1.0'},
+  ),
+  LlmProviderPreset(
+    id: 'pioneer',
+    displayName: 'Pioneer AI',
+    baseUrl: 'https://api.pioneer.ai/v1/chat/completions',
+    authorizationHeader: 'X-API-Key',
+    authorizationScheme: '',
+  ),
+  LlmProviderPreset(
+    id: 'uc-direct',
+    displayName: 'UC Direct',
+    baseUrl: 'https://api.uncensored.com/api/v1',
+    authorizationHeader: 'X-API-Key',
+    authorizationScheme: '',
+  ),
   LlmProviderPreset(
     id: 'agnes-cn',
     displayName: 'Agnes AI (China)',

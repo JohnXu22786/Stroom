@@ -15,6 +15,7 @@ import 'aws_sigv4.dart';
 import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
+import 'llm_provider_preset_catalog.dart';
 import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
 import 'llm_oauth_token_client.dart';
@@ -3641,9 +3642,14 @@ class LlmAccountConnectorService {
     final configuredHeaders = account.endpointConfig['headers'];
     if (configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
-        if (entry.key is String && entry.value is String) {
-          headers[entry.key as String] = entry.value as String;
+        if (entry.key is! String || entry.value is! String) {
+          throw const LlmAccountConnectorException();
         }
+        LlmNativeRequestBuilder._validateRequestHeader(
+          entry.key as String,
+          entry.value as String,
+        );
+        headers[entry.key as String] = entry.value as String;
       }
     }
     if (account.connectorType == 'kilocode') {
@@ -3659,6 +3665,12 @@ class LlmAccountConnectorService {
       } else if (account.connectorType == 'claude') {
         headers['x-api-key'] = key;
         headers['anthropic-version'] = '2023-06-01';
+      } else if (account.connectorType == 'openai-compatibility') {
+        LlmNativeRequestBuilder._applyConfiguredApiKeyHeader(
+          headers,
+          account.endpointConfig,
+          key,
+        );
       } else {
         headers['Authorization'] = 'Bearer $key';
       }
@@ -5367,20 +5379,39 @@ class LlmAccountConnectorService {
       for (final entry in value.entries) {
         final key = entry.key.toString();
         final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-        if (forbiddenKeys.contains(normalized) ||
-            normalized.endsWith('key') ||
-            normalized.endsWith('sig') ||
-            normalized.contains('apikey') ||
-            normalized.contains('accesskey') ||
-            normalized.contains('token') ||
-            normalized.contains('secret') ||
-            normalized.contains('password') ||
-            normalized.contains('auth') ||
-            normalized.contains('credential') ||
-            normalized.contains('authorization') ||
-            normalized.contains('privatekey') ||
-            normalized.contains('signature') ||
-            normalized.contains('cookie')) {
+        final providerAuthMetadata = const {
+          'apikeyheader',
+          'apikeyscheme',
+        }.contains(normalized);
+        if (!providerAuthMetadata &&
+            (forbiddenKeys.contains(normalized) ||
+                normalized.endsWith('key') ||
+                normalized.endsWith('sig') ||
+                normalized.contains('apikey') ||
+                normalized.contains('accesskey') ||
+                normalized.contains('token') ||
+                normalized.contains('secret') ||
+                normalized.contains('password') ||
+                normalized.contains('auth') ||
+                normalized.contains('credential') ||
+                normalized.contains('authorization') ||
+                normalized.contains('privatekey') ||
+                normalized.contains('signature') ||
+                normalized.contains('cookie'))) {
+          throw const LlmAccountConnectorException();
+        }
+        if (normalized == 'apikeyheader' &&
+            (entry.value is! String ||
+                !LlmNativeRequestBuilder._isValidHeaderName(
+                  entry.value as String,
+                ))) {
+          throw const LlmAccountConnectorException();
+        }
+        if (normalized == 'apikeyscheme' &&
+            (entry.value is! String ||
+                !LlmNativeRequestBuilder._isValidHeaderValue(
+                  entry.value as String,
+                ))) {
           throw const LlmAccountConnectorException();
         }
         if ((normalized == 'baseurl' || normalized == 'modelsurl') &&
@@ -5513,6 +5544,49 @@ class LlmNativeRequestBuilder {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
   };
+
+  static bool _isValidHeaderName(String value) =>
+      RegExp(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$").hasMatch(value);
+
+  static bool _isValidHeaderValue(String value) =>
+      !RegExp(r'[\x00-\x1F\x7F]').hasMatch(value);
+
+  static void _validateRequestHeader(String name, String value) {
+    if (!_isValidHeaderName(name) || !_isValidHeaderValue(value)) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
+  static void _applyConfiguredApiKeyHeader(
+    Map<String, String> headers,
+    Map<String, dynamic> endpointConfig,
+    String apiKey,
+  ) {
+    final presetId = endpointConfig['providerPresetId'];
+    final preset = findLlmOpenAiProviderPreset(
+      presetId is String ? presetId : null,
+    );
+    final configuredName = endpointConfig['apiKeyHeader'];
+    final headerName = configuredName is String
+        ? configuredName
+        : preset?.authorizationHeader ?? 'Authorization';
+    final configuredScheme = endpointConfig['apiKeyScheme'];
+    final scheme = configuredScheme is String
+        ? configuredScheme
+        : preset?.authorizationScheme ?? 'Bearer';
+    if (!_isValidHeaderName(headerName) ||
+        !_isValidHeaderValue(scheme) ||
+        !_isValidHeaderValue(apiKey)) {
+      throw const LlmAccountConnectorException();
+    }
+    final lowerName = headerName.toLowerCase();
+    headers.removeWhere((name, _) {
+      final lowerExisting = name.toLowerCase();
+      return lowerExisting == lowerName ||
+          (lowerName != 'authorization' && lowerExisting == 'authorization');
+    });
+    headers[headerName] = scheme.isEmpty ? apiKey : '$scheme $apiKey';
+  }
 
   static String? credentialBundleString(
     String? credential,
@@ -5736,9 +5810,11 @@ class LlmNativeRequestBuilder {
         account.connectorType != 'uncloseai' &&
         configuredHeaders is Map) {
       for (final entry in configuredHeaders.entries) {
-        if (entry.key is String && entry.value is String) {
-          headers[entry.key as String] = entry.value as String;
+        if (entry.key is! String || entry.value is! String) {
+          throw const LlmAccountConnectorException();
         }
+        _validateRequestHeader(entry.key as String, entry.value as String);
+        headers[entry.key as String] = entry.value as String;
       }
     }
 
@@ -5963,6 +6039,13 @@ class LlmNativeRequestBuilder {
         break;
       case 'bedrock':
         if (account.authType == 'api_key') {
+          headers['Authorization'] = 'Bearer $secret';
+        }
+        break;
+      case 'openai-compatibility':
+        if (account.authType == 'api_key') {
+          _applyConfiguredApiKeyHeader(headers, config, secret);
+        } else if (secret.isNotEmpty) {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;

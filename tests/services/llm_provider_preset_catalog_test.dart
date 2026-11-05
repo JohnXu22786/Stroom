@@ -15,6 +15,290 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
+  test('M49 API-key presets preserve source endpoint and header contracts', () {
+    const expected = {
+      'api-airforce': (
+        'https://api.airforce/v1/chat/completions',
+        'Authorization',
+        'Bearer',
+        {
+          'HTTP-Referer': 'https://endpoint-proxy.local',
+          'X-Title': 'Endpoint Proxy',
+        },
+        'https://api.airforce/v1/models',
+      ),
+      'navy': (
+        'https://api.navy/v1/chat/completions',
+        'Authorization',
+        'Bearer',
+        {'User-Agent': 'OmniRoute/1.0'},
+        'https://api.navy/v1/models',
+      ),
+      'pioneer': (
+        'https://api.pioneer.ai/v1/chat/completions',
+        'X-API-Key',
+        '',
+        <String, String>{},
+        null,
+      ),
+      'uc-direct': (
+        'https://api.uncensored.com/api/v1',
+        'X-API-Key',
+        '',
+        <String, String>{},
+        null,
+      ),
+    };
+    for (final entry in expected.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value.$1, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, entry.value.$2, reason: entry.key);
+      expect(preset.authorizationScheme, entry.value.$3, reason: entry.key);
+      expect(preset.headers, entry.value.$4, reason: entry.key);
+      expect(preset.modelsUrl, entry.value.$5, reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+
+      final config = preset.applyToEndpointConfig(const {
+        'userSetting': 'preserved',
+        'headers': {'X-Workspace': 'personal'},
+      });
+      expect(config['providerPresetId'], entry.key);
+      expect(config['apiKeyHeader'], entry.value.$2);
+      expect(config['apiKeyScheme'], entry.value.$3);
+      expect(config['headers'], {
+        'X-Workspace': 'personal',
+        ...entry.value.$4,
+      });
+      expect(config['userSetting'], 'preserved');
+      expect(config.toString(), isNot(contains('api-key-secret')));
+    }
+
+    final airforceConfig = findLlmOpenAiProviderPreset('api-airforce')!
+        .applyToEndpointConfig(const {
+      'headers': {'X-Workspace': 'personal'},
+    });
+    final switched = findLlmOpenAiProviderPreset('pioneer')!
+        .applyToEndpointConfig(airforceConfig);
+    expect(switched['headers'], {'X-Workspace': 'personal'});
+    expect(switched['apiKeyHeader'], 'X-API-Key');
+    expect(switched['apiKeyScheme'], '');
+
+    final custom = LlmProviderPreset.clearFromEndpointConfig(switched);
+    expect(custom.containsKey('providerPresetId'), isFalse);
+    expect(custom.containsKey('apiKeyHeader'), isFalse);
+    expect(custom.containsKey('apiKeyScheme'), isFalse);
+    expect(custom['headers'], {'X-Workspace': 'personal'});
+  });
+
+  test('M49 API-key requests use the selected dynamic auth header', () {
+    final airforce = findLlmOpenAiProviderPreset('api-airforce')!;
+    final pioneer = findLlmOpenAiProviderPreset('pioneer')!;
+    final builder = LlmNativeRequestBuilder();
+    final airforceRequest = builder.build(
+      account: LlmAccount(
+        id: 'm49-airforce',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: airforce.displayName,
+        endpointConfig: airforce.applyToEndpointConfig(const {}),
+      ),
+      credential: 'synthetic-m49-key',
+      modelId: 'manual-model',
+      body: const {'model': 'manual-model', 'messages': []},
+    );
+    expect(
+        airforceRequest.headers['Authorization'], 'Bearer synthetic-m49-key');
+    expect(airforceRequest.headers['HTTP-Referer'],
+        'https://endpoint-proxy.local');
+    expect(airforceRequest.headers['X-Title'], 'Endpoint Proxy');
+    expect(airforceRequest.toString(), isNot(contains('synthetic-m49-key')));
+
+    final pioneerRequest = builder.build(
+      account: LlmAccount(
+        id: 'm49-pioneer',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: pioneer.displayName,
+        endpointConfig: pioneer.applyToEndpointConfig(const {}),
+      ),
+      credential: 'synthetic-m49-key',
+      modelId: 'manual-model',
+      body: const {'model': 'manual-model', 'messages': []},
+    );
+    expect(pioneerRequest.headers['X-API-Key'], 'synthetic-m49-key');
+    expect(pioneerRequest.headers['Authorization'], isNull);
+    expect(
+      () => builder.build(
+        account: LlmAccount(
+          id: 'm49-pioneer-static-auth',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: pioneer.displayName,
+          endpointConfig: pioneer.applyToEndpointConfig(const {
+            'headers': {'X-API-Key': 'static-must-not-win'},
+          }),
+        ),
+        credential: 'synthetic-m49-key',
+        modelId: 'manual-model',
+        body: const {'model': 'manual-model', 'messages': []},
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    expect(
+      () => builder.build(
+        account: LlmAccount(
+          id: 'm49-airforce-invalid-header',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: airforce.displayName,
+          endpointConfig: airforce.applyToEndpointConfig(const {
+            'headers': {'X-Workspace': 'safe\r\nAuthorization: leaked'},
+          }),
+        ),
+        credential: 'synthetic-m49-key',
+        modelId: 'manual-model',
+        body: const {'model': 'manual-model', 'messages': []},
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+    expect(
+      () => builder.build(
+        account: LlmAccount(
+          id: 'm49-pioneer-invalid-key-header-value',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: pioneer.displayName,
+          endpointConfig: pioneer.applyToEndpointConfig(const {}),
+        ),
+        credential: 'synthetic-key\r\nX-Leak: value',
+        modelId: 'manual-model',
+        body: const {'model': 'manual-model', 'messages': []},
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+
+    final ucDirect = findLlmOpenAiProviderPreset('uc-direct')!;
+    final ucRequest = builder.build(
+      account: LlmAccount(
+        id: 'm49-uc-direct',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: ucDirect.displayName,
+        endpointConfig: ucDirect.applyToEndpointConfig(const {}),
+      ),
+      credential: 'synthetic-m49-key',
+      modelId: 'manual-model',
+      body: const {'model': 'manual-model', 'messages': []},
+    );
+    expect(ucRequest.uri.path, '/api/v1/chat/completions');
+    expect(ucRequest.headers['X-API-Key'], 'synthetic-m49-key');
+    expect(ucRequest.headers['Authorization'], isNull);
+  });
+
+  test('M49 preset accounts retain secure credentials and protocol overrides',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+    );
+    for (final presetId in ['api-airforce', 'navy', 'pioneer', 'uc-direct']) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = LlmAccount(
+        id: 'm49-$presetId-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {}),
+        models: const [
+          LlmUpstreamModel(
+            id: 'm49-account:manual-model',
+            upstreamModelId: 'manual-model',
+            displayName: 'Manual model',
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      );
+      await service.saveAccount(account, secret: 'synthetic-m49-key');
+      final restored = (await service.getAccount(account.id))!;
+      expect(await service.readCredential(account.id), 'synthetic-m49-key');
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(
+          restored.endpointConfig['apiKeyHeader'], preset.authorizationHeader);
+      expect(
+          restored.endpointConfig['apiKeyScheme'], preset.authorizationScheme);
+      expect(restored.endpointConfig['headers'],
+          preset.headers.isEmpty ? isNull : preset.headers);
+      expect(restored.endpointConfig.toString(),
+          isNot(contains('synthetic-m49-key')));
+      expect(restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages');
+      final group = LlmModelGroup(
+        id: 'm49-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages');
+    }
+  });
+
+  test('M49 model discovery shares provider auth and static headers', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-model'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    for (final presetId in ['api-airforce', 'navy']) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm49-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'synthetic-m49-key',
+      );
+      await service.discoverModels(account, refreshRemote: true);
+      final request = requests.last;
+      expect(request.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(request.headers['Authorization'], 'Bearer synthetic-m49-key');
+      for (final header in preset.headers.entries) {
+        expect(request.headers[header.key], header.value, reason: presetId);
+      }
+    }
+    expect(requests, hasLength(2));
+  });
+
   test('M44 API-key presets retain audited Chat Completions metadata', () {
     const endpoints = {
       'onomeo': 'https://onomeo.com/v1/chat/completions',
