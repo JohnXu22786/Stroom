@@ -23,6 +23,67 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('Azure account saves endpoint settings and secure API key', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Azure production');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    await tester.ensureVisible(connectorField);
+    tester
+        .widget<DropdownButtonFormField<String>>(connectorField)
+        .onChanged!('azure-ai');
+    await tester.pumpAndSettle();
+
+    Future<void> enterField(String label, String value) async {
+      final field = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == label,
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    await enterField('Azure resource / Foundry host',
+        'https://example-resource.openai.azure.com');
+    await enterField('Azure deployment ID', 'gpt-4o-production');
+    await enterField('Azure API version', '2024-12-01-preview');
+    await enterField('Azure API Key', 'synthetic-azure-secret');
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'azure-ai');
+    expect(saved.endpointConfig, {
+      'apiProtocol': 'openai.chat_completions',
+      'baseUrl': 'https://example-resource.openai.azure.com',
+      'azureDeploymentId': 'gpt-4o-production',
+      'apiVersion': '2024-12-01-preview',
+    });
+    expect(saved.models.single.upstreamModelId, 'gpt-4o-production');
+    expect(saved.models.single.config['catalogSource'],
+        'configured-azure-deployment');
+    expect(credentials.values.values, ['synthetic-azure-secret']);
+    expect(saved.endpointConfig.toString(), isNot(contains('synthetic-azure-secret')));
+    final refreshed = await service.discoverModels(saved, refreshRemote: true);
+    expect(refreshed.single.id, saved.models.single.id);
+    expect(refreshed.single.upstreamModelId, 'gpt-4o-production');
+  });
+
   testWidgets('OpenAI-compatible account offers named API presets', (
     tester,
   ) async {

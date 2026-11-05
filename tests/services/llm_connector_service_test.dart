@@ -6946,6 +6946,85 @@ void main() {
   group('LlmNativeRequestBuilder', () {
     final builder = LlmNativeRequestBuilder();
 
+    test('Azure deployment requests use the configured deployment and key header', () {
+      final account = _account(
+        'm50-azure-request',
+        'azure-ai',
+        endpointConfig: const {
+          'baseUrl': 'https://example-resource.openai.azure.com',
+          'azureDeploymentId': 'production chat',
+          'apiVersion': '2024-12-01-preview',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm50-azure-model',
+            upstreamModelId: 'production chat',
+            displayName: 'production chat',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+            config: {'catalogSource': 'configured-azure-deployment'},
+          ),
+        ],
+      );
+      final request = builder.build(
+        account: account,
+        credential: 'synthetic-azure-secret',
+        modelId: 'production chat',
+        body: const {'model': 'production chat', 'messages': []},
+      );
+
+      expect(request.uri.scheme, 'https');
+      expect(request.uri.host, 'example-resource.openai.azure.com');
+      expect(request.uri.path,
+          '/openai/deployments/production%20chat/chat/completions');
+      expect(request.uri.queryParameters, {'api-version': '2024-12-01-preview'});
+      expect(request.headers['api-key'], 'synthetic-azure-secret');
+      expect(request.headers.containsKey('Authorization'), isFalse);
+      expect(request.toString(), isNot(contains('synthetic-azure-secret')));
+      expect(account.endpointConfig.toString(), isNot(contains('synthetic-azure-secret')));
+      expect(
+        () => builder.build(
+          account: account,
+          credential: 'synthetic-azure-secret',
+          modelId: 'different-deployment',
+          body: const {'model': 'different-deployment', 'messages': []},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
+    test('Azure discovery returns the configured deployment as its model ID', () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final saved = await service.saveAccount(
+        _account(
+          'm50-azure-refresh',
+          'azure-ai',
+          endpointConfig: const {
+            'baseUrl': 'https://example-resource.services.ai.azure.com',
+            'azureDeploymentId': 'foundry-deployment',
+            'apiVersion': '2024-12-01-preview',
+          },
+          models: const [],
+        ),
+        secret: 'stored-azure-secret',
+      );
+
+      final models = await service.discoverModels(saved, refreshRemote: true);
+
+      expect(models.map((model) => model.upstreamModelId), ['foundry-deployment']);
+      expect(models.single.config['catalogSource'], 'configured-azure-deployment');
+      expect(models.single.capabilities['supportedApiProtocols'], [
+        'openai.chat_completions',
+      ]);
+      expect(await service.readCredential(saved.id), 'stored-azure-secret');
+    });
+
     test('redacts query values from prepared request diagnostics', () {
       final request = LlmPreparedNativeRequest(
         uri: Uri.parse(

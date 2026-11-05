@@ -26,6 +26,7 @@ import 'cursor_http2_transport.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
+import 'azure_openai_endpoint.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -601,6 +602,18 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'azure-ai',
+      displayName: 'Azure AI Foundry',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+    ),
+    LlmConnectorDefinition(
+      id: 'azure-openai',
+      displayName: 'Azure OpenAI',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+    ),
+    LlmConnectorDefinition(
       id: 'opencode-go',
       displayName: 'OpenCode Go',
       protocol: LlmNativeProtocol.openAIChatCompletions,
@@ -781,6 +794,8 @@ abstract final class LlmConnectorRegistry {
         'workbuddy' ||
         'github' ||
         'ghe-copilot' ||
+        'azure-ai' ||
+        'azure-openai' ||
         'gitlab-duo' ||
         'zed-hosted' ||
         'qoder' ||
@@ -799,6 +814,8 @@ abstract final class LlmConnectorRegistry {
         'bedrock' => 'openai',
         'openai-compatibility' ||
         'openai-api' ||
+        'azure-ai' ||
+        'azure-openai' ||
         'opencode-go' ||
         'opencode-zen' ||
         'aihorde' ||
@@ -1604,6 +1621,48 @@ class LlmAccountConnectorService {
     }
     if (account.connectorType == 'vertex' && account.authType == 'oauth') {
       throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'azure-ai' ||
+        account.connectorType == 'azure-openai') {
+      final deploymentId = LlmNativeRequestBuilder._configString(
+        account.endpointConfig,
+        'azureDeploymentId',
+      );
+      final baseUrl = LlmNativeRequestBuilder._configString(
+        account.endpointConfig,
+        'baseUrl',
+      );
+      final apiVersion = LlmNativeRequestBuilder._configString(
+            account.endpointConfig,
+            'apiVersion',
+          ) ??
+          AzureOpenAiEndpoint.defaultApiVersion;
+      if (deploymentId == null || baseUrl == null) {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        AzureOpenAiEndpoint.chatCompletionsUri(
+          resourceUrl: baseUrl,
+          deploymentId: deploymentId,
+          apiVersion: apiVersion,
+        );
+      } on FormatException {
+        throw const LlmAccountConnectorException();
+      }
+      final configuredModel = LlmUpstreamModel(
+        id: '${account.id}:azure-deployment:${Uri.encodeComponent(deploymentId)}',
+        upstreamModelId: deploymentId,
+        displayName: deploymentId,
+        capabilities: const {
+          'chat': true,
+          'streaming': true,
+          'supportedApiProtocols': ['openai.chat_completions'],
+        },
+        config: const {'catalogSource': 'configured-azure-deployment'},
+      );
+      return List.unmodifiable(
+        _mergeModelMappings([configuredModel], account.models),
+      );
     }
     if (account.connectorType == 'uncloseai' && !refreshRemote) {
       if (account.models.isNotEmpty) return List.unmodifiable(account.models);
@@ -5840,6 +5899,13 @@ class LlmNativeRequestBuilder {
           headers['Authorization'] = 'Bearer ${secret.trim()}';
         }
         break;
+      case 'azure-ai' || 'azure-openai':
+        if (secret.trim().isEmpty) {
+          throw const LlmAccountConnectorException();
+        }
+        headers.removeWhere((name, _) => name.toLowerCase() == 'authorization');
+        headers['api-key'] = secret.trim();
+        break;
       case 'gitlab-duo':
         headers['Authorization'] = 'Bearer $secret';
         break;
@@ -6572,6 +6638,24 @@ class LlmNativeRequestBuilder {
         account.connectorType == 'openai-compatibility' &&
             config['legacyOcrFullEndpoint'] == true &&
             nativeFormat == null;
+    if (account.connectorType == 'azure-ai' ||
+        account.connectorType == 'azure-openai') {
+      final deploymentId = _configString(config, 'azureDeploymentId');
+      final apiVersion = _configString(config, 'apiVersion') ??
+          AzureOpenAiEndpoint.defaultApiVersion;
+      if (deploymentId == null || deploymentId != modelId) {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        return AzureOpenAiEndpoint.chatCompletionsUri(
+          resourceUrl: _baseUrl(config, ''),
+          deploymentId: deploymentId,
+          apiVersion: apiVersion,
+        );
+      } on FormatException {
+        throw const LlmAccountConnectorException();
+      }
+    }
     switch (account.connectorType) {
       case 'amazon-q':
         amazonQRegion = _amazonQRegion(account, {
@@ -7068,6 +7152,8 @@ class LlmNativeRequestBuilder {
       'command-code' => host == 'api.commandcode.ai',
       'aihorde' => host == 'oai.aihorde.net',
       'uncloseai' => host == 'hermes.ai.unturf.com',
+      'azure-ai' || 'azure-openai' =>
+        AzureOpenAiEndpoint.isAzureResourceHost(host),
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',
       'deepseek' => host == 'api.deepseek.com',
