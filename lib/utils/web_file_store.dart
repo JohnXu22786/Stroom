@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:idb_shim/idb_shim.dart'
     show Database, idbModeReadOnly, idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
@@ -19,22 +19,35 @@ class WebFileStore {
 
   static bool _testMode = false;
   static final Map<String, Uint8List> _inMemoryStore = {};
+  static Future<void> _testMutationQueue = Future<void>.value();
+  static Object? _nextTestTransformError;
 
   /// Enable in-memory test mode — all operations use a [Map] instead of
   /// IndexedDB.  Call before any read/write/delete/exists in tests.
   static void enableTestMode() {
     _testMode = true;
     _inMemoryStore.clear();
+    _testMutationQueue = Future<void>.value();
+    _nextTestTransformError = null;
   }
 
   /// Reset test mode and clear stored data.
   static void disableTestMode() {
     _testMode = false;
     _inMemoryStore.clear();
+    _testMutationQueue = Future<void>.value();
+    _nextTestTransformError = null;
   }
 
   /// Whether test mode is currently active.
   static bool get isTestMode => _testMode;
+
+  /// Makes the next in-memory [transform] that writes fail before commit.
+  @visibleForTesting
+  static void failNextTransformForTesting(Object error) {
+    if (!_testMode) throw StateError('WebFileStore test mode is not active.');
+    _nextTestTransformError = error;
+  }
 
   // ---- IndexedDB database ------------------------------------------------
 
@@ -92,6 +105,157 @@ class WebFileStore {
     final txn = db.transaction('files', idbModeReadWrite);
     await txn.objectStore('files').put(data, key);
     await txn.completed;
+  }
+
+  /// Atomically transforms one stored value, returning `null` to leave it
+  /// unchanged. IndexedDB read-write transactions serialize this operation
+  /// across browser tabs; the in-memory implementation mirrors that behavior
+  /// for tests.
+  static Future<Uint8List?> transform(
+    String key,
+    Uint8List? Function(Uint8List? current) transform,
+  ) async {
+    if (_testMode) {
+      final previous = _testMutationQueue;
+      final release = Completer<void>();
+      _testMutationQueue = release.future;
+      await previous;
+      try {
+        final current = _inMemoryStore[key];
+        final updated = transform(
+          current == null ? null : Uint8List.fromList(current),
+        );
+        if (updated != null) {
+          final error = _nextTestTransformError;
+          _nextTestTransformError = null;
+          if (error != null) throw error;
+          _inMemoryStore[key] = Uint8List.fromList(updated);
+        }
+        return updated;
+      } finally {
+        release.complete();
+      }
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final store = txn.objectStore('files');
+    try {
+      final stored = await store.getObject(key);
+      final updated = transform(_toUint8List(stored, key));
+      if (updated != null) await store.put(updated, key);
+      await txn.completed;
+      return updated;
+    } catch (_) {
+      try {
+        await txn.completed;
+      } catch (_) {
+        // Preserve the original read, transform, or write error.
+      }
+      rethrow;
+    }
+  }
+
+  /// Writes [writeData] and transforms [transformKey] in one read-write
+  /// transaction. A `null` transform result commits neither change.
+  static Future<Uint8List?> transformAndWrite({
+    required String transformKey,
+    required String writeKey,
+    required Uint8List writeData,
+    required Uint8List? Function(Uint8List? current) transform,
+  }) async {
+    if (_testMode) {
+      final previous = _testMutationQueue;
+      final release = Completer<void>();
+      _testMutationQueue = release.future;
+      await previous;
+      try {
+        final current = _inMemoryStore[transformKey];
+        final updated = transform(
+          current == null ? null : Uint8List.fromList(current),
+        );
+        if (updated == null) return null;
+        final error = _nextTestTransformError;
+        _nextTestTransformError = null;
+        if (error != null) throw error;
+        _inMemoryStore[writeKey] = Uint8List.fromList(writeData);
+        _inMemoryStore[transformKey] = Uint8List.fromList(updated);
+        return updated;
+      } finally {
+        release.complete();
+      }
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final store = txn.objectStore('files');
+    try {
+      final stored = await store.getObject(transformKey);
+      final updated = transform(_toUint8List(stored, transformKey));
+      if (updated == null) {
+        await txn.completed;
+        return null;
+      }
+      await store.put(writeData, writeKey);
+      await store.put(updated, transformKey);
+      await txn.completed;
+      return updated;
+    } catch (_) {
+      try {
+        await txn.completed;
+      } catch (_) {
+        // Preserve the original read, transform, or write error.
+      }
+      rethrow;
+    }
+  }
+
+  /// Deletes [deleteKey] only when an atomic read of [readKey] satisfies
+  /// [shouldDelete]. Both operations share one IndexedDB read-write
+  /// transaction so another tab cannot add a reference between the check and
+  /// deletion.
+  static Future<bool> deleteIf({
+    required String readKey,
+    required String deleteKey,
+    required bool Function(Uint8List? value) shouldDelete,
+  }) async {
+    if (_testMode) {
+      final previous = _testMutationQueue;
+      final release = Completer<void>();
+      _testMutationQueue = release.future;
+      await previous;
+      try {
+        final stored = _inMemoryStore[readKey];
+        final current = stored == null ? null : Uint8List.fromList(stored);
+        if (!shouldDelete(current)) return false;
+        _inMemoryStore.remove(deleteKey);
+        return true;
+      } finally {
+        release.complete();
+      }
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final store = txn.objectStore('files');
+    try {
+      final stored = await store.getObject(readKey);
+      final current = _toUint8List(stored, readKey);
+      if (!shouldDelete(current)) {
+        await txn.completed;
+        return false;
+      }
+      await store.delete(deleteKey);
+      await txn.completed;
+      return true;
+    } catch (_) {
+      try {
+        await txn.completed;
+      } catch (_) {
+        // Preserve the original read, predicate, or delete error.
+      }
+      rethrow;
+    }
   }
 
   /// 将 IndexedDB 读回的任意类型尽量转为 Uint8List

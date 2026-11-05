@@ -5,9 +5,36 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/manifest_operations.dart';
 import 'package:stroom/services/text_storage_tool_service.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+Future<void> _writePersistedTextRecord(
+  String id,
+  Map<String, dynamic> updates,
+) async {
+  final raw = await WebFileStore.read('manifest_database_data');
+  final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
+  final records = data[ManifestTables.textRecords] as List<dynamic>;
+  (records.singleWhere((record) => (record as Map)['id'] == id)
+          as Map<String, dynamic>)
+      .addAll(updates);
+  await WebFileStore.write(
+    'manifest_database_data',
+    Uint8List.fromList(utf8.encode(jsonEncode(data))),
+  );
+}
+
+Future<void> _addPersistedTextRecord(Map<String, dynamic> record) async {
+  final raw = await WebFileStore.read('manifest_database_data');
+  final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
+  (data[ManifestTables.textRecords] as List<dynamic>).add(record);
+  await WebFileStore.write(
+    'manifest_database_data',
+    Uint8List.fromList(utf8.encode(jsonEncode(data))),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -789,6 +816,453 @@ void main() {
   );
 
   test(
+    'checks persisted JSON against an update made by another web tab',
+    () async {
+      await ManifestDatabase.insertTextRecord({
+        'id': 'cross-tab-record',
+        'hash': 'starting-hash',
+        'name': 'Original',
+        'format': 'md',
+        'folder': '',
+      });
+      await ManifestDatabase.getAllTextRecords(); // Prime this tab's cache.
+
+      final otherTabData = emptyWebData();
+      otherTabData[ManifestTables.textRecords] = [
+        {
+          'id': 'cross-tab-record',
+          'hash': 'other-tab-hash',
+          'name': 'Original',
+          'format': 'md',
+          'folder': '',
+        },
+      ];
+      await WebFileStore.write(
+        'manifest_database_data',
+        Uint8List.fromList(utf8.encode(jsonEncode(otherTabData))),
+      );
+
+      final updated = await ManifestDatabase.updateTextRecordIfHash(
+        'cross-tab-record',
+        'starting-hash',
+        {'name': 'Original', 'format': 'md', 'folder': ''},
+        {'hash': 'stale-tab-hash'},
+      );
+
+      expect(updated, isFalse);
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      expect(
+        (persisted[ManifestTables.textRecords] as List).single['hash'],
+        'other-tab-hash',
+      );
+    },
+  );
+
+  test(
+    'does not delete replacement content committed by another web tab',
+    () async {
+      const original = 'Original content';
+      const committed = 'Other tab content';
+      final originalBytes = Uint8List.fromList(utf8.encode(original));
+      final committedBytes = Uint8List.fromList(utf8.encode(committed));
+      final originalHash = computeTextHash(originalBytes);
+      final committedHash = computeTextHash(committedBytes);
+      final record = TextRecord(
+        id: 'cross-tab-content-cleanup',
+        name: 'Original',
+        hash: originalHash,
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: originalBytes.length,
+      );
+      await TextManifest.writeText(record.storageFileName, original);
+      await TextManifest.addRecord(record);
+      await TextManifest.loadRecords(); // Keep this tab's pre-update snapshot.
+      await TextManifest.writeText('$committedHash.txt', committed);
+      await _writePersistedTextRecord(record.id, {
+        'hash': committedHash,
+        'size': committedBytes.length,
+      });
+
+      final losingUpdate = TextRecord(
+        id: record.id,
+        name: record.name,
+        hash: committedHash,
+        format: record.format,
+        createdAt: record.createdAt,
+        modifiedAt: DateTime.utc(2026, 1, 2),
+        size: committedBytes.length,
+      );
+      final replaced = await TextManifest.updateRecordIfHashWithContent(
+        record.id,
+        originalHash,
+        {'name': record.name, 'format': record.format, 'folder': ''},
+        losingUpdate,
+        committedBytes,
+      );
+
+      expect(replaced, isFalse);
+      expect(
+        await TextManifest.readText('$committedHash.txt'),
+        committed,
+        reason: 'the winning tab still references these replacement bytes',
+      );
+    },
+  );
+
+  test(
+    'metadata rename preserves a content update committed by another web tab',
+    () async {
+      const original = 'Original content';
+      const committed = 'Other tab content';
+      final originalBytes = Uint8List.fromList(utf8.encode(original));
+      final committedBytes = Uint8List.fromList(utf8.encode(committed));
+      final originalHash = computeTextHash(originalBytes);
+      final committedHash = computeTextHash(committedBytes);
+      final record = TextRecord(
+        id: 'cross-tab-metadata',
+        name: 'Original',
+        hash: originalHash,
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: originalBytes.length,
+      );
+      await TextManifest.writeText(record.storageFileName, original);
+      await TextManifest.addRecord(record);
+      await TextManifest.loadRecords(); // Keep this tab's pre-update snapshot.
+      await TextManifest.writeText('$committedHash.txt', committed);
+      await _writePersistedTextRecord(record.id, {
+        'hash': committedHash,
+        'size': committedBytes.length,
+      });
+
+      await TextManifest.renameRecordWithFormat(record.id, 'Renamed', 'md');
+
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      final updated = (persisted[ManifestTables.textRecords] as List).single
+          as Map<String, dynamic>;
+      expect(updated['name'], 'Renamed');
+      expect(updated['format'], 'md');
+      expect(updated['hash'], committedHash);
+      expect(await TextManifest.readText('$committedHash.txt'), committed);
+    },
+  );
+
+  test(
+    'deleting a record preserves content referenced by another web tab',
+    () async {
+      const content = 'Shared content';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final record = TextRecord(
+        id: 'cross-tab-delete-source',
+        name: 'Original',
+        hash: computeTextHash(bytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+      );
+      await TextManifest.writeText(record.storageFileName, content);
+      await TextManifest.addRecord(record);
+      await TextManifest.loadRecords(); // Keep this tab's one-record snapshot.
+      await _addPersistedTextRecord({
+        ...record.toMap(),
+        'id': 'cross-tab-delete-reference',
+        'name': 'Other tab reference',
+      });
+
+      await TextManifest.deleteRecord(record.id);
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      expect(
+        (persisted[ManifestTables.textRecords] as List).map(
+          (row) => (row as Map)['id'],
+        ),
+        ['cross-tab-delete-reference'],
+      );
+    },
+  );
+
+  test(
+    'batch deletion preserves content referenced by another web tab',
+    () async {
+      const content = 'Shared batch content';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final record = TextRecord(
+        id: 'cross-tab-batch-delete-source',
+        name: 'Original',
+        hash: computeTextHash(bytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+      );
+      await TextManifest.writeText(record.storageFileName, content);
+      await TextManifest.addRecord(record);
+      await TextManifest.loadRecords(); // Keep this tab's one-record snapshot.
+      await _addPersistedTextRecord({
+        ...record.toMap(),
+        'id': 'cross-tab-batch-delete-reference',
+        'name': 'Other tab reference',
+      });
+
+      await TextManifest.deleteRecords([record.id]);
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      expect(
+        (persisted[ManifestTables.textRecords] as List).map(
+          (row) => (row as Map)['id'],
+        ),
+        ['cross-tab-batch-delete-reference'],
+      );
+    },
+  );
+
+  test(
+    'removing a folder preserves content added by another web tab',
+    () async {
+      const content = 'Folder content shared across tabs';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final record = TextRecord(
+        id: 'cross-tab-folder-delete-source',
+        name: 'Original',
+        hash: computeTextHash(bytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+        folder: 'To Delete',
+      );
+      await TextManifest.writeText(record.storageFileName, content);
+      await TextManifest.addRecord(record);
+      await TextManifest.loadRecords(); // Keep this tab's stale snapshot.
+      await _addPersistedTextRecord({
+        ...record.toMap(),
+        'id': 'cross-tab-folder-delete-reference',
+        'name': 'Other tab reference',
+        'folder': 'Keep',
+      });
+
+      await TextManifest.removeFolder('To Delete');
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      expect(
+        (persisted[ManifestTables.textRecords] as List).map(
+          (row) => (row as Map)['id'],
+        ),
+        ['cross-tab-folder-delete-reference'],
+      );
+    },
+  );
+
+  test(
+    'concurrent web-tab creation and folder removal keep committed text readable',
+    () async {
+      const content = 'Concurrent shared content';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final initialRecord = TextRecord(
+        id: 'concurrent-folder-delete-source',
+        name: 'Initial',
+        hash: computeTextHash(bytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+        folder: 'Concurrent Delete',
+      );
+      await TextManifest.addRecordWithContent(initialRecord, bytes);
+      await TextManifest.loadRecords(); // Prime the first tab's snapshot.
+
+      final secondTab = ManifestOperations<TextRecord>(
+        manifestKey: 'text_manifest_second_tab',
+        storageDirName: 'texts',
+        fromMap: TextRecord.fromMap,
+        tableName: ManifestTables.textRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final newRecord = TextRecord(
+        id: 'concurrent-folder-delete-reference',
+        name: 'Second tab',
+        hash: initialRecord.hash,
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+        folder: 'Concurrent Keep',
+      );
+
+      await Future.wait([
+        TextManifest.removeFolder('Concurrent Delete'),
+        secondTab.addTextRecordWithContent(newRecord, bytes),
+      ]);
+
+      expect(await TextManifest.readText(newRecord.storageFileName), content);
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      expect(
+        (persisted[ManifestTables.textRecords] as List).map(
+          (row) => (row as Map)['id'],
+        ),
+        [newRecord.id],
+      );
+    },
+  );
+
+  test(
+    'reading after another web tab replaces content reloads its manifest',
+    () async {
+      const original = 'Original text';
+      const updated = 'Text committed by another tab';
+      final originalBytes = Uint8List.fromList(utf8.encode(original));
+      final updatedBytes = Uint8List.fromList(utf8.encode(updated));
+      final record = TextRecord(
+        id: 'cross-tab-fresh-read',
+        name: 'Shared document',
+        hash: computeTextHash(originalBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: originalBytes.length,
+      );
+      await TextManifest.addRecordWithContent(record, originalBytes);
+      await TextManifest.loadRecords(); // Prime this tab's manifest cache.
+
+      final updatedHash = computeTextHash(updatedBytes);
+      await WebFileStore.write('texts/$updatedHash.txt', updatedBytes);
+      await _writePersistedTextRecord(record.id, {
+        'hash': updatedHash,
+        'size': updatedBytes.length,
+        'textLength': updated.length,
+      });
+      await WebFileStore.delete('texts/${record.hash}.txt');
+
+      final response = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_read', {
+          'record_id': record.id,
+        }),
+      ) as Map<String, dynamic>;
+
+      expect(response['content'], updated);
+      expect(response['hash'], updatedHash);
+    },
+  );
+
+  test(
+    'single deletion cleans the hash committed by another web tab',
+    () async {
+      const original = 'Original content';
+      const replacement = 'Replaced content';
+      final originalBytes = Uint8List.fromList(utf8.encode(original));
+      final replacementBytes = Uint8List.fromList(utf8.encode(replacement));
+      final record = TextRecord(
+        id: 'cross-tab-single-delete-hash',
+        name: 'Document',
+        hash: computeTextHash(originalBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: originalBytes.length,
+      );
+      await TextManifest.addRecordWithContent(record, originalBytes);
+      await TextManifest.loadRecords(); // Keep this tab's old hash cached.
+      final replacementHash = computeTextHash(replacementBytes);
+      await WebFileStore.write('texts/$replacementHash.txt', replacementBytes);
+      await _writePersistedTextRecord(record.id, {
+        'hash': replacementHash,
+        'size': replacementBytes.length,
+        'textLength': replacement.length,
+      });
+
+      await TextManifest.deleteRecord(record.id);
+
+      expect(await TextManifest.readText('$replacementHash.txt'), isNull);
+    },
+  );
+
+  test(
+    'batch deletion cleans hashes committed by another web tab',
+    () async {
+      const original = 'Original batch content';
+      const replacement = 'Replaced batch content';
+      final originalBytes = Uint8List.fromList(utf8.encode(original));
+      final replacementBytes = Uint8List.fromList(utf8.encode(replacement));
+      final record = TextRecord(
+        id: 'cross-tab-batch-delete-hash',
+        name: 'Batch document',
+        hash: computeTextHash(originalBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: originalBytes.length,
+      );
+      await TextManifest.addRecordWithContent(record, originalBytes);
+      await TextManifest.loadRecords(); // Keep this tab's old hash cached.
+      final replacementHash = computeTextHash(replacementBytes);
+      await WebFileStore.write('texts/$replacementHash.txt', replacementBytes);
+      await _writePersistedTextRecord(record.id, {
+        'hash': replacementHash,
+        'size': replacementBytes.length,
+        'textLength': replacement.length,
+      });
+
+      await TextManifest.deleteRecords([record.id]);
+
+      expect(await TextManifest.readText('$replacementHash.txt'), isNull);
+    },
+  );
+
+  test(
+    'folder removal preserves a record another web tab moved outside it',
+    () async {
+      const content = 'Keep this moved document';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final record = TextRecord(
+        id: 'cross-tab-folder-move-out',
+        name: 'Moved document',
+        hash: computeTextHash(bytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: bytes.length,
+        folder: 'To Delete/Subfolder',
+      );
+      await TextManifest.addRecordWithContent(record, bytes);
+      await TextManifest.loadRecords(); // Keep this tab's old folder cached.
+      await _writePersistedTextRecord(record.id, {'folder': 'Keep'});
+
+      await TextManifest.removeFolder('To Delete');
+
+      final persisted = jsonDecode(
+        utf8.decode(
+          (await WebFileStore.read('manifest_database_data'))!,
+        ),
+      ) as Map<String, dynamic>;
+      final remaining = (persisted[ManifestTables.textRecords] as List).single
+          as Map<String, dynamic>;
+      expect(remaining['id'], record.id);
+      expect(remaining['folder'], 'Keep');
+      expect(await TextManifest.readText(record.storageFileName), content);
+    },
+  );
+
+  test(
     'conditional update fails if stored metadata no longer matches',
     () async {
       await ManifestDatabase.insertTextRecord({
@@ -955,7 +1429,7 @@ void main() {
   });
 
   test(
-    'failed conditional replacement cleans its unreferenced content',
+    'cleans unreferenced content after the manifest transaction fails',
     () async {
       const oldContent = 'Original body';
       const newContent = 'Replacement body';
@@ -979,12 +1453,7 @@ void main() {
       await TextManifest.writeText(oldRecord.storageFileName, oldContent);
       await TextManifest.addRecord(oldRecord);
 
-      // An unserializable record in another JSON-backed table makes the full
-      // manifest save fail after the replacement bytes have been written.
-      await ManifestDatabase.insertImageRecord({
-        'id': 'serialization-failure',
-        'unserializable': Object(),
-      });
+      WebFileStore.failNextTransformForTesting(StateError('write failed'));
 
       await expectLater(
         TextManifest.updateRecordIfHashWithContent(
@@ -994,7 +1463,7 @@ void main() {
           updatedRecord,
           Uint8List.fromList(utf8.encode(newContent)),
         ),
-        throwsA(isA<JsonUnsupportedObjectError>()),
+        throwsA(isA<StateError>()),
       );
 
       expect(
@@ -1027,14 +1496,11 @@ void main() {
         'Keep/This',
         recordTable: 'text_records',
       );
-      await ManifestDatabase.insertImageRecord({
-        'id': 'serialization-failure',
-        'unserializable': Object(),
-      });
+      WebFileStore.failNextTransformForTesting(StateError('write failed'));
 
       await expectLater(
         TextManifest.removeFolder('Keep'),
-        throwsA(isA<JsonUnsupportedObjectError>()),
+        throwsA(isA<StateError>()),
       );
 
       expect(await TextManifest.readText(record.storageFileName), content);
@@ -1061,21 +1527,19 @@ void main() {
       );
       await TextManifest.writeText(record.storageFileName, content);
       await TextManifest.addRecord(record);
-      await ManifestDatabase.insertImageRecord({
-        'id': 'serialization-failure',
-        'unserializable': Object(),
-      });
+      WebFileStore.failNextTransformForTesting(StateError('write failed'));
 
       await expectLater(
         TextManifest.deleteRecord(record.id),
-        throwsA(isA<JsonUnsupportedObjectError>()),
+        throwsA(isA<StateError>()),
       );
       expect(await TextManifest.readText(record.storageFileName), content);
       expect((await TextManifest.loadRecords()).single.id, record.id);
 
+      WebFileStore.failNextTransformForTesting(StateError('write failed'));
       await expectLater(
         TextManifest.deleteRecords([record.id]),
-        throwsA(isA<JsonUnsupportedObjectError>()),
+        throwsA(isA<StateError>()),
       );
       expect(await TextManifest.readText(record.storageFileName), content);
       expect((await TextManifest.loadRecords()).single.id, record.id);
@@ -1160,6 +1624,105 @@ void main() {
   });
 
   test(
+    'stops body reads after stored content exceeds the remaining search budget',
+    () async {
+      final firstBytes = Uint8List.fromList(utf8.encode('a' * (768 * 1024)));
+      final firstRecord = TextRecord(
+        id: 'search-budget-first',
+        name: 'First budget document',
+        hash: computeTextHash(firstBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026, 1, 3),
+        size: firstBytes.length,
+      );
+      await TextManifest.writeFile(firstRecord.storageFileName, firstBytes);
+      await TextManifest.addRecord(firstRecord);
+
+      final oversizedBytes = Uint8List.fromList(
+        utf8.encode('b' * (384 * 1024)),
+      );
+      final oversizedRecord = TextRecord(
+        id: 'search-budget-misreported',
+        name: 'Misreported budget document',
+        hash: computeTextHash(oversizedBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2026, 1, 2),
+        size: 1,
+      );
+      await TextManifest.writeFile(
+        oversizedRecord.storageFileName,
+        oversizedBytes,
+      );
+      await TextManifest.addRecord(oversizedRecord);
+
+      final laterMatch = TextRecord(
+        id: 'search-budget-later-match',
+        name: 'Later match',
+        hash: computeTextHash(Uint8List.fromList(utf8.encode('needle'))),
+        format: 'txt',
+        createdAt: DateTime.utc(2026, 1, 1),
+        size: 'needle'.length,
+      );
+      await TextManifest.writeFile(
+        laterMatch.storageFileName,
+        Uint8List.fromList(utf8.encode('needle')),
+      );
+      await TextManifest.addRecord(laterMatch);
+
+      final result = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_search', {
+          'query': 'needle',
+        }),
+      ) as Map<String, dynamic>;
+
+      expect(result['content_search_truncated'], isTrue);
+      expect(result['results'], isEmpty);
+      expect(result['scanned'], 3);
+    },
+  );
+
+  test('charges corrupted file bytes against the search budget', () async {
+    const bodySize = 512 * 1024;
+    for (var index = 0; index < 2; index++) {
+      final expected = Uint8List(bodySize)..fillRange(0, bodySize, 97 + index);
+      final corrupted = Uint8List(bodySize)..fillRange(0, bodySize, 120);
+      final record = TextRecord(
+        id: 'corrupt-search-budget-$index',
+        name: 'Corrupt budget $index',
+        hash: computeTextHash(expected),
+        format: 'txt',
+        createdAt: DateTime.utc(2026, 1, index + 2),
+        size: bodySize,
+      );
+      await TextManifest.writeFile(record.storageFileName, expected);
+      await TextManifest.addRecord(record);
+      await TextManifest.writeFile(record.storageFileName, corrupted);
+    }
+
+    final matchingContent = 'needle in valid content';
+    final matchingBytes = Uint8List.fromList(utf8.encode(matchingContent));
+    final matching = TextRecord(
+      id: 'after-corrupt-search-budget',
+      name: 'Matching document',
+      hash: computeTextHash(matchingBytes),
+      format: 'txt',
+      createdAt: DateTime.utc(2026, 1, 1),
+      size: matchingBytes.length,
+    );
+    await TextManifest.writeFile(matching.storageFileName, matchingBytes);
+    await TextManifest.addRecord(matching);
+
+    final result = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_search', {
+        'query': 'needle',
+      }),
+    ) as Map<String, dynamic>;
+
+    expect(result['content_search_truncated'], isTrue);
+    expect(result['results'], isEmpty);
+  });
+
+  test(
     'read and search enforce the byte limit against stored file size',
     () async {
       final bytes = Uint8List(1024 * 1024 + 1)
@@ -1216,6 +1779,48 @@ void main() {
     expect(tooLong, contains('最多支持 256 个字符'));
     expect(created['status'], 'created');
   });
+
+  test(
+    'rejects content whose bytes no longer match the manifest hash',
+    () async {
+      const original = 'Original lesson notes';
+      const corrupted = 'tampered-marker lesson notes';
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Lesson',
+          'content': original,
+          'format': 'txt',
+        }),
+      ) as Map<String, dynamic>;
+      await TextManifest.writeText('${created['hash']}.txt', corrupted);
+
+      final read = await TextStorageToolService.handleTool(
+        'stroom_space_read',
+        {'record_id': created['id']},
+      );
+      expect(read, contains('内容哈希'));
+      expect(read, isNot(contains(corrupted)));
+
+      final searched = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_search', {
+          'query': 'tampered-marker',
+        }),
+      ) as Map<String, dynamic>;
+      expect(searched['results'], isEmpty);
+
+      final replacement =
+          await TextStorageToolService.handleTool('stroom_space_write', {
+        'record_id': created['id'],
+        'expected_hash': created['hash'],
+        'expected_metadata_hash': created['metadata_hash'],
+        'name': 'Lesson',
+        'content': 'Replacement content',
+      });
+      expect(replacement, startsWith('错误:'));
+      expect(await TextManifest.readText('${created['hash']}.txt'), corrupted);
+      expect((await TextManifest.loadRecords()).single.hash, created['hash']);
+    },
+  );
 
   test(
     'rejects corrupted record hashes before building a storage path',

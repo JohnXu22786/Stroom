@@ -151,7 +151,7 @@ class TextStorageToolService {
     final folderResult = _validateOptionalFolder(args);
     if (folderResult.error != null) return '错误: ${folderResult.error}。';
     final limit = _boundedInt(args['limit'], _defaultListLimit, _maxListLimit);
-    final records = await TextManifest.loadRecords();
+    final records = await TextManifest.loadRecords(forceRefresh: true);
     final matching = records
         .where(
           (record) => _withinFolder(record.folder, folderResult.folder),
@@ -187,7 +187,7 @@ class TextStorageToolService {
     );
     final searchContent = args['search_content'] != false;
     final needle = query.trim().toLowerCase();
-    final records = (await TextManifest.loadRecords())
+    final records = (await TextManifest.loadRecords(forceRefresh: true))
         .where(
           (record) => _withinFolder(record.folder, folderResult.folder),
         )
@@ -198,6 +198,7 @@ class TextStorageToolService {
     var contentSearchSkippedOversized = 0;
     var contentSearchBytesRead = 0;
     var contentSearchTruncated = false;
+    var contentSearchBudgetExhausted = false;
     var hasMore = false;
     for (final record in records) {
       if (scanned >= _maxSearchScan) {
@@ -210,7 +211,7 @@ class TextStorageToolService {
       if (!nameMatches && searchContent) {
         final remainingSearchBytes =
             _maxSearchContentBytes - contentSearchBytesRead;
-        if (remainingSearchBytes <= 0) {
+        if (contentSearchBudgetExhausted || remainingSearchBytes <= 0) {
           contentSearchTruncated = true;
           continue;
         }
@@ -222,6 +223,10 @@ class TextStorageToolService {
         final contentLimit = remainingSearchBytes < _maxToolDocumentBytes
             ? remainingSearchBytes
             : _maxToolDocumentBytes;
+        if (record.size > contentLimit) {
+          contentSearchTruncated = true;
+          continue;
+        }
         String? content;
         try {
           content = await TextManifest.readTextLimited(
@@ -229,16 +234,21 @@ class TextStorageToolService {
             contentLimit,
           );
         } on StoredFileSizeLimitExceeded {
-          if (contentLimit < _maxToolDocumentBytes) {
-            contentSearchTruncated = true;
-          } else {
+          // The web store must fetch the IndexedDB value before checking its
+          // size. Conservatively consume the remaining budget after a
+          // mismatch so later records cannot repeatedly materialize bodies.
+          contentSearchBudgetExhausted = true;
+          contentSearchTruncated = true;
+          if (contentLimit >= _maxToolDocumentBytes) {
             contentSearchSkippedOversized++;
           }
           continue;
         }
         if (content != null) {
           contentSearchBytesRead += utf8.encode(content).length;
-          snippet = _findSnippet(content, needle);
+          if (_contentMatchesRecordHash(record, content)) {
+            snippet = _findSnippet(content, needle);
+          }
         }
       }
       if (!nameMatches && snippet == null) continue;
@@ -295,6 +305,9 @@ class TextStorageToolService {
       return '错误: 文档超过 $_maxToolDocumentBytes 字节，工具读取上限为 1 MiB。';
     }
     if (content == null) return '错误: 文档正文不存在，记录可能已损坏。';
+    if (!_contentMatchesRecordHash(record, content)) {
+      return '错误: 文档正文与内容哈希不匹配，记录可能已损坏。';
+    }
     if (offset > content.length) return '错误: offset 超出文档长度。';
     final end = (offset + length).clamp(0, content.length).toInt();
     return jsonEncode({
@@ -432,11 +445,14 @@ class TextStorageToolService {
   }
 
   static Future<TextRecord?> _findRecord(String id) async {
-    for (final record in await TextManifest.loadRecords()) {
+    for (final record in await TextManifest.loadRecords(forceRefresh: true)) {
       if (record.id == id) return record;
     }
     return null;
   }
+
+  static bool _contentMatchesRecordHash(TextRecord record, String content) =>
+      computeTextHash(Uint8List.fromList(utf8.encode(content))) == record.hash;
 
   static Map<String, dynamic> _recordMetadata(TextRecord record) => {
         'id': record.id,

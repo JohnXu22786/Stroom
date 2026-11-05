@@ -103,9 +103,15 @@ void main() {
     await tester.tap(find.text('工具'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.drag(find.byType(ListView).last, const Offset(0, -400));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    final toolsList = find.byType(ListView).last;
+    await tester.scrollUntilVisible(
+      find.text('exa_mcp'),
+      300,
+      scrollable: find.descendant(
+        of: toolsList,
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('exa_mcp'), findsOneWidget,
         reason: 'the tools panel must list the discovered MCP tool');
   });

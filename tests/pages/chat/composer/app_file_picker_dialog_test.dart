@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -44,7 +45,8 @@ Future<void> _pumpUntil(
       fail('Timed out waiting for condition');
     }
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -63,8 +65,7 @@ void main() {
   // edited bytes once it pops.
   // ====================================================================
   group('AppFilePickerDialog quick-edit flow', () {
-    testWidgets(
-        'the quick editor processes in place, then the selection holds '
+    testWidgets('the quick editor processes in place, then the selection holds '
         'the edited bytes', (tester) async {
       // Room for the tab content + preview bar + confirm button.
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
@@ -87,16 +88,18 @@ void main() {
       });
 
       List<MapEntry<String, Uint8List>>? pickerResult;
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () async {
-              pickerResult = await showAppFilePickerDialog(context);
-            },
-            child: const Text('Open Picker'),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                pickerResult = await showAppFilePickerDialog(context);
+              },
+              child: const Text('Open Picker'),
+            ),
           ),
         ),
-      ));
+      );
       await tester.tap(find.text('Open Picker'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -117,8 +120,9 @@ void main() {
         tester,
         () => find.byType(PreviewChip).evaluate().isNotEmpty,
       );
-      final originalChipBytes =
-          tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
+      final originalChipBytes = tester
+          .widget<PreviewChip>(find.byType(PreviewChip))
+          .bytes;
 
       // Preview chip → preview dialog → quick editor.
       await tester.tap(find.byType(PreviewChip));
@@ -140,8 +144,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
-          reason: 'the editor must stay on screen while processing');
+      expect(
+        find.byType(ExtendedImageEditorPage),
+        findsOneWidget,
+        reason: 'the editor must stay on screen while processing',
+      );
       expect(
         find.descendant(
           of: find.byType(ExtendedImageEditorPage),
@@ -171,8 +178,11 @@ void main() {
       await tester.tap(find.byKey(const Key('file_picker_confirm_btn')));
       await tester.pump();
       expect(pickerResult, isNotNull);
-      expect(pickerResult!.single.value, isNot(same(originalChipBytes)),
-          reason: 'the confirmed selection must hold the edited bytes');
+      expect(
+        pickerResult!.single.value,
+        isNot(same(originalChipBytes)),
+        reason: 'the confirmed selection must hold the edited bytes',
+      );
     });
   });
 
@@ -180,16 +190,19 @@ void main() {
   // Preview bar tests
   // ═══════════════════════════════════════════════════════════════
   group('AppFilePickerDialog preview bar', () {
-    testWidgets('preview bar is not shown when no files are selected',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () => showAppFilePickerDialog(context),
-            child: const Text('Open Picker'),
+    testWidgets('preview bar is not shown when no files are selected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppFilePickerDialog(context),
+              child: const Text('Open Picker'),
+            ),
           ),
         ),
-      ));
+      );
 
       await tester.tap(find.text('Open Picker'));
       await tester.pump();
@@ -208,54 +221,51 @@ void main() {
     /// 'work/inner' folders.
     Future<void> seedTextLibrary(WidgetTester tester) async {
       await tester.runAsync(() async {
-        await TextManifest.writeText('hash-root.txt', 'root');
-        await TextManifest.addRecord(TextRecord(
-          name: 'root-note',
-          hash: 'hash-root',
-          size: 4,
-          createdAt: DateTime.now(),
-        ));
-        await TextManifest.writeText('hash-work.txt', 'work');
-        await TextManifest.addRecord(TextRecord(
-          name: 'work-note',
-          hash: 'hash-work',
-          size: 4,
-          createdAt: DateTime.now(),
-          folder: 'work',
-        ));
-        await TextManifest.writeText('hash-inner.txt', 'inner');
-        await TextManifest.addRecord(TextRecord(
-          name: 'inner-note',
-          hash: 'hash-inner',
-          size: 5,
-          createdAt: DateTime.now(),
-          folder: 'work/inner',
-        ));
+        Future<void> addTextRecord(
+          String name,
+          String content, {
+          String folder = '',
+        }) async {
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          await TextManifest.addRecordWithContent(
+            TextRecord(
+              name: name,
+              hash: computeTextHash(bytes),
+              size: bytes.length,
+              createdAt: DateTime.now(),
+              folder: folder,
+              textLength: content.length,
+            ),
+            bytes,
+          );
+        }
+
+        await addTextRecord('root-note', 'root');
+        await addTextRecord('work-note', 'work', folder: 'work');
+        await addTextRecord('inner-note', 'inner', folder: 'work/inner');
       });
     }
 
     /// Opens the picker and waits for the text tab (the default tab) to
     /// finish loading its records.
     Future<void> openPicker(WidgetTester tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () => showAppFilePickerDialog(context),
-            child: const Text('Open Picker'),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppFilePickerDialog(context),
+              child: const Text('Open Picker'),
+            ),
           ),
         ),
-      ));
+      );
       await tester.tap(find.text('Open Picker'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      await _pumpUntil(
-        tester,
-        () => find.text('work').evaluate().isNotEmpty,
-      );
+      await _pumpUntil(tester, () => find.text('work').evaluate().isNotEmpty);
     }
 
-    testWidgets(
-        'system back inside a subfolder navigates up one level '
+    testWidgets('system back inside a subfolder navigates up one level '
         'instead of closing the picker', (tester) async {
       await seedTextLibrary(tester);
       await openPicker(tester);
@@ -263,10 +273,7 @@ void main() {
       // Drill into 'work', then into 'work/inner'.
       await tester.tap(find.text('work'));
       await tester.pump();
-      await _pumpUntil(
-        tester,
-        () => find.text('inner').evaluate().isNotEmpty,
-      );
+      await _pumpUntil(tester, () => find.text('inner').evaluate().isNotEmpty);
       await tester.tap(find.text('inner'));
       await tester.pump();
       await _pumpUntil(
@@ -277,74 +284,105 @@ void main() {
       // System back: one level up to 'work' — the picker stays open.
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('选择文件'), findsOneWidget,
-          reason: 'the picker must stay open while inside a folder');
-      expect(find.text('返回根目录'), findsOneWidget,
-          reason: 'back from work/inner must land in work, whose parent '
-              'is the root');
-      expect(find.text('返回: work'), findsNothing,
-          reason: 'the back key must leave work/inner');
+      expect(
+        find.text('选择文件'),
+        findsOneWidget,
+        reason: 'the picker must stay open while inside a folder',
+      );
+      expect(
+        find.text('返回根目录'),
+        findsOneWidget,
+        reason:
+            'back from work/inner must land in work, whose parent '
+            'is the root',
+      );
+      expect(
+        find.text('返回: work'),
+        findsNothing,
+        reason: 'the back key must leave work/inner',
+      );
 
       // System back again: to the root — the picker still stays open.
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('选择文件'), findsOneWidget,
-          reason: 'the picker must stay open at the root after the '
-              'second back press');
-      expect(find.text('返回根目录'), findsNothing,
-          reason: 'at the root there is no parent to navigate to');
+      expect(
+        find.text('选择文件'),
+        findsOneWidget,
+        reason:
+            'the picker must stay open at the root after the '
+            'second back press',
+      );
+      expect(
+        find.text('返回根目录'),
+        findsNothing,
+        reason: 'at the root there is no parent to navigate to',
+      );
 
       // System back at the root: closes the picker.
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('选择文件'), findsNothing,
-          reason: 'back at the root must close the picker');
+      expect(
+        find.text('选择文件'),
+        findsNothing,
+        reason: 'back at the root must close the picker',
+      );
     });
 
-    testWidgets('system back at the root closes the picker with null',
-        (tester) async {
+    testWidgets('system back at the root closes the picker with null', (
+      tester,
+    ) async {
       List<MapEntry<String, Uint8List>>? pickerResult;
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () async {
-              pickerResult = await showAppFilePickerDialog(context);
-            },
-            child: const Text('Open Picker'),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                pickerResult = await showAppFilePickerDialog(context);
+              },
+              child: const Text('Open Picker'),
+            ),
           ),
         ),
-      ));
+      );
       await tester.tap(find.text('Open Picker'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('选择文件'), findsNothing,
-          reason: 'back at the root must close the picker');
-      expect(pickerResult, isNull,
-          reason: 'cancelling via the back key must return null');
+      expect(
+        find.text('选择文件'),
+        findsNothing,
+        reason: 'back at the root must close the picker',
+      );
+      expect(
+        pickerResult,
+        isNull,
+        reason: 'cancelling via the back key must return null',
+      );
     });
 
-    testWidgets(
-        'the close (X) button still closes the picker from inside a '
+    testWidgets('the close (X) button still closes the picker from inside a '
         'subfolder', (tester) async {
       await seedTextLibrary(tester);
       await openPicker(tester);
 
       await tester.tap(find.text('work'));
       await tester.pump();
-      await _pumpUntil(
-        tester,
-        () => find.text('inner').evaluate().isNotEmpty,
+      await _pumpUntil(tester, () => find.text('inner').evaluate().isNotEmpty);
+      expect(
+        find.text('返回根目录'),
+        findsOneWidget,
+        reason: 'the test must be inside the work folder',
       );
-      expect(find.text('返回根目录'), findsOneWidget,
-          reason: 'the test must be inside the work folder');
 
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
-      expect(find.text('选择文件'), findsNothing,
-          reason: 'the explicit close button must always close the picker');
+      expect(
+        find.text('选择文件'),
+        findsNothing,
+        reason: 'the explicit close button must always close the picker',
+      );
     });
   });
 }

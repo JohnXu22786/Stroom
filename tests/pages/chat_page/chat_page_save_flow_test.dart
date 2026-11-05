@@ -95,6 +95,15 @@ void main() {
 
       await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
+      final saveSucceeded = find.textContaining('已保存到应用文件:');
+      for (var attempt = 0; attempt < 50; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pumpAndSettle();
+        if (saveSucceeded.evaluate().isNotEmpty) break;
+      }
+      expect(saveSucceeded, findsOneWidget);
 
       final records = await TextManifest.loadRecords();
       expect(records, hasLength(1));
