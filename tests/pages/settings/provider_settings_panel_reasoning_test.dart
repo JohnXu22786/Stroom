@@ -4,6 +4,7 @@
 // - 供应商级推理力度允许仅填参数名（选项值可选）
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/llm_model_config_shared.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -17,6 +18,9 @@ Future<ProviderConfigItem?> _openAndSave(
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -106,7 +110,7 @@ void main() {
 
       expect(saved, isNull,
           reason: 'the first option is sent as the effective default');
-      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+      expect(find.text('自定义参数的名称和值不能为空。'), findsOneWidget);
     });
 
     testWidgets('rejects invalid numeric custom-param options', (tester) async {
@@ -127,7 +131,7 @@ void main() {
 
       expect(saved, isNull,
           reason: 'every selectable numeric option must parse before saving');
-      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+      expect(find.text('参数“top_k”的值不是合法数字：oops'), findsOneWidget);
     });
 
     testWidgets('rejects blank numeric custom-param options', (tester) async {
@@ -148,7 +152,7 @@ void main() {
 
       expect(saved, isNull,
           reason: 'blank numeric options are not valid values to coerce');
-      expect(find.text('参数 "top_k" 的数值选项不能为空'), findsOneWidget);
+      expect(find.text('参数“top_k”的数值选项不能为空。'), findsOneWidget);
     });
 
     testWidgets('rejects an invalid numeric default value', (tester) async {
@@ -168,7 +172,7 @@ void main() {
       final saved = await _openAndSave(tester, config: config);
 
       expect(saved, isNull);
-      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+      expect(find.text('参数“top_k”的值不是合法数字：oops'), findsOneWidget);
     });
 
     testWidgets('preserves valid integer and decimal custom-param options',
@@ -637,7 +641,7 @@ void main() {
       await tester.enterText(fields.at(0), 'reasoning_effort');
       await tester.pump();
 
-      expect(find.text('已存在该参数'), findsOneWidget);
+      expect(find.text('推理参数与自定义参数重名：effort'), findsOneWidget);
     });
 
     testWidgets(
@@ -681,7 +685,7 @@ void main() {
       // 与推理力度一致：无开/关值输入框
       expect(find.text('开启时值'), findsNothing);
       expect(find.text('关闭时值'), findsNothing);
-      expect(find.textContaining('无需配置参数值'), findsOneWidget);
+      expect(find.textContaining('布尔类型无需配置参数值，聊天面板提供开/关切换。'), findsOneWidget);
 
       // 添加名称式力度参数（boolean 开关只需参数名即可通过校验）
       await tester.scrollUntilVisible(

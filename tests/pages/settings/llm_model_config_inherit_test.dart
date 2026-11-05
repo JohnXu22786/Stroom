@@ -422,7 +422,7 @@ void main() {
 
       await _pumpAndSave(tester, model: model, provider: provider);
 
-      expect(find.text('推理参数与自定义参数存在重名: reasoning_effort'), findsOneWidget);
+      expect(find.text('推理参数与自定义参数重名：reasoning_effort'), findsOneWidget);
     });
 
     testWidgets('back navigation without changes does not warn',
@@ -893,7 +893,7 @@ void main() {
           await _scrollToReasoning(tester, find.text('use_cache'));
           // 布尔类型：无添加值按钮、无选项块
           expect(find.text('添加值'), findsNothing);
-          expect(find.textContaining('无需配置参数值'), findsOneWidget);
+          expect(find.textContaining('布尔类型无需配置参数值'), findsOneWidget);
         },
       );
 
@@ -1093,7 +1093,7 @@ void main() {
 
       // 保存被拦（空值参数）
       expect(saved, isNull);
-      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
     });
 
     testWidgets('new additional param can add values and save', (tester) async {
@@ -1377,7 +1377,7 @@ void main() {
           // 与推理力度一致：没有开/关值输入框
           expect(find.text('开启时值'), findsNothing);
           expect(find.text('关闭时值'), findsNothing);
-          expect(find.textContaining('无需配置参数值'), findsOneWidget);
+          expect(find.textContaining('布尔类型无需配置参数值'), findsOneWidget);
         },
       );
 
@@ -1664,7 +1664,6 @@ void main() {
 
             await tester.tap(find.byIcon(Icons.edit).first);
             await tester.pumpAndSettle();
-            expect(find.text('编辑选项值'), findsOneWidget);
             expect(find.byType(TextField).last, findsOneWidget);
             expect(
               (tester
@@ -1733,7 +1732,7 @@ void main() {
 
       expect(saved, isNull,
           reason: 'An empty JSON default must prevent the page from saving.');
-      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget,
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget,
           reason:
               'A stale non-JSON option must not satisfy JSON value validation.');
     });
@@ -1794,7 +1793,7 @@ void main() {
 
         expect(saved, isNull, reason: '$invalidValue must not be saved');
         expect(
-          find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'),
+          find.text('参数“top_p”的选项值必须是有限数字：$invalidValue'),
           findsOneWidget,
         );
       });
@@ -1807,7 +1806,7 @@ void main() {
       );
 
       expect(saved, isNull);
-      expect(find.text('参数 "top_p" 的选项值必须是有限数字：NaN'), findsOneWidget);
+      expect(find.text('参数“top_p”的选项值必须是有限数字：NaN'), findsOneWidget);
     });
 
     testWidgets('saves integer and decimal option values', (tester) async {

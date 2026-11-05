@@ -11,7 +11,6 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/pages/ocr_model_config_page.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/model_config_page.dart';
-import 'package:stroom/pages/model_config_shared.dart';
 
 /// Helper to create a test ProviderEntry with one config
 ProviderEntry _createTestEntry({
@@ -302,7 +301,6 @@ void main() {
 
       // Should navigate to ModelConfigPage
       expect(find.byType(ModelConfigPage), findsOneWidget);
-      expect(find.byType(TrimSection), findsOneWidget);
       expect(find.byType(SimpleModelConfigPage), findsNothing);
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });

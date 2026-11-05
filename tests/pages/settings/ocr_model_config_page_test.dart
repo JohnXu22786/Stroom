@@ -58,9 +58,7 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
 }
 
 Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
-  final field = find.byWidgetPredicate(
-    (widget) => widget is TextField && widget.decoration?.hintText == '如 4096',
-  );
+  final field = find.byType(TextField).at(2);
   await tester.enterText(field, text);
   await tester.pump();
 }
@@ -105,12 +103,12 @@ void main() {
       expect(find.text('用户指令'), findsNothing);
       expect(find.text('添加指令'), findsNothing);
 
-      await _scrollTo(tester, find.text('温度 (Temperature)'));
-      expect(find.text('温度 (Temperature)'), findsOneWidget);
+      await _scrollTo(tester, find.text('温度'));
+      expect(find.text('温度'), findsOneWidget);
       await _scrollTo(tester, find.text('Top P'));
       expect(find.text('Top P'), findsOneWidget);
-      await _scrollTo(tester, find.text('最大 Token 数'));
-      expect(find.text('最大 Token 数'), findsOneWidget);
+      await _scrollTo(tester, find.text('最大输出 Token 数'));
+      expect(find.text('最大输出 Token 数'), findsOneWidget);
 
       // Params verified non-universal for OCR models are not built in.
       expect(find.text('图片细节级别 (Detail)'), findsNothing);
@@ -214,7 +212,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNull);
-      expect(find.text('参数 "scale" 的值不是有效数字：abc'), findsOneWidget);
+      expect(find.text('参数“scale”的默认参数值必须是有限数字：abc'), findsOneWidget);
     });
 
     testWidgets('rejects an invalid boolean default when saving',
@@ -238,7 +236,7 @@ void main() {
 
       expect(saved, isNull);
       expect(
-        find.text('参数 "enabled" 的值必须是 true 或 false：yes'),
+        find.text('参数“enabled”的值必须是 true 或 false：yes'),
         findsOneWidget,
       );
     });
@@ -331,7 +329,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNull);
-      expect(find.text('参数 "scale" 的值不是有效数字：abc'), findsOneWidget);
+      expect(find.text('参数“scale”的默认参数值必须是有限数字：abc'), findsOneWidget);
     });
 
     testWidgets('rejects an invalid boolean option when saving',
@@ -355,7 +353,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNull);
-      expect(find.text('参数 "enabled" 的值必须是 true 或 false：yes'), findsOneWidget);
+      expect(find.text('参数“enabled”的值必须是 true 或 false：yes'), findsOneWidget);
     });
 
     testWidgets('saves valid numeric, boolean, and JSON defaults',
@@ -408,7 +406,7 @@ void main() {
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
       await _enterField(tester, 0, 'Edited OCR model');
-      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _scrollTo(tester, find.text('最大输出 Token 数'));
       await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.byType(Switch).last);
       await tester.pumpAndSettle();
@@ -431,13 +429,13 @@ void main() {
       );
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _scrollTo(tester, find.text('最大输出 Token 数'));
       await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
       expect(saved, isNull);
-      expect(find.text('最大 Token 数必须为正整数'), findsOneWidget);
+      expect(find.text('最大输出 Token 数必须为正整数。'), findsOneWidget);
     });
   });
 }

@@ -863,7 +863,7 @@ void main() {
 
       // Should see model parameters
       expect(find.text('温度 (Temperature)'), findsOneWidget);
-      expect(find.text('流式输出 (Stream Output)'), findsOneWidget);
+      expect(find.text('流式输出'), findsOneWidget);
       expect(find.text('Top P'), findsOneWidget);
       expect(find.text('最大Token数 (Max Tokens)'), findsOneWidget);
       expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
@@ -999,7 +999,7 @@ void main() {
       // 默认开启：开关 on，副标题显示当前上限（字符数，非 token）
       expect(find.text('工具结果截断'), findsOneWidget);
       expect(find.text('启用截断'), findsOneWidget);
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
       final tile = tester.widget<SwitchListTile>(
         find.widgetWithText(SwitchListTile, '启用截断'),
       );
@@ -1037,7 +1037,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 关闭后：副标题变为"不截断"，长度输入框隐藏
-      expect(find.text('不截断，完整发送（仍受 50KB 存储上限约束）'), findsOneWidget);
+      expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
           (w) => w is TextField && w.decoration?.labelText == '最大字符数',
@@ -1081,7 +1081,7 @@ void main() {
       await tester.enterText(lengthField, '8000');
       await tester.pumpAndSettle();
       // 副标题即时反映新上限
-      expect(find.text('超长结果截断至 8000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 8000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1120,7 +1120,7 @@ void main() {
       await tester.enterText(lengthField, '5000000');
       await tester.pumpAndSettle();
       expect(
-        find.text('有效范围：100~100000 字符'),
+        find.text('有效范围：100–100000 个字符'),
         findsOneWidget,
         reason: '越界输入必须就地提示有效范围',
       );
@@ -1208,7 +1208,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 配置过空集合 → 开关全部关闭，说明文字用"已配置"措辞
-      expect(find.textContaining('未启用的工具'), findsOneWidget);
+      expect(find.text('已关闭的工具不会在新话题中自动启用。'), findsOneWidget);
       for (final toolName in ['web_search', 'todowrite', 'brave_web_search']) {
         final tile = tester.widget<SwitchListTile>(
           find.widgetWithText(SwitchListTile, toolName),
@@ -1582,7 +1582,7 @@ void main() {
 
       // Should show confirmation dialog
       expect(find.text('删除助手'), findsOneWidget);
-      expect(find.text('确定要删除助手「助手删除」吗？此操作无法撤销。'), findsOneWidget);
+      expect(find.text('确定要删除助手“助手删除”吗？此操作无法撤销。'), findsOneWidget);
       // Should have cancel and delete buttons
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
@@ -1616,7 +1616,7 @@ void main() {
       // Assistant should be removed
       expect(find.text('要删除的助手'), findsNothing);
       // Should show empty state
-      expect(find.text('暂无助手，请先创建'), findsOneWidget);
+      expect(find.text('暂无助手，请先创建。'), findsOneWidget);
     });
 
     testWidgets('cancelling delete keeps assistant in grid', (tester) async {
@@ -1693,7 +1693,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The info box text should now be visible
-      expect(find.text('助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
+      expect(find.text('启用时助手参数会覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
 
       // The info icon should be visible
       expect(find.byIcon(Icons.info_outline), findsOneWidget);

@@ -67,12 +67,13 @@ Finder _descriptionFieldFinder() => find.byWidgetPredicate(
     );
 
 Finder _commandFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '例如: npx',
+      (w) => w is TextField && w.decoration?.hintText == '例如：npx',
     );
 
 Finder _argsFieldFinder() => find.byWidgetPredicate(
       (w) =>
-          w is TextField && w.decoration?.hintText?.startsWith('用逗号分隔') == true,
+          w is TextField &&
+          w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
     );
 
 Finder _urlFieldFinder() => find.byWidgetPredicate(

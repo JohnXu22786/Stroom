@@ -513,7 +513,7 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址'), findsOneWidget);
+    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址。'), findsOneWidget);
     expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
     expect(
       state.entries.single.configs[1].host,

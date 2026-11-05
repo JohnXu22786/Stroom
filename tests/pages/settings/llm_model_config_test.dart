@@ -332,7 +332,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Should show error about missing or incomplete toggle
-      expect(find.textContaining('开关必须先填写完整'), findsWidgets);
+      expect(find.textContaining('请先完整填写推理开关，再配置推理力度'), findsWidgets);
     });
   });
 
@@ -455,12 +455,12 @@ void main() {
 
       // The effort card should show helper text since toggle is not complete
       await tester.scrollUntilVisible(
-        find.text('请先完整填写推理开关后再配置推理力度'),
+        find.text('请先完整填写推理开关，再配置推理力度。'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-      expect(find.text('请先完整填写推理开关后再配置推理力度'), findsOneWidget);
+      expect(find.text('请先完整填写推理开关，再配置推理力度。'), findsOneWidget);
       // The effort card header "推理力度" should use blue (primary) color, not gray
       final effortHeader = find.text('推理力度');
       expect(effortHeader, findsOneWidget);
@@ -753,7 +753,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show validation error
-      expect(find.text('模型 ID 为必填项'), findsOneWidget);
+      expect(find.text('模型 ID 为必填项。'), findsOneWidget);
     });
 
     testWidgets('validates custom params require both name and default value',
@@ -764,7 +764,7 @@ void main() {
       // Fill in model ID first
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
         'test-model',
       );
 
@@ -777,7 +777,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show validation error
-      expect(find.text('自定义参数的参数名和默认值不能为空'), findsOneWidget);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
     });
 
     testWidgets('saves and returns ModelConfig with correct data',
@@ -810,14 +810,14 @@ void main() {
       // Fill in model ID
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
         'gpt-4o',
       );
 
       // Fill in model name
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '输入显示名称（可选）'),
+        find.byType(TextField).at(1),
         'GPT-4o Vision',
       );
 
@@ -861,7 +861,7 @@ void main() {
       // Fill in model ID only
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
         'whisper-1',
       );
 
@@ -904,7 +904,7 @@ void main() {
       // Fill model ID
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
         'custom-model',
       );
 
@@ -950,12 +950,12 @@ void main() {
 
       // Fields should be populated
       final nameField = tester.widget<TextField>(
-        find.widgetWithText(TextField, '输入显示名称（可选）'),
+        find.byType(TextField).at(1),
       );
       expect(nameField.controller?.text, equals('My Whisper'));
 
       final modelIdField = tester.widget<TextField>(
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
       );
       expect(modelIdField.controller?.text, equals('whisper-1'));
 
@@ -998,14 +998,14 @@ void main() {
       // Clear name first so auto-fill from modelId works
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '输入显示名称（可选）'),
+        find.byType(TextField).at(1),
         '',
       );
 
       // Modify model ID
       await enterTextAndSettle(
         tester,
-        find.widgetWithText(TextField, '如 gpt-4o'),
+        find.byType(TextField).at(0),
         'new-model-id',
       );
 
