@@ -1380,6 +1380,41 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('clears previous request details when no model is available', (
+      tester,
+    ) async {
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [_createOcrEntry(withModels: true)],
+        );
+      await tester.pumpWidget(
+        _buildTestApp(
+          testProviderEntriesNotifier: providerNotifier,
+          testImages: [_createTestImage()],
+          testImagePayloadPreparer: (_) async {
+            throw StateError('request preparation failed');
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await _pumpUntil(
+        tester,
+        () => find.text('查看详细错误').evaluate().isNotEmpty,
+      );
+      expect(find.text('查看详细错误'), findsOneWidget);
+
+      providerNotifier.state = const ProviderEntriesState(entries: []);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请先在设置中配置 OCR 供应商和模型'), findsOneWidget);
+      expect(find.text('查看详细错误'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('waits for retry image caching before adding a task', (
       tester,
     ) async {
