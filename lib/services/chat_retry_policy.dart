@@ -1,15 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 
 const String kAutoContinuationMessage = 'Continue if not finished.';
 
-/// Retry policy for streaming HTTP 429 rate limits.
+/// Retry policy for actual HTTP 429 throttling responses.
 ///
-/// Four retries follow the initial request. The backoff starts at 500 ms,
-/// doubles for each retry, and is capped at five seconds. Jitter spreads
-/// concurrent clients across the upper half of each interval.
+/// Five retries follow the initial request. The delay schedule is based on
+/// OpenCode CLI's 2/4/8/10/10 second backoff and adds jitter. A valid
+/// Retry-After value is a minimum delay, bounded to fifteen minutes.
 class RateLimitRetryPolicy {
   final int maxRetries;
   final Duration initialDelay;
@@ -18,10 +19,35 @@ class RateLimitRetryPolicy {
   final bool jitter;
 
   const RateLimitRetryPolicy({
-    this.maxRetries = 4,
-    this.initialDelay = const Duration(milliseconds: 500),
-    this.maxDelay = const Duration(seconds: 5),
-    this.maxRetryAfter = const Duration(minutes: 1),
+    this.maxRetries = 5,
+    this.initialDelay = const Duration(seconds: 2),
+    this.maxDelay = const Duration(seconds: 10),
+    this.maxRetryAfter = const Duration(minutes: 15),
+    this.jitter = true,
+  });
+
+  Duration delayForRetry(int retryNumber, {double? randomValue}) {
+    final multiplier = math.pow(2, retryNumber - 1).toInt();
+    final rawMs = initialDelay.inMilliseconds * multiplier;
+    final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
+    if (!jitter) return Duration(milliseconds: cappedMs);
+    final fraction =
+        (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
+    return Duration(milliseconds: (cappedMs * fraction).round());
+  }
+}
+
+/// Retry schedule for recognized network interruptions during chat streams.
+class TransportRetryPolicy {
+  final int maxRetries;
+  final Duration initialDelay;
+  final Duration maxDelay;
+  final bool jitter;
+
+  const TransportRetryPolicy({
+    this.maxRetries = 5,
+    this.initialDelay = const Duration(seconds: 2),
+    this.maxDelay = const Duration(seconds: 30),
     this.jitter = true,
   });
 
@@ -42,6 +68,7 @@ Stream<T> retryRateLimitedStream<T>(
   Stream<T> Function() createStream, {
   RateLimitRetryPolicy policy = const RateLimitRetryPolicy(),
   Future<void> Function(Duration duration)? delay,
+  bool Function()? isCancelled,
 }) async* {
   var retries = 0;
   while (true) {
@@ -53,21 +80,68 @@ Stream<T> retryRateLimitedStream<T>(
       }
       return;
     } catch (error) {
-      if (emittedEvent ||
+      if (isCancelled?.call() == true ||
+          emittedEvent ||
           retries >= policy.maxRetries ||
           !_isRateLimit(error)) {
         rethrow;
       }
       retries++;
-      final wait = _retryAfter(error, maximum: policy.maxRetryAfter) ??
-          policy.delayForRetry(retries);
+      final retryAfter = _retryAfter(error, maximum: policy.maxRetryAfter);
+      final backoff = policy.delayForRetry(retries);
+      final wait = retryAfter != null && retryAfter > backoff
+          ? retryAfter
+          : backoff;
       await (delay?.call(wait) ?? Future<void>.delayed(wait));
+      if (isCancelled?.call() == true) rethrow;
     }
   }
 }
 
-bool _isRateLimit(Object error) =>
-    error is DioException && error.response?.statusCode == 429;
+bool _isRateLimit(Object error) {
+  if (error is! DioException || error.response?.statusCode != 429) return false;
+  final details = [
+    _flattenErrorDetails(error.response?.data),
+    error.response?.statusMessage ?? '',
+    error.message ?? '',
+  ].join(' ').toLowerCase();
+  const nonThrottleMarkers = [
+    'insufficient_quota',
+    'quota',
+    'billing',
+    'payment',
+    'account',
+    'hard_limit',
+    'usage_limit',
+    'credits',
+    'invalid_request',
+    'invalid_parameter',
+    'invalid_api_key',
+    'authentication_error',
+    'unauthorized',
+    'permission_denied',
+    'validation_error',
+    'bad_request',
+  ];
+  if (nonThrottleMarkers.any(details.contains)) return false;
+  const throttleMarkers = [
+    'rate_limit',
+    'rate limit',
+    'too many requests',
+    'throttl',
+  ];
+  return throttleMarkers.any(details.contains);
+}
+
+String _flattenErrorDetails(Object? value) {
+  if (value is Map) {
+    return value.entries
+        .map((entry) => '${entry.key} ${_flattenErrorDetails(entry.value)}')
+        .join(' ');
+  }
+  if (value is Iterable) return value.map(_flattenErrorDetails).join(' ');
+  return value?.toString() ?? '';
+}
 
 Duration? _retryAfter(Object error, {required Duration maximum}) {
   if (error is! DioException) return null;
@@ -180,7 +254,14 @@ bool shouldAutoContinueStream({
   required bool hasPartialOutput,
   bool hasToolHistory = false,
 }) {
-  if (!hasPartialOutput || hasToolHistory || error == null) return false;
+  if (!hasPartialOutput || hasToolHistory) return false;
+  return isRetryableTransportFailure(error);
+}
+
+/// True only for transport-level failures that can be retried without replaying
+/// a completed request, validation failure, or server response.
+bool isRetryableTransportFailure(Object? error) {
+  if (error == null) return false;
   if (error is DioException) {
     if (error.response?.statusCode != null) return false;
     return switch (error.type) {
@@ -198,8 +279,13 @@ bool shouldAutoContinueStream({
 
 bool _isNetworkTransportCause(Object? error) {
   if (error is TimeoutException) return true;
-  final type = error?.runtimeType.toString();
-  if (type == 'SocketException') return true;
-  return type == 'HttpException' &&
-      error.toString().toLowerCase().contains('connection closed');
+  if (error is SocketException) return true;
+  if (error is HttpException) {
+    final message = error.message.toLowerCase();
+    return message.contains('connection closed') ||
+        message.contains('connection reset') ||
+        message.contains('connection aborted') ||
+        message.contains('connection broken');
+  }
+  return false;
 }

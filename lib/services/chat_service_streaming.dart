@@ -76,7 +76,9 @@ extension ChatServiceStreamingExt on ChatService {
                   system: req.system,
                   extraParams: extraParams,
                   cancelToken: _cancelToken,
-                )).listen(
+                ),
+                isCancelled: () => _cancelToken?.isCancelled ?? false,
+              ).listen(
           (event) {
             if (event.isReasoning) {
               _reasoningBuffer.write(event.text);
@@ -242,7 +244,9 @@ extension ChatServiceStreamingExt on ChatService {
                     system: req.system,
                     extraParams: extraParams,
                     cancelToken: _cancelToken,
-                  )).listen(
+                  ),
+                  isCancelled: () => _cancelToken?.isCancelled ?? false,
+                ).listen(
             (event) {
               // usage 计量是 API 计费事实（per-request 隔离），必须
               // 先于取消守卫处理：用户停止后仍要把已计量请求的

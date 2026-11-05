@@ -391,6 +391,7 @@
       }
     }
   },
+  "chatAutoContinuePrompt": "Continue if not finished.",
   "chatSearchCurrent": "Search this conversation...",
   "chatSearchAll": "Search all conversations...",
   "searchPrevious": "Previous match",

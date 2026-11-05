@@ -23,7 +23,9 @@ import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 import 'chat_retry_policy.dart'
-    show kAutoContinuationMessage, shouldAutoContinueStream;
+    show TransportRetryPolicy, isRetryableTransportFailure,
+        shouldAutoContinueStream;
+import '../l10n/app_localizations.dart' show appLocalizationsForLocale;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -60,6 +62,8 @@ part 'chat_stream_manager_finalize.dart';
 
 class ChatStreamManager {
   final Ref? _ref;
+  final TransportRetryPolicy _transportRetryPolicy;
+  final Future<void> Function(Duration duration)? _retryDelay;
   final ChatAdapter _adapter = ChatAdapter();
 
   // ── Per-conversation stream states ──
@@ -104,7 +108,12 @@ class ChatStreamManager {
         hasAccumulatedToolCalls;
   }
 
-  ChatStreamManager([this._ref]);
+  ChatStreamManager(
+    [this._ref], {
+    TransportRetryPolicy transportRetryPolicy = const TransportRetryPolicy(),
+    @visibleForTesting Future<void> Function(Duration duration)? retryDelay,
+  })  : _transportRetryPolicy = transportRetryPolicy,
+        _retryDelay = retryDelay;
 
   // ── 公开 getter ──
 
@@ -525,7 +534,8 @@ class ChatStreamManager {
       }
 
       var streamHistory = List<ChatMessage>.from(requestHistory);
-      var continuedAfterNetworkFailure = false;
+      var transportRetries = 0;
+      var replyLengthAtLastContinuation = 0;
       while (true) {
         try {
           await for (final event in createStream(streamHistory)) {
@@ -534,40 +544,59 @@ class ChatStreamManager {
           }
           break;
         } catch (e) {
-          if (continuedAfterNetworkFailure ||
-              state.cancelledByUser ||
-              !shouldAutoContinueStream(
-                error: e,
-                hasPartialOutput: state.fullReply.isNotEmpty,
-                hasToolHistory: state.toolCalls.isNotEmpty,
-              )) {
+          final hasPartialOutput = state.fullReply.isNotEmpty;
+          final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
+              state.reasoningSections.any((section) => section.isNotEmpty);
+          final canContinuePartial = shouldAutoContinueStream(
+            error: e,
+            hasPartialOutput: hasPartialOutput,
+            hasToolHistory: state.toolCalls.isNotEmpty,
+          );
+          if (state.cancelledByUser ||
+              state.toolCalls.isNotEmpty ||
+              hasVisibleReasoning ||
+              transportRetries >= _transportRetryPolicy.maxRetries ||
+              !isRetryableTransportFailure(e) ||
+              (hasPartialOutput && !canContinuePartial)) {
             rethrow;
           }
 
-          continuedAfterNetworkFailure = true;
-          final continuation = ChatMessage(
-            role: 'user',
-            content: kAutoContinuationMessage,
-          );
-          state.history.add(continuation);
-          state.historyOnSuccess?.add(continuation);
-          state.pendingContinuation = continuation;
-          try {
-            final handler = state.onContinuation;
-            if (handler != null) {
-              await _deliverContinuation(state, continuation, handler);
+          transportRetries++;
+          final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await (_retryDelay?.call(wait) ?? Future<void>.delayed(wait));
+          if (state.cancelledByUser) rethrow;
+
+          if (hasPartialOutput) {
+            final continuation = ChatMessage(
+              role: 'user',
+              content: appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatAutoContinuePrompt,
+            );
+            state.history.add(continuation);
+            state.historyOnSuccess?.add(continuation);
+            state.pendingContinuations.add(continuation);
+            try {
+              final handler = state.onContinuation;
+              if (handler != null) {
+                await _deliverContinuation(state, continuation, handler);
+              }
+            } catch (callbackError) {
+              debugPrint(
+                  '[ChatStreamManager] continuation display callback failed: $callbackError');
             }
-          } catch (callbackError) {
-            debugPrint(
-                '[ChatStreamManager] continuation display callback failed: $callbackError');
+
+            final replyDelta = state.fullReply.substring(
+              replyLengthAtLastContinuation,
+            );
+            replyLengthAtLastContinuation = state.fullReply.length;
+            streamHistory = [
+              ...streamHistory,
+              ChatMessage(role: 'assistant', content: replyDelta),
+              continuation,
+            ];
           }
-          streamHistory = [
-            ...streamHistory,
-            ChatMessage(role: 'assistant', content: state.fullReply),
-            continuation,
-          ];
           debugPrint(
-              '[ChatStreamManager] network stream interrupted; continuing once, convId=$convId');
+              '[ChatStreamManager] network stream interrupted; retrying ($transportRetries/${_transportRetryPolicy.maxRetries}), convId=$convId');
         }
       }
     } catch (e, s) {
@@ -620,11 +649,10 @@ class ChatStreamManager {
     final activeState = _streams[convId];
     if (activeState != null && !activeState.cancelledByUser) {
       activeState.onContinuation = handler;
-      final pendingContinuation = activeState.pendingContinuation;
-      if (pendingContinuation != null) {
-        unawaited(
-          _deliverContinuation(activeState, pendingContinuation, handler),
-        );
+      for (final pending in List<ChatMessage>.from(
+        activeState.pendingContinuations,
+      )) {
+        unawaited(_deliverContinuation(activeState, pending, handler));
       }
     } else {
       _pendingContinuationHandlers[convId] = handler;
@@ -636,14 +664,18 @@ class ChatStreamManager {
     ChatMessage continuation,
     Future<bool> Function(ChatMessage continuation) handler,
   ) async {
+    if (!state.pendingContinuations.contains(continuation) ||
+        !state.deliveringContinuations.add(continuation)) {
+      return;
+    }
     try {
       final displayed = await handler(continuation);
-      if (displayed && identical(state.pendingContinuation, continuation)) {
-        state.pendingContinuation = null;
-      }
+      if (displayed) state.pendingContinuations.remove(continuation);
     } catch (callbackError) {
       debugPrint(
           '[ChatStreamManager] continuation display callback failed: $callbackError');
+    } finally {
+      state.deliveringContinuations.remove(continuation);
     }
   }
 

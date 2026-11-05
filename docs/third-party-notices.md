@@ -280,6 +280,15 @@ implementation XORs the first 100 bytes by `0xFF` and remuxes the decoded FLV
 to MP4; the reference script writes an FLV. The citation does not establish a
 license grant, and this note does not determine whether any code was copied.
 
+## OpenCode CLI design reference
+
+The retry and stream-continuation behavior was informed by the CLI portions of
+[`anomalyco/opencode`](https://github.com/anomalyco/opencode), reviewed at
+commit [`84262f9277f14fc3a493d46c31789942ea5cb55e`](https://github.com/anomalyco/opencode/tree/84262f9277f14fc3a493d46c31789942ea5cb55e).
+OpenCode is distributed under the [MIT License](https://github.com/anomalyco/opencode/blob/84262f9277f14fc3a493d46c31789942ea5cb55e/LICENSE).
+This is a design reference only; no OpenCode code was copied into Stroom.
+Stroom remains licensed under AGPL-3.0.
+
 ## Bundled vendor assets
 
 - **flutter_math_fork 0.7.4** is declared as an app dependency. Its

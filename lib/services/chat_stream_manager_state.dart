@@ -73,7 +73,8 @@ class _ConversationStreamState {
   Future<void>? _periodicPersistFuture;
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
-  ChatMessage? pendingContinuation;
+  final List<ChatMessage> pendingContinuations = [];
+  final Set<ChatMessage> deliveringContinuations = {};
   // The text sections are the canonical live representation. Completed
   // sections are immutable strings, and only the current section remains a
   // mutable buffer. This lets throttled snapshots reuse sealed sections
