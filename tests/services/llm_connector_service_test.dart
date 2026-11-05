@@ -6956,6 +6956,7 @@ void main() {
             jsonEncode({
               'data': [
                 {'id': 'gpt-5.4', 'type': 'text'},
+                {'id': 'gpt-5.4-mini', 'type': 'text'},
                 {'id': 'deepseek-v4-pro', 'type': 'text'},
                 {'id': 'image-generator', 'type': 'image'},
               ],
@@ -6988,12 +6989,18 @@ void main() {
               id: 'gpt-5.4-local',
               upstreamModelId: 'gpt-5.4',
               displayName: 'GPT-5.4',
-              config: {'apiProtocolOverride': 'openai.responses'},
+            ),
+            LlmUpstreamModel(
+              id: 'gpt-5.4-mini-local',
+              upstreamModelId: 'gpt-5.4-mini',
+              displayName: 'GPT-5.4 mini',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
             ),
           ],
         ),
         secret: 'cheaperinference-catalog-key',
       );
+      expect(account.endpointConfig['providerPresetId'], 'cheaperinference');
 
       final discovered = await accounts.discoverModels(
         account,
@@ -7008,10 +7015,16 @@ void main() {
       );
       expect(
         discovered.map((model) => model.upstreamModelId),
-        ['gpt-5.4', 'deepseek-v4-pro'],
+        ['gpt-5.4', 'gpt-5.4-mini', 'deepseek-v4-pro'],
       );
       expect(
-          discovered.first.config['apiProtocolOverride'], 'openai.responses');
+        discovered[0].config['apiProtocolOverride'],
+        'openai.responses',
+      );
+      expect(
+        discovered[1].config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
       expect(discovered.last.config['apiProtocolOverride'], isNull);
     });
 

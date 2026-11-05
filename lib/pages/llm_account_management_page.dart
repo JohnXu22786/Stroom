@@ -1976,8 +1976,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             capabilities: model.capabilities,
             config: {
               'catalogSource': 'pinned-provider-preset',
-              if (model.apiProtocolOverride != null)
+              if (model.apiProtocolOverride != null) ...{
                 'apiProtocolOverride': model.apiProtocolOverride,
+                'apiProtocolOverrideSource': 'provider-preset-default',
+              },
             },
           ),
       ];
@@ -2034,8 +2036,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             capabilities: model.capabilities,
             config: {
               'catalogSource': 'pinned-provider-preset',
-              if (model.apiProtocolOverride != null)
+              if (model.apiProtocolOverride != null) ...{
                 'apiProtocolOverride': model.apiProtocolOverride,
+                'apiProtocolOverrideSource': 'provider-preset-default',
+              },
             },
           ),
       ];
@@ -3184,16 +3188,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       // catalog to infer or substitute here.
       _models.text = azureDeploymentId;
     }
-    final previousModelPresetId =
-        widget.account?.endpointConfig['providerPresetId'];
-    final previousModelPreset = findLlmOpenAiProviderPreset(
-      previousModelPresetId is String ? previousModelPresetId : null,
-    );
     final selectedModelPreset = findLlmOpenAiProviderPreset(_providerPresetId);
-    final previousPresetModelIds = {
-      for (final model in previousModelPreset?.fallbackModels ?? const [])
-        '${previousModelPreset!.modelIdPrefix}${model.id}',
-    };
     final existingModelsByUpstream = <String, List<AiGatewayUpstreamModel>>{};
     for (final model in previousModels) {
       existingModelsByUpstream
@@ -3229,7 +3224,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       var existing = existingByLine[index];
       final refreshPresetModel = selectedModelPreset != null &&
           providerPresetIdentityChanged &&
-          previousPresetModelIds.contains(upstreamId);
+          selectedModelPreset.fallbackModels.any(
+            (model) =>
+                '${selectedModelPreset.modelIdPrefix}${model.id}' == upstreamId,
+          );
       if (existing == null &&
           !providerPresetIdentityChanged &&
           index < previousModels.length &&
@@ -3314,8 +3312,25 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         existing?.config ?? const {},
       );
       if (refreshedPresetModel != null) {
+        final retainedApiProtocolOverride = modelConfig['apiProtocolOverride'];
+        final retainedOverrideSource = modelConfig['apiProtocolOverrideSource'];
         modelConfig.remove('catalogSource');
+        modelConfig
+          ..remove('apiProtocolOverride')
+          ..remove('apiProtocolOverrideSource');
         modelConfig.addAll(refreshedPresetModel.config);
+        if (retainedApiProtocolOverride != null &&
+            retainedOverrideSource != 'provider-preset-default') {
+          modelConfig
+            ..['apiProtocolOverride'] = retainedApiProtocolOverride
+            ..remove('apiProtocolOverrideSource');
+        }
+      } else if (providerPresetIdentityChanged &&
+          modelConfig['apiProtocolOverrideSource'] ==
+              'provider-preset-default') {
+        modelConfig
+          ..remove('apiProtocolOverride')
+          ..remove('apiProtocolOverrideSource');
       }
       if (_isAzureConnector) {
         modelConfig['catalogSource'] = 'configured-azure-deployment';

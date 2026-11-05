@@ -243,6 +243,217 @@ void main() {
     },
   );
 
+  testWidgets(
+    'preset switches apply defaults without replacing explicit model overrides',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'cheaperinference-preset-switch',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Fireworks account',
+          endpointConfig: const {
+            'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'fireworks',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'custom-gpt-5.4',
+              upstreamModelId: 'gpt-5.4',
+              displayName: 'GPT 5.4',
+            ),
+            LlmUpstreamModel(
+              id: 'custom-gpt-5.4-mini',
+              upstreamModelId: 'gpt-5.4-mini',
+              displayName: 'GPT 5.4 mini',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
+            ),
+          ],
+        ),
+        secret: 'existing-fireworks-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              widget.decoration.labelText == '服务商预设',
+        ),
+      );
+      preset.onChanged!('cheaperinference');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '凭据',
+        ),
+        'new-cheaperinference-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverride'],
+        'openai.responses',
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      final nextPreset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              widget.decoration.labelText == '服务商预设',
+        ),
+      );
+      nextPreset.onChanged!('bazaarlink');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '凭据',
+        ),
+        'new-bazaarlink-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final switchedAway = (await service.listAccounts()).single;
+      final defaultModel = switchedAway.models.singleWhere(
+        (model) => model.upstreamModelId == 'gpt-5.4',
+      );
+      expect(defaultModel.config['apiProtocolOverride'], isNull);
+      expect(defaultModel.config['apiProtocolOverrideSource'], isNull);
+      expect(
+        switchedAway.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+    },
+  );
+
+  testWidgets(
+    'switching from CheaperInference to a custom endpoint clears inherited defaults',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'cheaperinference-custom-switch',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'CheaperInference',
+          endpointConfig: const {
+            'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
+            'modelsUrl': 'https://api.cheaperinference.com/v1/models',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'cheaperinference',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'custom-switch-gpt-5.4',
+              upstreamModelId: 'gpt-5.4',
+              displayName: 'GPT 5.4',
+              config: {
+                'apiProtocolOverride': 'openai.responses',
+                'apiProtocolOverrideSource': 'provider-preset-default',
+              },
+            ),
+            LlmUpstreamModel(
+              id: 'custom-switch-gpt-5.4-mini',
+              upstreamModelId: 'gpt-5.4-mini',
+              displayName: 'GPT 5.4 mini',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
+            ),
+          ],
+        ),
+        secret: 'existing-cheaperinference-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              widget.decoration.labelText == '服务商预设',
+        ),
+      );
+      preset.onChanged!('');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '凭据',
+        ),
+        'custom-endpoint-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig.containsKey('providerPresetId'), isFalse);
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverride'],
+        isNull,
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverrideSource'],
+        isNull,
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+    },
+  );
+
   testWidgets('changing OpenAI provider preset requires a replacement key', (
     tester,
   ) async {

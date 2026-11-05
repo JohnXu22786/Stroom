@@ -1940,6 +1940,10 @@ class LlmAccountConnectorService {
       if (account.connectorType == 'uncloseai') {
         return _mergeUncloseAiModelMappings(discovered, account.models);
       }
+      if (account.connectorType == 'openai-compatibility' &&
+          account.endpointConfig['providerPresetId'] == 'cheaperinference') {
+        return _mergeCheaperInferenceModelMappings(discovered, account.models);
+      }
       return _mergeModelMappings(discovered, account.models);
     }
     return List.unmodifiable([
@@ -2011,6 +2015,47 @@ class LlmAccountConnectorService {
       merged[model.upstreamModelId] = model;
     }
     return List.unmodifiable(merged.values);
+  }
+
+  static List<LlmUpstreamModel> _mergeCheaperInferenceModelMappings(
+    List<LlmUpstreamModel> discovered,
+    List<LlmUpstreamModel> configured,
+  ) {
+    final configuredById = {
+      for (final model in configured) model.upstreamModelId: model,
+    };
+    LlmUpstreamModel mergeModel(
+      LlmUpstreamModel model,
+      LlmUpstreamModel existing,
+    ) {
+      final config = {...model.config, ...existing.config};
+      if (existing.config['apiProtocolOverrideSource'] ==
+          'provider-preset-default') {
+        config
+          ..remove('apiProtocolOverride')
+          ..remove('apiProtocolOverrideSource');
+        if (model.config['apiProtocolOverride'] is String) {
+          config
+            ..['apiProtocolOverride'] = model.config['apiProtocolOverride']
+            ..['apiProtocolOverrideSource'] = 'provider-preset-default';
+        }
+      }
+      return LlmUpstreamModel(
+        id: existing.id,
+        upstreamModelId: model.upstreamModelId,
+        displayName: existing.displayName,
+        capabilities: existing.capabilities,
+        config: config,
+      );
+    }
+
+    return List.unmodifiable([
+      for (final model in discovered)
+        if (configuredById[model.upstreamModelId] case final existing?)
+          mergeModel(model, existing)
+        else
+          model,
+    ]);
   }
 
   static List<LlmUpstreamModel> _mergeUncloseAiModelMappings(
@@ -3840,6 +3885,13 @@ class LlmAccountConnectorService {
 
     try {
       final models = <LlmUpstreamModel>[];
+      final providerPreset = account.connectorType == 'openai-compatibility'
+          ? findLlmOpenAiProviderPreset(
+              account.endpointConfig['providerPresetId'] is String
+                  ? account.endpointConfig['providerPresetId'] as String
+                  : null,
+            )
+          : null;
       final seenPageTokens = <String>{};
       String? pageToken;
       var pageCount = 0;
@@ -4028,6 +4080,24 @@ class LlmAccountConnectorService {
             continue;
           }
           if (!_isChatModel(modelId, map) && !supportsImagenPredict) continue;
+          final presetModel = providerPreset?.fallbackModels
+              .where(
+                (model) =>
+                    '${providerPreset.modelIdPrefix}${model.id}' == modelId,
+              )
+              .firstOrNull;
+          final savedModel = account.models
+              .where((model) => model.upstreamModelId == modelId)
+              .firstOrNull;
+          final apiProtocolOverride =
+              savedModel?.config['apiProtocolOverride'] ??
+                  presetModel?.apiProtocolOverride;
+          final apiProtocolOverrideSource =
+              savedModel?.config['apiProtocolOverride'] != null
+                  ? savedModel?.config['apiProtocolOverrideSource']
+                  : presetModel?.apiProtocolOverride != null
+                      ? 'provider-preset-default'
+                      : null;
           models.add(
             LlmUpstreamModel(
               id: '${account.id}:remote:${models.length}',
@@ -4154,6 +4224,10 @@ class LlmAccountConnectorService {
               config: {
                 'catalogSource': 'upstream_models_endpoint',
                 'provider': account.connectorType,
+                if (apiProtocolOverride is String)
+                  'apiProtocolOverride': apiProtocolOverride,
+                if (apiProtocolOverrideSource is String)
+                  'apiProtocolOverrideSource': apiProtocolOverrideSource,
                 'extensions': {account.connectorType: modelExtensions},
               },
             ),
