@@ -25,7 +25,7 @@ extension ChatServiceStreamingExt on ChatService {
         'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
     cancel();
     _isCancelledByUser = false;
-    _reasoningBuffer = '';
+    _reasoningBuffer.clear();
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -79,7 +79,7 @@ extension ChatServiceStreamingExt on ChatService {
                 )).listen(
           (event) {
             if (event.isReasoning) {
-              _reasoningBuffer += event.text;
+              _reasoningBuffer.write(event.text);
             } else if (event.usage != null) {
               // usage 计量事件（provider 流末尾产出，per-request 隔离）
               // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
@@ -138,8 +138,8 @@ extension ChatServiceStreamingExt on ChatService {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
     _isCancelledByUser = false;
-    _reasoningBuffer = '';
-    _contentBuffer = '';
+    _reasoningBuffer.clear();
+    _contentBuffer.clear();
     _lastReasoningLength = 0;
     _thinkingSignature = '';
 
@@ -260,7 +260,7 @@ extension ChatServiceStreamingExt on ChatService {
                 _thinkingSignature = event.thinkingSignature!;
               }
               if (event.isReasoning) {
-                _reasoningBuffer += event.text;
+                _reasoningBuffer.write(event.text);
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
                 controller.add(ReasoningEvent(event.text));
@@ -269,7 +269,7 @@ extension ChatServiceStreamingExt on ChatService {
               } else if (event.text.isNotEmpty) {
                 // Accumulate visible content for tool call chain
                 // preservation per DeepSeek spec.
-                _contentBuffer += event.text;
+                _contentBuffer.write(event.text);
                 controller.add(TextEvent(event.text));
               }
             },
@@ -310,7 +310,7 @@ extension ChatServiceStreamingExt on ChatService {
           // No tool calls → done. Visible text is already retained by the
           // stream manager, so the service no longer needs its duplicate.
           if (toolCallRefs.isEmpty) {
-            _contentBuffer = '';
+            _contentBuffer.clear();
             break;
           }
 
@@ -324,7 +324,7 @@ extension ChatServiceStreamingExt on ChatService {
           // messages.append(message) preserves the complete assistant message
           // (including reasoning_content) when sending subsequent requests
           // in the same tool call chain.
-          final roundReasoning = _reasoningBuffer.substring(
+          final roundReasoning = _reasoningBuffer.toString().substring(
             _lastReasoningLength,
           );
 
@@ -402,7 +402,7 @@ extension ChatServiceStreamingExt on ChatService {
           // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
           // user(tool_result 块)。历史保持中立，格式切换安全。
           messages.addAll(_protocol.buildAssistantChainMessage(
-            content: _contentBuffer,
+            content: _contentBuffer.toString(),
             toolCalls: neutralCalls,
             roundReasoning: roundReasoning,
             thinkingSignature: _thinkingSignature,
@@ -411,7 +411,7 @@ extension ChatServiceStreamingExt on ChatService {
               toolOutputMaxChars: toolOutputMaxChars));
 
           // Reset per-round buffers for the next iteration
-          _contentBuffer = '';
+          _contentBuffer.clear();
           _lastReasoningLength = _reasoningBuffer.length;
           _thinkingSignature = '';
           // 本轮完整执行且未提前退出（工具已执行、消息已追加）。
@@ -451,13 +451,13 @@ extension ChatServiceStreamingExt on ChatService {
   }
 
   void _releaseResponseBuffers() {
-    _contentBuffer = '';
-    _reasoningBuffer = '';
+    _contentBuffer.clear();
+    _reasoningBuffer.clear();
     _lastReasoningLength = 0;
     _thinkingSignature = '';
   }
 
-  String get reasoningContent => _reasoningBuffer;
+  String get reasoningContent => _reasoningBuffer.toString();
 
   /// Executes a single tool for the parallel tool-call batch.
   ///
