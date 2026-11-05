@@ -80,7 +80,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isDark: isDark,
               isStreaming: isStreaming,
               activeId: activeId,
-              streamingMsgId: streamingMsgId,
               controller: controller,
             ),
             textStreamMessageBuilder: (context, message, index,
@@ -95,7 +94,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isDark: isDark,
               isStreaming: isStreaming,
               activeId: activeId,
-              streamingMsgId: streamingMsgId,
               controller: controller,
             ),
           ),
@@ -115,7 +113,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isDark,
     required bool isStreaming,
     required String? activeId,
-    required String? streamingMsgId,
     required InMemoryChatController controller,
   }) {
     Widget buildMessage(Message message) {
@@ -140,14 +137,16 @@ extension _ChatPageBuildersExt on _ChatPageState {
           groupStatus: groupStatus,
           isStreaming: isStreaming,
           activeId: activeId,
-          streamingMsgId: streamingMsgId,
+          streamingMsgId: _streamingMsgId,
           isDark: isDark,
         );
       }
       return const SizedBox.shrink();
     }
 
-    if (initialMessage.id != streamingMsgId) {
+    // The provider-backed ID can lag the local ID when the placeholder is
+    // inserted, so use page state to attach the notifier on its first build.
+    if (initialMessage.id != _streamingMsgId) {
       return buildMessage(initialMessage);
     }
     return ValueListenableBuilder<int>(
