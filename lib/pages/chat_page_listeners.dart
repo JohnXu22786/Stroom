@@ -12,8 +12,7 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// automatically re-register on the new conversation's families.
   /// No _isStreamingForCurrentConv guard needed — families prevent cross-contamination.
   void _registerStreamingListeners(String convId) {
-    ref.listen(streamingTextAppendProvider(convId),
-        (StreamingTextAppend? prev, StreamingTextAppend? next) {
+    ref.listen(streamingTextAppendProvider(convId), (prev, next) {
       if (!mounted || next == null || next.hasMarkdownSyntax) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
@@ -32,8 +31,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       final segments = existingSegments;
       final existingIndex = segments.lastIndexWhere(
         (segment) =>
-            segment is TextSegment &&
-            segment.chunkIndex == next.chunkIndex,
+            segment is TextSegment && segment.chunkIndex == next.chunkIndex,
       );
       final updated = List<MessageSegment>.of(segments);
       final segment = TextSegment(
@@ -53,8 +51,8 @@ extension _ChatPageListenersExt on _ChatPageState {
         _rebuildLiveSegments(msgId);
         final rebuilt =
             List<MessageSegment>.of(_chatSegments[msgId] ?? const []);
-        rebuilt.removeWhere((item) => item is TextSegment &&
-            item.chunkIndex == next.chunkIndex);
+        rebuilt.removeWhere((item) =>
+            item is TextSegment && item.chunkIndex == next.chunkIndex);
         rebuilt.add(segment);
         _chatSegments[msgId] = rebuilt;
       }
@@ -133,15 +131,13 @@ extension _ChatPageListenersExt on _ChatPageState {
         _rebuildLiveSegments(msgId);
         return;
       }
-      final reasoningWasCompleted =
-          _isReasoningCompletedForMsg[msgId] ?? false;
+      final reasoningWasCompleted = _isReasoningCompletedForMsg[msgId] ?? false;
       _isReasoningCompletedForMsg[msgId] = true;
       // Switch the placeholder to the normal assistant bubble without
       // copying the growing reply into the chat controller. Text is rendered
       // from the live segments below.
       _updateStreamingMessage(msgId, '');
-      if (!reasoningWasCompleted ||
-          !_updateLiveTextSegment(msgId, next)) {
+      if (!reasoningWasCompleted || !_updateLiveTextSegment(msgId, next)) {
         _rebuildLiveSegments(msgId);
       }
       // Other segment changes are refreshed by their reasoning/tool listener.

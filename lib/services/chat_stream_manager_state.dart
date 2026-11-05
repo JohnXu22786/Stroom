@@ -87,6 +87,7 @@ class _ConversationStreamState {
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = _containsMarkdownSyntax(value);
     _markdownSyntaxCarry = '';
+    _markdownCarryStartsAtLineStart = true;
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
     _inlineDelimiterLeftCodeUnit = null;
@@ -148,6 +149,7 @@ class _ConversationStreamState {
   bool _atLineStart = true;
   bool _pendingOrderedListMarker = false;
   String _markdownSyntaxCarry = '';
+  bool _markdownCarryStartsAtLineStart = true;
   int? _pendingInlineDelimiter;
   int _pendingInlineDelimiterLength = 0;
   int? _inlineDelimiterLeftCodeUnit;
@@ -176,13 +178,20 @@ class _ConversationStreamState {
     _currentTextChunk.write(text);
     _pendingTextDelta.write(text);
     final syntaxProbe = '$_markdownSyntaxCarry$text';
+    final markdownProbe =
+        _markdownCarryStartsAtLineStart ? syntaxProbe : '\u0000$syntaxProbe';
     if (!_currentChunkHasMarkdownSyntax &&
-        (_containsMarkdownSyntax(syntaxProbe) || _scanInlineMarkdown(text))) {
+        (_containsMarkdownSyntax(markdownProbe) || _scanInlineMarkdown(text))) {
       _currentChunkHasMarkdownSyntax = true;
     }
-    _markdownSyntaxCarry = syntaxProbe.length <= 32
-        ? syntaxProbe
-        : syntaxProbe.substring(syntaxProbe.length - 32);
+    if (syntaxProbe.length <= 32) {
+      _markdownSyntaxCarry = syntaxProbe;
+    } else {
+      final firstRetainedIndex = syntaxProbe.length - 32;
+      _markdownCarryStartsAtLineStart =
+          syntaxProbe.codeUnitAt(firstRetainedIndex - 1) == 10;
+      _markdownSyntaxCarry = syntaxProbe.substring(firstRetainedIndex);
+    }
     if (!_currentChunkHasMarkdownSyntax) _scanOrderedListMarkers(text);
   }
 
@@ -271,14 +280,14 @@ class _ConversationStreamState {
         : delimiter == 126
             ? length >= 2
             : length >= 1;
-    final nextIsWhitespace = nextCodeUnit == 9 || nextCodeUnit == 10 ||
-        nextCodeUnit == 13 || nextCodeUnit == 32;
+    final nextIsWhitespace = nextCodeUnit == 9 ||
+        nextCodeUnit == 10 ||
+        nextCodeUnit == 13 ||
+        nextCodeUnit == 32;
     final leftIsWord = _isWordCodeUnit(_inlineDelimiterLeftCodeUnit);
     final underscoreInsideWord = delimiter == 95 && leftIsWord;
     if (opensDelimiter && !nextIsWhitespace && !underscoreInsideWord) {
-      _openInlineDelimiters
-          .putIfAbsent(delimiter, () => [])
-          .add(length);
+      _openInlineDelimiters.putIfAbsent(delimiter, () => []).add(length);
     }
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
@@ -298,9 +307,12 @@ class _ConversationStreamState {
     final delimiter = _pendingInlineDelimiter;
     if (delimiter == null) return false;
     final left = _inlineDelimiterLeftCodeUnit;
-    final leftIsWhitespace = left == 9 || left == 10 || left == 13 || left == 32;
+    final leftIsWhitespace =
+        left == 9 || left == 10 || left == 13 || left == 32;
     final openRuns = _openInlineDelimiters[delimiter];
-    if (leftIsWhitespace || openRuns == null || openRuns.isEmpty ||
+    if (leftIsWhitespace ||
+        openRuns == null ||
+        openRuns.isEmpty ||
         openRuns.last != _pendingInlineDelimiterLength) {
       return false;
     }
@@ -341,8 +353,7 @@ class _ConversationStreamState {
         _lineStartDigits.writeCharCode(codeUnit);
         continue;
       }
-      if ((codeUnit == 46 || codeUnit == 41) &&
-          _lineStartDigits.isNotEmpty) {
+      if ((codeUnit == 46 || codeUnit == 41) && _lineStartDigits.isNotEmpty) {
         _pendingOrderedListMarker = true;
         continue;
       }
@@ -359,6 +370,7 @@ class _ConversationStreamState {
     _atLineStart = true;
     _pendingOrderedListMarker = false;
     _markdownSyntaxCarry = '';
+    _markdownCarryStartsAtLineStart = true;
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
     _inlineDelimiterLeftCodeUnit = null;
@@ -373,8 +385,7 @@ class _ConversationStreamState {
     _linkScannerLineSpaces = 0;
   }
 
-  bool get currentTextChunkIsNotEmpty =>
-      _currentTextChunk.length > 0;
+  bool get currentTextChunkIsNotEmpty => _currentTextChunk.length > 0;
 
   /// Per-round text chunks that mirror reasoning sections: each time a new
   /// tool call round begins, a new chunk is started so that post-stream

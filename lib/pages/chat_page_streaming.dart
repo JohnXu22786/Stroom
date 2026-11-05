@@ -613,8 +613,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (segments == null) return false;
     final chunkIndex = textChunks.length - 1;
     final segmentIndex = segments.lastIndexWhere(
-      (segment) =>
-          segment is TextSegment && segment.chunkIndex == chunkIndex,
+      (segment) => segment is TextSegment && segment.chunkIndex == chunkIndex,
     );
     if (segmentIndex == -1) return false;
 

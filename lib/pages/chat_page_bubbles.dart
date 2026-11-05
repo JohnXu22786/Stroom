@@ -210,12 +210,10 @@ extension _ChatPageBubblesExt on _ChatPageState {
               streamingConvId != null &&
               s.chunkIndex != null &&
               s.chunkIndex! < liveTextChunkCount - 1;
-          final cacheKey = canReuseSealedText
-              ? '$messageId:${s.chunkIndex}'
-              : null;
-          final cached = cacheKey == null
-              ? null
-              : _streamingMarkdownCache[cacheKey];
+          final cacheKey =
+              canReuseSealedText ? '$messageId:${s.chunkIndex}' : null;
+          final cached =
+              cacheKey == null ? null : _streamingMarkdownCache[cacheKey];
           if (cached != null &&
               identical(cached.text, s.text) &&
               cached.isDark == isDark &&
@@ -226,42 +224,42 @@ extension _ChatPageBubblesExt on _ChatPageState {
               padding: const EdgeInsets.only(bottom: 4),
               child: hasSearchMatch
                   ? MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
-                    ),
-                    markdownGenerator: buildSearchMarkdownGenerator(
-                      query: _searchQuery,
-                      messageFirstMatchIndex: messageFirstMatchIndex,
-                      occurrenceOffset: occurrenceOffset,
-                      currentMatchIndex: _currentMatchIndex,
-                    ),
-                  )
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: buildSearchMarkdownGenerator(
+                        query: _searchQuery,
+                        messageFirstMatchIndex: messageFirstMatchIndex,
+                        occurrenceOffset: occurrenceOffset,
+                        currentMatchIndex: _currentMatchIndex,
+                      ),
+                    )
                   : MarkdownWidget(
-                    data: s.text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    // Per-segment streaming config: each segment
-                    // is parsed by its OWN MarkdownWidget, so the
-                    // fence-completion check must run against that
-                    // segment's text.
-                    config: buildMessageMarkdownConfig(
-                      isDark: isDark,
-                      conversationIsStreaming: isStreaming,
-                      streamingMsgId: _streamingMsgId,
-                      messageId: messageId,
-                      streamingText: s.text,
+                      data: s.text,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      // Per-segment streaming config: each segment
+                      // is parsed by its OWN MarkdownWidget, so the
+                      // fence-completion check must run against that
+                      // segment's text.
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: s.text,
+                      ),
+                      markdownGenerator: markdownGenerator,
                     ),
-                    markdownGenerator: markdownGenerator,
-                  ),
             );
             widgets.add(textWidget);
             if (cacheKey != null) {

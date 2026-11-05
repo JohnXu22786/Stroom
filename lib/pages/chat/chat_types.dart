@@ -9,6 +9,7 @@ sealed class MessageSegment {}
 
 class TextSegment extends MessageSegment {
   final String text;
+
   /// Index of this text section in the live stream, when available.
   /// Completed sections keep this identity across live segment rebuilds.
   final int? chunkIndex;
