@@ -81,19 +81,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    // The enabled set must include the discovered MCP tool. The global tool
-    // registry can also contain provider-gated tools that are not available
-    // in this conversation, so its raw size is not the enabled built-in count.
+    // Assert the discovered tool by name: the global registry can include
+    // provider-gated tools that are not enabled for this conversation.
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ChatPage)));
     final enabled = container.read(enabledToolNamesProvider);
     expect(enabled, contains('exa_mcp'),
         reason: 'MCP tool discovered during page init must be auto-enabled '
             '(badge/list must show the full count, not built-in-only)');
-    final builtinCount = ChatService.getRegisteredToolDefinitions().length;
-    expect(enabled.length, greaterThan(builtinCount),
-        reason: 'the tool badge count must include MCP tools '
-            '(built-in-only: $builtinCount)');
     // The tools panel must list the MCP tool alongside the built-ins.
     // The panel is a lazy ListView — scroll it to reveal the MCP tool
     // (it sorts after the built-in tools).
