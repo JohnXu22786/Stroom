@@ -277,14 +277,22 @@ class ChatMessage {
     final compactMessages = <dynamic>[];
     for (var i = 0; i < messages.length; i++) {
       final message = messages[i];
-      if (message is! Map ||
-          i >= currentUserMessage ||
-          message['role'] == 'system' ||
+      if (message is! Map || message['role'] == 'system') {
+        compactMessages.add(message);
+        continue;
+      }
+
+      if (i > currentUserMessage) {
+        compactMessages.add(_compactGeneratedRawMessage(message));
+        continue;
+      }
+      if (i == currentUserMessage ||
           (message['content'] == null &&
               message['reasoning_content'] == null)) {
         compactMessages.add(message);
         continue;
       }
+
       final compactMessage = Map<String, dynamic>.from(message);
       if (message['content'] != null) {
         compactMessage['content'] = '[previous message content omitted]';
@@ -302,6 +310,74 @@ class ChatMessage {
         ...Map<String, dynamic>.from(body),
         'messages': compactMessages,
       },
+    };
+  }
+
+  /// Keep protocol metadata from tool-loop messages while dropping their
+  /// generated payloads. These messages are diagnostics only; the rendered
+  /// assistant response and tool-call data are persisted separately.
+  static Map _compactGeneratedRawMessage(Map message) {
+    final role = message['role'];
+    if (role == 'assistant') {
+      final compactMessage = Map.from(message);
+      final content = message['content'];
+      if (content is String) {
+        compactMessage['content'] = '[generated assistant content omitted]';
+      } else if (content is List) {
+        compactMessage['content'] = content.map((part) {
+          if (part is! Map ||
+              (part['type'] != 'text' &&
+                  part['type'] != 'thinking' &&
+                  part['type'] != 'reasoning')) {
+            return part;
+          }
+          final textKey = part.containsKey('text')
+              ? 'text'
+              : part.containsKey('thinking')
+                  ? 'thinking'
+                  : 'reasoning';
+          if (part[textKey] == null) return part;
+          return <dynamic, dynamic>{
+            ...part,
+            textKey: '[generated assistant content omitted]',
+          };
+        }).toList();
+      }
+      if (message['reasoning_content'] != null) {
+        compactMessage['reasoning_content'] =
+            '[generated assistant reasoning omitted]';
+      }
+      return compactMessage;
+    }
+
+    if (role == 'tool' || role == 'function') {
+      return _compactToolResultMessage(message);
+    }
+    if (role == 'user' && _hasToolResult(message)) {
+      final compactMessage = Map.from(message);
+      final content = message['content'] as List;
+      compactMessage['content'] = content.map((part) {
+        if (part is! Map || part['type'] != 'tool_result') return part;
+        return _compactToolResultBlock(part);
+      }).toList();
+      return compactMessage;
+    }
+    return message;
+  }
+
+  static Map _compactToolResultMessage(Map message) {
+    if (message['content'] == null) return message;
+    return <dynamic, dynamic>{
+      ...message,
+      'content': '[tool result content omitted]',
+    };
+  }
+
+  static Map _compactToolResultBlock(Map block) {
+    if (block['content'] == null) return block;
+    return <dynamic, dynamic>{
+      ...block,
+      'content': '[tool result content omitted]',
     };
   }
 
