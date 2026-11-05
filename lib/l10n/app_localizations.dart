@@ -14398,6 +14398,18 @@ abstract class AppLocalizations {
   /// **'Cookie persistence disabled'**
   String get browserCookiePersistenceDisabled;
 
+  /// No description provided for @browserSniffPanelHideTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide sniff panel'**
+  String get browserSniffPanelHideTooltip;
+
+  /// No description provided for @browserSniffPanelShowTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Show sniff panel'**
+  String get browserSniffPanelShowTooltip;
+
   /// No description provided for @browserAdd.
   ///
   /// In en, this message translates to:

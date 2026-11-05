@@ -16,6 +16,30 @@ void main() {
 
   tearDown(BrowserCookieService.disableTestMode);
 
+  testWidgets('sniff panel toggle tooltip follows the active locale',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+
+    await _startNavigation(tester, platform, locale: const Locale('en', 'US'));
+    expect(find.byTooltip('Hide sniff panel'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Hide sniff panel'));
+    await tester.pump();
+    expect(find.byTooltip('Show sniff panel'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _startNavigation(tester, platform, locale: const Locale('zh', 'CN'));
+    expect(find.byTooltip('隐藏嗅探面板'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('隐藏嗅探面板'));
+    await tester.pump();
+    expect(find.byTooltip('显示嗅探面板'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('ambiguous same-URL error waits for active load completion',
       (tester) async {
     final previousPlatform = InAppWebViewPlatform.instance;
@@ -307,11 +331,11 @@ _BrowserPagePlatform _installBrowserPagePlatform() {
 }
 
 Future<InAppWebViewController> _startNavigation(
-  WidgetTester tester,
-  _BrowserPagePlatform platform,
-) async {
+    WidgetTester tester, _BrowserPagePlatform platform,
+    {Locale locale = const Locale('en', 'US')}) async {
   await tester.pumpWidget(
     MaterialApp(
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const BrowserPage(initialUrl: 'https://failed.example/'),

@@ -4582,6 +4582,8 @@
   "browserCookieRetentionOffTooltip": "Cookie persistence (off)",
   "browserCookiePersistenceEnabled": "Cookie persistence enabled",
   "browserCookiePersistenceDisabled": "Cookie persistence disabled",
+  "browserSniffPanelHideTooltip": "Hide sniff panel",
+  "browserSniffPanelShowTooltip": "Show sniff panel",
   "browserAdd": "Add",
   "browserNoScripts": "No scripts yet. Tap “Add” to create one.",
   "browserUnnamedScript": "Untitled script",

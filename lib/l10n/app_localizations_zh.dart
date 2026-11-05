@@ -8124,6 +8124,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get browserCookiePersistenceDisabled => '已关闭 Cookie 持久化';
 
   @override
+  String get browserSniffPanelHideTooltip => '隐藏嗅探面板';
+
+  @override
+  String get browserSniffPanelShowTooltip => '显示嗅探面板';
+
+  @override
   String get browserAdd => '添加';
 
   @override
@@ -16367,6 +16373,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get browserCookiePersistenceDisabled => '已关闭 Cookie 持久化';
+
+  @override
+  String get browserSniffPanelHideTooltip => '隐藏嗅探面板';
+
+  @override
+  String get browserSniffPanelShowTooltip => '显示嗅探面板';
 
   @override
   String get browserAdd => '添加';

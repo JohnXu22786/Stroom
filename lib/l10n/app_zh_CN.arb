@@ -4582,6 +4582,8 @@
   "browserCookieRetentionOffTooltip": "Cookie 持久化（已关闭）",
   "browserCookiePersistenceEnabled": "已启用 Cookie 持久化",
   "browserCookiePersistenceDisabled": "已关闭 Cookie 持久化",
+  "browserSniffPanelHideTooltip": "隐藏嗅探面板",
+  "browserSniffPanelShowTooltip": "显示嗅探面板",
   "browserAdd": "添加",
   "browserNoScripts": "暂无脚本，点击“添加”创建",
   "browserUnnamedScript": "未命名脚本",
