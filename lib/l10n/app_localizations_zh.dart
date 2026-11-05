@@ -6726,12 +6726,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatNoErrorDetails => '无详细数据';
 
   @override
-  String get ttsBackgroundInterrupted => '应用进入后台，合成中断';
-
-  @override
-  String get ttsAppExitedInterrupted => '应用已退出，合成中断';
-
-  @override
   String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';
 }
 
@@ -13454,12 +13448,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatNoErrorDetails => '无详细数据';
-
-  @override
-  String get ttsBackgroundInterrupted => '应用进入后台，合成中断';
-
-  @override
-  String get ttsAppExitedInterrupted => '应用已退出，合成中断';
 
   @override
   String get ttsInstructionDescription => '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格';

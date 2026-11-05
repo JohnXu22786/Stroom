@@ -3710,7 +3710,7 @@
   },
   "ttsSynthesisConfig": "Synthesis settings",
   "ttsVoiceAndSoundHelp": "Adjust the voice and sound",
-  "ttsProviderSettingsLead": "in",
+  "ttsProviderSettingsLead": "in ",
   "ttsProviderSettings": "TTS provider settings",
   "ttsProviderSettingsTail": "to configure more parameters",
   "ttsEditText": "Edit text",
@@ -3841,7 +3841,5 @@
   "chatRequest": "Request",
   "chatResponse": "Response",
   "chatNoErrorDetails": "No details available",
-  "ttsBackgroundInterrupted": "Synthesis interrupted because the app entered the background",
-  "ttsAppExitedInterrupted": "Synthesis interrupted because the app exited",
   "ttsInstructionDescription": "Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly."
 }

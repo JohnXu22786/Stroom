@@ -3841,7 +3841,5 @@
   "chatRequest": "请求 (Request)",
   "chatResponse": "响应 (Response)",
   "chatNoErrorDetails": "无详细数据",
-  "ttsBackgroundInterrupted": "应用进入后台，合成中断",
-  "ttsAppExitedInterrupted": "应用已退出，合成中断",
   "ttsInstructionDescription": "通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格"
 }

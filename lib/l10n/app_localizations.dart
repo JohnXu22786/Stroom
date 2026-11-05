@@ -11545,7 +11545,7 @@ abstract class AppLocalizations {
   /// No description provided for @ttsProviderSettingsLead.
   ///
   /// In en, this message translates to:
-  /// **'in'**
+  /// **'in '**
   String get ttsProviderSettingsLead;
 
   /// No description provided for @ttsProviderSettings.
@@ -11919,18 +11919,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No details available'**
   String get chatNoErrorDetails;
-
-  /// No description provided for @ttsBackgroundInterrupted.
-  ///
-  /// In en, this message translates to:
-  /// **'Synthesis interrupted because the app entered the background'**
-  String get ttsBackgroundInterrupted;
-
-  /// No description provided for @ttsAppExitedInterrupted.
-  ///
-  /// In en, this message translates to:
-  /// **'Synthesis interrupted because the app exited'**
-  String get ttsAppExitedInterrupted;
 
   /// No description provided for @ttsInstructionDescription.
   ///

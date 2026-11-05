@@ -6816,7 +6816,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ttsVoiceAndSoundHelp => 'Adjust the voice and sound';
 
   @override
-  String get ttsProviderSettingsLead => 'in';
+  String get ttsProviderSettingsLead => 'in ';
 
   @override
   String get ttsProviderSettings => 'TTS provider settings';
@@ -7046,14 +7046,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatNoErrorDetails => 'No details available';
-
-  @override
-  String get ttsBackgroundInterrupted =>
-      'Synthesis interrupted because the app entered the background';
-
-  @override
-  String get ttsAppExitedInterrupted =>
-      'Synthesis interrupted because the app exited';
 
   @override
   String get ttsInstructionDescription =>
@@ -13871,7 +13863,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get ttsVoiceAndSoundHelp => 'Adjust the voice and sound';
 
   @override
-  String get ttsProviderSettingsLead => 'in';
+  String get ttsProviderSettingsLead => 'in ';
 
   @override
   String get ttsProviderSettings => 'TTS provider settings';
@@ -14101,14 +14093,6 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatNoErrorDetails => 'No details available';
-
-  @override
-  String get ttsBackgroundInterrupted =>
-      'Synthesis interrupted because the app entered the background';
-
-  @override
-  String get ttsAppExitedInterrupted =>
-      'Synthesis interrupted because the app exited';
 
   @override
   String get ttsInstructionDescription =>
