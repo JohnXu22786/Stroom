@@ -3720,7 +3720,7 @@
   "ttsSpeed": "Speed",
   "ttsNormal": "Normal",
   "ttsVolume": "Volume",
-  "ttsInstruction": "Speaking style instruction (instruction)",
+  "ttsInstruction": "Speaking style instruction",
   "ttsInstructionHint": "For example: Speak in a cheerful and excited tone",
   "ttsCustomParams": "Custom parameters",
   "ttsDefaultValue": "Default: {value}",

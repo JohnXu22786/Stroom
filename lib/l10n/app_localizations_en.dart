@@ -6846,7 +6846,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ttsVolume => 'Volume';
 
   @override
-  String get ttsInstruction => 'Speaking style instruction (instruction)';
+  String get ttsInstruction => 'Speaking style instruction';
 
   @override
   String get ttsInstructionHint =>
@@ -13901,7 +13901,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get ttsVolume => 'Volume';
 
   @override
-  String get ttsInstruction => 'Speaking style instruction (instruction)';
+  String get ttsInstruction => 'Speaking style instruction';
 
   @override
   String get ttsInstructionHint =>
