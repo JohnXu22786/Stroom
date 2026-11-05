@@ -177,6 +177,9 @@ extension _ChatPageListenersExt on _ChatPageState {
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != prev) _conversationLoadGeneration++;
       if (next == null && next != prev) {
+        if (_isInitialChatLoadPending) {
+          setState(() => _isInitialChatLoadPending = false);
+        }
         _detachStreamPage(clearIfCompleted: true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && ref.read(activeConversationIdProvider) == null) {
@@ -216,22 +219,25 @@ extension _ChatPageListenersExt on _ChatPageState {
         _finalizedMessages.clear();
         _isReasoningCompletedForMsg.clear();
         manager.activateConversation(next);
-        // Only schedule _loadConversationMessages for actual conversation
-        // SWITCHES (prev != null), not for the initial registration of this
-        // listener (prev == null). During init, _initialize() already calls
-        // _loadConversationMessages + _restoreStreamingState, so a second
-        // load would clear the in-progress UI and cause user messages to
-        // appear incomplete for 1-2 seconds before re-rendering.
+        // Schedule loads for conversation switches and for an initial
+        // null→ID restoration that the first _initialize load could not see.
+        // Keep an already pending spinner tied to the new active ID as well.
+        final isInitialConversationRestore =
+            prev == null && _loadedConversationId != next;
+        if (isInitialConversationRestore && !_isInitialChatLoadPending) {
+          setState(() => _isInitialChatLoadPending = true);
+        }
         // Capture the target conversation ID so rapid C1→C2→C3 switches
         // don't load the wrong conversation (the post-frame reads
         // activeConversationIdProvider which may have changed).
-        if (prev != null) {
+        if (prev != null || isInitialConversationRestore) {
           final capturedConvId = next;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted &&
-                ref.read(activeConversationIdProvider) == capturedConvId) {
-              _loadConversationMessages();
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted ||
+                ref.read(activeConversationIdProvider) != capturedConvId) {
+              return;
             }
+            await _loadConversationMessages();
           });
         }
       }
@@ -264,19 +270,29 @@ extension _ChatPageListenersExt on _ChatPageState {
         final activeId = ref.read(activeConversationIdProvider);
         if (activeId != null) {
           final activeConv = next.where((c) => c.id == activeId).firstOrNull;
-          if (activeConv != null && activeConv.messages.isNotEmpty) {
-            // Only reload if there's a mismatch: either history is empty
-            // (initial load hadn't completed) OR the loaded conversation
-            // has more messages than we currently have (e.g. data arrived
-            // after user sent a message, so _history only has the new
-            // message but not the history).
-            if (_history.isEmpty ||
+          final isWaitingForInitialHistory = _isInitialChatLoadPending;
+          if (activeConv == null) {
+            // The provider has finished hydrating without the saved ID; show
+            // the normal empty/error state instead of leaving a spinner up.
+            if (isWaitingForInitialHistory) {
+              setState(() => _isInitialChatLoadPending = false);
+            }
+          } else {
+            // Retry when initial setup was waiting for provider hydration, or
+            // when the active history is newer than the currently loaded list.
+            final shouldReload = isWaitingForInitialHistory ||
+                (_history.isEmpty && activeConv.messages.isNotEmpty) ||
                 (_history.length < activeConv.messages.length &&
                     !_isStreamingActive &&
                     !_isLoadingMessages &&
-                    !_isModifyingHistory)) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _loadConversationMessages();
+                    !_isModifyingHistory);
+            if (shouldReload) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!mounted ||
+                    ref.read(activeConversationIdProvider) != activeId) {
+                  return;
+                }
+                await _loadConversationMessages();
               });
             }
           }
