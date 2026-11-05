@@ -3216,6 +3216,281 @@ void main() {
       expect(models.single.upstreamModelId, 'discovered-${requests.length}');
     }
   });
+
+  test('M47 eligible presets retain pinned chat endpoints and catalogs', () {
+    const endpoints = {
+      'typhoon': 'https://api.opentyphoon.ai/v1/chat/completions',
+      'unifically': 'https://api.unifically.com/v1/chat/completions',
+      'unorouter': 'https://api.unorouter.com/v1/chat/completions',
+      'upstage': 'https://api.upstage.ai/v1/chat/completions',
+      'v0-vercel': 'https://api.v0.dev/v1/chat/completions',
+      'venice': 'https://api.venice.ai/api/v1/chat/completions',
+      'vercel-ai-gateway': 'https://ai-gateway.vercel.sh/v1/chat/completions',
+      'void-ai': 'https://api.voidai.app/v1/chat/completions',
+      'volcengine': 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+      'volcengine-agent-plan':
+          'https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions',
+      'volcengine-coding-plan':
+          'https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions',
+      'wandb': 'https://api.inference.wandb.ai/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect({
+      for (final id in [
+        'unifically',
+        'unorouter',
+        'void-ai',
+        'volcengine-coding-plan',
+      ])
+        id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+    }, {
+      'unifically': 'https://api.unifically.com/v1/models?category=llm',
+      'unorouter': 'https://api.unorouter.com/v1/models',
+      'void-ai': 'https://api.voidai.app/v1/models',
+      'volcengine-coding-plan':
+          'https://ark.cn-beijing.volces.com/api/coding/v3/models',
+    });
+    expect(findLlmOpenAiProviderPreset('typhoon')!.fallbackModels.single.id,
+        'typhoon-v2.5-30b-a3b-instruct');
+    expect(
+      findLlmOpenAiProviderPreset('typhoon')!
+          .fallbackModels
+          .single
+          .capabilities,
+      {'contextLength': 131072},
+    );
+    expect(
+      findLlmOpenAiProviderPreset('upstage')!.fallbackModels.map((m) => m.id),
+      ['solar-pro3', 'solar-mini'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('v0-vercel')!.fallbackModels.map((m) => m.id),
+      ['v0-1.0-md', 'v0-1.5-lg', 'v0-1.5-md'],
+    );
+    expect(findLlmOpenAiProviderPreset('venice')!.fallbackModels.single.id,
+        'venice-latest');
+    expect(
+      findLlmOpenAiProviderPreset('vercel-ai-gateway')!
+          .fallbackModels
+          .map((m) => m.id),
+      [
+        'openai/gpt-4.1',
+        'anthropic/claude-4-sonnet',
+        'google/gemini-2.5-pro',
+        'moonshotai/kimi-k2',
+        'vercel/v0-1.5-md',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('volcengine')!
+          .fallbackModels
+          .map((m) => m.id),
+      [
+        'deepseek-v3-2-251201',
+        'doubao-seed-2-0-pro-260215',
+        'doubao-seed-2-0-code-preview-260215',
+        'kimi-k2-5-260127',
+        'glm-4-7-251222',
+        'DeepSeek-V4-Flash',
+        'DeepSeek-V4-Pro',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('wandb')!.fallbackModels.map((m) => m.id),
+      [
+        'openai/gpt-oss-120b',
+        'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+        'deepseek-ai/DeepSeek-V3.1',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('volcengine-agent-plan')!
+          .fallbackModels
+          .map((m) => m.id),
+      [
+        'doubao-seed-evolving',
+        'doubao-seed-2-1-turbo-260628',
+        'doubao-seed-2-0-lite-260215',
+        'doubao-seed-2-0-mini-260215',
+        'deepseek-v4-flash-ga-260731',
+        'kimi-k3',
+        'glm-5-2-260617',
+        'kimi-k2.7-code',
+        'minimax-m3',
+        'deepseek-v4-pro-260425',
+        'minimax-m2.7',
+        'kimi-k2.6',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('volcengine-agent-plan')!
+          .fallbackModels
+          .first
+          .capabilities,
+      {
+        'contextLength': 1048576,
+        'toolCalling': true,
+        'vision': true,
+        'reasoning': true,
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('volcengine-coding-plan')!
+          .fallbackModels
+          .first
+          .capabilities,
+      {
+        'contextLength': 262144,
+        'toolCalling': true,
+        'vision': true,
+        'reasoning': true,
+      },
+    );
+
+    // UC Direct requires a secret-backed X-API-Key header, which the shared
+    // OpenAI-compatible account connector cannot express.
+    expect(findLlmOpenAiProviderPreset('uc-direct'), isNull);
+  });
+
+  test(
+      'each M47 eligible preset saves, reloads, and routes through Chat and Task Flow',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+    );
+    const presetIds = [
+      'typhoon',
+      'unifically',
+      'unorouter',
+      'upstage',
+      'v0-vercel',
+      'venice',
+      'vercel-ai-gateway',
+      'void-ai',
+      'volcengine',
+      'volcengine-agent-plan',
+      'volcengine-coding-plan',
+      'wandb',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final fallback = preset.fallbackModels.firstOrNull;
+      final model = LlmUpstreamModel(
+        id: 'm47-$presetId:${fallback?.id ?? 'user-model'}',
+        upstreamModelId: fallback?.id ?? 'user-model',
+        displayName: fallback?.displayName ?? 'User model',
+        capabilities: fallback?.capabilities ?? const {},
+        config: const {'apiProtocolOverride': 'anthropic.messages'},
+      );
+      final account = LlmAccount(
+        id: 'm47-$presetId',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {
+          'accountOwnedConfig': 'preserved',
+        }),
+        models: [model],
+      );
+      await service.saveAccount(account, secret: 'key-$presetId');
+      final restored = (await service.getAccount(account.id))!;
+      expect(restored.connectorType, 'openai-compatibility', reason: presetId);
+      expect(restored.endpointConfig['providerPresetId'], presetId);
+      expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+      expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+      expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+      expect(await service.readCredential(account.id), 'key-$presetId');
+      expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+      expect(restored.models.single.capabilities, model.capabilities);
+      expect(
+        restored.models.single.config['apiProtocolOverride'],
+        'anthropic.messages',
+      );
+
+      final group = LlmModelGroup(
+        id: 'm47-$presetId-group',
+        displayName: preset.displayName,
+        members: [
+          LlmModelGroupMember(
+            accountId: restored.id,
+            upstreamModelId: restored.models.single.upstreamModelId,
+          ),
+        ],
+      );
+      final configs = buildLlmModelGroupProviderConfigs(
+        accounts: [restored],
+        groups: [group],
+      );
+      expect(configs, hasLength(1));
+      expect(configs.single.apiProtocol, 'openai.chat_completions');
+      expect(
+        configs.single.models.single.apiProtocolOverride,
+        'anthropic.messages',
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains('openai-compatibility'),
+      );
+    }
+  });
+
+  test(
+      'M47 discovery presets refresh provider-owned model lists with bearer auth',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-${requests.length}'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = [
+      'unifically',
+      'unorouter',
+      'void-ai',
+      'volcengine-coding-plan',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm47-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+      final models = await service.discoverModels(account, refreshRemote: true);
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(models.single.upstreamModelId, 'discovered-${requests.length}');
+    }
+  });
 }
 
 class _MemoryLlmAccountPreferences implements LlmAccountPreferences {
