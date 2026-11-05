@@ -1,7 +1,7 @@
 # In-App Agent Tools for v0.7
 
-**Status:** v0.7 design proposal  
-**Baseline reviewed:** `v0.7` at `47b39099131b3e82e8923b9eb6e65e69db88341e` (2026-10-18)
+**Status:** v0.7 implementation plan; integrations are being delivered in separate changes
+**Baseline reviewed:** `v0.7` at `0d57bfac1ad28e48eae0109e64f16e3e86c33641` (2026-11-05)
 
 ## Goal
 
@@ -19,6 +19,12 @@ Stroom does not currently host an MCP server. The in-app chat also has a separat
 
 The existing `todowrite` tool is a useful starting point, but its list is held in a static in-memory collection, shared by the running app, and writes replace the whole list. It is not persisted per conversation. See `lib/services/todo_tool_service.dart`.
 
+### Delivery status
+
+- Text Storage tools (`stroom_space_list`, `stroom_space_search`, `stroom_space_read`, and `stroom_space_write`) are implemented in draft PR #1395; check that PR for the current CI status. They are not considered delivered until that PR is merged.
+- The current `todowrite` remains an in-memory, app-wide list. Conversation-scoped persistence is still required.
+- OCR, ASR, TTS, and saved task-flow tools are not yet connected to the in-app assistant. Their existing user-facing services and flows remain the source of truth for later integrations.
+
 ### Reusable application capabilities
 
 - **OCR:** `OcrService` supports single-image and batch recognition using configured OCR models.
@@ -29,7 +35,7 @@ The existing `todowrite` tool is a useful starting point, but its list is held i
 
 Relevant sources include `lib/services/ocr_service.dart`, `lib/services/asr_service.dart`, `lib/providers/tts_provider.dart`, `lib/task_flow/services/task_flow_execution_service.dart`, `lib/task_flow/models/block_type_definition.dart`, and `lib/utils/text_manifest.dart`.
 
-## v0.7 design
+## v0.7 implementation plan
 
 ### One local capability registry
 
@@ -50,7 +56,7 @@ The first-party tool definitions should use stable, namespaced names such as `st
 | Task flows | `stroom_task_flow_list`, `stroom_task_flow_run`, `stroom_task_flow_status`, `stroom_task_flow_control` | List saved flows, run a selected flow with an explicit input, inspect execution progress, and pause, resume, or cancel an execution. Keep flow creation and editing in the existing builder UI for the first release. |
 | Text Storage | `stroom_space_list`, `stroom_space_search`, `stroom_space_read`, `stroom_space_write` | List, search, read, and write user-visible text documents in Stroom Text Storage (`txt`, `md`, `mmd`) using manifest record IDs and app-relative folders. |
 
-Tool names are proposals; final names should be checked against provider naming limits and external MCP name collisions before implementation.
+Tool names are proposals; verify provider naming limits and resolve collisions with external MCP tools during implementation.
 
 ### Tool inputs and results
 
@@ -81,8 +87,8 @@ The existing web file store uses IndexedDB and does not provide a general raw-fi
 
 ## Implementation order
 
-1. Define the local tool registry, common result/error handling, namespacing, and per-conversation enablement. Keep existing external MCP behavior unchanged.
-2. Upgrade `todowrite` to conversation-scoped persisted state and add the Text Storage tools through current manifest APIs.
+1. Keep the existing local tool registry and external MCP routing intact; add only the common validation, result handling, and per-conversation settings needed by first-party tools.
+2. Complete the Text Storage tools through the current manifest APIs (in progress in PR #1395), then persist TODO state per conversation.
 3. Add OCR, ASR, and TTS handlers that delegate to their existing services and return Stroom file references where applicable.
 4. Add saved task-flow list/run/status/control tools using the existing execution service and background task tracking.
 5. Verify behavior on web, Android, iOS, Linux, Windows, and macOS. The web path must use manifests and IndexedDB; native paths must stay inside app-managed storage.
