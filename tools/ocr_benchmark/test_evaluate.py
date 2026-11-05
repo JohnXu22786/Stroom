@@ -604,6 +604,93 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(metrics["formula_fidelity"]["value"], 0)
         self.assertEqual(metrics["formula_fidelity"]["pending"], 0)
 
+    def test_unstructured_single_cell_table_requires_exact_prediction(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "single-cell-table",
+                    "gold_text": "xy",
+                    "table_text": "xy",
+                    "categories": ["table"],
+                }
+            ]
+        }
+
+        for output_format in ("plain_text", "markdown", "table", "latex"):
+            cases = [
+                ("xy", 1),
+                ("xyz", 0),
+                ("prefix xy suffix", 0),
+            ]
+            if output_format in {"markdown", "table"}:
+                cases.append(("| xy |", 1))
+            for text, expected_fidelity in cases:
+                with self.subTest(output_format=output_format, text=text):
+                    input_data = predictions(
+                        [{"fixture_id": "single-cell-table", "text": text}]
+                    )
+                    input_data["run"]["output_format"] = output_format
+
+                    report = evaluate_predictions(manifest, input_data)
+
+                    self.assertEqual(
+                        report["metrics"]["table_fidelity"]["value"],
+                        expected_fidelity,
+                    )
+
+    def test_unstructured_single_cell_table_ignores_annotated_formula(self):
+        table = "xy"
+        formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-table-with-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-table-with-formula",
+                        "text": f"{table}\n{formula}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_unstructured_single_cell_table_can_match_annotated_formula(self):
+        table_and_formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-formula-table",
+                        "gold_text": table_and_formula,
+                        "table_text": table_and_formula,
+                        "formula_text": table_and_formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-formula-table",
+                        "text": table_and_formula,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
     def test_missing_or_null_prediction_text_keeps_content_metrics_pending(self):
         report = evaluate_predictions(
             small_manifest(),
