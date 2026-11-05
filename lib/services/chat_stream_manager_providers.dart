@@ -42,10 +42,10 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     _setProvider(streamingFullReplyProvider(convId), '');
     _setProvider(streamingHasFirstTokenProvider(convId), false);
     _setProvider(streamingReasoningProvider(convId), '');
-    _setProvider(streamingReasoningSectionsProvider(convId), []);
-    _setProvider(streamingToolCallsProvider(convId), []);
+    _setProvider(streamingReasoningSectionsProvider(convId), <String>[]);
+    _setProvider(streamingToolCallsProvider(convId), <ToolCallData>[]);
     _setProvider(streamingTextSectionsProvider(convId), ['']);
-    _setProvider(streamingToolCallRoundStartsProvider(convId), []);
+    _setProvider(streamingToolCallRoundStartsProvider(convId), <int>[]);
   }
 
   /// Pushes a provider update for [convId]'s family instance.

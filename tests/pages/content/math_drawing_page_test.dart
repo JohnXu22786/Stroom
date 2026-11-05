@@ -504,8 +504,7 @@ class _DelayedEditorController extends PlatformInAppWebViewController {
 
   @override
   void addJavaScriptHandler(
-      {required String handlerName,
-      required JavaScriptHandlerCallback callback}) {}
+      {required String handlerName, required Function callback}) {}
   @override
   void dispose({bool isKeepAlive = false}) {}
 }

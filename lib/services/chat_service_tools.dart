@@ -18,6 +18,13 @@ extension _ChatServiceToolsExt on ChatService {
     // MCP server's real tool. Let enabled MCP routes resolve before reporting
     // the disabled name, while still blocking the local handler itself.
     final entry = isDisabled ? null : ChatService._toolRegistries[name];
+    final conversationHandler =
+        isDisabled ? null : _conversationToolHandlers[name];
+    if (conversationHandler != null) {
+      final result = conversationHandler(args);
+      if (result is Future<String>) return await result;
+      return result as String;
+    }
     if (entry != null) {
       final handler =
           entry['handler'] as dynamic Function(Map<String, dynamic>);

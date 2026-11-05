@@ -714,8 +714,9 @@ void main() {
     final videosDir = Directory('$appDir/videos');
     await videosDir.create(recursive: true);
     addTearDown(() async {
-      if (await videosDir.exists()) {
-        await videosDir.delete(recursive: true);
+      final video = File('$appDir/videos/prod_big.mp4');
+      if (await video.exists()) {
+        await video.delete();
       }
     });
     final videoPath = '$appDir/videos/prod_big.mp4';

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:html/dom.dart' as html;
+import 'package:html/parser.dart' as html_parser;
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
-/// Full-screen dialog that renders HTML code in a completely open sandbox
-/// WebView browser.
+/// Full-screen dialog that renders HTML code in a WebView.
 ///
 /// Configuration:
 /// - JavaScript enabled
@@ -15,20 +16,43 @@ import 'package:stroom/widgets/html_code_block_widget.dart';
 /// This allows the user to freely browse the rendered HTML, interact with
 /// JavaScript, load CDN libraries, images, and other external resources,
 /// and navigate to linked pages by clicking hyperlinks.
+InAppWebViewSettings htmlPreviewWebViewSettings({required bool sandboxed}) =>
+    InAppWebViewSettings(
+      javaScriptEnabled: true,
+      mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+      allowFileAccess: sandboxed ? false : null,
+      allowContentAccess: !sandboxed,
+      allowFileAccessFromFileURLs: !sandboxed,
+      allowUniversalAccessFromFileURLs: !sandboxed,
+      javaScriptBridgeEnabled: sandboxed ? false : null,
+      javaScriptCanOpenWindowsAutomatically: sandboxed ? false : null,
+      supportMultipleWindows: sandboxed ? false : null,
+      domStorageEnabled: true,
+      // AI-generated previews cannot trigger native download handling.
+      useOnDownloadStart: !sandboxed,
+      useShouldOverrideUrlLoading: sandboxed,
+    );
+
 void showHtmlPreviewDialog({
   required BuildContext context,
   required String htmlCode,
+  bool sandboxed = false,
 }) {
   showDialog(
     context: context,
-    builder: (ctx) => _HtmlPreviewDialogContent(htmlCode: htmlCode),
+    builder: (ctx) =>
+        _HtmlPreviewDialogContent(htmlCode: htmlCode, sandboxed: sandboxed),
   );
 }
 
 class _HtmlPreviewDialogContent extends StatefulWidget {
   final String htmlCode;
+  final bool sandboxed;
 
-  const _HtmlPreviewDialogContent({required this.htmlCode});
+  const _HtmlPreviewDialogContent({
+    required this.htmlCode,
+    required this.sandboxed,
+  });
 
   @override
   State<_HtmlPreviewDialogContent> createState() =>
@@ -55,13 +79,11 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
     // extra body padding via a style override injected into the <head>.
     final base = HtmlCodeBlockWidget.buildHtmlDocument(code);
     // Add dialog-specific body padding override
-    return base.replaceFirst(
-      '</head>',
-      '''  <style>
-    body { padding: 16px; }
-  </style>
-</head>''',
+    final document = html_parser.parse(base);
+    document.head?.append(
+      html.Element.tag('style')..text = 'body { padding: 16px; }',
     );
+    return document.outerHtml;
   }
 
   static const _emptyPlaceholderHtml = '''
@@ -119,16 +141,11 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            // WebView — full screen preview with fully open permissions
+            // AI previews keep scripts and network access but cannot access
+            // Stroom's host bridge or local files.
             InAppWebView(
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                allowFileAccessFromFileURLs: true,
-                allowUniversalAccessFromFileURLs: true,
-                domStorageEnabled: true,
-                // Allow navigation — users can click links and browse
-                useOnDownloadStart: true,
+              initialSettings: htmlPreviewWebViewSettings(
+                sandboxed: widget.sandboxed,
               ),
               initialData: InAppWebViewInitialData(
                 data: _buildHtml(),
@@ -151,6 +168,9 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                   });
                 }
               },
+              shouldOverrideUrlLoading: widget.sandboxed
+                  ? (controller, action) async => NavigationActionPolicy.CANCEL
+                  : null,
             ),
 
             // Loading overlay
@@ -189,18 +209,11 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: cs.error,
-                        ),
+                        Icon(Icons.error_outline, size: 48, color: cs.error),
                         const SizedBox(height: 12),
                         Text(
                           '加载失败',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: cs.onSurface,
-                          ),
+                          style: TextStyle(fontSize: 16, color: cs.onSurface),
                         ),
                       ],
                     ),
@@ -241,8 +254,9 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                     padding: const EdgeInsets.only(right: 8),
                     child: Container(
                       decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.85,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(

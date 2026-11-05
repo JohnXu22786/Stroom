@@ -11,6 +11,7 @@ import '../models/assistant.dart';
 import '../models/chat_message.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
+import '../services/todo_tool_service.dart' show TodoItem;
 import 'assistant_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
@@ -128,6 +129,10 @@ class Conversation {
   /// 发送成功后清空。
   List<Attachment> draftAttachments = [];
 
+  /// Assistant TODO state belongs to this conversation and is persisted with
+  /// the conversation record.
+  List<TodoItem> todoItems;
+
   /// Per-conversation set of MCP/built-in tool names that the user has enabled.
   /// Defaults to empty (interpreted by the chat page as "auto-enable all
   /// available tools" for new conversations; explicit empty is preserved
@@ -217,6 +222,7 @@ class Conversation {
     this.assistantId,
     this.draftText = '',
     List<Attachment>? draftAttachments,
+    List<TodoItem>? todoItems,
     Set<String>? enabledMcpToolNames,
     this.hasExplicitEnabledMcpTools = false,
     this.contextSummary,
@@ -236,6 +242,7 @@ class Conversation {
         updatedAt = updatedAt ?? DateTime.now(),
         messages = messages ?? [],
         enabledMcpToolNames = enabledMcpToolNames ?? {},
+        todoItems = todoItems ?? [],
         draftAttachments = draftAttachments ?? [];
 
   Map<String, dynamic> toMap() => {
@@ -254,6 +261,8 @@ class Conversation {
           'draftAttachments': draftAttachments
               .map((a) => a.toMap(includeBase64Data: true))
               .toList(),
+        if (todoItems.isNotEmpty)
+          'todoItems': todoItems.map((todo) => todo.toJson()).toList(),
         if (contextSummary != null) 'contextSummary': contextSummary,
         if (compactionTailStartId != null)
           'compactionTailStartId': compactionTailStartId,
@@ -365,6 +374,18 @@ class Conversation {
     if (enabledMcpToolNames.remove('todoread')) {
       enabledMcpToolNames.add('todowrite');
     }
+    final todoItems = <TodoItem>[];
+    final todoItemsRaw = map['todoItems'];
+    if (todoItemsRaw is List) {
+      for (final item in todoItemsRaw) {
+        if (item is! Map) continue;
+        try {
+          todoItems.add(TodoItem.fromJson(Map<String, dynamic>.from(item)));
+        } catch (_) {
+          // Skip an invalid TODO entry without dropping the conversation.
+        }
+      }
+    }
     // hasExplicitEnabledMcpTools is true if the user has touched the toggles
     // for this conversation. Defaults to false (new conversation → auto-enable
     // all available tools). Persisted explicitly so an empty
@@ -423,6 +444,7 @@ class Conversation {
       assistantId: assistantIdRaw is String ? assistantIdRaw : null,
       draftText: draftRaw is String ? draftRaw : '',
       draftAttachments: draftAttachments,
+      todoItems: todoItems,
       enabledMcpToolNames: enabledMcpToolNames,
       hasExplicitEnabledMcpTools: hasExplicit,
       contextSummary: contextSummaryRaw is String ? contextSummaryRaw : null,

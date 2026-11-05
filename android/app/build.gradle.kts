@@ -7,6 +7,10 @@ plugins {
 import java.util.Properties
 import java.io.FileInputStream
 
+// The Android CI smoke test runs on an x86_64 emulator. Keep release builds
+// arm64-only, while allowing CI to select the emulator ABI explicitly.
+val ciAndroidAbi = System.getenv("STROOM_CI_ANDROID_ABI")
+
 val keystoreProps = Properties()
 val keystorePropsFile = rootProject.file("key.properties")
 if (keystorePropsFile.exists()) {
@@ -45,7 +49,7 @@ android {
 
         ndk {
             abiFilters.clear()
-            abiFilters.add("arm64-v8a")
+            abiFilters.add(ciAndroidAbi?.takeIf { it == "x86_64" } ?: "arm64-v8a")
         }
     }
 

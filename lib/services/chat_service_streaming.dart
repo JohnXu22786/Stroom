@@ -48,7 +48,7 @@ extension ChatServiceStreamingExt on ChatService {
         if (_isCancelledByUser) return;
         final req = await _protocol.buildRequest(
           history: history,
-          assistantPrompt: _assistantPrompt,
+          assistantPrompt: withChatVisualizationPrompt(_assistantPrompt),
           contextSummary: _contextSummary,
           toolOutputMaxChars:
               ChatService.getEffectiveToolOutputMaxChars(_assistantSettings),
@@ -165,7 +165,7 @@ extension ChatServiceStreamingExt on ChatService {
             ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
         final req = await _protocol.buildRequest(
           history: history,
-          assistantPrompt: _assistantPrompt,
+          assistantPrompt: withChatVisualizationPrompt(_assistantPrompt),
           contextSummary: _contextSummary,
           toolOutputMaxChars: toolOutputMaxChars,
         );

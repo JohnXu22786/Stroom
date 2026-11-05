@@ -11,6 +11,10 @@ extension _ChatPageUiExt on _ChatPageState {
   /// Goes through the position directly (not the controller) so it is not
   /// swallowed by the keyboard-session scroll suppression.
   void _scrollToBottom() {
+    if (_useWebMessages) {
+      _webMessageKey.currentState?.send({'type': 'scrollBottom'});
+      return;
+    }
     if (_chatScrollController.hasClients) {
       _chatScrollController.position.jumpTo(
         _chatScrollController.position.maxScrollExtent,

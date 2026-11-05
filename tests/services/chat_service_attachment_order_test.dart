@@ -44,7 +44,9 @@ class _MessageCaptureProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
-    capturedMessages = messages;
+    capturedMessages = messages
+        .where((message) => message['role'] != 'system')
+        .toList(growable: false);
     return 'test response';
   }
 
@@ -61,7 +63,9 @@ class _MessageCaptureProvider extends BaseChatProvider {
     CancelToken? cancelToken,
     String? system,
   }) async* {
-    capturedMessages = messages;
+    capturedMessages = messages
+        .where((message) => message['role'] != 'system')
+        .toList(growable: false);
     yield AIStreamEvent('test response');
   }
 }

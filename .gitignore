@@ -78,7 +78,12 @@ macos/Pods/
 macos/Runner.xcodeproj/project.xcworkspace/
 macos/Runner.xcodeproj/xcuserdata/
 macos/Runner.xcworkspace/
-macos/Runner.xcworkspace/contents.xcworkspacedata
+!macos/Runner.xcworkspace/
+macos/Runner.xcworkspace/*
+!macos/Runner.xcworkspace/contents.xcworkspacedata
+!macos/Runner.xcworkspace/xcshareddata/
+macos/Runner.xcworkspace/xcshareddata/*
+!macos/Runner.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 macos/Runner/Assets.car
 macos/Runner/AppIcon.appiconset/
 macos/Runner/Runner.app

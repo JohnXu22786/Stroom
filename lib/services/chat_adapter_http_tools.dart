@@ -8,9 +8,29 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
   /// 但它们的可选定义会遵循 MCP 总开关，关闭时不提供给助手与对话。
   void initializeBuiltinTools(ProviderEntriesState entriesState) {
     _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
+    final configuredOcr = flattenProviderModels(entriesState, 'ocr').isNotEmpty;
+    final configuredAsr = flattenProviderModels(entriesState, 'asr').isNotEmpty;
+    final configuredTts = flattenProviderModels(entriesState, 'tts').isNotEmpty;
+    for (final def in ChatMediaToolService.toolDefinitions) {
+      ChatService.registerTool(
+        def,
+        (_) =>
+            'Error: ${def.name} is available only inside its chat conversation.',
+      );
+    }
+    for (final def in ChatTaskFlowToolService.toolDefinitions) {
+      ChatService.registerTool(
+        def,
+        (_) =>
+            'Error: ${def.name} is available only inside its chat conversation.',
+      );
+    }
     _disabledMcpToolNames = {
       ...disabledMcpToolNames(entriesState),
       if (!_mcpMasterSwitchEnabled) ...kMcpSearchToolNames,
+      if (!configuredOcr) ChatMediaToolService.ocrToolName,
+      if (!configuredAsr) ChatMediaToolService.asrToolName,
+      if (!configuredTts) 'stroom_tts',
     };
     ChatService.setDisabledToolNames(_disabledMcpToolNames);
     final mcpEntry =

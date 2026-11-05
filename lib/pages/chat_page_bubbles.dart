@@ -188,6 +188,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                       streamingMsgId: _streamingMsgId,
                       messageId: messageId,
                       streamingText: s.text,
+                      conversationViewportHeight: _conversationViewportHeight,
                     ),
                     markdownGenerator: buildSearchMarkdownGenerator(
                       query: _searchQuery,
@@ -211,6 +212,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                       streamingMsgId: _streamingMsgId,
                       messageId: messageId,
                       streamingText: s.text,
+                      conversationViewportHeight: _conversationViewportHeight,
                     ),
                     markdownGenerator: markdownGenerator,
                   ),
@@ -296,6 +298,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
       streamingMsgId: _streamingMsgId,
       messageId: message.id,
       streamingText: message.text,
+      conversationViewportHeight: _conversationViewportHeight,
     );
 
     return Container(

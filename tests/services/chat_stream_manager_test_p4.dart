@@ -308,5 +308,67 @@ void chatStreamManagerGroup4() {
         manager.dispose();
       },
     );
+
+    test('todowrite uses and persists the owning conversation handler',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      var globalHandlerCalled = false;
+      final todoDefinition = TodoToolService.toolDefinitions.single;
+      ChatService.setDisabledToolNames({});
+      ChatService.registerTool(todoDefinition, (_) {
+        globalHandlerCalled = true;
+        return 'global handler';
+      });
+      addTearDown(() {
+        ChatService.setDisabledToolNames({});
+        ChatService.registerTool(todoDefinition, TodoToolService.handleTodo);
+      });
+
+      final conversation = Conversation(id: 'todo-chat', title: 'Study');
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(ref);
+            notifier.state = [conversation];
+            return notifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+      final manager = container.read(chatStreamManagerProvider);
+      addTearDown(manager.dispose);
+      final provider = _MockProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'todo-call',
+              'type': 'function',
+              'function': {
+                'name': 'todowrite',
+                'arguments': jsonEncode({
+                  'todos': [
+                    {'content': 'Review notes', 'priority': 'high'},
+                  ],
+                }),
+              },
+            },
+          ]),
+        ],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      await manager.startStreaming(
+        text: 'Track this study task',
+        convId: conversation.id,
+        history: [_userMsg('Track this study task')],
+        tools: [todoDefinition],
+      );
+
+      final savedConversation = container
+          .read(conversationsProvider)
+          .singleWhere((item) => item.id == conversation.id);
+      expect(savedConversation.todoItems.single.content, 'Review notes');
+      expect(globalHandlerCalled, isFalse);
+    });
   });
 }

@@ -64,6 +64,8 @@ void chatStreamManagerGroup2() {
 
       expect(manager.isStreaming, false);
       expect(result.fullReply.startsWith('错误:'), true);
+      expect(result.assistantMessage!.blocks!.whereType<TextBlock>().first.text,
+          result.fullReply);
 
       manager.dispose();
     });

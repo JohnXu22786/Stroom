@@ -2,14 +2,19 @@
 //   - conversation_draft_test.dart
 //   - conversation_history_ordering_test.dart
 //   - conversation_mcp_tools_test.dart
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/services/todo_tool_service.dart'
+    show TodoItem, TodoToolService;
 part 'conversation_test_p1.dart';
 part 'conversation_test_p2.dart';
 part 'conversation_test_p3.dart';

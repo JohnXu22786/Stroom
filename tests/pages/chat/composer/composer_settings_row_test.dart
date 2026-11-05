@@ -22,7 +22,8 @@ Widget createChatTestApp({String? activeConversationId}) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: MaterialApp(home: const ChatPage()),
+    child:
+        MaterialApp(home: const ChatPage.withNativeMessageRendererForTesting()),
   );
 }
 

@@ -6,6 +6,16 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageEditingExt on _ChatPageState {
+  /// History-changing actions must wait for both the UI stream marker and
+  /// the stream manager's final persistence work to finish.
+  bool get _historyMutationBlocked {
+    if (_isStreamingActive) return true;
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId == null) return false;
+    return ref.read(streamingConversationsProvider).contains(activeId) ||
+        ref.read(chatStreamManagerProvider).isStreamingFor(activeId);
+  }
+
   /// Removes [messageId]'s controller item and all per-message caches.
   ///
   /// Shared by the edit / retry truncation loops. The controller removal is
@@ -44,13 +54,9 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   void _confirmRetryOrEdit(String messageId) {
+    if (_historyMutationBlocked) return;
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    final activeId = ref.read(activeConversationIdProvider);
-    if (activeId != null &&
-        ref.read(streamingConversationsProvider).contains(activeId)) {
-      return;
-    }
 
     final msg = _history[index];
     final isUser = msg.role == 'user';
@@ -66,18 +72,9 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   void _startEditMessage(String messageId) {
+    if (_historyMutationBlocked) return;
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    final activeId = ref.read(activeConversationIdProvider);
-    // Check both the provider set AND the local flag — there's a
-    // microsecond window between _isStreamingActive=true (set
-    // synchronously in _startStreaming) and the
-    // streamingConversationsProvider update (pushed by the manager).
-    if ((activeId != null &&
-            ref.read(streamingConversationsProvider).contains(activeId)) ||
-        _isStreamingActive) {
-      return;
-    }
     final msg = _history[index];
 
     // Instead of showing a separate dialog, enter edit mode in the composer.
@@ -104,7 +101,7 @@ extension _ChatPageEditingExt on _ChatPageState {
     String newText,
     List<Attachment> attachments,
   ) {
-    if (!mounted) return;
+    if (!mounted || _historyMutationBlocked) return;
     // Clear edit state
     setState(() {
       _editingMessageId = null;
@@ -131,6 +128,7 @@ extension _ChatPageEditingExt on _ChatPageState {
     String newText,
     List<Attachment> newAttachments,
   ) async {
+    if (_historyMutationBlocked) return;
     // Re-entrancy guard: prevent concurrent edit operations (e.g.
     // rapid double-tap on "Send" in edit mode).
     if (_isModifyingHistory) return;
@@ -187,6 +185,7 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
+    if (_historyMutationBlocked) return;
     _isModifyingHistory = true;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
@@ -234,11 +233,10 @@ extension _ChatPageEditingExt on _ChatPageState {
     // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
     if (messageId == _streamingMsgId) return;
-    final activeId = ref.read(activeConversationIdProvider);
-    if (activeId != null &&
-        ref.read(streamingConversationsProvider).contains(activeId)) {
-      return;
-    }
+    // Stop clears the provider's streaming marker immediately so the composer
+    // responds at once. The manager still owns persistence until cancellation
+    // finalization completes, so keep deletion blocked during that interval.
+    if (_historyMutationBlocked) return;
     final index = _history.indexWhere((m) => m.id == messageId);
     // 孤儿消息：只存在于 controller/缓存、不在 _history 中（如 Stop 掉
     // 的部分回复）。直接移除 controller 项与缓存——否则其工具卡片会
@@ -305,6 +303,7 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   void _confirmDeleteMessage(String messageId) {
+    if (_historyMutationBlocked) return;
     showDeleteConfirmDialog(
       context: context,
       onDelete: () => _deleteMessage(messageId),

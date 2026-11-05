@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
-import 'package:stroom/widgets/html_code_block_widget.dart';
+import 'package:stroom/widgets/html_inline_preview_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -757,173 +757,57 @@ void main() {
   });
 
   group('HTML code block builder', () {
-    test('returns HtmlCodeBlockWidget for html language', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final widget = builder('<h1>Hello</h1>', 'html');
-      expect(widget, isA<HtmlCodeBlockWidget>());
-      final htmlWidget = widget as HtmlCodeBlockWidget;
-      expect(htmlWidget.htmlCode, '<h1>Hello</h1>');
-    });
-
-    test('returns CodeBlockSourceView for non-html languages (python)', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final widget = builder('print("hello")', 'python');
+    test('plain html language stays a regular source code block', () {
+      final widget =
+          codeBlockPreConfig(isDark: false).builder!('<h1>Hello</h1>', 'html');
       expect(widget, isA<CodeBlockSourceView>());
+      expect((widget as CodeBlockSourceView).language, 'html');
     });
 
-    test('returns CodeBlockSourceView for non-html languages (dart)', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final widget = builder('void main() {}', 'dart');
-      expect(widget, isA<CodeBlockSourceView>());
+    test('html-preview language selects the inline visual renderer', () {
+      final widget = codeBlockPreConfig(isDark: false).builder!(
+          '<h1>Hello</h1>', 'html-preview');
+      expect(widget, isA<HtmlInlinePreviewWidget>());
+      expect((widget as HtmlInlinePreviewWidget).htmlCode, '<h1>Hello</h1>');
     });
 
-    test('returns CodeBlockSourceView for empty language', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final widget = builder('<h1>test</h1>', '');
-      expect(widget, isA<CodeBlockSourceView>());
-    });
-
-    test('returns CodeBlockSourceView for unknown language', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final widget = builder('<h1>test</h1>', 'unknown_language_xyz');
-      expect(widget, isA<CodeBlockSourceView>());
-    });
-
-    test('html builder works in dark mode too', () {
-      final pre = codeBlockPreConfig(isDark: true);
-      final builder = pre.builder!;
-      final widget = builder('<button>Click</button>', 'html');
-      expect(widget, isA<HtmlCodeBlockWidget>());
-      final htmlWidget = widget as HtmlCodeBlockWidget;
-      expect(htmlWidget.htmlCode, '<button>Click</button>');
-    });
-
-    test('mermaid still works when HTML support is added', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final builder = pre.builder!;
-      final mermaidWidget = builder('graph TD', 'mermaid');
-      expect(mermaidWidget, isA<MermaidRenderWidget>());
-    });
-
-    test('preConfig builder returns MermaidRenderWidget when not streaming',
+    test('html-preview uppercase language is recognized case-insensitively',
         () {
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
-      final builder = pre.builder!;
-      final widget = builder('graph TD\nA-->B', 'mermaid');
+      final widget = codeBlockPreConfig(isDark: false).builder!(
+          '<h1>Hello</h1>', 'HTML-PREVIEW');
+      expect(widget, isA<HtmlInlinePreviewWidget>());
+    });
+
+    test('open html-preview fence is marked streaming and remains inert', () {
+      final widget = codeBlockPreConfig(
+        isDark: false,
+        isStreaming: true,
+        streamingText: '```html-preview\n<script>window.ran = true;</script>',
+      ).builder!('<script>window.ran = true;</script>', 'html-preview')
+          as HtmlInlinePreviewWidget;
+      expect(widget.isStreaming, isTrue);
+    });
+
+    test('closed html-preview fence is ready even if later prose streams', () {
+      final widget = codeBlockPreConfig(
+        isDark: false,
+        isStreaming: true,
+        streamingText: '```html-preview\n<div>done</div>\n```\nmore text',
+      ).builder!('<div>done</div>', 'html-preview') as HtmlInlinePreviewWidget;
+      expect(widget.isStreaming, isFalse);
+    });
+
+    test('mermaid still renders while HTML visualization uses a separate fence',
+        () {
+      final widget =
+          codeBlockPreConfig(isDark: false).builder!('graph TD', 'mermaid');
       expect(widget, isA<MermaidRenderWidget>());
     });
 
-    test(
-        'preConfig builder returns loading widget (not CodeBlockSourceView) when streaming mermaid',
-        () {
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
-      final builder = pre.builder!;
-      final widget = builder('graph TD\nA-->B', 'mermaid');
-      // During streaming, mermaid code blocks now show a loading widget
-      // instead of CodeBlockSourceView or the full MermaidRenderWidget.
-      expect(widget, isNot(isA<CodeBlockSourceView>()));
-      expect(widget, isNot(isA<MermaidRenderWidget>()));
-    });
-
-    test('preConfig builder still renders non-mermaid code during streaming',
-        () {
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
-      final builder = pre.builder!;
-      final widget = builder('print("hello")', 'python');
+    test('other languages keep the DSH source renderer', () {
+      final widget = codeBlockPreConfig(isDark: false).builder!(
+          'print("hello")', 'python');
       expect(widget, isA<CodeBlockSourceView>());
-    });
-
-    test('preConfig builder still renders html code during streaming', () {
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
-      final builder = pre.builder!;
-      final widget = builder('<h1>Hello</h1>', 'html');
-      expect(widget, isA<HtmlCodeBlockWidget>());
-    });
-
-    test('html block with an OPEN fence gets isStreaming=true', () {
-      // Same fence-completion check as mermaid: while the html fence is
-      // still open (streamingText is the unclosed tail), the card must
-      // show its "正在生成中" state.
-      final pre = codeBlockPreConfig(
-        isDark: false,
-        isStreaming: true,
-        streamingText: '```html\n<div>',
-      );
-      final widget = pre.builder!('<div>', 'html') as HtmlCodeBlockWidget;
-      expect(widget.isStreaming, isTrue);
-    });
-
-    test('html block with a CLOSED fence renders as a finished card', () {
-      // The stream continues after the closed fence, but this html block
-      // itself is complete → the card must NOT show "正在生成中".
-      final pre = codeBlockPreConfig(
-        isDark: false,
-        isStreaming: true,
-        streamingText: '```html\n<div>x</div>\n```\nmore text',
-      );
-      final widget =
-          pre.builder!('<div>x</div>', 'html') as HtmlCodeBlockWidget;
-      expect(widget.isStreaming, isFalse);
-    });
-
-    test('uppercase HTML fence renders the card with the as-is language', () {
-      // ```HTML must be treated as html (case-insensitive) and the badge
-      // must keep the original casing.
-      final pre = codeBlockPreConfig(isDark: false);
-      final widget =
-          pre.builder!('<h1>Hello</h1>', 'HTML') as HtmlCodeBlockWidget;
-      expect(widget.language, 'HTML');
-    });
-
-    test('language label is passed through to CodeBlockSourceView', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final widget =
-          pre.builder!('print("hi")', 'python') as CodeBlockSourceView;
-      expect(widget.language, 'python');
-    });
-
-    test('empty language passes an empty label to CodeBlockSourceView', () {
-      final pre = codeBlockPreConfig(isDark: false);
-      final widget = pre.builder!('some code', '') as CodeBlockSourceView;
-      expect(widget.language, '');
-    });
-
-    test('plain code block is streaming only while it is the open tail', () {
-      // Same fence-completion check as mermaid/html: of the two python
-      // blocks in the streaming text, only the still-open trailing one is
-      // the block currently being generated.
-      final pre = codeBlockPreConfig(
-        isDark: false,
-        isStreaming: true,
-        streamingText:
-            '```python\nclosed\n```\nthen prose\n```python\nopen\nmore',
-      );
-      final closed = pre.builder!('closed', 'python') as CodeBlockSourceView;
-      expect(closed.isStreaming, isFalse,
-          reason: 'a closed block must not auto-scroll');
-      final openTail =
-          pre.builder!('open\nmore', 'python') as CodeBlockSourceView;
-      expect(openTail.isStreaming, isTrue,
-          reason: 'the still-open trailing block is the one being generated');
-    });
-
-    test('plain code block is streaming when streamingText is unavailable', () {
-      // Legacy path (streamingText == null): every code block in the
-      // streaming message is treated as still being generated.
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
-      final widget = pre.builder!('x = 1', 'python') as CodeBlockSourceView;
-      expect(widget.isStreaming, isTrue);
-    });
-
-    test('plain code block is not streaming when the message is not', () {
-      final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
-      final widget = pre.builder!('x = 1', 'python') as CodeBlockSourceView;
-      expect(widget.isStreaming, isFalse);
     });
   });
 
