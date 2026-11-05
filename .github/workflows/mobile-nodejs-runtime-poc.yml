@@ -100,7 +100,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -partition-size 4096
           script: |
             adb install nodejs-mobile/tools/mobile-test/android/testnode/app/build/outputs/apk/debug/app-debug.apk
             cp tools/mobile-runtime-poc/run-nodejs-mobile.sh "$RUNNER_TEMP/run-nodejs-mobile.sh"
