@@ -73,12 +73,17 @@ class _ConversationStreamState {
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
   ChatMessage? pendingContinuation;
-  final StringBuffer _fullReply = StringBuffer();
-  String get fullReply => _fullReply.toString();
+  // The text sections are the canonical live representation. Completed
+  // sections are immutable strings, and only the current section remains a
+  // mutable buffer. This lets throttled snapshots reuse sealed sections
+  // instead of copying the full reply for every update.
+  final List<String> _completedTextChunks = [];
+  StringBuffer _currentTextChunk = StringBuffer();
+
+  String get fullReply => textChunks.join();
   set fullReply(String value) {
-    _fullReply
-      ..clear()
-      ..write(value);
+    _completedTextChunks.clear();
+    _currentTextChunk = StringBuffer(value);
   }
 
   final StringBuffer _reasoningBuffer = StringBuffer();
@@ -106,26 +111,25 @@ class _ConversationStreamState {
     _reasoningSectionActive = false;
   }
 
-  // Text chunks are ranges into the canonical full reply. Keeping a buffer
-  // per chunk as well as `_fullReply` retained every streamed character twice.
-  final List<int> _textChunkStarts = [0];
+  // Only the growing section needs to be materialized at each throttle tick.
+  // Previously each read converted the full reply to a String, then sliced
+  // every section from that new full copy.
   List<String> get textChunks {
-    final reply = _fullReply.toString();
-    return List<String>.generate(_textChunkStarts.length, (index) {
-      final start = _textChunkStarts[index];
-      final end = index + 1 < _textChunkStarts.length
-          ? _textChunkStarts[index + 1]
-          : reply.length;
-      return reply.substring(start, end);
-    });
+    return List<String>.unmodifiable([
+      ..._completedTextChunks,
+      _currentTextChunk.toString(),
+    ]);
   }
 
-  void appendText(String text) => _fullReply.write(text);
+  void appendText(String text) => _currentTextChunk.write(text);
 
-  void startTextChunk() => _textChunkStarts.add(_fullReply.length);
+  void startTextChunk() {
+    _completedTextChunks.add(_currentTextChunk.toString());
+    _currentTextChunk = StringBuffer();
+  }
 
   bool get currentTextChunkIsNotEmpty =>
-      _textChunkStarts.last < _fullReply.length;
+      _currentTextChunk.length > 0;
 
   /// Per-round text chunks that mirror reasoning sections: each time a new
   /// tool call round begins, a new chunk is started so that post-stream

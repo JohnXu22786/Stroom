@@ -71,6 +71,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final convId = _attachedStreamConvId;
     final msgId = _attachedStreamMsgId;
     if (manager != null && convId != null && msgId != null) {
+      _streamingMarkdownCache
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
       manager.detachStreamPage(
         convId,
         msgId,
@@ -536,6 +538,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
         // 内的分段/推理缓存条目（切换对话时会统一清除）。
         await _controller?.removeMessage(placeholder);
         _chatSegments.remove(aiMsgId);
+        _streamingMarkdownCache
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _reasoningContents.remove(aiMsgId);
         _isReasoningCompletedForMsg.remove(aiMsgId);
       }
@@ -545,6 +549,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
   /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
+    _streamingMarkdownCache
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: msg.reasoningSections ?? [],
       textChunks: msg.textSections ?? [],
@@ -580,18 +586,38 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (convId == null) return;
 
     final segments = buildAgentChainSegments(
-      reasoningSections: List<String>.from(
-          ref.read(streamingReasoningSectionsProvider(convId))),
-      textChunks:
-          List<String>.from(ref.read(streamingTextSectionsProvider(convId))),
-      toolCalls:
-          List<ToolCallData>.from(ref.read(streamingToolCallsProvider(convId))),
+      reasoningSections: ref.read(streamingReasoningSectionsProvider(convId)),
+      textChunks: ref.read(streamingTextSectionsProvider(convId)),
+      toolCalls: ref.read(streamingToolCallsProvider(convId)),
       isLastReasoningStreaming: !(_isReasoningCompletedForMsg[msgId] ?? false),
-      toolCallRoundStarts: List<int>.from(
-          ref.read(streamingToolCallRoundStartsProvider(convId))),
+      toolCallRoundStarts:
+          ref.read(streamingToolCallRoundStartsProvider(convId)),
     );
 
     _chatSegments[msgId] = segments;
+  }
+
+  /// Replaces only the final growing text section after a throttled text
+  /// update. The sealed reasoning, text, and tool segments keep their object
+  /// identity so their Markdown widgets can reuse the existing parse tree.
+  bool _updateLiveTextSegment(String msgId, List<String> textChunks) {
+    if (textChunks.isEmpty) return false;
+    final segments = _chatSegments[msgId];
+    if (segments == null) return false;
+    final chunkIndex = textChunks.length - 1;
+    final segmentIndex = segments.lastIndexWhere(
+      (segment) =>
+          segment is TextSegment && segment.chunkIndex == chunkIndex,
+    );
+    if (segmentIndex == -1) return false;
+
+    final updated = List<MessageSegment>.of(segments);
+    updated[segmentIndex] = TextSegment(
+      textChunks[chunkIndex],
+      chunkIndex: chunkIndex,
+    );
+    _chatSegments[msgId] = updated;
+    return true;
   }
 
   void _stopStreaming() {

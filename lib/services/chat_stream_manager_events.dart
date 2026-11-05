@@ -20,8 +20,8 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           // Text sections are the sole live text provider. The page derives
           // its controller message from these ranges instead of retaining a
           // second full-reply snapshot in another provider.
-          _pushToProvider(convId, streamingTextSectionsProvider,
-              List<String>.from(state.textChunks));
+          _pushToProvider(
+              convId, streamingTextSectionsProvider, state.textChunks);
         }
 
       case ReasoningEvent e:
@@ -87,8 +87,8 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // triggered by the toolCalls push reads the stale round boundary and
         // renders the new round's reasoning at the bottom until the first
         // complete event of the round.
-        _pushToProvider(convId, streamingTextSectionsProvider,
-            List<String>.from(state.textChunks));
+        _pushToProvider(
+            convId, streamingTextSectionsProvider, state.textChunks);
         _pushToProvider(convId, streamingToolCallRoundStartsProvider,
             List<int>.from(state.toolCallRoundStarts));
         _pushToProvider(convId, streamingToolCallsProvider,

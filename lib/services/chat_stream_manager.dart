@@ -237,7 +237,7 @@ class ChatStreamManager {
 
   /// Text chunks for a specific conversation.
   List<String> textChunksFor(String convId) =>
-      List.unmodifiable(_streams[convId]?.textChunks ?? []);
+      _streams[convId]?.textChunks ?? const [];
 
   /// Tool call round starts for a specific conversation.
   List<int> toolCallRoundStartsFor(String convId) =>

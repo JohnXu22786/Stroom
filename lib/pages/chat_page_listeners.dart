@@ -82,12 +82,17 @@ extension _ChatPageListenersExt on _ChatPageState {
         _rebuildLiveSegments(msgId);
         return;
       }
+      final reasoningWasCompleted =
+          _isReasoningCompletedForMsg[msgId] ?? false;
       _isReasoningCompletedForMsg[msgId] = true;
       // Switch the placeholder to the normal assistant bubble without
       // copying the growing reply into the chat controller. Text is rendered
       // from the live segments below.
       _updateStreamingMessage(msgId, '');
-      _rebuildLiveSegments(msgId);
+      if (!reasoningWasCompleted ||
+          !_updateLiveTextSegment(msgId, next)) {
+        _rebuildLiveSegments(msgId);
+      }
       // Other segment changes are refreshed by their reasoning/tool listener.
     });
   }
