@@ -24,11 +24,12 @@ class _MockProvider extends BaseChatProvider {
 
   /// When non-null, the provider waits for this completer before yielding.
   final Completer<void>? waitForYield;
+  final Completer<void>? firstCallStarted;
   bool throwAfterYield = false;
   Object? errorAfterYield;
   final List<List<Map<String, dynamic>>> capturedMessages = [];
 
-  _MockProvider(this._rounds, {this.waitForYield});
+  _MockProvider(this._rounds, {this.waitForYield, this.firstCallStarted});
 
   int get callCount => _callCount;
 
@@ -55,6 +56,9 @@ class _MockProvider extends BaseChatProvider {
       throw Exception('Simulated provider error');
     }
     _callCount++;
+    if (_callCount == 1 && firstCallStarted != null) {
+      firstCallStarted!.complete();
+    }
     capturedMessages.add(messages);
     if (_callCount <= _rounds.length) {
       if (waitForYield != null) await waitForYield!.future;

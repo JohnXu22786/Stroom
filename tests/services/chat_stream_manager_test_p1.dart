@@ -85,6 +85,7 @@ void chatStreamManagerGroup1() {
     test('continuation handler survives stop followed by resend', () async {
       final manager = ChatStreamManager();
       final firstStreamGate = Completer<void>();
+      final firstCallStarted = Completer<void>();
       final networkFailure = DioException(
         requestOptions: RequestOptions(path: '/chat'),
         type: DioExceptionType.connectionError,
@@ -95,6 +96,7 @@ void chatStreamManagerGroup1() {
           [AIStreamEvent('partial answer')],
         ],
         waitForYield: firstStreamGate,
+        firstCallStarted: firstCallStarted,
       )..errorAfterYield = networkFailure;
       manager.adapter.forceService(_makeChatService(provider));
       final displayedContinuations = <ChatMessage>[];
@@ -104,6 +106,7 @@ void chatStreamManagerGroup1() {
         convId: 'conv-stop-resend',
         history: [_userMsg('Stop this turn')],
       );
+      await firstCallStarted.future;
       manager.cancel('conv-stop-resend');
       manager.setContinuationHandler(
         'conv-stop-resend',
