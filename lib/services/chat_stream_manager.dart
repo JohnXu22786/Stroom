@@ -278,6 +278,7 @@ class ChatStreamManager {
     required List<ChatMessage> history,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
+    Future<void> Function(ChatMessage continuation)? onContinuation,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -497,8 +498,8 @@ class ChatStreamManager {
                 tools: tools,
                 convId: convId,
                 assistant: assistant,
-                entriesState: entriesStateOverride ??
-                    _ref?.read(providerEntriesProvider),
+                entriesState:
+                    entriesStateOverride ?? _ref?.read(providerEntriesProvider),
               );
 
     // Now safe to yield to event loop — all state is established and the
@@ -530,6 +531,7 @@ class ChatStreamManager {
               !shouldAutoContinueStream(
                 error: e,
                 hasPartialOutput: state.fullReply.isNotEmpty,
+                hasToolHistory: state.toolCalls.isNotEmpty,
               )) {
             rethrow;
           }
@@ -541,6 +543,12 @@ class ChatStreamManager {
           );
           state.history.add(continuation);
           state.historyOnSuccess?.add(continuation);
+          try {
+            await onContinuation?.call(continuation);
+          } catch (callbackError) {
+            debugPrint(
+                '[ChatStreamManager] continuation display callback failed: $callbackError');
+          }
           streamHistory = [
             ...streamHistory,
             ChatMessage(role: 'assistant', content: state.fullReply),

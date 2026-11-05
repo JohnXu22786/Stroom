@@ -52,19 +52,26 @@ void chatStreamManagerGroup1() {
       );
       final provider = _MockProvider([
         [AIStreamEvent('partial answer')],
-      ])..errorAfterYield = networkFailure;
+      ])
+        ..errorAfterYield = networkFailure;
       manager.adapter.forceService(_makeChatService(provider));
+      final displayedContinuations = <ChatMessage>[];
 
       final result = await manager.startStreaming(
         text: 'Hi',
         convId: 'conv-network-continue',
         history: [_userMsg('Hi', 'u-original')],
+        onContinuation: (message) async => displayedContinuations.add(message),
       );
 
       expect(provider.callCount, 2);
       expect(result.history.map((message) => message.role),
           ['user', 'user', 'assistant']);
       expect(result.history[1].content, 'Continue if not finished.');
+      expect(displayedContinuations, hasLength(1));
+      expect(displayedContinuations.single.role, 'user');
+      expect(
+          displayedContinuations.single.content, 'Continue if not finished.');
       expect(result.fullReply, 'partial answerFinal response');
       final resentMessages = provider.capturedMessages.last;
       expect(resentMessages.last['role'], 'user');

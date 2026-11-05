@@ -14,12 +14,14 @@ class RateLimitRetryPolicy {
   final int maxRetries;
   final Duration initialDelay;
   final Duration maxDelay;
+  final Duration maxRetryAfter;
   final bool jitter;
 
   const RateLimitRetryPolicy({
     this.maxRetries = 4,
     this.initialDelay = const Duration(milliseconds: 500),
     this.maxDelay = const Duration(seconds: 5),
+    this.maxRetryAfter = const Duration(minutes: 1),
     this.jitter = true,
   });
 
@@ -28,7 +30,8 @@ class RateLimitRetryPolicy {
     final rawMs = initialDelay.inMilliseconds * multiplier;
     final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
     if (!jitter) return Duration(milliseconds: cappedMs);
-    final fraction = (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
+    final fraction =
+        (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
     return Duration(milliseconds: (cappedMs * fraction).round());
   }
 }
@@ -50,11 +53,14 @@ Stream<T> retryRateLimitedStream<T>(
       }
       return;
     } catch (error) {
-      if (emittedEvent || retries >= policy.maxRetries || !_isRateLimit(error)) {
+      if (emittedEvent ||
+          retries >= policy.maxRetries ||
+          !_isRateLimit(error)) {
         rethrow;
       }
       retries++;
-      final wait = _retryAfter(error) ?? policy.delayForRetry(retries);
+      final wait = _retryAfter(error, maximum: policy.maxRetryAfter) ??
+          policy.delayForRetry(retries);
       await (delay?.call(wait) ?? Future<void>.delayed(wait));
     }
   }
@@ -63,19 +69,20 @@ Stream<T> retryRateLimitedStream<T>(
 bool _isRateLimit(Object error) =>
     error is DioException && error.response?.statusCode == 429;
 
-Duration? _retryAfter(Object error) {
+Duration? _retryAfter(Object error, {required Duration maximum}) {
   if (error is! DioException) return null;
   final value = error.response?.headers.value('retry-after');
   if (value == null) return null;
   final seconds = double.tryParse(value.trim());
   if (seconds != null && seconds >= 0 && seconds.isFinite) {
-    return Duration(milliseconds: (seconds * 1000).round());
+    final millis = math.min(seconds * 1000, maximum.inMilliseconds).round();
+    return Duration(milliseconds: millis);
   }
   final date = _parseRetryAfterDate(value);
   if (date == null) return null;
   final remaining = date.difference(DateTime.now());
   if (remaining.isNegative) return Duration.zero;
-  return remaining;
+  return remaining > maximum ? maximum : remaining;
 }
 
 DateTime? _parseRetryAfterDate(String value) {
@@ -171,15 +178,17 @@ DateTime? _validatedUtcDate({
 bool shouldAutoContinueStream({
   required Object? error,
   required bool hasPartialOutput,
+  bool hasToolHistory = false,
 }) {
-  if (!hasPartialOutput || error == null) return false;
+  if (!hasPartialOutput || hasToolHistory || error == null) return false;
   if (error is DioException) {
     if (error.response?.statusCode != null) return false;
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
       DioExceptionType.receiveTimeout ||
-      DioExceptionType.connectionError => true,
+      DioExceptionType.connectionError =>
+        true,
       DioExceptionType.unknown => _isNetworkTransportCause(error.error),
       _ => false,
     };
