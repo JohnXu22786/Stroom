@@ -840,8 +840,72 @@ def _table_matches(
 ) -> bool:
     allow_tsv = output_format == "plain_text"
     expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
+    if formula_text:
+        canonical_formula = _canonical_formula(formula_text, output_format)
+        strip_markdown_markup = output_format in {"markdown", "table"}
+
+        def matches_formula_row(value: str) -> bool:
+            return canonical_formula == _canonical_formula(
+                value,
+                output_format,
+                strip_markdown_markup=strip_markdown_markup,
+                formula_text=formula_text,
+            )
+
+        def is_formula_line(value: str) -> bool:
+            stripped = value.strip()
+            if matches_formula_row(stripped):
+                return True
+            if stripped.startswith("|") and _has_unescaped_trailing_pipe(stripped):
+                parsed_row = _table_rows(stripped, 1)
+                return len(parsed_row) == 1 and matches_formula_row(
+                    parsed_row[0][0]
+                )
+            return False
+
     if not expected_rows:
-        return normalize_text(expected) in normalize_text(actual)
+        candidates = [actual]
+        if formula_text:
+            table_lines = actual.splitlines()
+            for line_index, line in enumerate(table_lines):
+                if is_formula_line(line):
+                    candidates.append(
+                        "\n".join(
+                            table_lines[:line_index] + table_lines[line_index + 1 :]
+                        )
+                    )
+                    break
+        normalized_expected = normalize_text(expected)
+        expected_row = (normalized_expected,)
+        for candidate in candidates:
+            if normalized_expected == normalize_text(candidate):
+                return True
+
+            candidate_rows = []
+            for line in candidate.splitlines():
+                if not line.strip():
+                    continue
+                rows = _table_rows(
+                    line,
+                    1,
+                    matching_rows={expected_row},
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if rows:
+                    candidate_rows.extend(rows)
+                elif output_format in {"markdown", "table"} and (
+                    _is_table_separator_row(line, 1)
+                ):
+                    continue
+                else:
+                    break
+            else:
+                if candidate_rows == [expected_row]:
+                    return True
+        return False
     expected_column_count = max(len(row) for row in expected_rows)
     known_prose_rows = set()
     if gold_text is not None:
@@ -857,30 +921,9 @@ def _table_matches(
                 if prose_row not in expected_rows:
                     known_prose_rows.add(prose_row)
     if formula_text:
-        canonical_formula = _canonical_formula(formula_text, output_format)
-        strip_markdown_markup = output_format in {"markdown", "table"}
-
-        def matches_formula_row(value: str) -> bool:
-            return canonical_formula == _canonical_formula(
-                value,
-                output_format,
-                strip_markdown_markup=strip_markdown_markup,
-                formula_text=formula_text,
-            )
-
         table_lines = actual.splitlines()
         for line_index, line in enumerate(table_lines):
-            stripped = line.strip()
-            formula_row = matches_formula_row(stripped)
-            if (
-                not formula_row
-                and stripped.startswith("|")
-                and _has_unescaped_trailing_pipe(stripped)
-            ):
-                parsed_row = _table_rows(stripped, 1)
-                if len(parsed_row) == 1:
-                    formula_row = matches_formula_row(parsed_row[0][0])
-            if formula_row:
+            if is_formula_line(line):
                 candidate_lines = table_lines[:line_index] + table_lines[
                     line_index + 1 :
                 ]
