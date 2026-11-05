@@ -30,6 +30,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final assistants = ref.watch(assistantProvider);
+    final isLoading = ref.watch(assistantInitialLoadProvider).isLoading;
     final cs = Theme.of(context).colorScheme;
     final pressHighlightColor = cs.primary.withValues(alpha: 0.02);
     final dragHighlightColor = cs.primary.withValues(alpha: 0.06);
@@ -56,30 +57,34 @@ class AssistantSelectionPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: assistants.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 64,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : assistants.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        AppLocalizations.of(context)!.assistantEmptyState,
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: Text(
+                            AppLocalizations.of(context)!.assistantCreate),
+                        onPressed: () =>
+                            _showCreateAssistantDialog(context, ref),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppLocalizations.of(context)!.assistantEmptyState,
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: Text(AppLocalizations.of(context)!.assistantCreate),
-                    onPressed: () => _showCreateAssistantDialog(context, ref),
-                  ),
-                ],
-              ),
-            )
+                )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(

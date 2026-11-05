@@ -280,6 +280,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   Widget build(BuildContext context) {
     final selectedAssistant = ref.watch(selectedAssistantProvider);
     final conversations = ref.watch(conversationsProvider);
+    final isLoading = ref.watch(conversationsInitialLoadProvider).isLoading;
     final streamingConversations = ref.watch(streamingConversationsProvider);
     final activeConversationId = ref.watch(activeConversationIdProvider);
     final cs = Theme.of(context).colorScheme;
@@ -411,9 +412,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
                 // Conversation list
                 Expanded(
-                  child: sorted.isEmpty
-                      ? _buildEmptyState(cs)
-                      : ReorderableListView.builder(
+                  child: isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : sorted.isEmpty
+                          ? _buildEmptyState(cs)
+                          : ReorderableListView.builder(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
                           itemCount: sorted.length,
