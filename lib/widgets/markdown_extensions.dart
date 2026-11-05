@@ -573,8 +573,10 @@ typedef _MermaidFenceInfo = ({
 _MermaidFenceInfo _unclosedFenceInfo(
   String text, {
   bool includeTail = true,
+  String? normalizedText,
 }) {
-  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final normalized = normalizedText ??
+      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   final lines = normalized.split('\n');
   var inFence = false;
   String? fenceChar;
@@ -1020,8 +1022,12 @@ class StreamingFenceInfoCache {
   }
 
   _MermaidFenceInfo _scanFromStart(String text) {
-    final info = _unclosedFenceInfo(text, includeTail: false);
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final info = _unclosedFenceInfo(
+      text,
+      includeTail: false,
+      normalizedText: normalized,
+    );
     _info = info;
     _textLength = text.length;
     _normalizedTextLength = normalized.length;
