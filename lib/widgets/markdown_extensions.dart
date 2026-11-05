@@ -822,7 +822,9 @@ _MermaidFenceInfo _unclosedFenceInfo(
     tail: tail,
     tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
     normalizedTailSource: !includeTail && hasUnfencedIndentedCode
-        ? normalized.substring(tailStart)
+        ? tailStart >= normalized.length
+            ? ''
+            : normalized.substring(tailStart)
         : null,
     isCached: !includeTail,
     hasUnfencedIndentedCode: hasUnfencedIndentedCode,
