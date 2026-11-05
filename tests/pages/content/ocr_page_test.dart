@@ -1666,11 +1666,10 @@ void main() {
               backgroundTasksNotifier: notifier,
               retryData: legacyRetryData,
               retryTaskId: taskId,
-              testRetryImageRestorer: (snapshot) async =>
-                  OcrRetryRestoreResult(
-                    images: snapshot.images,
-                    missingImageCount: 0,
-                  ),
+              testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
+                images: snapshot.images,
+                missingImageCount: 0,
+              ),
               testRetrySnapshotCacher: (
                   {required taskId, required snapshot}) async {
                 final result = await OcrRetryStorage.cacheSnapshot(
@@ -1765,11 +1764,10 @@ void main() {
             retryData: legacyRetryData,
             retryTaskId: taskId,
             retryTaskGeneration: originalTask,
-            testRetryImageRestorer: (snapshot) async =>
-                OcrRetryRestoreResult(
-                  images: snapshot.images,
-                  missingImageCount: 0,
-                ),
+            testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
+              images: snapshot.images,
+              missingImageCount: 0,
+            ),
             testRetrySnapshotCacher: ({required taskId, required snapshot}) {
               cacheStarted.complete();
               return Future.value({
@@ -1824,12 +1822,12 @@ void main() {
           backgroundTasksNotifier: notifier,
           retryData: legacyRetryData,
           retryTaskId: taskId,
-          testRetryImageRestorer: (snapshot) async =>
-              OcrRetryRestoreResult(
-                images: snapshot.images,
-                missingImageCount: 0,
-              ),
-          testRetrySnapshotCacher: ({required taskId, required snapshot}) async {
+          testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
+            images: snapshot.images,
+            missingImageCount: 0,
+          ),
+          testRetrySnapshotCacher: (
+              {required taskId, required snapshot}) async {
             migrationStarted.complete();
             await finishMigration.future;
             return {

@@ -538,8 +538,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             taskGeneration != null &&
             notifier.state.any(
               (task) =>
-                  task.id == taskId &&
-                  task.hasSameGenerationAs(taskGeneration),
+                  task.id == taskId && task.hasSameGenerationAs(taskGeneration),
             )) {
           await notifier.setRetryDataAndWaitForGeneration(
             taskId,
