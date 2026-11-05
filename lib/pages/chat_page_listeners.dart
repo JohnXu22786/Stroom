@@ -112,6 +112,7 @@ extension _ChatPageListenersExt on _ChatPageState {
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != prev) _conversationLoadGeneration++;
       if (next == null && next != prev) {
+        _detachStreamPage(clearIfCompleted: true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && ref.read(activeConversationIdProvider) == null) {
             _clearConversationView();
@@ -120,6 +121,10 @@ extension _ChatPageListenersExt on _ChatPageState {
         return;
       }
       if (next != null && next != prev) {
+        // Stop retaining the previous conversation's stream buffers while
+        // this page displays another conversation. Reattach below if the
+        // destination conversation is still streaming.
+        _detachStreamPage(clearIfCompleted: true);
         // Check streaming state FIRST, then set flags, THEN activate
         // (so listeners fired by activateConversation see correct flags).
         final manager = ref.read(chatStreamManagerProvider);
@@ -127,6 +132,9 @@ extension _ChatPageListenersExt on _ChatPageState {
         _isStreamingActive = targetIsStreaming;
         _streamingMsgId =
             targetIsStreaming ? manager.streamingMsgIdFor(next) : null;
+        if (targetIsStreaming && _streamingMsgId != null) {
+          _attachStreamPage(manager, next, _streamingMsgId!);
+        }
         // Clear _history so _loadConversationMessages passes the guard
         // (`if (_isStreamingActive && _history.isNotEmpty) return;`).
         // Without this, switching from a streaming conversation to another
