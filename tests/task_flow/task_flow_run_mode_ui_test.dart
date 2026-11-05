@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fake_file_picker.dart';
 
@@ -131,6 +132,7 @@ void main() {
     testWidgets(
       'OCR rejects a valid image selection when another manifest record is unresolved',
       (tester) async {
+        SharedPreferences.setMockInitialValues({});
         ManifestDatabase.enableTestMode();
         ImageManifest.invalidateCache();
         final folderName =
