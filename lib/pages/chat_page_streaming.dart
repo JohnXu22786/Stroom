@@ -153,14 +153,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
         // Insert directly as Message.text so it renders through the
         // normal textMessageBuilder (gray bubble + segments) instead of
         // textStreamMessageBuilder (raw white-background Markdown).
-        // The live text is rendered from the segment state, so keep the
-        // controller message empty instead of retaining another full copy.
+        // This fallback insertion happens only when async restore left the
+        // message out of the replacement controller. Seed the restored text
+        // so the re-entry bubble is immediately complete.
+        final latestFullReply = manager.fullReplyFor(activeConvId);
         restoreController
             ?.insertMessage(
           Message.text(
             id: msgId,
             authorId: _aiUser.id,
-            text: '',
+            text: latestFullReply,
             createdAt: DateTime.now(),
           ),
         )

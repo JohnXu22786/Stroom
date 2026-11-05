@@ -74,6 +74,13 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
+      if (!next.any((section) => section.isNotEmpty)) {
+        // Empty text chunks are published at tool-round boundaries. Keep the
+        // TextStream placeholder so tool-only rounds render through their
+        // live segments without prematurely switching bubble builders.
+        _rebuildLiveSegments(msgId);
+        return;
+      }
       _isReasoningCompletedForMsg[msgId] = true;
       // Switch the placeholder to the normal assistant bubble without
       // copying the growing reply into the chat controller. Text is rendered

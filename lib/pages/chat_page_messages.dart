@@ -543,11 +543,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
                 false;
         if (!inCtrl) {
+          final restoredFullReply =
+              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
           _controller?.insertMessage(
             Message.text(
               id: savedStreamingMsgId,
               authorId: _aiUser.id,
-              text: '',
+              text: restoredFullReply,
               createdAt: DateTime.now(),
             ),
           );
