@@ -15,6 +15,7 @@ import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
 import 'cursor_connect_rpc.dart';
 import 'cursor_http2_transport.dart';
+import 'cursor_api_key_auth.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
@@ -229,6 +230,7 @@ class LlmConnectorHttpClient {
     final accountForRefresh = storedAccount;
     var didPrepareCredential = false;
     var didRetry = false;
+    var didCursorApiKeyRetry = false;
     Future<bool> refreshTraeCredential() async {
       try {
         return await accountService.refreshCredential(
@@ -450,10 +452,20 @@ class LlmConnectorHttpClient {
       }
       if (storedAccount.connectorType == 'cursor') {
         try {
-          final accessToken = LlmNativeRequestBuilder.credentialBundleString(
-            credential,
-            const ['access_token', 'accessToken'],
-          );
+          final apiKey =
+              storedAccount.authType == 'api_key' ? credential?.trim() : null;
+          final accessToken = storedAccount.authType == 'api_key'
+              ? apiKey == null
+                  ? null
+                  : await CursorApiKeyAuth.resolveAccessToken(
+                      apiKey,
+                      dio: _dio,
+                      cancelToken: requestCancelToken,
+                    )
+              : LlmNativeRequestBuilder.credentialBundleString(
+                  credential,
+                  const ['access_token', 'accessToken'],
+                );
           if (accessToken == null || prepared.body is! List<int>) {
             throw const LlmConnectorAuthenticationRequired();
           }
@@ -472,7 +484,24 @@ class LlmConnectorHttpClient {
           await waitForRequestSentMarker();
           if (response.statusCode < 200 || response.statusCode >= 300) {
             if (response.statusCode == 401 &&
+                storedAccount.authType == 'api_key') {
+              final apiKey = credential?.trim();
+              if (apiKey != null &&
+                  CursorApiKeyAuth.retryAfterUnauthorizedResponse(
+                    apiKey,
+                    statusCode: response.statusCode,
+                    alreadyRetried: didCursorApiKeyRetry,
+                  )) {
+                didCursorApiKeyRetry = true;
+                continue;
+              }
+              throw const LlmConnectorHttpException(
+                code: 'cursor_api_key_session_rejected',
+              );
+            }
+            if (response.statusCode == 401 &&
                 !didRetry &&
+                storedAccount.authType == 'oauth' &&
                 _canRefresh(storedAccount)) {
               didRetry = true;
               if (await accountService.refreshCredential(
@@ -545,6 +574,19 @@ class LlmConnectorHttpClient {
           rethrow;
         } on LlmConnectorRequestCancelled {
           rethrow;
+        } on CursorApiKeyAuthException catch (error) {
+          throw LlmConnectorHttpException(
+            code: error.code == 'api_key_rejected'
+                ? 'cursor_api_key_rejected'
+                : 'cursor_api_key_exchange_failed',
+          );
+        } on DioException catch (error) {
+          if (CancelToken.isCancel(error)) {
+            throw const LlmConnectorRequestCancelled();
+          }
+          throw const LlmConnectorHttpException(
+            code: 'cursor_api_key_exchange_failed',
+          );
         } on CursorConnectRpcException catch (error) {
           if (error.code == 'unsupported_capability' ||
               error.code.startsWith('unsupported_')) {

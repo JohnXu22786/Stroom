@@ -497,7 +497,7 @@ abstract final class LlmConnectorRegistry {
       id: 'cursor',
       displayName: 'Cursor',
       protocol: LlmNativeProtocol.cursorAgentConnectRpc,
-      authTypes: {'oauth'},
+      authTypes: {'oauth', 'api_key'},
       modelCatalog: kPinnedCursorModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
@@ -878,7 +878,7 @@ abstract final class LlmConnectorRegistry {
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       'devin-cli-agentic' => authType == 'cli_session',
-      'cursor' => authType == 'oauth',
+      'cursor' => {'oauth', 'api_key'}.contains(authType),
       'qoder' => {'api_key', 'oauth', 'pat'}.contains(authType),
       _ => true,
     };
@@ -5849,11 +5849,13 @@ class LlmNativeRequestBuilder {
         'access_token',
         'accessToken',
       ]);
-      if (account.authType != 'oauth' ||
+      final apiKey = account.authType == 'api_key' ? credential?.trim() : null;
+      if (!{'oauth', 'api_key'}.contains(account.authType) ||
           nativeFormat != null ||
           !account.models.any((model) => model.upstreamModelId == modelId) ||
           !kPinnedCursorModels.contains(modelId) ||
-          accessToken == null ||
+          (account.authType == 'oauth' && accessToken == null) ||
+          (account.authType == 'api_key' && apiKey == null) ||
           body is! Map) {
         throw const LlmAccountConnectorException();
       }
