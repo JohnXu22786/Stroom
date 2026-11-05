@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 
 import '../chat_types.dart';
@@ -218,6 +219,7 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   }
 
   void _openReasoningPanel(BuildContext context, WidgetRef ref) {
+    final convId = ref.read(activeConversationIdProvider);
     showDialog(
       context: context,
       builder: (ctx) => _ReasoningPanelDialog(
@@ -259,8 +261,12 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   bool _userScrolledUp = false;
-  String _displayText = '';
+  final StringBuffer _displayBuffer = StringBuffer();
+  String? _displaySnapshot;
   int _previousTextLength = 0;
+  int _lastReasoningSequence = -1;
+  int _pendingReasoningPrefixLength = 0;
+  bool _hasSeededReasoning = false;
 
   /// Drives the completion sequence for the corner status icon: spinner
   /// fades out (0.5s) → checkmark pops in with a jelly bounce (0.5s) →
@@ -290,8 +296,8 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
   @override
   void initState() {
     super.initState();
-    _displayText = widget.initialReasoningText;
-    _previousTextLength = _displayText.length;
+    _setDisplayText(widget.initialReasoningText);
+    _previousTextLength = _displayBuffer.length;
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
     _completionController = AnimationController(
@@ -368,6 +374,29 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     }
   }
 
+  void _appendReasoningUpdate(StreamingReasoningAppend append) {
+    if (append.sequence <= _lastReasoningSequence) return;
+    _lastReasoningSequence = append.sequence;
+    if (append.sectionIndex != widget.sectionIndex || append.text.isEmpty) {
+      return;
+    }
+    final skippedLength = _pendingReasoningPrefixLength;
+    _pendingReasoningPrefixLength = 0;
+    if (append.text.length <= skippedLength) return;
+    _displayBuffer.write(append.text.substring(skippedLength));
+    _displaySnapshot = null;
+  }
+
+  void _setDisplayText(String text) {
+    _displayBuffer
+      ..clear()
+      ..write(text);
+    _displaySnapshot = text;
+  }
+
+  String get _displayText =>
+      _displaySnapshot ??= _displayBuffer.toString();
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -380,17 +409,48 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     final allSections = convId != null
         ? ref.watch(streamingReasoningSectionsProvider(convId))
         : const <String>[];
+    final latestReasoningAppend = convId != null
+        ? ref.watch(streamingReasoningAppendProvider(convId))
+        : null;
+    if (!_hasSeededReasoning) {
+      if (widget.isStreaming && convId != null) {
+        final manager = ref.read(chatStreamManagerProvider);
+        final sections = manager.reasoningSectionsFor(convId);
+        if (widget.sectionIndex < sections.length &&
+            sections[widget.sectionIndex].isNotEmpty) {
+          _setDisplayText(sections[widget.sectionIndex]);
+        }
+        _pendingReasoningPrefixLength =
+            manager.pendingReasoningDeltaLengthFor(convId);
+      }
+      _lastReasoningSequence = convId == null
+          ? -1
+          : ref.read(streamingReasoningAppendProvider(convId))?.sequence ?? -1;
+      _hasSeededReasoning = true;
+    }
+    final currentAppend = convId == null
+        ? latestReasoningAppend
+        : ref.read(streamingReasoningAppendProvider(convId));
+    if (currentAppend != null) _appendReasoningUpdate(currentAppend);
+    if (convId != null) {
+      ref.listen(streamingReasoningAppendProvider(convId), (prev, next) {
+        if (!mounted || next == null) return;
+        setState(() => _appendReasoningUpdate(next));
+      });
+    }
     if (widget.sectionIndex < allSections.length) {
       final providerText = allSections[widget.sectionIndex];
-      if (providerText.length >= _displayText.length) {
-        _displayText = providerText;
+      if (providerText.length >= _displayBuffer.length) {
+        _setDisplayText(providerText);
       }
     }
+    // Materialize the incrementally accumulated content once for this render.
+    final displayText = _displayText;
 
     // Auto-scroll to bottom when new content arrives, unless the user
     // has manually scrolled up (interrupted auto-scroll).
-    if (_displayText.length > _previousTextLength) {
-      _previousTextLength = _displayText.length;
+    if (displayText.length > _previousTextLength) {
+      _previousTextLength = displayText.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_userScrolledUp && _scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -408,7 +468,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
         : false;
     final isStreamActive =
         convId != null ? ref.watch(isStreamingProvider(convId)) : false;
-    final hasReasoningContent = _displayText.isNotEmpty;
+    final hasReasoningContent = displayText.isNotEmpty;
     final isReasoningComplete =
         hasReasoningContent && (hasFirstToken || !isStreamActive);
 
@@ -419,7 +479,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     // open-time snapshot passed from the section.)
     final isPanelStreaming = !isReasoningComplete;
 
-    final showEmpty = _displayText.isEmpty && !isReasoningComplete;
+    final showEmpty = displayText.isEmpty && !isReasoningComplete;
 
     // Detect completion transitions to drive the corner checkmark sequence.
     // The first build only records the initial state (a panel opened after
@@ -605,7 +665,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
                           child: MarkdownWidget(
-                            data: _displayText,
+                            data: displayText,
                             selectable: true,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),

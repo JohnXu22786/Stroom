@@ -41,15 +41,24 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         if (now.difference(state.lastReasoningUpdate) >=
             ChatStreamManager._reasoningThrottle) {
           state.lastReasoningUpdate = now;
-          _pushToProvider(
-              convId, streamingReasoningProvider, state.reasoningBuffer);
-          _pushToProvider(convId, streamingReasoningSectionsProvider,
-              state.reasoningSections);
+          final append = state.takeReasoningAppend();
+          if (append != null) {
+            _pushToProvider(
+                convId, streamingReasoningAppendProvider, append);
+          }
         }
 
       case ReasoningSectionEndEvent():
+        // Preserve the sub-throttle tail before publishing the boundary.
+        final append = state.takeReasoningAppend();
+        if (append != null) {
+          _pushToProvider(convId, streamingReasoningAppendProvider, append);
+        }
+        final completedReasoning = state.reasoningBuffer;
         state.endReasoningSection();
         final sections = state.reasoningSections;
+        _pushToProvider(
+            convId, streamingReasoningProvider, completedReasoning);
         // The service emits one ReasoningSectionEndEvent per tool round,
         // right before that round's ToolCallStartEvents. Mark that the
         // next tool call begins a new round: the reasoning-section

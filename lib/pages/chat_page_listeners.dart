@@ -70,6 +70,34 @@ extension _ChatPageListenersExt on _ChatPageState {
       _rebuildLiveSegments(msgId);
     });
 
+    ref.listen(streamingReasoningAppendProvider(convId),
+        (StreamingReasoningAppend? prev, StreamingReasoningAppend? next) {
+      if (!mounted || next == null || next.text.isEmpty) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+      if (msgId == null) return;
+      final sections = _reasoningContents[msgId] ?? const <String>[];
+      var shouldRebuild = false;
+      final updated = List<String>.of(sections);
+      while (updated.length <= next.sectionIndex) {
+        updated.add('');
+      }
+      if (updated[next.sectionIndex].isEmpty) {
+        // A marker is enough for the inline reasoning button. Keep active text
+        // in the stream manager and fetch one full snapshot only when the user
+        // opens the reasoning panel.
+        updated[next.sectionIndex] = ' ';
+        _reasoningContents[msgId] = updated;
+        shouldRebuild = true;
+      }
+      if (_isReasoningCompletedForMsg[msgId] ?? false) {
+        _isReasoningCompletedForMsg[msgId] = false;
+        shouldRebuild = true;
+      }
+      if (!shouldRebuild) return;
+      _rebuildLiveSegments(msgId);
+      _refreshStreamingBubble(msgId);
+    });
+
     ref.listen(streamingReasoningSectionsProvider(convId),
         (List<String>? prev, List<String> next) {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
