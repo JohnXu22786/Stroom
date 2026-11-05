@@ -13,6 +13,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
+import 'package:stroom/pages/video_gallery_shared.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -1316,6 +1317,8 @@ void main() {
       await tester.tap(find.text('打开文件'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(VideoPlayerPage), findsOneWidget);
     });
 
     testWidgets(
