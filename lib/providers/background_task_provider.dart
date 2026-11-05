@@ -3409,24 +3409,7 @@ Map<String, dynamic>? _retryDataFromTaskMap(
                 credentialValues,
               )) {
             final safeLegacyInstruction = _legacyOcrInstructionContent(request);
-            final redactedPasswordEcho =
-                _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
-              instructionContent,
-              credentialValues,
-            );
-            if (safeLegacyInstruction == null &&
-                redactedPasswordEcho != null &&
-                redactedPasswordEcho != instructionContent &&
-                !_legacyOcrTextContainsCredential(
-                  redactedPasswordEcho,
-                  credentialValues,
-                ) &&
-                !_legacyOcrTextContainsMaskedCredential(
-                  redactedPasswordEcho,
-                  credentialValues,
-                )) {
-              retryData['instructionContent'] = redactedPasswordEcho;
-            } else if (safeLegacyInstruction == null) {
+            if (safeLegacyInstruction == null) {
               retryData.remove('instructionContent');
             } else {
               retryData['instructionContent'] = safeLegacyInstruction;
@@ -3445,9 +3428,30 @@ Map<String, dynamic>? _retryDataFromTaskMap(
           }
           retryData['modelRef'] = safeModelRef;
         }
-        return Map<String, dynamic>.from(
+        final sanitizedRetryData = Map<String, dynamic>.from(
           _withoutCredentialEchoes(retryData, credentialValues) as Map,
         );
+        final originalInstruction = rawRetryData['instructionContent'];
+        if (map['type'] == BackgroundTaskType.ocr.name &&
+            originalInstruction is String) {
+          final redactedPasswordEcho =
+              _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
+            originalInstruction,
+            credentialValues,
+          );
+          if (redactedPasswordEcho != null &&
+              !_legacyOcrTextContainsCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              ) &&
+              !_legacyOcrTextContainsMaskedCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              )) {
+            sanitizedRetryData['instructionContent'] = redactedPasswordEcho;
+          }
+        }
+        return sanitizedRetryData;
       }
       malformedRetryData = retryData;
     } catch (_) {
