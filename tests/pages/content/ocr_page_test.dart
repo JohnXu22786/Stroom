@@ -1804,6 +1804,12 @@ void main() {
     testWidgets('legacy retry migration updates its original task generation', (
       tester,
     ) async {
+      // This test verifies publication, not disk persistence. The migration
+      // awaits persistence while holding the cache maintenance lock, and
+      // widget-test FakeAsync cannot advance that real storage work.
+      BackgroundTaskNotifier.debugDisablePersistence = true;
+      addTearDown(() => BackgroundTaskNotifier.debugDisablePersistence = false);
+
       const taskId = 'legacy-retry-migration-current-owner';
       final bytes = Uint8List.fromList([21, 22, 23]);
       final migrationStarted = Completer<void>();
