@@ -17,6 +17,7 @@ import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/services/llm_provider_preset_catalog.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 import '../fixtures/vertex_service_account.dart';
 
@@ -1001,6 +1002,177 @@ void main() {
     expect(connector.requestedModelIds, [modelId]);
     expect(connector.lastNativeFormat, isNull);
     expect(connector.requestBody?['model'], modelId);
+  });
+
+  test('Task Flow b.ai routing replays reasoning and marks cache misses',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    const accountId = 'bai-task-flow-account';
+    const upstreamModelId = 'deepseek-reasoner';
+    const localModelId = 'bai-task-flow-model';
+    await accounts.saveAccount(
+      LlmAccount(
+        id: accountId,
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'b.ai',
+        status: LlmAccountStatus.ready,
+        endpointConfig:
+            findLlmOpenAiProviderPreset('bai')!.applyToEndpointConfig(const {}),
+        models: const [
+          LlmUpstreamModel(
+            id: localModelId,
+            upstreamModelId: upstreamModelId,
+            displayName: 'DeepSeek Reasoner',
+            capabilities: {'chat': true, 'streaming': true, 'reasoning': true},
+          ),
+        ],
+      ),
+      secret: 'bai-test-key',
+    );
+    final group = LlmModelGroup(
+      id: 'bai-task-flow-group',
+      displayName: 'b.ai',
+      members: const [
+        LlmModelGroupMember(
+          accountId: accountId,
+          localModelId: localModelId,
+          upstreamModelId: upstreamModelId,
+        ),
+      ],
+    );
+    await accounts.saveModelGroup(group);
+    final groupConfig = buildLlmModelGroupProviderConfigs(
+      accounts: [(await accounts.getAccount(accountId))!],
+      groups: [group],
+    ).single;
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'task-flow-bai-group',
+          type: 'llm',
+          name: 'b.ai task-flow group',
+          configs: [groupConfig],
+        ),
+      ],
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      responseBodies: [
+        {
+          'choices': [
+            {
+              'message': {
+                'role': 'assistant',
+                'content': 'previous answer',
+                'reasoning_content': 'source-returned thought',
+              },
+            },
+          ],
+        },
+        {
+          'choices': [
+            {
+              'message': {'content': 'Task Flow reply'},
+            },
+          ],
+        },
+        {
+          'choices': [
+            {
+              'message': {'content': 'cache-miss reply'},
+            },
+          ],
+        },
+        {
+          'choices': [
+            {
+              'message': {'content': 'stored-reasoning reply'},
+            },
+          ],
+        },
+      ],
+    );
+    final adapter = ChatAdapter(
+      routingRuntime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+    )..configure(entries);
+    addTearDown(adapter.dispose);
+    final model = groupConfig.models.single;
+    final service = adapter.getOrCreateService(
+      'task-flow-bai-conversation',
+      entriesState: entries,
+      modelReference: {'configId': groupConfig.id, 'modelId': model.id},
+    );
+
+    // ignore: invalid_use_of_visible_for_testing_member
+    final provider = service!.provider!;
+    expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'question'},
+        ]),
+        'previous answer');
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'question'},
+        {'role': 'assistant', 'content': 'previous answer'},
+        {'role': 'user', 'content': 'continue'},
+      ]),
+      'Task Flow reply',
+    );
+    final messages = connector.requestBody!['messages'] as List;
+    expect(
+      (messages[1] as Map)['reasoning_content'],
+      'source-returned thought',
+    );
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'question'},
+        {'role': 'assistant', 'content': 'unmatched answer'},
+        {'role': 'user', 'content': 'continue'},
+      ]),
+      'cache-miss reply',
+    );
+    final cacheMissMessages = connector.requestBody!['messages'] as List;
+    expect((cacheMissMessages[1] as Map)['reasoning_content'], ' ');
+    expect(
+      await provider.chat(const [
+        {'role': 'user', 'content': 'question'},
+        {
+          'role': 'assistant',
+          'content': 'stored answer',
+          'reasoning_content': 'stored source reasoning',
+        },
+        {'role': 'user', 'content': 'continue'},
+      ]),
+      'stored-reasoning reply',
+    );
+    final storedReasoningMessages = connector.requestBody!['messages'] as List;
+    expect(
+      (storedReasoningMessages[1] as Map)['reasoning_content'],
+      'stored source reasoning',
+    );
+    expect(
+      connector.requestedAccountIds,
+      [accountId, accountId, accountId, accountId],
+    );
+    expect(
+      connector.requestedModelIds,
+      [upstreamModelId, upstreamModelId, upstreamModelId, upstreamModelId],
+    );
   });
 
   test('Qwen Cloud account IDs route only through documented formats', () {

@@ -1085,6 +1085,7 @@ void main() {
       'apmix',
       'arcee-ai',
       'auriko',
+      'bai',
       'baichuan',
       'baidu',
       'bluesminds',
@@ -1247,6 +1248,7 @@ void main() {
         'apmix': 'https://api.apmix.ai/v1/chat/completions',
         'api-airforce': 'https://api.airforce/v1/chat/completions',
         'auriko': 'https://api.auriko.ai/v1/chat/completions',
+        'bai': 'https://api.b.ai/v1/chat/completions',
         'baseten': 'https://inference.baseten.co/v1/chat/completions',
         'baichuan': 'https://api.baichuan-ai.com/v1/chat/completions',
         'baidu': 'https://qianfan.baidubce.com/v2/chat/completions',
@@ -2430,9 +2432,12 @@ void main() {
       ]) {
         expect(findLlmOpenAiProviderPreset(id), isNull);
       }
-      // Deferred: open-sse/config/providers/registry/bai/index.ts:16 requires
-      // reasoning-content echo, which presets cannot represent.
-      expect(findLlmOpenAiProviderPreset('bai'), isNull);
+      final bai = findLlmOpenAiProviderPreset('bai')!;
+      expect(bai.baseUrl, 'https://api.b.ai/v1/chat/completions');
+      expect(bai.modelsUrl, 'https://api.b.ai/v1/models');
+      expect(bai.fallbackModels.map((model) => model.id), [
+        'deepseek-reasoner',
+      ]);
       // `baidu` is the single user-facing choice for the shared Qianfan chat URL.
       expect(findLlmOpenAiProviderPreset('qianfan'), isNull);
       // The eligible M38 registry entries use distinct chat URLs, so no aliases
