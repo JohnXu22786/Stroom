@@ -2192,7 +2192,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
-    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -2229,7 +2229,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final safeReceiptContextAction = RegExp(
-    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -2239,7 +2239,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final bareRedactedAction = RegExp(
-    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
+    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
     caseSensitive: false,
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
@@ -2602,7 +2602,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 caseSensitive: false,
               ).hasMatch(beforeEcho);
       final hasSafeInstructionLead = RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
@@ -2612,7 +2612,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           naturalCarefulInstructionLead ||
           readFromOcrSourcePrompt ||
           RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
