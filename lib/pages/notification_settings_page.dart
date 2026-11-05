@@ -457,9 +457,8 @@ class _NotificationSettingsPageState
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.tonalIcon(
-                      onPressed: _isCheckingPermission
-                          ? null
-                          : _requestPermission,
+                      onPressed:
+                          _isCheckingPermission ? null : _requestPermission,
                       icon: const Icon(Icons.notifications, size: 18),
                       label: Text(
                         _strings.notificationSettingsRequestPermission,

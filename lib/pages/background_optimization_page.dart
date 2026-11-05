@@ -104,9 +104,8 @@ class _BackgroundOptimizationPageState
     final w = await isWatchdogEnabled();
     final c = await isColdStartRestoreEnabled();
     final b = await isBatteryReminderEnabled();
-    final closeMinimize = isDesktopPlatform()
-        ? await isDesktopCloseMinimizeEnabled()
-        : true;
+    final closeMinimize =
+        isDesktopPlatform() ? await isDesktopCloseMinimizeEnabled() : true;
     if (isDesktopPlatform()) {
       // 兜底：确保窗口关闭事件被拦截（Application 层初始化
       // 失败时，本页面负责重新建立拦截，保证退出确认始终生效）。
@@ -650,9 +649,8 @@ class _BackgroundOptimizationPageState
                         _isIgnoringBattery
                             ? Icons.check_circle
                             : Icons.battery_alert,
-                        color: _isIgnoringBattery
-                            ? Colors.green
-                            : Colors.orange,
+                        color:
+                            _isIgnoringBattery ? Colors.green : Colors.orange,
                         size: 20,
                       ),
                 const SizedBox(width: 8),
@@ -661,8 +659,8 @@ class _BackgroundOptimizationPageState
                     _isCheckingBattery
                         ? _strings.backgroundOptimizationCheckingBattery
                         : _isIgnoringBattery
-                        ? _strings.backgroundOptimizationBatteryIgnored
-                        : _strings.backgroundOptimizationBatteryMayKill,
+                            ? _strings.backgroundOptimizationBatteryIgnored
+                            : _strings.backgroundOptimizationBatteryMayKill,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
