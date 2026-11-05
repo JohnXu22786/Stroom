@@ -13,6 +13,7 @@ import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
+import 'chat_visualization_prompt.dart';
 import 'context_manager.dart'
     show
         kInterruptedToolResultPlaceholder,

@@ -292,8 +292,12 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
     if (fence == null) return;
     switch (action) {
       case 'html':
-        if (fence.language == 'html' && !fence.generating) {
-          showHtmlPreviewDialog(context: context, htmlCode: fence.code);
+        if (fence.language == 'html-preview' && !fence.generating) {
+          showHtmlPreviewDialog(
+            context: context,
+            htmlCode: fence.code,
+            sandboxed: true,
+          );
         }
       case 'mermaid':
         if (fence.language == 'mermaid' && !fence.generating) {
@@ -302,8 +306,10 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       case 'copyCode':
         await Clipboard.setData(ClipboardData(text: fence.code));
       case 'saveCode':
-        final extension = RegExp(r'^[a-z0-9]+$').hasMatch(fence.language)
-            ? fence.language
+        final saveLanguage =
+            fence.language == 'html-preview' ? 'html' : fence.language;
+        final extension = RegExp(r'^[a-z0-9]+$').hasMatch(saveLanguage)
+            ? saveLanguage
             : 'txt';
         await FilePicker.saveFile(
             dialogTitle: '保存代码',

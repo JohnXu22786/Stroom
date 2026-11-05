@@ -273,6 +273,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// mean a page-level setState (a full message-list rebuild) per flip.
   final ValueNotifier<int> _overlayMetricsTick = ValueNotifier(0);
 
+  /// Current transcript viewport; unlike the overlay tick, changes only on
+  /// resize so previews do not rebuild for ordinary scrolling.
+  final ValueNotifier<double?> _conversationViewportHeight =
+      ValueNotifier(null);
+
   /// Whether the chat list is currently being positioned so the top of the
   /// last user message is at the top of the viewport after a conversation
   /// load. While true, the message list is hidden (offstage) so the
@@ -455,6 +460,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController.removeListener(_onChatScroll);
     _chatScrollController.dispose();
     _overlayMetricsTick.dispose();
+    _conversationViewportHeight.dispose();
     super.dispose();
   }
 

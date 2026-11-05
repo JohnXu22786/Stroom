@@ -380,8 +380,9 @@ void chatServiceRequestGroup5() {
         expect(messages[0]['role'], 'system');
         expect(
           messages[0]['content'],
-          'You are a helpful assistant. Speak Chinese.',
+          startsWith('You are a helpful assistant. Speak Chinese.'),
         );
+        expect(messages[0]['content'], contains('```html-preview'));
       },
     );
 
@@ -403,7 +404,8 @@ void chatServiceRequestGroup5() {
       expect(messages[1]['content'], 'What is Flutter?');
     });
 
-    test('system prompt not added when empty', () async {
+    test('visualization guidance is added when assistant prompt is empty',
+        () async {
       service.setAssistantPrompt('');
 
       final history = <ChatMessage>[
@@ -415,11 +417,14 @@ void chatServiceRequestGroup5() {
 
       final messages = provider.capturedMessages;
       expect(messages, isNotNull);
-      expect(messages!.length, 1);
-      expect(messages[0]['role'], 'user');
+      expect(messages!.length, 2);
+      expect(messages[0]['role'], 'system');
+      expect(messages[0]['content'], contains('```html-preview'));
+      expect(messages[1]['role'], 'user');
     });
 
-    test('system prompt not added when null', () async {
+    test('visualization guidance is added when assistant prompt is null',
+        () async {
       service.setAssistantPrompt(null);
 
       final history = <ChatMessage>[
@@ -431,8 +436,10 @@ void chatServiceRequestGroup5() {
 
       final messages = provider.capturedMessages;
       expect(messages, isNotNull);
-      expect(messages!.length, 1);
-      expect(messages[0]['role'], 'user');
+      expect(messages!.length, 2);
+      expect(messages[0]['role'], 'system');
+      expect(messages[0]['content'], contains('```html-preview'));
+      expect(messages[1]['role'], 'user');
     });
 
     test('system prompt is first message with tool calls flow', () async {
@@ -449,7 +456,11 @@ void chatServiceRequestGroup5() {
       expect(messages, isNotNull);
       expect(messages!.length, 2);
       expect(messages[0]['role'], 'system');
-      expect(messages[0]['content'], 'You are a helpful assistant.');
+      expect(
+        messages[0]['content'],
+        startsWith('You are a helpful assistant.'),
+      );
+      expect(messages[0]['content'], contains('```html-preview'));
       expect(messages[1]['role'], 'user');
     });
   });

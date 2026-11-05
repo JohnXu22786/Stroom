@@ -92,7 +92,7 @@ jobs:
       - name: Install Linux WebView dependencies
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev libc++1-19
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -104,6 +104,25 @@ jobs:
       - run: flutter pub get
       - run: flutter build linux --release
       - run: xvfb-run flutter test -d linux integration_test/message_view_smoke_test.dart --reporter expanded
+      - name: Diagnose Linux smoke app startup
+        if: failure()
+        run: |
+          app=build/linux/x64/debug/bundle/stroom
+          if [ ! -x "$app" ]; then
+            echo "Flutter did not leave an executable debug bundle at $app"
+            find build/linux -maxdepth 6 -type f -name stroom -print || true
+            exit 0
+          fi
+          echo "--- Missing or resolved runtime libraries ---"
+          ldd "$app" || true
+          echo "--- Launching the debug bundle in a fresh Xvfb display ---"
+          set +e
+          xvfb-run -a timeout --foreground --signal=TERM --kill-after=5s 20s \
+            env G_MESSAGES_DEBUG=all "$app" > "$RUNNER_TEMP/stroom-linux-startup.log" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/stroom-linux-startup.log"
+          echo "Debug bundle exit status: $result (124 means it stayed alive for the 20 second probe)"
 
   message-platform-web:
     name: Message view Web build and smoke test

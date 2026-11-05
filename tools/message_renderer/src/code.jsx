@@ -69,8 +69,8 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
   const context = useContext(MessageContext);
   const host = useRef(null);
   lang = lang?.toLowerCase();
-  const htmlFenceClosed =
-    lang === "html" &&
+  const htmlPreviewFenceClosed =
+    lang === "html-preview" &&
     fenceComplete(context?.source, sourceStart, sourceEnd);
   streaming =
     streaming && !fenceComplete(context?.source, sourceStart, sourceEnd);
@@ -85,8 +85,8 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
     status: "loading",
   });
   const action = (name) => context?.action(name, { sourceStart, sourceEnd });
-  const special = lang === "html" || lang === "mermaid";
-  const canPreviewHtml = htmlFenceClosed && !streaming;
+  const special = lang === "html-preview" || lang === "mermaid";
+  const canPreviewHtml = htmlPreviewFenceClosed && !streaming;
   const htmlStatus = htmlPreview.code === code ? htmlPreview.status : "loading";
   const showingHtmlPreview =
     canPreviewHtml && htmlStatus !== "error" && htmlStatus !== "tall";
@@ -113,6 +113,10 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
           <button data-action="html" onClick={() => action("html")}>
             内容较长，打开全屏预览
           </button>
+        </div>
+      ) : lang === "html-preview" && streaming ? (
+        <div className="html-preview-generating" role="status">
+          正在生成可视化内容…
         </div>
       ) : showingHtmlPreview ? (
         <HtmlPreview
@@ -142,7 +146,7 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
               wrap={wrap}
               setWrap={setWrap}
               setSource={setSource}
-              htmlFenceClosed={htmlFenceClosed}
+              htmlPreviewFenceClosed={htmlPreviewFenceClosed}
               mermaidSource={lang === "mermaid" && source}
             />,
             toolbar,
@@ -266,9 +270,14 @@ function CodeActions({
   wrap,
   setWrap,
   setSource,
-  htmlFenceClosed,
+  htmlPreviewFenceClosed,
   mermaidSource = false,
 }) {
+  const fullscreenAction = special
+    ? lang === "html-preview"
+      ? "html"
+      : lang
+    : "code";
   return (
     <div className={className} aria-label="代码块操作">
       <button
@@ -309,13 +318,14 @@ function CodeActions({
       {!mermaidSource && (
         <button
           className="stroom-code-action"
-          data-action={special ? lang : "code"}
+          data-action={fullscreenAction}
           title="全屏"
           aria-label="全屏"
           disabled={
-            special && (streaming || (lang === "html" && !htmlFenceClosed))
+            special &&
+            (streaming || (lang === "html-preview" && !htmlPreviewFenceClosed))
           }
-          onClick={() => action(special ? lang : "code")}
+          onClick={() => action(fullscreenAction)}
         >
           <IconFullscreenOutlineRegular size={16} />
         </button>
