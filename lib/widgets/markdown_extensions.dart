@@ -1314,10 +1314,9 @@ PreConfig codeBlockPreConfig({
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
   );
-  final streamingFenceInfo = isStreaming && streamingText != null
-      ? _unclosedFenceInfo(streamingText)
-      : null;
-  final mermaidFenceCount = streamingFenceInfo?.mermaidFenceCount ?? 0;
+  _MermaidFenceInfo? streamingFenceInfo;
+  var hasStreamingFenceInfo = false;
+  var mermaidFenceCount = 0;
   var nextMermaidFenceIndex = 0;
   // Use a builder so mermaid and html code blocks get rendered via WebView
   // while all other code blocks still get syntax highlighting.
@@ -1330,6 +1329,11 @@ PreConfig codeBlockPreConfig({
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
     builder: (code, language) {
+      if (isStreaming && streamingText != null && !hasStreamingFenceInfo) {
+        streamingFenceInfo = _unclosedFenceInfo(streamingText);
+        mermaidFenceCount = streamingFenceInfo!.mermaidFenceCount;
+        hasStreamingFenceInfo = true;
+      }
       int? mermaidFenceIndex;
       if (language.trim().toLowerCase() == 'mermaid') {
         if (mermaidFenceCount > 0 &&
