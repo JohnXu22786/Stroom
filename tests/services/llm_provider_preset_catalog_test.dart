@@ -3584,13 +3584,17 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'writer',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       ['palmyra-x5', 'palmyra-x4'],
     );
     expect(
       findLlmOpenAiProviderPreset(
         'xiaomi-mimo-token-plan',
-      )!.fallbackModels.map((model) => model.id),
+      )!
+          .fallbackModels
+          .map((model) => model.id),
       ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.5-pro', 'mimo-v2.5'],
     );
     expect(findLlmOpenAiProviderPreset('xkiro')!.fallbackModels, hasLength(39));
@@ -3601,7 +3605,10 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'xiaomi-mimo',
-      )!.fallbackModels.first.capabilities,
+      )!
+          .fallbackModels
+          .first
+          .capabilities,
       {'contextLength': 1048576, 'maxOutputTokens': 131072},
     );
   });
