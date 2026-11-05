@@ -142,6 +142,54 @@ class LlmProviderPreset {
 
 const llmOpenAiProviderPresets = <LlmProviderPreset>[
   LlmProviderPreset(
+    id: 'g4f-gemini',
+    displayName: 'g4f.space Gemini',
+    baseUrl: 'https://g4f.space/api/gemini/v1/chat/completions',
+    modelsUrl: 'https://g4f.space/api/gemini/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('models/gemini-2.5-flash'),
+      LlmProviderPresetModel('models/gemini-2.5-pro'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'g4f-groq',
+    displayName: 'g4f.space Groq',
+    baseUrl: 'https://g4f.space/api/groq/v1/chat/completions',
+    modelsUrl: 'https://g4f.space/api/groq/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('llama-3.3-70b-versatile'),
+      LlmProviderPresetModel('llama-3.1-8b-instant'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'g4f-nvidia',
+    displayName: 'g4f.space NVIDIA',
+    baseUrl: 'https://g4f.space/api/nvidia/v1/chat/completions',
+    modelsUrl: 'https://g4f.space/api/nvidia/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('nvidia/nemotron-3-nano-30b-a3b'),
+      LlmProviderPresetModel('z-ai/glm-5.2'),
+      LlmProviderPresetModel('minimaxai/minimax-m2.7'),
+    ],
+  ),
+  LlmProviderPreset(
+    id: 'g4f-ollama',
+    displayName: 'g4f.space Ollama',
+    baseUrl: 'https://g4f.space/api/ollama/v1/chat/completions',
+    modelsUrl: 'https://g4f.space/api/ollama/v1/models',
+    fallbackModels: [LlmProviderPresetModel('gemma3:4b')],
+  ),
+  LlmProviderPreset(
+    id: 'g4f-pollinations',
+    displayName: 'g4f.space Pollinations',
+    baseUrl: 'https://g4f.space/api/pollinations/v1/chat/completions',
+    modelsUrl: 'https://g4f.space/api/pollinations/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('openai'),
+      LlmProviderPresetModel('openai-fast'),
+    ],
+  ),
+  LlmProviderPreset(
     id: 'api-airforce',
     displayName: 'Api.airforce',
     baseUrl: 'https://api.airforce/v1/chat/completions',
