@@ -93,6 +93,7 @@ if (caseName === 'async-timeout') process.env.STROOM_LIFECYCLE_TIMEOUT_MS = '100
 require(bridge)
 process.argv = [
   process.execPath, npmCli, 'install', '--prefix', target, '--foreground-scripts',
+  '--cache', tempPath,
   '--package-lock=false', '--no-audit', '--no-fund',
   caseName === 'core-js' ? 'core-js@3.45.1' : packagePath,
 ]
