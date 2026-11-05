@@ -52,11 +52,7 @@ int asIntParam(Map<String, dynamic> params, String key, int fallback) {
 /// Number fields store `num`; passing those directly into a
 /// `Map<String, String>` throws a runtime `TypeError`. Values are
 /// stringified (or the fallback returned) instead.
-String asStringParam(
-  Map<String, dynamic> params,
-  String key,
-  String fallback,
-) {
+String asStringParam(Map<String, dynamic> params, String key, String fallback) {
   final raw = params[key];
   if (raw == null) return fallback;
   return raw is String ? raw : raw.toString();
@@ -75,8 +71,6 @@ Future<String?> saveTextForFlow(
   if (text.isEmpty) return null;
   final bytes = Uint8List.fromList(utf8.encode(text));
   final hash = computeTextHash(bytes);
-  final storageFileName = '$hash.txt';
-  final filePath = await TextManifest.writeText(storageFileName, text);
 
   if (shouldCommit != null && !shouldCommit()) return null;
 
@@ -104,7 +98,7 @@ Future<String?> saveTextForFlow(
     folder: saveFolder,
     textLength: text.length,
   );
-  await TextManifest.addRecord(record);
+  final filePath = await TextManifest.addRecordWithContent(record, bytes);
   if (shouldCommit != null && !shouldCommit()) {
     await TextManifest.deleteRecord(record.id);
     return null;

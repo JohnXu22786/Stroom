@@ -26,8 +26,9 @@ final textFolderListProvider =
 // 视图模式（false = 列表，true = 缩略图/网格）
 // ============================================================================
 
-final textViewModeProvider =
-    StateNotifierProvider<TextViewModeNotifier, bool>((ref) {
+final textViewModeProvider = StateNotifierProvider<TextViewModeNotifier, bool>((
+  ref,
+) {
   final notifier = TextViewModeNotifier();
   notifier.load();
   return notifier;
@@ -91,14 +92,7 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     if (format == null || format.isEmpty) {
       await TextManifest.renameRecord(id, newName);
     } else {
-      final records = await TextManifest.loadRecords();
-      final index = records.indexWhere((r) => r.id == id);
-      if (index != -1) {
-        final r = records[index];
-        await TextManifest.updateRecord(
-          r.copyWithName(newName).copyWithFormat(format),
-        );
-      }
+      await TextManifest.renameRecordWithFormat(id, newName, format);
     }
     await loadRecords();
   }
@@ -203,8 +197,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     TextManifest.invalidateCache();
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetParentClean = targetParent.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
@@ -266,8 +262,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetParentClean = targetParent.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
@@ -291,15 +289,17 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
 
     for (final r in records) {
       if (r.folder == sourceName) {
-        await TextManifest.addRecord(TextRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-          textLength: r.textLength,
-        ));
+        await TextManifest.addRecord(
+          TextRecord(
+            name: r.name,
+            hash: r.hash,
+            format: r.format,
+            createdAt: DateTime.now(),
+            size: r.size,
+            folder: newPath,
+            textLength: r.textLength,
+          ),
+        );
       }
     }
 
@@ -309,15 +309,17 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       final newDescPath = '$newPath$suffix';
       for (final r in records) {
         if (r.folder == desc) {
-          await TextManifest.addRecord(TextRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-            textLength: r.textLength,
-          ));
+          await TextManifest.addRecord(
+            TextRecord(
+              name: r.name,
+              hash: r.hash,
+              format: r.format,
+              createdAt: DateTime.now(),
+              size: r.size,
+              folder: newDescPath,
+              textLength: r.textLength,
+            ),
+          );
         }
       }
       // Empty subfolders (no records) must stay in the folder cache;

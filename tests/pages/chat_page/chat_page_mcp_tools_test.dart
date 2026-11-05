@@ -81,9 +81,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    // The enabled set must include the discovered MCP tool. The global tool
-    // registry can also contain provider-gated tools that are not available
-    // in this conversation, so its raw size is not the enabled built-in count.
+    // Assert the discovered tool by name: the global registry can include
+    // provider-gated tools that are not enabled for this conversation.
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ChatPage)));
     final enabled = container.read(enabledToolNamesProvider);
@@ -97,10 +96,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     final mcpToolName = find.text('exa_mcp');
+    final toolsList = find.byType(ListView).last;
     await tester.scrollUntilVisible(
       mcpToolName,
       300,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.descendant(
+        of: toolsList,
+        matching: find.byType(Scrollable),
+      ),
     );
     expect(mcpToolName, findsOneWidget,
         reason: 'the tools panel must list the discovered MCP tool');

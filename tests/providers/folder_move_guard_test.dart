@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +14,28 @@ import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
+
+Future<void> _addValidTextRecord(
+  TextRecordsNotifier notifier, {
+  required String name,
+  required String folder,
+}) async {
+  final content = '$name:$folder';
+  final bytes = Uint8List.fromList(utf8.encode(content));
+  await TextManifest.addRecordWithContent(
+    TextRecord(
+      name: name,
+      hash: computeTextHash(bytes),
+      format: 'txt',
+      createdAt: DateTime.now(),
+      size: bytes.length,
+      folder: folder,
+      textLength: content.length,
+    ),
+    bytes,
+  );
+  await notifier.loadRecords();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -32,16 +57,7 @@ void main() {
 
       await notifier.createFolder('x');
       await notifier.createFolder('x/b');
-      await notifier.addRecord(
-        TextRecord(
-          name: 'doc',
-          hash: 'h1',
-          format: 'txt',
-          createdAt: DateTime.now(),
-          size: 10,
-          folder: 'x/b',
-        ),
-      );
+      await _addValidTextRecord(notifier, name: 'doc', folder: 'x/b');
 
       // 目标为当前父目录（无操作移动）—— 记录必须保持原位
       await notifier.moveFolder('x/b', 'x');
@@ -59,16 +75,7 @@ void main() {
       final notifier = container.read(textRecordsProvider.notifier);
 
       await notifier.createFolder('x');
-      await notifier.addRecord(
-        TextRecord(
-          name: 'doc',
-          hash: 'h1',
-          format: 'txt',
-          createdAt: DateTime.now(),
-          size: 10,
-          folder: 'x',
-        ),
-      );
+      await _addValidTextRecord(notifier, name: 'doc', folder: 'x');
 
       await notifier.moveFolder('x', '');
 
@@ -83,16 +90,7 @@ void main() {
 
       await notifier.createFolder('x');
       await notifier.createFolder('x/b');
-      await notifier.addRecord(
-        TextRecord(
-          name: 'doc',
-          hash: 'h1',
-          format: 'txt',
-          createdAt: DateTime.now(),
-          size: 10,
-          folder: 'x/b',
-        ),
-      );
+      await _addValidTextRecord(notifier, name: 'doc', folder: 'x/b');
 
       await notifier.copyFolder('x/b', 'x/b');
 
@@ -155,16 +153,7 @@ void main() {
       final notifier = container.read(textRecordsProvider.notifier);
 
       await notifier.createFolder('x/b');
-      await notifier.addRecord(
-        TextRecord(
-          name: 'doc',
-          hash: 'h1',
-          format: 'txt',
-          createdAt: DateTime.now(),
-          size: 10,
-          folder: 'x/b',
-        ),
-      );
+      await _addValidTextRecord(notifier, name: 'doc', folder: 'x/b');
 
       // 无操作重命名（对话框预填基础名后直接确认）
       await notifier.renameFolder('x/b', 'b');

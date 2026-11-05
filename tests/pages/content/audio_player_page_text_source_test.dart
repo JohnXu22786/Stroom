@@ -62,29 +62,26 @@ void main() {
     });
 
     test('TextManifest.loadRecords returns stored text records', () async {
-      const fileName = 'record_test.txt';
       const testContent = '记录测试内容';
-
-      // Write the file first
-      await TextManifest.writeFile(
-        fileName,
-        Uint8List.fromList(utf8.encode(testContent)),
-      );
+      final bytes = Uint8List.fromList(utf8.encode(testContent));
 
       // Load records - writing a file doesn't auto-add a record
       final records = await TextManifest.loadRecords();
       expect(records, isEmpty);
 
       // Add a record manually to simulate real usage
-      await TextManifest.addRecord(TextRecord(
-        name: 'record_test',
-        hash: 'test_hash',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: testContent.length,
-        textLength: testContent.length,
-        folder: '',
-      ));
+      await TextManifest.addRecordWithContent(
+        TextRecord(
+          name: 'record_test',
+          hash: computeTextHash(bytes),
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          textLength: testContent.length,
+          folder: '',
+        ),
+        bytes,
+      );
 
       final recordsAfter = await TextManifest.loadRecords();
       expect(recordsAfter, isNotEmpty);

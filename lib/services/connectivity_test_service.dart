@@ -7,8 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/mcp.dart';
 import '../models/tts_models.dart';
+import '../utils/text_manifest.dart';
 import 'http_tool_service.dart';
 import 'mcp_client.dart';
+import 'text_storage_tool_service.dart';
 import 'todo_tool_service.dart';
 import 'web_search_service.dart';
 
@@ -42,6 +44,18 @@ class ConnectivityTestService {
 
   static String defaultBuiltinTestContent(String toolName) {
     if (toolName == 'todowrite') return '{}';
+    if (toolName == 'stroom_space_list' ||
+        toolName == 'stroom_space_read' ||
+        toolName == 'stroom_space_write') {
+      return '{}';
+    }
+    if (toolName == 'stroom_space_search') {
+      return _jsonEncoder.convert({
+        'query': '__stroom_connectivity_probe__',
+        'search_content': false,
+        'limit': 1,
+      });
+    }
     return _jsonEncoder.convert({
       'query': 'Stroom 连通性测试',
       'source': 'google',
@@ -218,6 +232,50 @@ class ConnectivityTestService {
         case 'web_search':
           result = await WebSearchService.handleWebSearch(arguments);
           break;
+        case 'stroom_space_list':
+        case 'stroom_space_search':
+          final spaceResult = await TextStorageToolService.handleTool(
+            toolName,
+            toolName == 'stroom_space_search'
+                ? {...arguments, 'search_content': false}
+                : arguments,
+          );
+          if (spaceResult.startsWith('错误:')) {
+            return _finish(stopwatch, false, 'Stroom 工具测试失败', spaceResult);
+          }
+          final decoded = jsonDecode(spaceResult) as Map<String, dynamic>;
+          final count = decoded['count'] as int? ?? 0;
+          result = '工具可用；测试未读取正文内容，返回 $count 条元数据结果。';
+          break;
+        case 'stroom_space_read':
+          final records = await TextManifest.loadRecords();
+          final recordId = arguments.containsKey('record_id')
+              ? arguments['record_id']
+              : records.isEmpty
+                  ? '__stroom_connectivity_probe__'
+                  : records.first.id;
+          final readResult = await TextStorageToolService.handleTool(toolName, {
+            'record_id': recordId,
+            'length': 0,
+          });
+          if (records.isEmpty &&
+              !arguments.containsKey('record_id') &&
+              readResult.startsWith('错误: 找不到 ID')) {
+            result = '读取工具可用；文本空间当前没有文档可供读取。';
+            break;
+          }
+          if (readResult.startsWith('错误:')) {
+            return _finish(stopwatch, false, 'Stroom 工具测试失败', readResult);
+          }
+          result = '读取工具可用；已读取一份文档的元数据，未显示正文。';
+          break;
+        case 'stroom_space_write':
+          return _finish(
+            stopwatch,
+            false,
+            '跳过写入工具测试',
+            '连通性测试不会创建或覆盖你的文档。可在实际工具调用中验证写入。',
+          );
         default:
           return _finish(
             stopwatch,

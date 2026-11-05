@@ -6,6 +6,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
+Future<TextRecord> _addRecordWithContent(TextRecord record) async {
+  final content = '${record.id}:${record.name}';
+  final bytes = Uint8List.fromList(utf8.encode(content));
+  final storedRecord = TextRecord(
+    id: record.id,
+    name: record.name,
+    hash: computeTextHash(bytes),
+    format: record.format,
+    createdAt: record.createdAt,
+    modifiedAt: record.modifiedAt,
+    size: bytes.length,
+    folder: record.folder,
+    textLength: content.length,
+  );
+  await TextManifest.addRecordWithContent(storedRecord, bytes);
+  return storedRecord;
+}
+
+void _testWithRealAsync(
+  String description,
+  Future<void> Function(WidgetTester tester) body,
+) {
+  testWidgets(description, (tester) async {
+    await tester.runAsync(() => body(tester));
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -18,12 +45,12 @@ void main() {
   // ====== ManifestDatabase text records (in-memory, no file I/O) ======
 
   group('ManifestDatabase text records', () {
-    testWidgets('empty initially', (WidgetTester t) async {
+    _testWithRealAsync('empty initially', (WidgetTester t) async {
       final records = await ManifestDatabase.getAllTextRecords();
       expect(records, isEmpty);
     });
 
-    testWidgets('insert and retrieve', (WidgetTester t) async {
+    _testWithRealAsync('insert and retrieve', (WidgetTester t) async {
       await ManifestDatabase.insertTextRecord({
         'id': 'txt_1',
         'name': 'test_text',
@@ -39,7 +66,7 @@ void main() {
       expect(records[0]['id'], equals('txt_1'));
     });
 
-    testWidgets('update existing record', (WidgetTester t) async {
+    _testWithRealAsync('update existing record', (WidgetTester t) async {
       await ManifestDatabase.insertTextRecord({
         'id': 'txt_2',
         'name': 'original',
@@ -50,14 +77,16 @@ void main() {
         'folder': '',
         'textLength': 200,
       });
-      await ManifestDatabase.updateTextRecord(
-          'txt_2', {'name': 'renamed', 'size': 400});
+      await ManifestDatabase.updateTextRecord('txt_2', {
+        'name': 'renamed',
+        'size': 400,
+      });
       final records = await ManifestDatabase.getAllTextRecords();
       expect(records[0]['name'], equals('renamed'));
       expect(records[0]['size'], equals(400));
     });
 
-    testWidgets('delete record', (WidgetTester t) async {
+    _testWithRealAsync('delete record', (WidgetTester t) async {
       await ManifestDatabase.insertTextRecord({
         'id': 'txt_3',
         'name': 'to_delete',
@@ -73,7 +102,7 @@ void main() {
       expect(records, isEmpty);
     });
 
-    testWidgets('batch delete', (WidgetTester t) async {
+    _testWithRealAsync('batch delete', (WidgetTester t) async {
       for (var i = 0; i < 3; i++) {
         await ManifestDatabase.insertTextRecord({
           'id': 'txt_batch_$i',
@@ -93,55 +122,63 @@ void main() {
     });
   });
 
-  // ====== TextManifest record CRUD (DB-only methods, no file I/O) ======
+  // ====== TextManifest record CRUD with valid stored content ======
 
   group('TextManifest DB operations', () {
-    testWidgets('add and load records', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        name: 'test_text',
-        hash: 'hash1',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        textLength: 100,
-      ));
+    _testWithRealAsync('add and load records', (WidgetTester t) async {
+      await _addRecordWithContent(
+        TextRecord(
+          name: 'test_text',
+          hash: 'hash1',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          textLength: 100,
+        ),
+      );
       final records = await TextManifest.loadRecords();
       expect(records.length, equals(1));
       expect(records[0].name, equals('test_text'));
     });
 
-    testWidgets('rename record (DB only)', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        id: 'txt_rename',
-        name: 'old_name',
-        hash: 'hren',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        textLength: 100,
-      ));
+    _testWithRealAsync('rename record (DB only)', (WidgetTester t) async {
+      await _addRecordWithContent(
+        TextRecord(
+          id: 'txt_rename',
+          name: 'old_name',
+          hash: 'hren',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          textLength: 100,
+        ),
+      );
       await TextManifest.renameRecord('txt_rename', 'new_name');
       final records = await TextManifest.loadRecords();
       expect(records[0].name, equals('new_name'));
     });
 
-    testWidgets('move record to folder (DB only)', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        id: 'txt_move',
-        name: 'movable',
-        hash: 'hmov',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        folder: '',
-        textLength: 100,
-      ));
+    _testWithRealAsync('move record to folder (DB only)', (
+      WidgetTester t,
+    ) async {
+      await _addRecordWithContent(
+        TextRecord(
+          id: 'txt_move',
+          name: 'movable',
+          hash: 'hmov',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          folder: '',
+          textLength: 100,
+        ),
+      );
       await TextManifest.moveRecord('txt_move', 'my_folder');
       final records = await TextManifest.loadRecords();
       expect(records[0].folder, equals('my_folder'));
     });
 
-    testWidgets('update record (DB only)', (WidgetTester t) async {
+    _testWithRealAsync('update record (DB only)', (WidgetTester t) async {
       final record = TextRecord(
         id: 'txt_upd',
         name: 'before',
@@ -151,9 +188,10 @@ void main() {
         size: 100,
         textLength: 100,
       );
-      await TextManifest.addRecord(record);
+      final storedRecord = await _addRecordWithContent(record);
       await TextManifest.updateRecord(
-          record.copyWith(name: 'after', size: 999));
+        storedRecord.copyWith(name: 'after', size: 999),
+      );
       final records = await TextManifest.loadRecords();
       expect(records[0].name, equals('after'));
       expect(records[0].size, equals(999));
@@ -183,7 +221,9 @@ void main() {
       expect(restored.folder, equals('subfolder'));
       expect(restored.textLength, equals(42));
       expect(
-          restored.createdAt.toIso8601String(), equals(now.toIso8601String()));
+        restored.createdAt.toIso8601String(),
+        equals(now.toIso8601String()),
+      );
     });
   });
 
@@ -209,8 +249,11 @@ void main() {
       final hash1 = computeTextHash(utf8Bytes);
       final hash2 = computeTextHash(Uint8List.fromList(utf8.encode(chinese)));
 
-      expect(hash1, equals(hash2),
-          reason: 'computeTextHash must return identical hash for same input.');
+      expect(
+        hash1,
+        equals(hash2),
+        reason: 'computeTextHash must return identical hash for same input.',
+      );
       expect(hash1, isNotEmpty, reason: 'Hash must not be empty.');
     });
 
@@ -227,37 +270,58 @@ void main() {
       // The same hash should be computed from stored file content
       // (once writeText is fixed to use utf8.encode instead of codeUnits)
       expect(hash, isNotEmpty);
-      expect(bytes.length, greaterThan(0),
-          reason: 'UTF-8 encoded bytes must not be empty.');
+      expect(
+        bytes.length,
+        greaterThan(0),
+        reason: 'UTF-8 encoded bytes must not be empty.',
+      );
     });
   });
 
   // ====== writeText returns file path (used by ASR/OCR open file button) ======
 
   group('TextManifest writeText returns file path', () {
-    test('writeText returns non-null non-empty file path for valid content',
-        () async {
-      const content = '测试文本内容 for ASR transcription result';
-      final fileName = 'test_asr_result.txt';
-      final filePath = await TextManifest.writeText(fileName, content);
+    test(
+      'writeText returns non-null non-empty file path for valid content',
+      () async {
+        const content = '测试文本内容 for ASR transcription result';
+        final fileName = 'test_asr_result.txt';
+        final filePath = await TextManifest.writeText(fileName, content);
 
-      expect(filePath, isNotNull,
-          reason: 'writeText must return a non-null file path');
-      expect(filePath, isNotEmpty,
-          reason: 'writeText must return a non-empty file path');
-      // Path should contain the file name
-      expect(filePath, contains(fileName),
-          reason: 'Returned file path must contain the requested filename');
-    });
+        expect(
+          filePath,
+          isNotNull,
+          reason: 'writeText must return a non-null file path',
+        );
+        expect(
+          filePath,
+          isNotEmpty,
+          reason: 'writeText must return a non-empty file path',
+        );
+        // Path should contain the file name
+        expect(
+          filePath,
+          contains(fileName),
+          reason: 'Returned file path must contain the requested filename',
+        );
+      },
+    );
 
     test('writeText returns unique path for each file', () async {
-      final path1 =
-          await TextManifest.writeText('unique_test_1.txt', 'content one');
-      final path2 =
-          await TextManifest.writeText('unique_test_2.txt', 'content two');
+      final path1 = await TextManifest.writeText(
+        'unique_test_1.txt',
+        'content one',
+      );
+      final path2 = await TextManifest.writeText(
+        'unique_test_2.txt',
+        'content two',
+      );
 
-      expect(path1, isNot(equals(path2)),
-          reason: 'Different files must return different paths');
+      expect(
+        path1,
+        isNot(equals(path2)),
+        reason: 'Different files must return different paths',
+      );
       expect(path1, contains('unique_test_1.txt'));
       expect(path2, contains('unique_test_2.txt'));
     });
@@ -266,33 +330,47 @@ void main() {
   // ====== Empty file handling ======
 
   group('TextManifest empty file handling', () {
-    test('readText returns empty string for empty bytes instead of null',
-        () async {
-      // Create a test file with empty content
-      const emptyContent = '';
-      final bytes = Uint8List.fromList(utf8.encode(emptyContent));
-      final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
+    test(
+      'readText returns empty string for empty bytes instead of null',
+      () async {
+        // Create a test file with empty content
+        const emptyContent = '';
+        final bytes = Uint8List.fromList(utf8.encode(emptyContent));
+        final hash = computeTextHash(bytes);
+        final storageFileName = '$hash.txt';
 
-      // Write empty content
-      await TextManifest.writeText(storageFileName, emptyContent);
+        // Write empty content
+        await TextManifest.writeText(storageFileName, emptyContent);
 
-      // Read back - should return '' not null
-      final result = await TextManifest.readText(storageFileName);
-      expect(result, isNotNull,
-          reason: 'Empty content should return "" not null');
-      expect(result, equals(''),
-          reason: 'readText should return empty string for empty file');
-    });
+        // Read back - should return '' not null
+        final result = await TextManifest.readText(storageFileName);
+        expect(
+          result,
+          isNotNull,
+          reason: 'Empty content should return "" not null',
+        );
+        expect(
+          result,
+          equals(''),
+          reason: 'readText should return empty string for empty file',
+        );
+      },
+    );
 
     test('computeTextHash for empty content is deterministic', () {
       final emptyBytes = Uint8List.fromList(utf8.encode(''));
       final hash1 = computeTextHash(emptyBytes);
       final hash2 = computeTextHash(Uint8List.fromList(utf8.encode('')));
-      expect(hash1, equals(hash2),
-          reason: 'Hash for empty content must be deterministic');
-      expect(hash1, isNotEmpty,
-          reason: 'Hash for empty content must still produce a valid hash');
+      expect(
+        hash1,
+        equals(hash2),
+        reason: 'Hash for empty content must be deterministic',
+      );
+      expect(
+        hash1,
+        isNotEmpty,
+        reason: 'Hash for empty content must still produce a valid hash',
+      );
     });
   });
 }

@@ -26,8 +26,11 @@ class TextStoragePage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
 
-  const TextStoragePage(
-      {super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const TextStoragePage({
+    super.key,
+    this.tabIndex = 0,
+    this.isActiveTab = true,
+  });
 
   @override
   ConsumerState<TextStoragePage> createState() => _TextStoragePageState();
@@ -150,8 +153,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           }
           continue;
         }
-        final storageFileName = '$hash.txt';
-
         final displayName = _uniqueTextName(
           p.basenameWithoutExtension(rawName),
           records,
@@ -159,8 +160,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         );
         usedInBatch.add(displayName);
 
-        await TextManifest.writeFile(storageFileName, bytes);
-        await TextManifest.addRecord(
+        await TextManifest.addRecordWithContent(
           TextRecord(
             name: displayName,
             hash: hash,
@@ -170,6 +170,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             folder: _currentFolder,
             textLength: content.length,
           ),
+          bytes,
         );
         count++;
       }
@@ -690,10 +691,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       ],
     );
 
-    final navigateToParentSignal =
-        ref.watch(filesPageNavigateToParentSignalProvider);
-    final tabResetSignal =
-        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
+    final navigateToParentSignal = ref.watch(
+      filesPageNavigateToParentSignalProvider,
+    );
+    final tabResetSignal = ref.watch(
+      fileTabFolderResetSignalProvider(widget.tabIndex),
+    );
 
     return FileManagerView<TextRecord>(
       tabResetSignal: tabResetSignal,

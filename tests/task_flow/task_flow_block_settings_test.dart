@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateNotifier;
@@ -56,8 +59,10 @@ void main() {
               builder: (context) => Center(
                 child: ElevatedButton(
                   onPressed: () async {
-                    final saved =
-                        await showBlockEditorDialog(context, block: block);
+                    final saved = await showBlockEditorDialog(
+                      context,
+                      block: block,
+                    );
                     onSaved?.call(saved);
                   },
                   child: const Text('打开设置'),
@@ -72,8 +77,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('CatCatch header follows edited audio output both ways',
-      (tester) async {
+  testWidgets('CatCatch header follows edited audio output both ways', (
+    tester,
+  ) async {
     TaskFlowBlock? saved;
     await pumpPanel(
       tester,
@@ -99,14 +105,19 @@ void main() {
     await tester.tap(outputSwitch);
     await tester.pumpAndSettle();
     expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('确认'), 150,
-        scrollable: find.byType(Scrollable).last);
+    await tester.scrollUntilVisible(
+      find.text('确认'),
+      150,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(saved?.params['audioOutput'], false);
-    expect(saved?.getDefinition()?.outputType,
-        BlockTypeDefinition.catcatch.outputType);
+    expect(
+      saved?.getDefinition()?.outputType,
+      BlockTypeDefinition.catcatch.outputType,
+    );
   });
 
   ProviderEntriesState _ttsEntries() {
@@ -138,8 +149,9 @@ void main() {
     );
   }
 
-  testWidgets('TTS block panel shows voice dropdown from configured voices',
-      (tester) async {
+  testWidgets('TTS block panel shows voice dropdown from configured voices', (
+    tester,
+  ) async {
     await pumpPanel(
       tester,
       block: TaskFlowBlock(typeKey: BlockType.tts),
@@ -163,86 +175,102 @@ void main() {
 
   group('flowFolderSourceFor', () {
     test('text-output blocks (asr/ocr/chat) list the TEXT page folders', () {
-      expect(flowFolderSourceFor(BlockType.asr, 'saveFolder'),
-          FlowFolderSource.text);
-      expect(flowFolderSourceFor(BlockType.ocr, 'saveFolder'),
-          FlowFolderSource.text);
-      expect(flowFolderSourceFor(BlockType.chat, 'saveFolder'),
-          FlowFolderSource.text);
+      expect(
+        flowFolderSourceFor(BlockType.asr, 'saveFolder'),
+        FlowFolderSource.text,
+      );
+      expect(
+        flowFolderSourceFor(BlockType.ocr, 'saveFolder'),
+        FlowFolderSource.text,
+      );
+      expect(
+        flowFolderSourceFor(BlockType.chat, 'saveFolder'),
+        FlowFolderSource.text,
+      );
     });
 
     test('audio-output blocks list the FILE page folders', () {
-      expect(flowFolderSourceFor(BlockType.tts, 'saveFolder'),
-          FlowFolderSource.file);
-      expect(flowFolderSourceFor(BlockType.audioSeparation, 'saveFolder'),
-          FlowFolderSource.file);
-      expect(flowFolderSourceFor(BlockType.catcatch, 'audioFolder'),
-          FlowFolderSource.file);
+      expect(
+        flowFolderSourceFor(BlockType.tts, 'saveFolder'),
+        FlowFolderSource.file,
+      );
+      expect(
+        flowFolderSourceFor(BlockType.audioSeparation, 'saveFolder'),
+        FlowFolderSource.file,
+      );
+      expect(
+        flowFolderSourceFor(BlockType.catcatch, 'audioFolder'),
+        FlowFolderSource.file,
+      );
     });
 
     test('catcatch video folder lists the VIDEO page folders', () {
-      expect(flowFolderSourceFor(BlockType.catcatch, 'videoFolder'),
-          FlowFolderSource.video);
+      expect(
+        flowFolderSourceFor(BlockType.catcatch, 'videoFolder'),
+        FlowFolderSource.video,
+      );
     });
   });
 
   testWidgets(
       'ASR block save-folder picker lists TEXT page folders, not the '
-      'audio/file page ones (records must land where the user sees them)',
-      (tester) async {
+      'audio/file page ones (records must land where the user sees them)', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
     // A folder that exists ONLY in the text gallery and one that exists
     // ONLY in the file (audio) gallery.
-    await TextManifest.addRecord(TextRecord(
-      name: '笔记',
-      hash: 'txt_dir_hash',
-      format: 'txt',
-      createdAt: DateTime.now(),
-      size: 1,
-      folder: 'text_dir',
-      textLength: 1,
-    ));
-    await FileManifest.addRecord(AudioRecord(
-      name: '音频',
-      hash: 'aud_dir_hash',
-      format: 'mp3',
-      createdAt: DateTime.now(),
-      size: 1,
-      folder: 'audio_dir',
-    ));
-
-    await pumpPanel(
-      tester,
-      block: TaskFlowBlock(typeKey: BlockType.asr),
+    const textContent = 'x';
+    final textBytes = Uint8List.fromList(utf8.encode(textContent));
+    await TextManifest.addRecordWithContent(
+      TextRecord(
+        name: '笔记',
+        hash: computeTextHash(textBytes),
+        format: 'txt',
+        createdAt: DateTime.now(),
+        size: textBytes.length,
+        folder: 'text_dir',
+        textLength: textContent.length,
+      ),
+      textBytes,
     );
+    await FileManifest.addRecord(
+      AudioRecord(
+        name: '音频',
+        hash: 'aud_dir_hash',
+        format: 'mp3',
+        createdAt: DateTime.now(),
+        size: 1,
+        folder: 'audio_dir',
+      ),
+    );
+
+    await pumpPanel(tester, block: TaskFlowBlock(typeKey: BlockType.asr));
 
     await tester.tap(find.text('选择'));
     await tester.pumpAndSettle();
 
-    expect(find.text('text_dir'), findsOneWidget,
-        reason: 'text-output blocks must offer the text page folders');
-    expect(find.text('audio_dir'), findsNothing,
-        reason: 'audio/page folders do not exist in the text manifest');
+    expect(
+      find.text('text_dir'),
+      findsOneWidget,
+      reason: 'text-output blocks must offer the text page folders',
+    );
+    expect(
+      find.text('audio_dir'),
+      findsNothing,
+      reason: 'audio/page folders do not exist in the text manifest',
+    );
   });
 
-  testWidgets('chat block panel shows assistant picker and input note',
-      (tester) async {
+  testWidgets('chat block panel shows assistant picker and input note', (
+    tester,
+  ) async {
     final assistants = [
-      Assistant(
-        id: 'a1',
-        name: '翻译助手',
-        prompt: '你是翻译',
-        emoji: '🌐',
-      ),
-      Assistant(
-        id: 'a2',
-        name: '代码助手',
-        prompt: '你是代码',
-        emoji: '💻',
-      ),
+      Assistant(id: 'a1', name: '翻译助手', prompt: '你是翻译', emoji: '🌐'),
+      Assistant(id: 'a2', name: '代码助手', prompt: '你是代码', emoji: '💻'),
     ];
     await pumpPanel(
       tester,
@@ -334,9 +362,7 @@ void main() {
               providerName: 'OpenAI',
               host: 'https://api.openai.com',
               key: 'k',
-              models: [
-                ModelConfig(name: 'whisper-1', modelId: 'whisper-1'),
-              ],
+              models: [ModelConfig(name: 'whisper-1', modelId: 'whisper-1')],
             ),
             // Empty host/key — its model must NOT appear in the panel
             // (the executor and the ASR page skip it too; including it
@@ -345,9 +371,7 @@ void main() {
               providerName: '未配置',
               host: '',
               key: '',
-              models: [
-                ModelConfig(name: 'ghost-model', modelId: 'ghost'),
-              ],
+              models: [ModelConfig(name: 'ghost-model', modelId: 'ghost')],
             ),
             ProviderConfigItem(
               providerName: 'Groq',
@@ -387,9 +411,7 @@ void main() {
         typeKey: BlockType.chat,
         params: {'assistantId': 'deleted-id'},
       ),
-      assistants: [
-        Assistant(id: 'a1', name: '现存助手', prompt: 'p'),
-      ],
+      assistants: [Assistant(id: 'a1', name: '现存助手', prompt: 'p')],
     );
 
     // The stale id resolves to nothing — the warning line guides
@@ -411,8 +433,9 @@ void main() {
     expect(find.text('配置的助手已删除，请重新选择'), findsNothing);
   });
 
-  testWidgets('new chat block defaults to 未指定 (follows current assistant)',
-      (tester) async {
+  testWidgets('new chat block defaults to 未指定 (follows current assistant)', (
+    tester,
+  ) async {
     await pumpPanel(
       tester,
       block: TaskFlowBlock(typeKey: BlockType.chat),
@@ -443,9 +466,7 @@ void main() {
                 ModelConfig(
                   name: 'edge-a',
                   modelId: 'edge-a',
-                  voices: [
-                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
-                  ],
+                  voices: [VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural')],
                 ),
               ],
             ),
@@ -468,8 +489,9 @@ void main() {
     expect(find.text('deleted-voice-id'), findsNothing);
   });
 
-  testWidgets('block card shows friendly param names, not raw ids',
-      (tester) async {
+  testWidgets('block card shows friendly param names, not raw ids', (
+    tester,
+  ) async {
     final entries = ProviderEntriesState(
       entries: [
         ProviderEntry(
@@ -485,9 +507,7 @@ void main() {
                 ModelConfig(
                   name: 'edge-a',
                   modelId: 'edge-a',
-                  voices: [
-                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
-                  ],
+                  voices: [VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural')],
                 ),
               ],
             ),
@@ -517,7 +537,8 @@ void main() {
                     params: {
                       'voice': 'zh-CN-XiaoxiaoNeural',
                       'modelRef': providerModelReference(
-                          flattenProviderModels(entries, 'tts').first),
+                        flattenProviderModels(entries, 'tts').first,
+                      ),
                     },
                   ),
                   index: 1,
@@ -545,48 +566,50 @@ void main() {
   });
 
   testWidgets(
-      'block card shows the save folder even when it is the root folder '
-      '(empty value → 根目录, not hidden)', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => _FakeEntriesNotifier(_asrEntries()),
-          ),
-          assistantProvider.overrideWith(
-            (ref) => _FakeAssistantsNotifier(const []),
-          ),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: Column(
-              children: [
-                FlowBlockCard(
-                  block: TaskFlowBlock(
-                    typeKey: BlockType.asr,
-                    params: {'saveFolder': ''},
+    'block card shows the save folder even when it is the root folder '
+    '(empty value → 根目录, not hidden)',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => _FakeEntriesNotifier(_asrEntries()),
+            ),
+            assistantProvider.overrideWith(
+              (ref) => _FakeAssistantsNotifier(const []),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  FlowBlockCard(
+                    block: TaskFlowBlock(
+                      typeKey: BlockType.asr,
+                      params: {'saveFolder': ''},
+                    ),
+                    index: 1,
                   ),
-                  index: 1,
-                ),
-                FlowBlockCard(
-                  block: TaskFlowBlock(
-                    typeKey: BlockType.asr,
-                    params: {'saveFolder': 'records/会议'},
+                  FlowBlockCard(
+                    block: TaskFlowBlock(
+                      typeKey: BlockType.asr,
+                      params: {'saveFolder': 'records/会议'},
+                    ),
+                    index: 2,
                   ),
-                  index: 2,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    // Root folder must appear (it was previously filtered as "default").
-    expect(find.text('保存文件夹: 根目录'), findsOneWidget);
-    expect(find.text('保存文件夹: records/会议'), findsOneWidget);
-  });
+      // Root folder must appear (it was previously filtered as "default").
+      expect(find.text('保存文件夹: 根目录'), findsOneWidget);
+      expect(find.text('保存文件夹: records/会议'), findsOneWidget);
+    },
+  );
 
   testWidgets(
       'block card shows the MODEL name for modelSelector params '
@@ -609,7 +632,8 @@ void main() {
                 typeKey: BlockType.asr,
                 params: {
                   'modelRef': providerModelReference(
-                      flattenProviderModels(entries, 'asr')[1])
+                    flattenProviderModels(entries, 'asr')[1],
+                  ),
                 },
               ),
               index: 1,
@@ -641,16 +665,12 @@ void main() {
                 ModelConfig(
                   name: 'edge-a',
                   modelId: 'edge-a',
-                  voices: [
-                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
-                  ],
+                  voices: [VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural')],
                 ),
                 ModelConfig(
                   name: 'edge-b',
                   modelId: 'edge-b',
-                  voices: [
-                    VoiceEntry(name: '云希', id: 'zh-CN-YunxiNeural'),
-                  ],
+                  voices: [VoiceEntry(name: '云希', id: 'zh-CN-YunxiNeural')],
                 ),
               ],
             ),
@@ -711,9 +731,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isNotNull);
     expect(result!.params['voice'], 'zh-CN-YunxiNeural');
-    expect(result!.params['modelRef'],
-        providerModelReference(flattenProviderModels(entries, 'tts')[1]),
-        reason: 'picking a voice from another model must switch the model');
+    expect(
+      result!.params['modelRef'],
+      providerModelReference(flattenProviderModels(entries, 'tts')[1]),
+      reason: 'picking a voice from another model must switch the model',
+    );
   });
 
   testWidgets(
@@ -744,7 +766,8 @@ void main() {
                         params: {
                           'voice': 'deleted-voice',
                           'modelRef': providerModelReference(
-                              flattenProviderModels(entries, 'tts').first)
+                            flattenProviderModels(entries, 'tts').first,
+                          ),
                         },
                       ),
                     );
@@ -765,13 +788,17 @@ void main() {
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(result, isNotNull);
-    expect(result!.params['voice'], '',
-        reason: 'a stale voice must reset to the model default, not '
-            'survive confirm');
+    expect(
+      result!.params['voice'],
+      '',
+      reason: 'a stale voice must reset to the model default, not '
+          'survive confirm',
+    );
   });
 
-  testWidgets('manual voice fallback keeps typed input across rebuilds',
-      (tester) async {
+  testWidgets('manual voice fallback keeps typed input across rebuilds', (
+    tester,
+  ) async {
     // A TTS config whose model has NO voices → the panel shows the manual
     // TextField; a typed id must survive unrelated rebuilds and confirm.
     final entries = ProviderEntriesState(
@@ -785,9 +812,7 @@ void main() {
               providerName: 'CustomTTS',
               host: 'https://example.com',
               key: 'k',
-              models: [
-                ModelConfig(name: 'custom', modelId: 'custom'),
-              ],
+              models: [ModelConfig(name: 'custom', modelId: 'custom')],
             ),
           ],
         ),
@@ -828,10 +853,7 @@ void main() {
 
     // Manual fallback field with the hint.
     expect(find.text('所有TTS模型均未配置音色，可手动输入ID'), findsOneWidget);
-    await tester.enterText(
-      find.byType(TextField).last,
-      'custom-voice-id',
-    );
+    await tester.enterText(find.byType(TextField).last, 'custom-voice-id');
     await tester.pumpAndSettle();
 
     // Confirm — the typed id must survive (no unrelated rebuild wipes it).
@@ -877,7 +899,8 @@ void main() {
         params: {
           'voice': 'shared-voice',
           'modelRef': providerModelReference(
-              flattenProviderModels(entries, 'tts').first)
+            flattenProviderModels(entries, 'tts').first,
+          ),
         },
       ),
       entries: entries,

@@ -283,18 +283,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       final newContent = _contentController.text;
       final bytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(bytes);
-      final oldStorageFileName = widget.file.storageFileName;
-      final newStorageFileName = '$newHash.txt';
-
-      // 写入新内容到新的存储文件（基于新 hash 的文件名）
-      await TextManifest.writeText(newStorageFileName, newContent);
-
-      // 删除旧的存储文件
-      await TextManifest.deleteFile(oldStorageFileName);
-
-      // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
-      // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateRecord(TextRecord(
+      final updated = TextRecord(
         id: widget.file.id,
         name: widget.file.name,
         hash: newHash,
@@ -306,7 +295,21 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         size: bytes.length,
         folder: widget.file.folder,
         textLength: newContent.length,
-      ));
+      );
+      final saved = await TextManifest.updateRecordIfHashWithContent(
+        widget.file.id,
+        widget.file.hash,
+        {
+          'name': widget.file.name,
+          'format': widget.file.format,
+          'folder': widget.file.folder,
+        },
+        updated,
+        bytes,
+      );
+      if (!saved) {
+        throw StateError('文档在编辑期间已更改，请重新打开后再保存。');
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -389,9 +392,8 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => MermaidChartPage(
-                  initialCode: _contentController.text,
-                ),
+                builder: (_) =>
+                    MermaidChartPage(initialCode: _contentController.text),
               ),
             );
           },
@@ -443,10 +445,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(title),
-          actions: _buildAppBarActions(),
-        ),
+        appBar: AppBar(title: Text(title), actions: _buildAppBarActions()),
         body: _isEditMode
             ? Padding(
                 padding: const EdgeInsets.all(16),

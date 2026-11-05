@@ -47,12 +47,7 @@ List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   return [
     for (final e in flattenProviderModels(state, 'ocr'))
-      _ModelOption(
-        e.model,
-        e.config.providerName,
-        e.config.host,
-        e.config.key,
-      ),
+      _ModelOption(e.model, e.config.providerName, e.config.host, e.config.key),
   ];
 }
 
@@ -178,11 +173,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           if (bytesStr != null) {
             try {
               final bytes = base64Decode(bytesStr);
-              _selectedImages.add(SelectedImage(
-                bytes: bytes,
-                format: imgData['format'] as String? ?? 'jpeg',
-                sourceName: imgData['name'] as String?,
-              ));
+              _selectedImages.add(
+                SelectedImage(
+                  bytes: bytes,
+                  format: imgData['format'] as String? ?? 'jpeg',
+                  sourceName: imgData['name'] as String?,
+                ),
+              );
             } catch (e) {
               debugPrint('Failed to decode retry image: $e');
             }
@@ -308,9 +305,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -351,10 +346,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -392,8 +384,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -587,10 +582,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               // Keep the row height aligned with the model card (the
               // default 48px tap target would inflate the card).
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 32,
-                minHeight: 32,
-              ),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () {
                 showDialog<void>(
                   context: context,
@@ -1400,10 +1392,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // (which may differ from [index] after swiping).
     final result = await showDialog<({String action, int index})>(
       context: context,
-      builder: (_) => _OcrPreviewDialog(
-        images: _selectedImages,
-        initialIndex: index,
-      ),
+      builder: (_) =>
+          _OcrPreviewDialog(images: _selectedImages, initialIndex: index),
     );
 
     if (result == null || !mounted) return;
@@ -1552,8 +1542,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     // Step 2: Create the task (appears in the task list instantly).
     final timestamp = _currentTimestamp();
-    final allHaveSourceNames =
-        _selectedImages.every((img) => img.sourceName != null);
+    final allHaveSourceNames = _selectedImages.every(
+      (img) => img.sourceName != null,
+    );
     final title = allHaveSourceNames
         ? 'OCR_${_selectedImages.first.sourceName!}'
         : 'OCR_$timestamp';
@@ -1575,7 +1566,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             _selectedInstructionIndex < instructions.length)
         ? instructions[_selectedInstructionIndex].content
         : null;
-    unawaited(_computeOcrRetryData(
+    unawaited(
+      _computeOcrRetryData(
         taskId,
         imageBytesList,
         imageFormatList,
@@ -1583,12 +1575,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         modelIndex,
         _selectedInstructionIndex,
         instructionContent,
-        bgNotifier));
+        bgNotifier,
+      ),
+    );
 
     // Step 4: Execute OCR immediately.
     try {
-      await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
-          title: title);
+      await _performOcr(
+        effectiveConfig,
+        taskId,
+        bgNotifier,
+        textNotifier,
+        title: title,
+      );
     } catch (e) {
       bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
     }
@@ -1720,8 +1719,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (task != null) {
         final runningIndex = task.steps.indexWhere((s) => s.running);
         if (runningIndex >= 0) {
-          bgNotifier.updateStep(taskId, runningIndex,
-              failed: true, error: 'OCR识别失败: $e');
+          bgNotifier.updateStep(
+            taskId,
+            runningIndex,
+            failed: true,
+            error: 'OCR识别失败: $e',
+          );
         }
         // Mark remaining pending steps as skipped
         for (var i = 0; i < task.steps.length; i++) {
@@ -1749,10 +1752,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             'data': service.lastResponseData,
         };
       }
-      bgNotifier.failTask(taskId,
-          error: 'OCR识别失败: $e',
-          rawRequest: rawRequest,
-          rawResponse: rawResponse);
+      bgNotifier.failTask(
+        taskId,
+        error: 'OCR识别失败: $e',
+        rawRequest: rawRequest,
+        rawResponse: rawResponse,
+      );
     }
   }
 
@@ -1768,11 +1773,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
-    final storageFileName = '$hash.txt';
-
-    // Capture the file path returned by writeText
-    final filePath = await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(
+    final filePath = await TextManifest.addRecordWithContent(
       TextRecord(
         name: title ??
             'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
@@ -1783,6 +1784,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         folder: _saveFolder,
         textLength: text.length,
       ),
+      bytes,
     );
     return filePath;
   }
@@ -1951,10 +1953,7 @@ class _OcrPreviewDialog extends StatefulWidget {
   final List<SelectedImage> images;
   final int initialIndex;
 
-  const _OcrPreviewDialog({
-    required this.images,
-    required this.initialIndex,
-  });
+  const _OcrPreviewDialog({required this.images, required this.initialIndex});
 
   @override
   State<_OcrPreviewDialog> createState() => _OcrPreviewDialogState();
@@ -2024,11 +2023,16 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.broken_image,
-                                  size: 48, color: Colors.white54),
+                              Icon(
+                                Icons.broken_image,
+                                size: 48,
+                                color: Colors.white54,
+                              ),
                               SizedBox(height: 8),
-                              Text('无法加载图片',
-                                  style: TextStyle(color: Colors.white54)),
+                              Text(
+                                '无法加载图片',
+                                style: TextStyle(color: Colors.white54),
+                              ),
                             ],
                           ),
                         );

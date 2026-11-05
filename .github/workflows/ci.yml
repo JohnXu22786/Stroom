@@ -11,6 +11,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  text-space-tools:
+    name: Stroom text-space tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Check Dart formatting
+        run: >-
+          dart format --language-version=3.0 --output=none --set-exit-if-changed
+          lib/services/text_storage_tool_service.dart
+          lib/services/chat_adapter.dart
+          lib/services/chat_adapter_http_tools.dart
+          lib/services/connectivity_test_service.dart
+          lib/pages/provider_config_page.dart
+          lib/pages/connectivity_test_dialog.dart
+          lib/pages/assistant/assistant_defaults_tab.dart
+          test/services/text_storage_tool_service_test.dart
+      - run: flutter test test/services/text_storage_tool_service_test.dart
+
   pr-description:
     name: PR description format
     if: github.event_name == 'pull_request'
