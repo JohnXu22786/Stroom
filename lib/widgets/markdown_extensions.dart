@@ -556,6 +556,7 @@ typedef _MermaidFenceInfo = ({
   int? mermaidFenceIndex,
   int mermaidFenceCount,
   int tailStart,
+  int tailSourceStart,
   String? fenceChar,
   int fenceLength,
   int fenceQuoteDepth,
@@ -794,6 +795,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
       mermaidFenceIndex: null,
       mermaidFenceCount: mermaidFenceCount,
       tailStart: tailStart,
+      tailSourceStart: 0,
       fenceChar: null,
       fenceLength: 0,
       fenceQuoteDepth: 0,
@@ -814,13 +816,16 @@ _MermaidFenceInfo _unclosedFenceInfo(
           : normalized.substring(tailStart);
   return (
     tail: tail,
-    tailSource: !includeTail && hasUnfencedIndentedCode ? normalized : null,
+    tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
     isCached: !includeTail,
     hasUnfencedIndentedCode: hasUnfencedIndentedCode,
     openFenceIndex: openFenceIndex,
     mermaidFenceIndex: openMermaidFenceIndex,
     mermaidFenceCount: mermaidFenceCount,
     tailStart: tailStart,
+    tailSourceStart: !includeTail && hasUnfencedIndentedCode
+        ? _sourceOffsetForNormalizedOffset(text, tailStart)
+        : 0,
     fenceChar: fenceChar,
     fenceLength: fenceLength,
     fenceQuoteDepth: fenceQuoteDepth,
@@ -835,6 +840,23 @@ _MermaidFenceInfo _unclosedFenceInfo(
   );
 }
 
+int _sourceOffsetForNormalizedOffset(String text, int normalizedOffset) {
+  var sourceOffset = 0;
+  var currentNormalizedOffset = 0;
+  while (sourceOffset < text.length &&
+      currentNormalizedOffset < normalizedOffset) {
+    if (text.codeUnitAt(sourceOffset) == 0x0d &&
+        sourceOffset + 1 < text.length &&
+        text.codeUnitAt(sourceOffset + 1) == 0x0a) {
+      sourceOffset += 2;
+    } else {
+      sourceOffset++;
+    }
+    currentNormalizedOffset++;
+  }
+  return sourceOffset;
+}
+
 /// Reuses fence metadata while an active streaming section grows.
 ///
 /// The caller owns this cache for one append-only text section. Appends that
@@ -844,9 +866,10 @@ _MermaidFenceInfo _unclosedFenceInfo(
 class StreamingFenceInfoCache {
   _MermaidFenceInfo? _info;
   int _textLength = 0;
+  int _normalizedTextLength = 0;
   _ClosingFencePrefix? _pendingClosingPrefix;
   String _markerSuffix = '';
-  bool _supportsIncrementalReuse = true;
+  bool _textEndedWithCarriageReturn = false;
 
   _MermaidFenceInfo _infoFor(String text) {
     final cached = _info;
@@ -855,16 +878,38 @@ class StreamingFenceInfoCache {
     }
     if (text.length == _textLength) return cached;
 
-    final appended = text.substring(_textLength);
-    if (!_supportsIncrementalReuse || appended.contains('\r')) {
-      return _scanFromStart(text);
+    var appended = text.substring(_textLength);
+    final completesCarriageReturnPair =
+        _textEndedWithCarriageReturn && appended.startsWith('\n');
+    if (completesCarriageReturnPair) {
+      // A CR at the end of the previous chunk was already treated as one
+      // normalized newline. If this chunk completes CRLF, its LF adds no
+      // second newline.
+      appended = appended.substring(1);
+    }
+    final normalizedAppended =
+        appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    _textEndedWithCarriageReturn = text.endsWith('\r');
+    final tailSourceStart = cached.tailSourceStart +
+        (completesCarriageReturnPair && cached.tailSourceStart == _textLength
+            ? 1
+            : 0);
+    if (normalizedAppended.isEmpty) {
+      return _rememberIncrementalUpdate(
+        text,
+        normalizedAppended,
+        cached,
+        _pendingClosingPrefix,
+        tailSourceStart: tailSourceStart,
+      );
     }
 
     if (cached.fenceChar == null) {
       if (cached.trailingLineClosedFence) return _scanFromStart(text);
-      if (!_mayContainFenceMarker('$_markerSuffix$appended')) {
+      if (!_mayContainFenceMarker('$_markerSuffix$normalizedAppended')) {
         _textLength = text.length;
-        _rememberSuffix(text);
+        _normalizedTextLength += normalizedAppended.length;
+        _rememberSuffix('$_markerSuffix$normalizedAppended');
         return cached;
       }
       return _scanFromStart(text);
@@ -872,9 +917,9 @@ class StreamingFenceInfoCache {
 
     // An opening fence whose info string is still on the unterminated final
     // line can change language identity as more streamed characters arrive.
-    if (cached.tailStart > _textLength) return _scanFromStart(text);
+    if (cached.tailStart > _normalizedTextLength) return _scanFromStart(text);
 
-    final lines = appended.split('\n');
+    final lines = normalizedAppended.split('\n');
     final firstLine = _advanceClosingFencePrefix(
       _pendingClosingPrefix,
       lines.first,
@@ -885,8 +930,10 @@ class StreamingFenceInfoCache {
     if (lines.length == 1) {
       return _rememberIncrementalUpdate(
         text,
+        normalizedAppended,
         cached,
         firstLine.prefix,
+        tailSourceStart: tailSourceStart,
       );
     }
 
@@ -924,20 +971,24 @@ class StreamingFenceInfoCache {
     }
     return _rememberIncrementalUpdate(
       text,
+      normalizedAppended,
       cached,
       _closingFencePrefix(
         finalContainer.line,
         cached.fenceChar!,
         cached.fenceLength,
       ),
+      tailSourceStart: tailSourceStart,
     );
   }
 
   _MermaidFenceInfo _rememberIncrementalUpdate(
     String text,
+    String normalizedAppended,
     _MermaidFenceInfo cached,
-    _ClosingFencePrefix? pendingClosingPrefix,
-  ) {
+    _ClosingFencePrefix? pendingClosingPrefix, {
+    int? tailSourceStart,
+  }) {
     final updated = (
       tail: null,
       tailSource: cached.hasUnfencedIndentedCode ? text : null,
@@ -947,6 +998,7 @@ class StreamingFenceInfoCache {
       mermaidFenceIndex: cached.mermaidFenceIndex,
       mermaidFenceCount: cached.mermaidFenceCount,
       tailStart: cached.tailStart,
+      tailSourceStart: tailSourceStart ?? cached.tailSourceStart,
       fenceChar: cached.fenceChar,
       fenceLength: cached.fenceLength,
       fenceQuoteDepth: cached.fenceQuoteDepth,
@@ -961,21 +1013,24 @@ class StreamingFenceInfoCache {
     );
     _info = updated;
     _textLength = text.length;
+    _normalizedTextLength += normalizedAppended.length;
     _pendingClosingPrefix = pendingClosingPrefix;
-    _rememberSuffix(text);
+    _rememberSuffix('$_markerSuffix$normalizedAppended');
     return updated;
   }
 
   _MermaidFenceInfo _scanFromStart(String text) {
     final info = _unclosedFenceInfo(text, includeTail: false);
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     _info = info;
     _textLength = text.length;
-    _supportsIncrementalReuse = !text.contains('\r');
+    _normalizedTextLength = normalized.length;
+    _textEndedWithCarriageReturn = text.endsWith('\r');
     _pendingClosingPrefix = null;
     if (info.fenceChar != null) {
-      final lineStart = text.lastIndexOf('\n') + 1;
+      final lineStart = normalized.lastIndexOf('\n') + 1;
       final container = _stripActiveContainerPrefixes(
-        text.substring(lineStart),
+        normalized.substring(lineStart),
         info.fenceQuoteDepth,
         info.fenceListIndent,
         info.fenceInnerQuoteDepth,
@@ -988,7 +1043,7 @@ class StreamingFenceInfoCache {
         );
       }
     }
-    _rememberSuffix(text);
+    _rememberSuffix(normalized);
     return info;
   }
 
@@ -1115,9 +1170,12 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
-      var tail = fenceInfo.tailStart >= tailSource.length
+      var tail = fenceInfo.tailSourceStart >= tailSource.length
           ? ''
-          : tailSource.substring(fenceInfo.tailStart);
+          : tailSource
+              .substring(fenceInfo.tailSourceStart)
+              .replaceAll('\r\n', '\n')
+              .replaceAll('\r', '\n');
       if (mermaidFenceIndex != null &&
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex) {
         tail = _stripFenceContainerPrefix(
