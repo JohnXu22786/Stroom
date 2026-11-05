@@ -13,11 +13,9 @@ This note does not duplicate or claim to enumerate that graph. The committed
 lock was generated with Flutter 3.47.8; CI and release workflows use that same
 SDK version when enforcing the lock.
 
-The lock currently resolves `function_tree` 0.9.1, its last published release
-as checked on 2026-10-24. Pub.dev marks it discontinued and names Dendrocas as
-its replacement. Stroom retains it because the current math evaluator exposes
-syntax that the rewrite does not support directly; a replacement needs a
-separate compatibility review. `cupertino_icons` remains at 1.0.9 because the
+The previous lock resolved `function_tree` 0.9.1 as a transitive dependency of
+`visual_math` 0.1.0. `visual_math` 0.1.1 no longer declares it, so it is absent
+from the current lock. `cupertino_icons` remains at 1.0.9 because the
 latest Chewie release (1.17.4) requires `cupertino_icons ^1.0.9`, which excludes
 the newer 2.0.0 release. The test-only `cross_file` dependency remains at
 0.3.5+5 because `file_picker_platform_interface` 4.2.0 requires `^0.3.5+4`,
