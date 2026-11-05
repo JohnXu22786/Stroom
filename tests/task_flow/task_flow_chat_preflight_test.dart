@@ -427,7 +427,8 @@ void main() {
 
       expect(config.apiProtocol, 'openai.chat_completions');
       expect(config.models.single.apiProtocolOverride, isNull);
-      expect(flowChatEndpointType(assistant, providers), 'openai.chat_completions');
+      expect(flowChatEndpointType(assistant, providers),
+          'openai.chat_completions');
       await validateTaskFlow(
         chatFlow(IOType.text),
         [FlowRunInput(text: 'hello')],
