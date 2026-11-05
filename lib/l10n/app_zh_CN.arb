@@ -3538,5 +3538,308 @@
         "type": "String"
       }
     }
-  }
+  },
+  "asrPageTitle": "音频转写",
+  "clear": "清空",
+  "configure": "去配置",
+  "asrModel": "识别模型",
+  "reselectModel": "请重新选择模型",
+  "selectAsrModel": "选择识别模型",
+  "enterPublicAudioUrl": "输入公网音频链接",
+  "recordingSelection": "录音选择",
+  "audioFiles": "音频文件",
+  "noAudioSelected": "暂未选择音频文件",
+  "supportedAudioFormats": "支持 wav、mp3、m4a、ogg 等常见音频格式",
+  "asrSelectedAudioCount": "{count, plural, one{已选择 {count} 个音频文件} other{已选择 {count} 个音频文件}}",
+  "@asrSelectedAudioCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrSelectedAudioCountShort": "{count, plural, one{已选 {count} 个音频} other{已选 {count} 个音频}}",
+  "@asrSelectedAudioCountShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrReselect": "重新选择",
+  "asrUrlLabel": "URL  |  公网链接",
+  "asrErrorDetails": "查看详细错误",
+  "asrResultSaved": "识别结果已保存",
+  "asrWorking": "识别中...",
+  "asrStart": "开始识别",
+  "saveTo": "保存至",
+  "rootFolder": "根目录",
+  "chooseSaveFolder": "选择保存文件夹",
+  "linkAlreadyAdded": "该链接已在列表中",
+  "chooseAudioSource": "选择音频来源",
+  "inAppRecordings": "应用内录音",
+  "chooseGeneratedRecordings": "从已生成的录音中选择",
+  "systemAudioFiles": "系统音频文件",
+  "chooseDeviceAudioFiles": "从设备文件中选择",
+  "cannotReadAudioFile": "无法读取音频文件",
+  "chooseAudioFileFailed": "选择音频文件失败: {details}",
+  "@chooseAudioFileFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseInAppRecording": "选择应用内录音",
+  "noRecordings": "暂无录音",
+  "durationSeconds": "{seconds, plural, one{{seconds}秒} other{{seconds}秒}}",
+  "@durationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "asrNeedsProvider": "请先在设置中配置音频转写供应商和模型",
+  "asrModelUnavailable": "原识别模型已失效或无法确认，请重新选择识别模型",
+  "asrUrlProviderRemoveFiles": "当前供应商使用 URL 上传方式，请移除本地音频文件后重试",
+  "asrFileProviderRemoveUrls": "当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试",
+  "asrTaskStartFailed": "任务启动失败: {details}",
+  "@asrTaskStartFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrInvalidUrl": "无效链接，必须以 http:// 或 https:// 开头",
+  "asrEnterAudioUrl": "输入音频链接",
+  "asrUrlProviderHelp": "当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。",
+  "cancel": "取消",
+  "add": "添加",
+  "ttsPageTitle": "音频",
+  "ttsAudioImportedCount": "{count, plural, one{已导入 {count} 个音频文件} other{已导入 {count} 个音频文件}}",
+  "@ttsAudioImportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsImportFailed": "导入失败: {details}",
+  "@ttsImportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsFileReadFailed": "文件数据读取失败",
+  "ttsExportAudioFile": "导出音频文件",
+  "ttsExportedTo": "已导出到: {path}",
+  "@ttsExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsExportFailed": "导出失败: {details}",
+  "@ttsExportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsConfirmRegenerate": "确认重新生成",
+  "ttsRegenerateConfirmFile": "确定要重新生成音频 “{fileName}” 吗？",
+  "@ttsRegenerateConfirmFile": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRegenerateOverwrite": "重新生成后将覆盖原音频文件。",
+  "ttsRegenerate": "确认重新生成",
+  "ttsCopiedFailed": "复制失败: {details}",
+  "@ttsCopiedFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseExportFolder": "选择导出目录",
+  "ttsExportAudio": "导出音频",
+  "ttsExportedCount": "{count, plural, one{已导出 {count} 个文件} other{已导出 {count} 个文件}}",
+  "@ttsExportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsFolderExport": "文件夹导出",
+  "ttsWebFolderExportHelp": "浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。",
+  "ttsDownloadZip": "下载 ZIP 文件",
+  "ttsExportAudioFolder": "导出音频文件夹",
+  "ttsRecord": "录音",
+  "ttsImport": "导入",
+  "ttsPlay": "播放",
+  "ttsExportLocal": "导出到本地",
+  "ttsRegenerateQuestion": "重新生成",
+  "ttsNeedsProvider": "请先在设置中配置语音合成供应商和模型",
+  "ttsAddedToTasks": "已添加到任务列表，后台生成中…",
+  "ttsCreateTitle": "语音合成",
+  "ttsOriginalTitle": "录音标题",
+  "ttsUseOriginalTitle": "使用原标题",
+  "ttsAudioFileNameHint": "保存的音频文件名（可选）",
+  "ttsTextToConvert": "转换文本",
+  "ttsSpeechContent": "语音内容",
+  "ttsTextHint": "请输入要转换为语音的文本...",
+  "ttsFullscreenEdit": "全屏编辑",
+  "ttsTextLimitWarning": "文字超出限制（最多 {limit} 字）",
+  "@ttsTextLimitWarning": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsSynthesisConfig": "合成配置",
+  "ttsVoiceAndSoundHelp": "调整音色与声音表现",
+  "ttsProviderSettingsLead": "在",
+  "ttsProviderSettings": "TTS供应商设置",
+  "ttsProviderSettingsTail": "页面设置更多参数",
+  "ttsEditText": "编辑文本",
+  "ttsClose": "关闭",
+  "ttsVoice": "音色",
+  "ttsSelectVoice": "选择音色",
+  "ttsSpeed": "语速",
+  "ttsNormal": "正常",
+  "ttsVolume": "音量",
+  "ttsInstruction": "语气指令（instruction）",
+  "ttsInstructionHint": "例如: Speak in a cheerful and excited tone",
+  "ttsCustomParams": "自定义参数",
+  "ttsDefaultValue": "默认: {value}",
+  "@ttsDefaultValue": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "ttsGenerateRecording": "生成录音",
+  "ttsSaveAs": "将保存为: {path}/{name}.{format}",
+  "@ttsSaveAs": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseSaveFolder": "选择保存文件夹",
+  "ttsFillTextError": "请输入要转换的文本",
+  "voiceBatchTitle": "批量添加音色",
+  "voiceBatchConfirm": "确认添加",
+  "voiceBatchSeparator": "分隔符：",
+  "voiceBatchCustomSeparatorHint": "请输入自定义分隔符",
+  "voiceBatchFieldOrder": "字段顺序：",
+  "voiceBatchNameThenId": "第1个=名称, 第2个=ID",
+  "voiceBatchIdThenName": "第1个=ID, 第2个=名称",
+  "voiceBatchColumnChoice": "{count, plural, one{检测到 1 列，请选择作为名称/ID的起始列：} other{检测到 {count} 列，请选择作为名称/ID的起始列：}}",
+  "@voiceBatchColumnChoice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceBatchColumn": "第{index}列：{sample}",
+  "@voiceBatchColumn": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "sample": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceBatchSingleColumn": "识别到单列数据，将全部作为ID处理（名称 = ID）",
+  "voiceBatchInputHint": "支持 Tab / 逗号 / 分号 / 竖线 作为分隔符，每行两个内容",
+  "voiceBatchNoPreview": "暂无解析结果",
+  "voiceName": "音色名称",
+  "voiceId": "音色ID",
+  "status": "状态",
+  "voiceNew": "✅ 新增",
+  "voiceIdExists": "⚠️ ID已存在",
+  "voiceFormatError": "❌ 格式错误{details}",
+  "@voiceFormatError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceDuplicateIds": "{count, plural, one{发现 {count} 个重复ID: {ids}} other{发现 {count} 个重复ID: {ids}}}",
+  "@voiceDuplicateIds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceInsufficientColumnData": "所选列数据不足",
+  "voiceCustomSeparator": "自定义...",
+  "voiceCommaSeparator": "逗号 (,)",
+  "voiceSemicolonSeparator": "分号 (;)",
+  "voicePipeSeparator": "竖线 (|)",
+  "voiceTabSeparator": "Tab",
+  "voiceEditorTitle": "音色编辑",
+  "save": "保存",
+  "voiceAddRow": "添加一行",
+  "voiceBatchAdd": "批量添加",
+  "voiceNoneAdd": "暂无音色，请添加",
+  "delete": "删除",
+  "voiceDuplicateResolution": "发现以下重复音色ID，逐条选择处理方式：",
+  "update": "更新",
+  "skip": "跳过",
+  "voiceDuplicatesRemaining": "{count, plural, one{还有 {count} 个重复未处理} other{还有 {count} 个重复未处理}}",
+  "@voiceDuplicatesRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "continueEditing": "继续编辑",
+  "asrRetryIncomplete": "重试音频不完整，请清空后重新选择全部音频",
+  "asrRetryAudioUnreadable": "重试音频数据无法读取，请重新选择音频: {details}",
+  "asrLegacyRetryUnavailable": "旧版重试音频不可用，请重新选择音频",
+  "asrRetryDataUnreadable": "重试数据无法读取，请重新选择音频",
+  "ttsSynthesisModel": "合成模型",
+  "@asrRetryAudioUnreadable": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrRetryUnavailable": "重试音频不可用，请重新选择音频",
+  "chatRequest": "请求 (Request)",
+  "chatResponse": "响应 (Response)",
+  "chatNoErrorDetails": "无详细数据",
+  "ttsInstructionDescription": "通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格"
 }

@@ -6506,6 +6506,552 @@ class AppLocalizationsEn extends AppLocalizations {
   String ankiSyncSchemaStatus(int schema, int usn, String modified) {
     return 'Schema version $schema · USN $usn · Modified $modified';
   }
+
+  @override
+  String get asrPageTitle => 'Audio Transcription';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get configure => 'Configure';
+
+  @override
+  String get asrModel => 'Recognition model';
+
+  @override
+  String get reselectModel => 'Please select a model again';
+
+  @override
+  String get selectAsrModel => 'Select a recognition model';
+
+  @override
+  String get enterPublicAudioUrl => 'Enter a public audio URL';
+
+  @override
+  String get recordingSelection => 'Recordings';
+
+  @override
+  String get audioFiles => 'Audio files';
+
+  @override
+  String get noAudioSelected => 'No audio files selected';
+
+  @override
+  String get supportedAudioFormats =>
+      'Supports common audio formats such as WAV, MP3, M4A, and OGG';
+
+  @override
+  String asrSelectedAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files selected',
+      one: '$count audio file selected',
+      zero: 'No audio files selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String asrSelectedAudioCountShort(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files selected',
+      one: '$count audio file selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrReselect => 'Select again';
+
+  @override
+  String get asrUrlLabel => 'URL | Public link';
+
+  @override
+  String get asrErrorDetails => 'View error details';
+
+  @override
+  String get asrResultSaved => 'Transcription result saved';
+
+  @override
+  String get asrWorking => 'Transcribing…';
+
+  @override
+  String get asrStart => 'Start transcription';
+
+  @override
+  String get saveTo => 'Save to';
+
+  @override
+  String get rootFolder => 'Root folder';
+
+  @override
+  String get chooseSaveFolder => 'Choose a folder';
+
+  @override
+  String get linkAlreadyAdded => 'This link is already in the list';
+
+  @override
+  String get chooseAudioSource => 'Choose an audio source';
+
+  @override
+  String get inAppRecordings => 'In-app recordings';
+
+  @override
+  String get chooseGeneratedRecordings => 'Choose from generated recordings';
+
+  @override
+  String get systemAudioFiles => 'System audio files';
+
+  @override
+  String get chooseDeviceAudioFiles => 'Choose files from your device';
+
+  @override
+  String get cannotReadAudioFile => 'Could not read the audio file';
+
+  @override
+  String chooseAudioFileFailed(String details) {
+    return 'Could not select audio file: $details';
+  }
+
+  @override
+  String get chooseInAppRecording => 'Choose in-app recordings';
+
+  @override
+  String get noRecordings => 'No recordings';
+
+  @override
+  String durationSeconds(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secs',
+      one: '$seconds sec',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrNeedsProvider =>
+      'Configure an audio transcription provider and model in Settings first';
+
+  @override
+  String get asrModelUnavailable =>
+      'The original recognition model is unavailable or cannot be verified. Please select a model again.';
+
+  @override
+  String get asrUrlProviderRemoveFiles =>
+      'This provider uploads audio by URL. Remove local audio files and try again.';
+
+  @override
+  String get asrFileProviderRemoveUrls =>
+      'This provider uploads audio files and does not support transcription by link. Remove links and try again.';
+
+  @override
+  String asrTaskStartFailed(String details) {
+    return 'Could not start the task: $details';
+  }
+
+  @override
+  String get asrInvalidUrl =>
+      'Invalid URL. It must start with http:// or https://';
+
+  @override
+  String get asrEnterAudioUrl => 'Enter an audio URL';
+
+  @override
+  String get asrUrlProviderHelp =>
+      'This provider uploads audio by URL. Enter a public audio URL (http/https).';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get add => 'Add';
+
+  @override
+  String get ttsPageTitle => 'Audio';
+
+  @override
+  String ttsAudioImportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files imported',
+      one: '$count audio file imported',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String ttsImportFailed(String details) {
+    return 'Import failed: $details';
+  }
+
+  @override
+  String get ttsFileReadFailed => 'Could not read file data';
+
+  @override
+  String get ttsExportAudioFile => 'Export audio file';
+
+  @override
+  String ttsExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String ttsExportFailed(String details) {
+    return 'Export failed: $details';
+  }
+
+  @override
+  String get ttsConfirmRegenerate => 'Confirm regeneration';
+
+  @override
+  String ttsRegenerateConfirmFile(String fileName) {
+    return 'Regenerate audio “$fileName”?';
+  }
+
+  @override
+  String get ttsRegenerateOverwrite =>
+      'The original audio file will be replaced after regeneration.';
+
+  @override
+  String get ttsRegenerate => 'Regenerate audio';
+
+  @override
+  String ttsCopiedFailed(String details) {
+    return 'Could not copy: $details';
+  }
+
+  @override
+  String get ttsChooseExportFolder => 'Choose export folder';
+
+  @override
+  String get ttsExportAudio => 'Export audio';
+
+  @override
+  String ttsExportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files exported',
+      one: '$count file exported',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ttsFolderExport => 'Export folder';
+
+  @override
+  String get ttsWebFolderExportHelp =>
+      'Your browser cannot choose an export folder. A ZIP file will be downloaded with the folder structure preserved.';
+
+  @override
+  String get ttsDownloadZip => 'Download ZIP file';
+
+  @override
+  String get ttsExportAudioFolder => 'Export audio folder';
+
+  @override
+  String get ttsRecord => 'Record';
+
+  @override
+  String get ttsImport => 'Import';
+
+  @override
+  String get ttsPlay => 'Play';
+
+  @override
+  String get ttsExportLocal => 'Export to device';
+
+  @override
+  String get ttsRegenerateQuestion => 'Regenerate';
+
+  @override
+  String get ttsNeedsProvider =>
+      'Configure a speech synthesis provider and model in Settings first';
+
+  @override
+  String get ttsAddedToTasks =>
+      'Added to the task list. Generating in the background…';
+
+  @override
+  String get ttsCreateTitle => 'Speech Synthesis';
+
+  @override
+  String get ttsOriginalTitle => 'Recording title';
+
+  @override
+  String get ttsUseOriginalTitle => 'Use original title';
+
+  @override
+  String get ttsAudioFileNameHint => 'Saved audio file name (optional)';
+
+  @override
+  String get ttsTextToConvert => 'Text to convert';
+
+  @override
+  String get ttsSpeechContent => 'Speech content';
+
+  @override
+  String get ttsTextHint => 'Enter text to convert to speech…';
+
+  @override
+  String get ttsFullscreenEdit => 'Edit in full screen';
+
+  @override
+  String ttsTextLimitWarning(int limit) {
+    return 'Text exceeds the limit (maximum $limit characters)';
+  }
+
+  @override
+  String get ttsSynthesisConfig => 'Synthesis settings';
+
+  @override
+  String get ttsVoiceAndSoundHelp => 'Adjust the voice and sound';
+
+  @override
+  String get ttsProviderSettingsLead => 'in ';
+
+  @override
+  String get ttsProviderSettings => 'TTS provider settings';
+
+  @override
+  String get ttsProviderSettingsTail => ' to configure more parameters';
+
+  @override
+  String get ttsEditText => 'Edit text';
+
+  @override
+  String get ttsClose => 'Close';
+
+  @override
+  String get ttsVoice => 'Voice';
+
+  @override
+  String get ttsSelectVoice => 'Select a voice';
+
+  @override
+  String get ttsSpeed => 'Speed';
+
+  @override
+  String get ttsNormal => 'Normal';
+
+  @override
+  String get ttsVolume => 'Volume';
+
+  @override
+  String get ttsInstruction => 'Speaking style instruction';
+
+  @override
+  String get ttsInstructionHint =>
+      'For example: Speak in a cheerful and excited tone';
+
+  @override
+  String get ttsCustomParams => 'Custom parameters';
+
+  @override
+  String ttsDefaultValue(Object value) {
+    return 'Default: $value';
+  }
+
+  @override
+  String get ttsGenerateRecording => 'Generate recording';
+
+  @override
+  String ttsSaveAs(String path, String name, String format) {
+    return 'Save as: $path/$name.$format';
+  }
+
+  @override
+  String get ttsChooseSaveFolder => 'Choose a folder';
+
+  @override
+  String get ttsFillTextError => 'Enter text to convert';
+
+  @override
+  String get voiceBatchTitle => 'Add voices in bulk';
+
+  @override
+  String get voiceBatchConfirm => 'Add selected voices';
+
+  @override
+  String get voiceBatchSeparator => 'Separator:';
+
+  @override
+  String get voiceBatchCustomSeparatorHint => 'Enter a custom separator';
+
+  @override
+  String get voiceBatchFieldOrder => 'Field order:';
+
+  @override
+  String get voiceBatchNameThenId => '1st = name, 2nd = ID';
+
+  @override
+  String get voiceBatchIdThenName => '1st = ID, 2nd = name';
+
+  @override
+  String voiceBatchColumnChoice(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Detected $count columns. Choose the starting column for the name/ID:',
+      one:
+          'Detected $count column. Choose the starting column for the name/ID:',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceBatchColumn(int index, String sample) {
+    return 'Column $index: $sample';
+  }
+
+  @override
+  String get voiceBatchSingleColumn =>
+      'One column detected. All values will be used as IDs (name = ID).';
+
+  @override
+  String get voiceBatchInputHint =>
+      'Separate name and ID with Tab, commas, semicolons, or vertical bars (one pair per line)';
+
+  @override
+  String get voiceBatchNoPreview => 'Nothing to preview';
+
+  @override
+  String get voiceName => 'Voice name';
+
+  @override
+  String get voiceId => 'Voice ID';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get voiceNew => '✅ New';
+
+  @override
+  String get voiceIdExists => '⚠️ ID already exists';
+
+  @override
+  String voiceFormatError(String details) {
+    return '❌ Format error$details';
+  }
+
+  @override
+  String voiceDuplicateIds(int count, String ids) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicate IDs found: $ids',
+      one: '$count duplicate ID found: $ids',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get voiceInsufficientColumnData =>
+      'Not enough data in the selected columns';
+
+  @override
+  String get voiceCustomSeparator => 'Custom…';
+
+  @override
+  String get voiceCommaSeparator => 'Comma (,)';
+
+  @override
+  String get voiceSemicolonSeparator => 'Semicolon (;)';
+
+  @override
+  String get voicePipeSeparator => 'Vertical bar (|)';
+
+  @override
+  String get voiceTabSeparator => 'Tab';
+
+  @override
+  String get voiceEditorTitle => 'Edit voices';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get voiceAddRow => 'Add row';
+
+  @override
+  String get voiceBatchAdd => 'Add in bulk';
+
+  @override
+  String get voiceNoneAdd => 'No voices yet. Add one to get started.';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get voiceDuplicateResolution =>
+      'The following voice IDs are duplicated. Choose how to handle each one:';
+
+  @override
+  String get update => 'Update';
+
+  @override
+  String get skip => 'Skip';
+
+  @override
+  String voiceDuplicatesRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicates remain',
+      one: '$count duplicate remains',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get continueEditing => 'Continue editing';
+
+  @override
+  String get asrRetryIncomplete =>
+      'Retry audio is incomplete. Clear the list and select all audio again.';
+
+  @override
+  String asrRetryAudioUnreadable(String details) {
+    return 'Retry audio data could not be read. Select the audio again: $details';
+  }
+
+  @override
+  String get asrLegacyRetryUnavailable =>
+      'Legacy retry audio is unavailable. Select the audio again.';
+
+  @override
+  String get asrRetryDataUnreadable =>
+      'Retry data could not be read. Select the audio again.';
+
+  @override
+  String get ttsSynthesisModel => 'Synthesis model';
+
+  @override
+  String get asrRetryUnavailable =>
+      'Retry audio is unavailable. Select the audio again.';
+
+  @override
+  String get chatRequest => 'Request';
+
+  @override
+  String get chatResponse => 'Response';
+
+  @override
+  String get chatNoErrorDetails => 'No details available';
+
+  @override
+  String get ttsInstructionDescription =>
+      'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -13009,4 +13555,550 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String ankiSyncSchemaStatus(int schema, int usn, String modified) {
     return 'Schema version $schema · USN $usn · Modified $modified';
   }
+
+  @override
+  String get asrPageTitle => 'Audio Transcription';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get configure => 'Configure';
+
+  @override
+  String get asrModel => 'Recognition model';
+
+  @override
+  String get reselectModel => 'Please select a model again';
+
+  @override
+  String get selectAsrModel => 'Select a recognition model';
+
+  @override
+  String get enterPublicAudioUrl => 'Enter a public audio URL';
+
+  @override
+  String get recordingSelection => 'Recordings';
+
+  @override
+  String get audioFiles => 'Audio files';
+
+  @override
+  String get noAudioSelected => 'No audio files selected';
+
+  @override
+  String get supportedAudioFormats =>
+      'Supports common audio formats such as WAV, MP3, M4A, and OGG';
+
+  @override
+  String asrSelectedAudioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files selected',
+      one: '$count audio file selected',
+      zero: 'No audio files selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String asrSelectedAudioCountShort(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files selected',
+      one: '$count audio file selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrReselect => 'Select again';
+
+  @override
+  String get asrUrlLabel => 'URL | Public link';
+
+  @override
+  String get asrErrorDetails => 'View error details';
+
+  @override
+  String get asrResultSaved => 'Transcription result saved';
+
+  @override
+  String get asrWorking => 'Transcribing…';
+
+  @override
+  String get asrStart => 'Start transcription';
+
+  @override
+  String get saveTo => 'Save to';
+
+  @override
+  String get rootFolder => 'Root folder';
+
+  @override
+  String get chooseSaveFolder => 'Choose a folder';
+
+  @override
+  String get linkAlreadyAdded => 'This link is already in the list';
+
+  @override
+  String get chooseAudioSource => 'Choose an audio source';
+
+  @override
+  String get inAppRecordings => 'In-app recordings';
+
+  @override
+  String get chooseGeneratedRecordings => 'Choose from generated recordings';
+
+  @override
+  String get systemAudioFiles => 'System audio files';
+
+  @override
+  String get chooseDeviceAudioFiles => 'Choose files from your device';
+
+  @override
+  String get cannotReadAudioFile => 'Could not read the audio file';
+
+  @override
+  String chooseAudioFileFailed(String details) {
+    return 'Could not select audio file: $details';
+  }
+
+  @override
+  String get chooseInAppRecording => 'Choose in-app recordings';
+
+  @override
+  String get noRecordings => 'No recordings';
+
+  @override
+  String durationSeconds(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secs',
+      one: '$seconds sec',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get asrNeedsProvider =>
+      'Configure an audio transcription provider and model in Settings first';
+
+  @override
+  String get asrModelUnavailable =>
+      'The original recognition model is unavailable or cannot be verified. Please select a model again.';
+
+  @override
+  String get asrUrlProviderRemoveFiles =>
+      'This provider uploads audio by URL. Remove local audio files and try again.';
+
+  @override
+  String get asrFileProviderRemoveUrls =>
+      'This provider uploads audio files and does not support transcription by link. Remove links and try again.';
+
+  @override
+  String asrTaskStartFailed(String details) {
+    return 'Could not start the task: $details';
+  }
+
+  @override
+  String get asrInvalidUrl =>
+      'Invalid URL. It must start with http:// or https://';
+
+  @override
+  String get asrEnterAudioUrl => 'Enter an audio URL';
+
+  @override
+  String get asrUrlProviderHelp =>
+      'This provider uploads audio by URL. Enter a public audio URL (http/https).';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get add => 'Add';
+
+  @override
+  String get ttsPageTitle => 'Audio';
+
+  @override
+  String ttsAudioImportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audio files imported',
+      one: '$count audio file imported',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String ttsImportFailed(String details) {
+    return 'Import failed: $details';
+  }
+
+  @override
+  String get ttsFileReadFailed => 'Could not read file data';
+
+  @override
+  String get ttsExportAudioFile => 'Export audio file';
+
+  @override
+  String ttsExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String ttsExportFailed(String details) {
+    return 'Export failed: $details';
+  }
+
+  @override
+  String get ttsConfirmRegenerate => 'Confirm regeneration';
+
+  @override
+  String ttsRegenerateConfirmFile(String fileName) {
+    return 'Regenerate audio “$fileName”?';
+  }
+
+  @override
+  String get ttsRegenerateOverwrite =>
+      'The original audio file will be replaced after regeneration.';
+
+  @override
+  String get ttsRegenerate => 'Regenerate audio';
+
+  @override
+  String ttsCopiedFailed(String details) {
+    return 'Could not copy: $details';
+  }
+
+  @override
+  String get ttsChooseExportFolder => 'Choose export folder';
+
+  @override
+  String get ttsExportAudio => 'Export audio';
+
+  @override
+  String ttsExportedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files exported',
+      one: '$count file exported',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ttsFolderExport => 'Export folder';
+
+  @override
+  String get ttsWebFolderExportHelp =>
+      'Your browser cannot choose an export folder. A ZIP file will be downloaded with the folder structure preserved.';
+
+  @override
+  String get ttsDownloadZip => 'Download ZIP file';
+
+  @override
+  String get ttsExportAudioFolder => 'Export audio folder';
+
+  @override
+  String get ttsRecord => 'Record';
+
+  @override
+  String get ttsImport => 'Import';
+
+  @override
+  String get ttsPlay => 'Play';
+
+  @override
+  String get ttsExportLocal => 'Export to device';
+
+  @override
+  String get ttsRegenerateQuestion => 'Regenerate';
+
+  @override
+  String get ttsNeedsProvider =>
+      'Configure a speech synthesis provider and model in Settings first';
+
+  @override
+  String get ttsAddedToTasks =>
+      'Added to the task list. Generating in the background…';
+
+  @override
+  String get ttsCreateTitle => 'Speech Synthesis';
+
+  @override
+  String get ttsOriginalTitle => 'Recording title';
+
+  @override
+  String get ttsUseOriginalTitle => 'Use original title';
+
+  @override
+  String get ttsAudioFileNameHint => 'Saved audio file name (optional)';
+
+  @override
+  String get ttsTextToConvert => 'Text to convert';
+
+  @override
+  String get ttsSpeechContent => 'Speech content';
+
+  @override
+  String get ttsTextHint => 'Enter text to convert to speech…';
+
+  @override
+  String get ttsFullscreenEdit => 'Edit in full screen';
+
+  @override
+  String ttsTextLimitWarning(int limit) {
+    return 'Text exceeds the limit (maximum $limit characters)';
+  }
+
+  @override
+  String get ttsSynthesisConfig => 'Synthesis settings';
+
+  @override
+  String get ttsVoiceAndSoundHelp => 'Adjust the voice and sound';
+
+  @override
+  String get ttsProviderSettingsLead => 'in ';
+
+  @override
+  String get ttsProviderSettings => 'TTS provider settings';
+
+  @override
+  String get ttsProviderSettingsTail => ' to configure more parameters';
+
+  @override
+  String get ttsEditText => 'Edit text';
+
+  @override
+  String get ttsClose => 'Close';
+
+  @override
+  String get ttsVoice => 'Voice';
+
+  @override
+  String get ttsSelectVoice => 'Select a voice';
+
+  @override
+  String get ttsSpeed => 'Speed';
+
+  @override
+  String get ttsNormal => 'Normal';
+
+  @override
+  String get ttsVolume => 'Volume';
+
+  @override
+  String get ttsInstruction => 'Speaking style instruction';
+
+  @override
+  String get ttsInstructionHint =>
+      'For example: Speak in a cheerful and excited tone';
+
+  @override
+  String get ttsCustomParams => 'Custom parameters';
+
+  @override
+  String ttsDefaultValue(Object value) {
+    return 'Default: $value';
+  }
+
+  @override
+  String get ttsGenerateRecording => 'Generate recording';
+
+  @override
+  String ttsSaveAs(String path, String name, String format) {
+    return 'Save as: $path/$name.$format';
+  }
+
+  @override
+  String get ttsChooseSaveFolder => 'Choose a folder';
+
+  @override
+  String get ttsFillTextError => 'Enter text to convert';
+
+  @override
+  String get voiceBatchTitle => 'Add voices in bulk';
+
+  @override
+  String get voiceBatchConfirm => 'Add selected voices';
+
+  @override
+  String get voiceBatchSeparator => 'Separator:';
+
+  @override
+  String get voiceBatchCustomSeparatorHint => 'Enter a custom separator';
+
+  @override
+  String get voiceBatchFieldOrder => 'Field order:';
+
+  @override
+  String get voiceBatchNameThenId => '1st = name, 2nd = ID';
+
+  @override
+  String get voiceBatchIdThenName => '1st = ID, 2nd = name';
+
+  @override
+  String voiceBatchColumnChoice(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Detected $count columns. Choose the starting column for the name/ID:',
+      one:
+          'Detected $count column. Choose the starting column for the name/ID:',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceBatchColumn(int index, String sample) {
+    return 'Column $index: $sample';
+  }
+
+  @override
+  String get voiceBatchSingleColumn =>
+      'One column detected. All values will be used as IDs (name = ID).';
+
+  @override
+  String get voiceBatchInputHint =>
+      'Separate name and ID with Tab, commas, semicolons, or vertical bars (one pair per line)';
+
+  @override
+  String get voiceBatchNoPreview => 'Nothing to preview';
+
+  @override
+  String get voiceName => 'Voice name';
+
+  @override
+  String get voiceId => 'Voice ID';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get voiceNew => '✅ New';
+
+  @override
+  String get voiceIdExists => '⚠️ ID already exists';
+
+  @override
+  String voiceFormatError(String details) {
+    return '❌ Format error$details';
+  }
+
+  @override
+  String voiceDuplicateIds(int count, String ids) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicate IDs found: $ids',
+      one: '$count duplicate ID found: $ids',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get voiceInsufficientColumnData =>
+      'Not enough data in the selected columns';
+
+  @override
+  String get voiceCustomSeparator => 'Custom…';
+
+  @override
+  String get voiceCommaSeparator => 'Comma (,)';
+
+  @override
+  String get voiceSemicolonSeparator => 'Semicolon (;)';
+
+  @override
+  String get voicePipeSeparator => 'Vertical bar (|)';
+
+  @override
+  String get voiceTabSeparator => 'Tab';
+
+  @override
+  String get voiceEditorTitle => 'Edit voices';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get voiceAddRow => 'Add row';
+
+  @override
+  String get voiceBatchAdd => 'Add in bulk';
+
+  @override
+  String get voiceNoneAdd => 'No voices yet. Add one to get started.';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get voiceDuplicateResolution =>
+      'The following voice IDs are duplicated. Choose how to handle each one:';
+
+  @override
+  String get update => 'Update';
+
+  @override
+  String get skip => 'Skip';
+
+  @override
+  String voiceDuplicatesRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicates remain',
+      one: '$count duplicate remains',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get continueEditing => 'Continue editing';
+
+  @override
+  String get asrRetryIncomplete =>
+      'Retry audio is incomplete. Clear the list and select all audio again.';
+
+  @override
+  String asrRetryAudioUnreadable(String details) {
+    return 'Retry audio data could not be read. Select the audio again: $details';
+  }
+
+  @override
+  String get asrLegacyRetryUnavailable =>
+      'Legacy retry audio is unavailable. Select the audio again.';
+
+  @override
+  String get asrRetryDataUnreadable =>
+      'Retry data could not be read. Select the audio again.';
+
+  @override
+  String get ttsSynthesisModel => 'Synthesis model';
+
+  @override
+  String get asrRetryUnavailable =>
+      'Retry audio is unavailable. Select the audio again.';
+
+  @override
+  String get chatRequest => 'Request';
+
+  @override
+  String get chatResponse => 'Response';
+
+  @override
+  String get chatNoErrorDetails => 'No details available';
+
+  @override
+  String get ttsInstructionDescription =>
+      'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.';
 }

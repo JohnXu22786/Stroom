@@ -136,6 +136,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/settings/ocr_model_config_page_test.dart",
         "pages/settings/tts_create_page_test.dart",
         "pages/voice_batch_add_page_test.dart",
+        "pages/voice_editor_shared_test.dart",
         "pages/asr_page_lifecycle_test.dart",
         "pages/ocr/ocr_shared_test.dart",
         "widgets/app_media_picker_dialog_test.dart",

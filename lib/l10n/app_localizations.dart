@@ -11061,6 +11061,870 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Schema version {schema} · USN {usn} · Modified {modified}'**
   String ankiSyncSchemaStatus(int schema, int usn, String modified);
+
+  /// No description provided for @asrPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Transcription'**
+  String get asrPageTitle;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
+  /// No description provided for @configure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get configure;
+
+  /// No description provided for @asrModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognition model'**
+  String get asrModel;
+
+  /// No description provided for @reselectModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a model again'**
+  String get reselectModel;
+
+  /// No description provided for @selectAsrModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a recognition model'**
+  String get selectAsrModel;
+
+  /// No description provided for @enterPublicAudioUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a public audio URL'**
+  String get enterPublicAudioUrl;
+
+  /// No description provided for @recordingSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings'**
+  String get recordingSelection;
+
+  /// No description provided for @audioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio files'**
+  String get audioFiles;
+
+  /// No description provided for @noAudioSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio files selected'**
+  String get noAudioSelected;
+
+  /// No description provided for @supportedAudioFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'Supports common audio formats such as WAV, MP3, M4A, and OGG'**
+  String get supportedAudioFormats;
+
+  /// No description provided for @asrSelectedAudioCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No audio files selected} one{{count} audio file selected} other{{count} audio files selected}}'**
+  String asrSelectedAudioCount(int count);
+
+  /// No description provided for @asrSelectedAudioCountShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} audio file selected} other{{count} audio files selected}}'**
+  String asrSelectedAudioCountShort(int count);
+
+  /// No description provided for @asrReselect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select again'**
+  String get asrReselect;
+
+  /// No description provided for @asrUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'URL | Public link'**
+  String get asrUrlLabel;
+
+  /// No description provided for @asrErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View error details'**
+  String get asrErrorDetails;
+
+  /// No description provided for @asrResultSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription result saved'**
+  String get asrResultSaved;
+
+  /// No description provided for @asrWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get asrWorking;
+
+  /// No description provided for @asrStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start transcription'**
+  String get asrStart;
+
+  /// No description provided for @saveTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to'**
+  String get saveTo;
+
+  /// No description provided for @rootFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Root folder'**
+  String get rootFolder;
+
+  /// No description provided for @chooseSaveFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder'**
+  String get chooseSaveFolder;
+
+  /// No description provided for @linkAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is already in the list'**
+  String get linkAlreadyAdded;
+
+  /// No description provided for @chooseAudioSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an audio source'**
+  String get chooseAudioSource;
+
+  /// No description provided for @inAppRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app recordings'**
+  String get inAppRecordings;
+
+  /// No description provided for @chooseGeneratedRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from generated recordings'**
+  String get chooseGeneratedRecordings;
+
+  /// No description provided for @systemAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'System audio files'**
+  String get systemAudioFiles;
+
+  /// No description provided for @chooseDeviceAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose files from your device'**
+  String get chooseDeviceAudioFiles;
+
+  /// No description provided for @cannotReadAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the audio file'**
+  String get cannotReadAudioFile;
+
+  /// No description provided for @chooseAudioFileFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not select audio file: {details}'**
+  String chooseAudioFileFailed(String details);
+
+  /// No description provided for @chooseInAppRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose in-app recordings'**
+  String get chooseInAppRecording;
+
+  /// No description provided for @noRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings'**
+  String get noRecordings;
+
+  /// No description provided for @durationSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds, plural, one{{seconds} sec} other{{seconds} secs}}'**
+  String durationSeconds(int seconds);
+
+  /// No description provided for @asrNeedsProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure an audio transcription provider and model in Settings first'**
+  String get asrNeedsProvider;
+
+  /// No description provided for @asrModelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The original recognition model is unavailable or cannot be verified. Please select a model again.'**
+  String get asrModelUnavailable;
+
+  /// No description provided for @asrUrlProviderRemoveFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'This provider uploads audio by URL. Remove local audio files and try again.'**
+  String get asrUrlProviderRemoveFiles;
+
+  /// No description provided for @asrFileProviderRemoveUrls.
+  ///
+  /// In en, this message translates to:
+  /// **'This provider uploads audio files and does not support transcription by link. Remove links and try again.'**
+  String get asrFileProviderRemoveUrls;
+
+  /// No description provided for @asrTaskStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the task: {details}'**
+  String asrTaskStartFailed(String details);
+
+  /// No description provided for @asrInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid URL. It must start with http:// or https://'**
+  String get asrInvalidUrl;
+
+  /// No description provided for @asrEnterAudioUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an audio URL'**
+  String get asrEnterAudioUrl;
+
+  /// No description provided for @asrUrlProviderHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This provider uploads audio by URL. Enter a public audio URL (http/https).'**
+  String get asrUrlProviderHelp;
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancel;
+
+  /// No description provided for @add.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get add;
+
+  /// No description provided for @ttsPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get ttsPageTitle;
+
+  /// No description provided for @ttsAudioImportedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} audio file imported} other{{count} audio files imported}}'**
+  String ttsAudioImportedCount(int count);
+
+  /// No description provided for @ttsImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {details}'**
+  String ttsImportFailed(String details);
+
+  /// No description provided for @ttsFileReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file data'**
+  String get ttsFileReadFailed;
+
+  /// No description provided for @ttsExportAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Export audio file'**
+  String get ttsExportAudioFile;
+
+  /// No description provided for @ttsExportedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to: {path}'**
+  String ttsExportedTo(String path);
+
+  /// No description provided for @ttsExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {details}'**
+  String ttsExportFailed(String details);
+
+  /// No description provided for @ttsConfirmRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm regeneration'**
+  String get ttsConfirmRegenerate;
+
+  /// No description provided for @ttsRegenerateConfirmFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate audio “{fileName}”?'**
+  String ttsRegenerateConfirmFile(String fileName);
+
+  /// No description provided for @ttsRegenerateOverwrite.
+  ///
+  /// In en, this message translates to:
+  /// **'The original audio file will be replaced after regeneration.'**
+  String get ttsRegenerateOverwrite;
+
+  /// No description provided for @ttsRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate audio'**
+  String get ttsRegenerate;
+
+  /// No description provided for @ttsCopiedFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not copy: {details}'**
+  String ttsCopiedFailed(String details);
+
+  /// No description provided for @ttsChooseExportFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export folder'**
+  String get ttsChooseExportFolder;
+
+  /// No description provided for @ttsExportAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Export audio'**
+  String get ttsExportAudio;
+
+  /// No description provided for @ttsExportedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} file exported} other{{count} files exported}}'**
+  String ttsExportedCount(int count);
+
+  /// No description provided for @ttsFolderExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export folder'**
+  String get ttsFolderExport;
+
+  /// No description provided for @ttsWebFolderExportHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Your browser cannot choose an export folder. A ZIP file will be downloaded with the folder structure preserved.'**
+  String get ttsWebFolderExportHelp;
+
+  /// No description provided for @ttsDownloadZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download ZIP file'**
+  String get ttsDownloadZip;
+
+  /// No description provided for @ttsExportAudioFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Export audio folder'**
+  String get ttsExportAudioFolder;
+
+  /// No description provided for @ttsRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Record'**
+  String get ttsRecord;
+
+  /// No description provided for @ttsImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get ttsImport;
+
+  /// No description provided for @ttsPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get ttsPlay;
+
+  /// No description provided for @ttsExportLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Export to device'**
+  String get ttsExportLocal;
+
+  /// No description provided for @ttsRegenerateQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate'**
+  String get ttsRegenerateQuestion;
+
+  /// No description provided for @ttsNeedsProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure a speech synthesis provider and model in Settings first'**
+  String get ttsNeedsProvider;
+
+  /// No description provided for @ttsAddedToTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to the task list. Generating in the background…'**
+  String get ttsAddedToTasks;
+
+  /// No description provided for @ttsCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Synthesis'**
+  String get ttsCreateTitle;
+
+  /// No description provided for @ttsOriginalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording title'**
+  String get ttsOriginalTitle;
+
+  /// No description provided for @ttsUseOriginalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use original title'**
+  String get ttsUseOriginalTitle;
+
+  /// No description provided for @ttsAudioFileNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved audio file name (optional)'**
+  String get ttsAudioFileNameHint;
+
+  /// No description provided for @ttsTextToConvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Text to convert'**
+  String get ttsTextToConvert;
+
+  /// No description provided for @ttsSpeechContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech content'**
+  String get ttsSpeechContent;
+
+  /// No description provided for @ttsTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text to convert to speech…'**
+  String get ttsTextHint;
+
+  /// No description provided for @ttsFullscreenEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit in full screen'**
+  String get ttsFullscreenEdit;
+
+  /// No description provided for @ttsTextLimitWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Text exceeds the limit (maximum {limit} characters)'**
+  String ttsTextLimitWarning(int limit);
+
+  /// No description provided for @ttsSynthesisConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesis settings'**
+  String get ttsSynthesisConfig;
+
+  /// No description provided for @ttsVoiceAndSoundHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust the voice and sound'**
+  String get ttsVoiceAndSoundHelp;
+
+  /// No description provided for @ttsProviderSettingsLead.
+  ///
+  /// In en, this message translates to:
+  /// **'in '**
+  String get ttsProviderSettingsLead;
+
+  /// No description provided for @ttsProviderSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS provider settings'**
+  String get ttsProviderSettings;
+
+  /// No description provided for @ttsProviderSettingsTail.
+  ///
+  /// In en, this message translates to:
+  /// **' to configure more parameters'**
+  String get ttsProviderSettingsTail;
+
+  /// No description provided for @ttsEditText.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit text'**
+  String get ttsEditText;
+
+  /// No description provided for @ttsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get ttsClose;
+
+  /// No description provided for @ttsVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get ttsVoice;
+
+  /// No description provided for @ttsSelectVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a voice'**
+  String get ttsSelectVoice;
+
+  /// No description provided for @ttsSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get ttsSpeed;
+
+  /// No description provided for @ttsNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get ttsNormal;
+
+  /// No description provided for @ttsVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get ttsVolume;
+
+  /// No description provided for @ttsInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaking style instruction'**
+  String get ttsInstruction;
+
+  /// No description provided for @ttsInstructionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For example: Speak in a cheerful and excited tone'**
+  String get ttsInstructionHint;
+
+  /// No description provided for @ttsCustomParams.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom parameters'**
+  String get ttsCustomParams;
+
+  /// No description provided for @ttsDefaultValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {value}'**
+  String ttsDefaultValue(Object value);
+
+  /// No description provided for @ttsGenerateRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate recording'**
+  String get ttsGenerateRecording;
+
+  /// No description provided for @ttsSaveAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as: {path}/{name}.{format}'**
+  String ttsSaveAs(String path, String name, String format);
+
+  /// No description provided for @ttsChooseSaveFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder'**
+  String get ttsChooseSaveFolder;
+
+  /// No description provided for @ttsFillTextError.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text to convert'**
+  String get ttsFillTextError;
+
+  /// No description provided for @voiceBatchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add voices in bulk'**
+  String get voiceBatchTitle;
+
+  /// No description provided for @voiceBatchConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Add selected voices'**
+  String get voiceBatchConfirm;
+
+  /// No description provided for @voiceBatchSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Separator:'**
+  String get voiceBatchSeparator;
+
+  /// No description provided for @voiceBatchCustomSeparatorHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a custom separator'**
+  String get voiceBatchCustomSeparatorHint;
+
+  /// No description provided for @voiceBatchFieldOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Field order:'**
+  String get voiceBatchFieldOrder;
+
+  /// No description provided for @voiceBatchNameThenId.
+  ///
+  /// In en, this message translates to:
+  /// **'1st = name, 2nd = ID'**
+  String get voiceBatchNameThenId;
+
+  /// No description provided for @voiceBatchIdThenName.
+  ///
+  /// In en, this message translates to:
+  /// **'1st = ID, 2nd = name'**
+  String get voiceBatchIdThenName;
+
+  /// No description provided for @voiceBatchColumnChoice.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Detected {count} column. Choose the starting column for the name/ID:} other{Detected {count} columns. Choose the starting column for the name/ID:}}'**
+  String voiceBatchColumnChoice(int count);
+
+  /// No description provided for @voiceBatchColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Column {index}: {sample}'**
+  String voiceBatchColumn(int index, String sample);
+
+  /// No description provided for @voiceBatchSingleColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'One column detected. All values will be used as IDs (name = ID).'**
+  String get voiceBatchSingleColumn;
+
+  /// No description provided for @voiceBatchInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate name and ID with Tab, commas, semicolons, or vertical bars (one pair per line)'**
+  String get voiceBatchInputHint;
+
+  /// No description provided for @voiceBatchNoPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to preview'**
+  String get voiceBatchNoPreview;
+
+  /// No description provided for @voiceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice name'**
+  String get voiceName;
+
+  /// No description provided for @voiceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice ID'**
+  String get voiceId;
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @voiceNew.
+  ///
+  /// In en, this message translates to:
+  /// **'✅ New'**
+  String get voiceNew;
+
+  /// No description provided for @voiceIdExists.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ ID already exists'**
+  String get voiceIdExists;
+
+  /// No description provided for @voiceFormatError.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Format error{details}'**
+  String voiceFormatError(String details);
+
+  /// No description provided for @voiceDuplicateIds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} duplicate ID found: {ids}} other{{count} duplicate IDs found: {ids}}}'**
+  String voiceDuplicateIds(int count, String ids);
+
+  /// No description provided for @voiceInsufficientColumnData.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough data in the selected columns'**
+  String get voiceInsufficientColumnData;
+
+  /// No description provided for @voiceCustomSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom…'**
+  String get voiceCustomSeparator;
+
+  /// No description provided for @voiceCommaSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Comma (,)'**
+  String get voiceCommaSeparator;
+
+  /// No description provided for @voiceSemicolonSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Semicolon (;)'**
+  String get voiceSemicolonSeparator;
+
+  /// No description provided for @voicePipeSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertical bar (|)'**
+  String get voicePipeSeparator;
+
+  /// No description provided for @voiceTabSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Tab'**
+  String get voiceTabSeparator;
+
+  /// No description provided for @voiceEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit voices'**
+  String get voiceEditorTitle;
+
+  /// No description provided for @save.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get save;
+
+  /// No description provided for @voiceAddRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Add row'**
+  String get voiceAddRow;
+
+  /// No description provided for @voiceBatchAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add in bulk'**
+  String get voiceBatchAdd;
+
+  /// No description provided for @voiceNoneAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'No voices yet. Add one to get started.'**
+  String get voiceNoneAdd;
+
+  /// No description provided for @delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get delete;
+
+  /// No description provided for @voiceDuplicateResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'The following voice IDs are duplicated. Choose how to handle each one:'**
+  String get voiceDuplicateResolution;
+
+  /// No description provided for @update.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get update;
+
+  /// No description provided for @skip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get skip;
+
+  /// No description provided for @voiceDuplicatesRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} duplicate remains} other{{count} duplicates remain}}'**
+  String voiceDuplicatesRemaining(int count);
+
+  /// No description provided for @continueEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue editing'**
+  String get continueEditing;
+
+  /// No description provided for @asrRetryIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry audio is incomplete. Clear the list and select all audio again.'**
+  String get asrRetryIncomplete;
+
+  /// No description provided for @asrRetryAudioUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry audio data could not be read. Select the audio again: {details}'**
+  String asrRetryAudioUnreadable(String details);
+
+  /// No description provided for @asrLegacyRetryUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy retry audio is unavailable. Select the audio again.'**
+  String get asrLegacyRetryUnavailable;
+
+  /// No description provided for @asrRetryDataUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry data could not be read. Select the audio again.'**
+  String get asrRetryDataUnreadable;
+
+  /// No description provided for @ttsSynthesisModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesis model'**
+  String get ttsSynthesisModel;
+
+  /// No description provided for @asrRetryUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry audio is unavailable. Select the audio again.'**
+  String get asrRetryUnavailable;
+
+  /// No description provided for @chatRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Request'**
+  String get chatRequest;
+
+  /// No description provided for @chatResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Response'**
+  String get chatResponse;
+
+  /// No description provided for @chatNoErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'No details available'**
+  String get chatNoErrorDetails;
+
+  /// No description provided for @ttsInstructionDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.'**
+  String get ttsInstructionDescription;
 }
 
 class _AppLocalizationsDelegate

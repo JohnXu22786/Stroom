@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/voice_batch_add_page.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
@@ -8,7 +9,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: VoiceBatchAddPage(existingVoices: [])),
+      const MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
     );
 
     final dropdownFinder = find.byType(DropdownButton<String>);
