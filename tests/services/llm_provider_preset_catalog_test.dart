@@ -2958,6 +2958,248 @@ void main() {
       }
     },
   );
+
+  test('M46 API-key presets retain pinned registry metadata', () {
+    const endpoints = {
+      'sealion': 'https://api.sea-lion.ai/v1/chat/completions',
+      'seekai': 'https://seekai.cc/v1/chat/completions',
+      'sensenova': 'https://token.sensenova.cn/v1/chat/completions',
+      'sparkdesk': 'https://spark-api-open.xf-yun.com/v1/chat/completions',
+      'speka': 'https://speka.me/v1/chat/completions',
+      'synthetic': 'https://api.synthetic.new/openai/v1/chat/completions',
+      'tokenmarket': 'https://api.tokensmarket.ai/v1/chat/completions',
+      'tokenreply': 'https://api.tokenreply.com/v1/chat/completions',
+    };
+    for (final entry in endpoints.entries) {
+      final preset = findLlmOpenAiProviderPreset(entry.key)!;
+      expect(preset.baseUrl, entry.value, reason: entry.key);
+      expect(preset.authType, 'api_key', reason: entry.key);
+      expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
+      expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
+      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    }
+    expect(
+      {
+        for (final id in [
+          'seekai',
+          'speka',
+          'synthetic',
+          'tokenmarket',
+          'tokenreply',
+        ])
+          id: findLlmOpenAiProviderPreset(id)!.modelsUrl,
+      },
+      {
+        'seekai': 'https://seekai.cc/v1/models',
+        'speka': 'https://speka.me/v1/models',
+        'synthetic': 'https://api.synthetic.new/openai/v1/models',
+        'tokenmarket': 'https://api.tokensmarket.ai/v1/models',
+        'tokenreply': 'https://api.tokenreply.com/v1/models',
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('sealion')!.fallbackModels.map((m) => m.id),
+      [
+        'aisingapore/Llama-SEA-LION-v3.5-70B-R',
+        'aisingapore/Llama-SEA-LION-v3-70B-IT',
+        'aisingapore/Gemma-SEA-LION-v4-27B-IT',
+        'aisingapore/Qwen-SEA-LION-v4.5-27B-IT',
+        'aisingapore/Qwen-SEA-LION-v4-32B-IT',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('sensenova')!.fallbackModels.map((m) => m.id),
+      ['sensenova-6.7-flash-lite', 'deepseek-v4-flash', 'glm-5.2'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('sensenova')!.fallbackModels[1].capabilities,
+      {
+        'contextLength': 1048576,
+        'maxOutputTokens': 65536,
+        'reasoning': true,
+        'supportedThinkingEfforts': ['none', 'low', 'medium', 'high'],
+        'supportsXHighEffort': false,
+        'interleavedField': 'reasoning_content',
+      },
+    );
+    expect(
+      findLlmOpenAiProviderPreset('sparkdesk')!.fallbackModels.map((m) => m.id),
+      ['4.0Ultra', 'generalv3', 'pro-128k', 'lite'],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('synthetic')!.fallbackModels.map((m) => m.id),
+      [
+        'hf:openai/gpt-oss-120b',
+        'hf:zai-org/GLM-5.2',
+        'hf:moonshotai/Kimi-K2.7-Code',
+        'hf:Qwen/Qwen3.6-27B',
+        'hf:MiniMaxAI/MiniMax-M3',
+        'hf:zai-org/GLM-4.7-Flash',
+        'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
+      ],
+    );
+    expect(
+      findLlmOpenAiProviderPreset('synthetic')!.fallbackModels[2].capabilities,
+      {
+        'contextLength': 262144,
+        'maxOutputTokens': 65536,
+        'toolCalling': true,
+        'reasoning': true,
+        'vision': true,
+      },
+    );
+    expect(findLlmOpenAiProviderPreset('tokenmarket')!.fallbackModels, isEmpty);
+    expect(findLlmOpenAiProviderPreset('tokenreply')!.fallbackModels, isEmpty);
+
+    // These M46 rows are deferred because their pinned runtime has no matching
+    // executable adapter or has provider-wide metadata the preset contract
+    // cannot retain on discovered models.
+    for (final id in [
+      'sumopod',
+      'tencent',
+      'thebai',
+      'token-kiosk',
+      'tokenrouter',
+    ]) {
+      expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
+    }
+  });
+
+  test(
+    'each M46 preset persists and routes through Chat and Task Flow',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryLlmAccountPreferences(),
+        credentialStore: _MemoryLlmCredentials(),
+      );
+      const presetIds = [
+        'sealion',
+        'seekai',
+        'sensenova',
+        'sparkdesk',
+        'speka',
+        'synthetic',
+        'tokenmarket',
+        'tokenreply',
+      ];
+      for (final presetId in presetIds) {
+        final preset = findLlmOpenAiProviderPreset(presetId)!;
+        final fallback = preset.fallbackModels.firstOrNull;
+        final model = LlmUpstreamModel(
+          id: 'm46-$presetId:${fallback?.id ?? 'user-model'}',
+          upstreamModelId: fallback?.id ?? 'user-model',
+          displayName: fallback?.displayName ?? 'User model',
+          capabilities: fallback?.capabilities ?? const {},
+          config: const {'apiProtocolOverride': 'anthropic.messages'},
+        );
+        final account = LlmAccount(
+          id: 'm46-$presetId',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {
+            'accountOwnedConfig': 'preserved',
+          }),
+          models: [model],
+        );
+        await service.saveAccount(account, secret: 'key-$presetId');
+        final restored = (await service.getAccount(account.id))!;
+        expect(
+          restored.connectorType,
+          'openai-compatibility',
+          reason: presetId,
+        );
+        expect(restored.endpointConfig['providerPresetId'], presetId);
+        expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+        expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+        expect(
+          restored.endpointConfig['apiProtocol'],
+          'openai.chat_completions',
+        );
+        expect(restored.endpointConfig['accountOwnedConfig'], 'preserved');
+        expect(await service.readCredential(account.id), 'key-$presetId');
+        expect(restored.models.single.upstreamModelId, model.upstreamModelId);
+        expect(restored.models.single.capabilities, model.capabilities);
+        expect(
+          restored.models.single.config['apiProtocolOverride'],
+          'anthropic.messages',
+        );
+
+        final group = LlmModelGroup(
+          id: 'm46-$presetId-group',
+          displayName: preset.displayName,
+          members: [
+            LlmModelGroupMember(
+              accountId: restored.id,
+              upstreamModelId: restored.models.single.upstreamModelId,
+            ),
+          ],
+        );
+        final configs = buildLlmModelGroupProviderConfigs(
+          accounts: [restored],
+          groups: [group],
+        );
+        expect(configs, hasLength(1));
+        expect(configs.single.apiProtocol, 'openai.chat_completions');
+        expect(
+          configs.single.models.single.apiProtocolOverride,
+          'anthropic.messages',
+        );
+        expect(
+          llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+          contains('openai-compatibility'),
+        );
+      }
+    },
+  );
+
+  test('M46 discovery presets refresh model lists using bearer auth', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-${requests.length}'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    const presetIds = [
+      'seekai',
+      'speka',
+      'synthetic',
+      'tokenmarket',
+      'tokenreply',
+    ];
+    for (final presetId in presetIds) {
+      final preset = findLlmOpenAiProviderPreset(presetId)!;
+      final account = await service.saveAccount(
+        LlmAccount(
+          id: 'm46-$presetId-discovery',
+          connectorType: 'openai-compatibility',
+          authType: preset.authType,
+          displayName: preset.displayName,
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+        ),
+        secret: 'key-$presetId',
+      );
+      final models = await service.discoverModels(account, refreshRemote: true);
+      expect(requests.last.uri.toString(), preset.modelsUrl, reason: presetId);
+      expect(requests.last.headers['Authorization'], 'Bearer key-$presetId');
+      expect(models.single.upstreamModelId, 'discovered-${requests.length}');
+    }
+  });
 }
 
 class _MemoryLlmAccountPreferences implements LlmAccountPreferences {
