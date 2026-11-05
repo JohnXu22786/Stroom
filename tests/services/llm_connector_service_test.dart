@@ -6946,7 +6946,9 @@ void main() {
   group('LlmNativeRequestBuilder', () {
     final builder = LlmNativeRequestBuilder();
 
-    test('Azure deployment requests use the configured deployment and key header', () {
+    test(
+        'Azure deployment requests use the configured deployment and key header',
+        () {
       final account = _account(
         'm50-azure-request',
         'azure-ai',
@@ -6980,11 +6982,13 @@ void main() {
       expect(request.uri.host, 'example-resource.openai.azure.com');
       expect(request.uri.path,
           '/openai/deployments/production%20chat/chat/completions');
-      expect(request.uri.queryParameters, {'api-version': '2024-12-01-preview'});
+      expect(
+          request.uri.queryParameters, {'api-version': '2024-12-01-preview'});
       expect(request.headers['api-key'], 'synthetic-azure-secret');
       expect(request.headers.containsKey('Authorization'), isFalse);
       expect(request.toString(), isNot(contains('synthetic-azure-secret')));
-      expect(account.endpointConfig.toString(), isNot(contains('synthetic-azure-secret')));
+      expect(account.endpointConfig.toString(),
+          isNot(contains('synthetic-azure-secret')));
       expect(
         () => builder.build(
           account: account,
@@ -6996,7 +7000,8 @@ void main() {
       );
     });
 
-    test('Azure discovery returns the configured deployment as its model ID', () async {
+    test('Azure discovery returns the configured deployment as its model ID',
+        () async {
       final service = LlmAccountConnectorService(
         preferences: _MemoryPreferences(),
         credentialStore: _MemoryCredentials(),
@@ -7017,8 +7022,10 @@ void main() {
 
       final models = await service.discoverModels(saved, refreshRemote: true);
 
-      expect(models.map((model) => model.upstreamModelId), ['foundry-deployment']);
-      expect(models.single.config['catalogSource'], 'configured-azure-deployment');
+      expect(
+          models.map((model) => model.upstreamModelId), ['foundry-deployment']);
+      expect(
+          models.single.config['catalogSource'], 'configured-azure-deployment');
       expect(models.single.capabilities['supportedApiProtocols'], [
         'openai.chat_completions',
       ]);

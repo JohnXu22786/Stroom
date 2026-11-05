@@ -15,7 +15,9 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
-  test('Azure deployments are available through Chat and Task Flow model groups', () {
+  test(
+      'Azure deployments are available through Chat and Task Flow model groups',
+      () {
     final account = LlmAccount(
       id: 'm50-azure-group',
       connectorType: 'azure-ai',
@@ -59,7 +61,8 @@ void main() {
     );
 
     expect(LlmConnectorRegistry.chatAdapterEndpointType('azure-ai'), 'openai');
-    expect(LlmConnectorRegistry.chatAdapterEndpointType('azure-openai'), 'openai');
+    expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('azure-openai'), 'openai');
     expect(builtinDefaultApiProtocolForConnector('azure-ai'),
         'openai.chat_completions');
     expect(

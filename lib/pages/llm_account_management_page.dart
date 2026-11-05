@@ -2580,48 +2580,49 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   labelText: _isAzureConnector
                       ? 'Azure resource / Foundry host'
                       : _connectorType == 'ghe-copilot'
-                      ? 'GitHub Enterprise instance HTTPS URL'
-                      : _connectorType == 'cline' ||
-                              _connectorType == 'clinepass'
-                          ? 'Cline 使用固定服务端点'
-                          : _connectorType == 'aihorde'
-                              ? 'AI Horde 使用固定 HTTPS Chat 端点'
-                              : _connectorType == 'uncloseai'
-                                  ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
-                                  : _connectorType == 'kilocode'
-                                      ? 'Kilo Code 使用固定服务端点'
-                                      : _connectorType == 'qoder' ||
-                                              _connectorType == 'trae'
-                                          ? '固定服务端点'
-                                          : '端点地址（连接器需要时填写）',
+                          ? 'GitHub Enterprise instance HTTPS URL'
+                          : _connectorType == 'cline' ||
+                                  _connectorType == 'clinepass'
+                              ? 'Cline 使用固定服务端点'
+                              : _connectorType == 'aihorde'
+                                  ? 'AI Horde 使用固定 HTTPS Chat 端点'
+                                  : _connectorType == 'uncloseai'
+                                      ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
+                                      : _connectorType == 'kilocode'
+                                          ? 'Kilo Code 使用固定服务端点'
+                                          : _connectorType == 'qoder' ||
+                                                  _connectorType == 'trae'
+                                              ? '固定服务端点'
+                                              : '端点地址（连接器需要时填写）',
                   hintText: _isAzureConnector
                       ? 'https://resource.openai.azure.com'
                       : switch (_connectorType) {
-                    'aihorde' => 'https://oai.aihorde.net/v1',
-                    'uncloseai' => 'https://hermes.ai.unturf.com/v1',
-                    'opencode-go' => 'https://opencode.ai/zen/go/v1',
-                    'opencode-zen' => 'https://opencode.ai/zen/v1',
-                    'command-code' => kCommandCodeBaseUrl,
-                    'ghe-copilot' => 'https://github.example.com',
-                    _ => 'https://api.example.com/v1',
-                  },
+                          'aihorde' => 'https://oai.aihorde.net/v1',
+                          'uncloseai' => 'https://hermes.ai.unturf.com/v1',
+                          'opencode-go' => 'https://opencode.ai/zen/go/v1',
+                          'opencode-zen' => 'https://opencode.ai/zen/v1',
+                          'command-code' => kCommandCodeBaseUrl,
+                          'ghe-copilot' => 'https://github.example.com',
+                          _ => 'https://api.example.com/v1',
+                        },
                   helperText: _isAzureConnector
                       ? '输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。'
                       : switch (_connectorType) {
-                    'opencode-go' ||
-                    'opencode-zen' =>
-                      '留空以使用此账号类型的官方模型目录和 API 端点。',
-                    'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
-                    'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
-                    'cline' ||
-                    'clinepass' =>
-                      '使用 Cline 的固定 HTTPS Chat Completions 端点。',
-                    'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
-                    'aihorde' => 'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
-                    'trae' =>
-                      'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
-                    _ => null,
-                  },
+                          'opencode-go' ||
+                          'opencode-zen' =>
+                            '留空以使用此账号类型的官方模型目录和 API 端点。',
+                          'command-code' => '使用 Command Code 的固定 HTTPS API 端点。',
+                          'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
+                          'cline' ||
+                          'clinepass' =>
+                            '使用 Cline 的固定 HTTPS Chat Completions 端点。',
+                          'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
+                          'aihorde' =>
+                            'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。',
+                          'trae' =>
+                            'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。',
+                          _ => null,
+                        },
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),
@@ -2733,7 +2734,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                             ? 'Claude Setup Token'
                                             : _authType == 'api_key'
                                                 ? switch (_connectorType) {
-                                                    'azure-ai' || 'azure-openai' =>
+                                                    'azure-ai' ||
+                                                    'azure-openai' =>
                                                       'Azure API Key',
                                                     'aihorde' =>
                                                       'AI Horde API Key（可选优先级）',
@@ -2852,55 +2854,55 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               if (!_isAzureConnector)
                 TextField(
                   controller: _models,
-                minLines: 3,
-                maxLines: 7,
-                readOnly: _connectorType == 'devin-cli-agentic' ||
-                    _connectorType == 'kimi-coding' ||
-                    _connectorType == 'kilocode' ||
-                    _connectorType == 'grok-cli' ||
-                    _connectorType == 'xai-oauth' ||
-                    _connectorType == 'muse-code' ||
-                    _connectorType == 'command-code' ||
-                    _connectorType == 'cline' ||
-                    _connectorType == 'clinepass' ||
-                    _connectorType == 'trae',
-                decoration: InputDecoration(
-                  labelText: '上游模型与能力',
-                  hintText: '每行一个：模型 ID,streaming,vision,tools',
-                  helperText: _connectorType == 'kilocode'
-                      ? _authType == 'none'
-                          ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
-                          : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
-                      : _connectorType == 'command-code'
-                          ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
-                          : _connectorType == 'devin-cli-agentic'
-                              ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
-                              : _connectorType == 'kimi-coding'
-                                  ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                                  : _connectorType == 'grok-cli'
-                                      ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                                      : _connectorType == 'xai-oauth'
-                                          ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                                          : _connectorType == 'muse-code'
-                                              ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                              : _connectorType == 'cline' ||
-                                                      _connectorType ==
-                                                          'clinepass'
-                                                  ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
-                                                  : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  minLines: 3,
+                  maxLines: 7,
+                  readOnly: _connectorType == 'devin-cli-agentic' ||
+                      _connectorType == 'kimi-coding' ||
+                      _connectorType == 'kilocode' ||
+                      _connectorType == 'grok-cli' ||
+                      _connectorType == 'xai-oauth' ||
+                      _connectorType == 'muse-code' ||
+                      _connectorType == 'command-code' ||
+                      _connectorType == 'cline' ||
+                      _connectorType == 'clinepass' ||
+                      _connectorType == 'trae',
+                  decoration: InputDecoration(
+                    labelText: '上游模型与能力',
+                    hintText: '每行一个：模型 ID,streaming,vision,tools',
+                    helperText: _connectorType == 'kilocode'
+                        ? _authType == 'none'
+                            ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
+                            : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
+                        : _connectorType == 'command-code'
+                            ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
+                            : _connectorType == 'devin-cli-agentic'
+                                ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                                : _connectorType == 'kimi-coding'
+                                    ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                                    : _connectorType == 'grok-cli'
+                                        ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                                        : _connectorType == 'xai-oauth'
+                                            ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                                            : _connectorType == 'muse-code'
+                                                ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                                                : _connectorType == 'cline' ||
+                                                        _connectorType ==
+                                                            'clinepass'
+                                                    ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
+                                                    : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                  ),
+                  onChanged: _connectorType == 'devin-cli-agentic' ||
+                          _connectorType == 'kimi-coding' ||
+                          _connectorType == 'kilocode' ||
+                          _connectorType == 'grok-cli' ||
+                          _connectorType == 'xai-oauth' ||
+                          _connectorType == 'muse-code' ||
+                          _connectorType == 'cline' ||
+                          _connectorType == 'clinepass' ||
+                          _connectorType == 'trae'
+                      ? null
+                      : (_) => setState(() => _draftChanged = true),
                 ),
-                onChanged: _connectorType == 'devin-cli-agentic' ||
-                        _connectorType == 'kimi-coding' ||
-                        _connectorType == 'kilocode' ||
-                        _connectorType == 'grok-cli' ||
-                        _connectorType == 'xai-oauth' ||
-                        _connectorType == 'muse-code' ||
-                        _connectorType == 'cline' ||
-                        _connectorType == 'clinepass' ||
-                        _connectorType == 'trae'
-                    ? null
-                    : (_) => setState(() => _draftChanged = true),
-              ),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(

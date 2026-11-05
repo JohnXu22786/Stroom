@@ -7152,7 +7152,8 @@ class LlmNativeRequestBuilder {
       'command-code' => host == 'api.commandcode.ai',
       'aihorde' => host == 'oai.aihorde.net',
       'uncloseai' => host == 'hermes.ai.unturf.com',
-      'azure-ai' || 'azure-openai' =>
+      'azure-ai' ||
+      'azure-openai' =>
         AzureOpenAiEndpoint.isAzureResourceHost(host),
       'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
       'glm' => host == 'open.bigmodel.cn',

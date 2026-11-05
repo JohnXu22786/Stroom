@@ -78,7 +78,8 @@ void main() {
     expect(saved.models.single.config['catalogSource'],
         'configured-azure-deployment');
     expect(credentials.values.values, ['synthetic-azure-secret']);
-    expect(saved.endpointConfig.toString(), isNot(contains('synthetic-azure-secret')));
+    expect(saved.endpointConfig.toString(),
+        isNot(contains('synthetic-azure-secret')));
     final refreshed = await service.discoverModels(saved, refreshRemote: true);
     expect(refreshed.single.id, saved.models.single.id);
     expect(refreshed.single.upstreamModelId, 'gpt-4o-production');
