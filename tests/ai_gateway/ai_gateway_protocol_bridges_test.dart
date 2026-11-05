@@ -2497,6 +2497,54 @@ void main() {
     });
 
     test(
+      'CLOVA token and result frames normalize without duplicate snapshots',
+      () {
+        const protocolId = 'clova.studio.chat';
+        final state = AiGatewayProtocolStreamState();
+        final token = AiGatewayProtocolStreamBridge.mapEvents(
+            protocolId,
+            {
+              '_eventType': 'token',
+              'message': {'thinkingContent': 'trace', 'content': 'answer'},
+            },
+            state: state);
+        expect(token.map((event) => (event.kind, event.delta)), [
+          (AiGatewayProtocolStreamEventKind.reasoningDelta, 'trace'),
+          (AiGatewayProtocolStreamEventKind.textDelta, 'answer'),
+        ]);
+
+        final result = AiGatewayProtocolStreamBridge.mapEvents(
+            protocolId,
+            {
+              '_eventType': 'result',
+              'result': {
+                'message': {'thinkingContent': 'trace', 'content': 'answer'},
+                'inputLength': 3,
+                'outputLength': 2,
+                'stopReason': 'length',
+              },
+            },
+            state: state);
+        expect(
+          result.where(
+            (event) =>
+                event.kind == AiGatewayProtocolStreamEventKind.textDelta ||
+                event.kind == AiGatewayProtocolStreamEventKind.reasoningDelta,
+          ),
+          isEmpty,
+        );
+        expect(
+          result
+              .singleWhere(
+                (event) => event.kind == AiGatewayProtocolStreamEventKind.usage,
+              )
+              .usage,
+          {'input_tokens': 3, 'output_tokens': 2, 'total_tokens': 5},
+        );
+      },
+    );
+
+    test(
       'stream frames normalize text, reasoning, tool, usage, and errors',
       () {
         final openAi = AiGatewayProtocolStreamBridge.mapEvent(

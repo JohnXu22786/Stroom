@@ -28,6 +28,7 @@ import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
 import 'azure_openai_endpoint.dart';
+import 'clova_studio_protocol.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -271,6 +272,7 @@ String _qwenCloudProtocolBaseUrl(
 }
 
 enum LlmNativeProtocol {
+  clovaStudioChat,
   openAIResponses,
   anthropicMessages,
   antigravityGenerateContent,
@@ -348,6 +350,13 @@ abstract final class LlmConnectorRegistry {
       ).hasMatch(modelId);
 
   static const List<LlmConnectorDefinition> all = [
+    LlmConnectorDefinition(
+      id: 'clova-studio',
+      displayName: 'Naver CLOVA Studio',
+      protocol: LlmNativeProtocol.clovaStudioChat,
+      authTypes: {'api_key'},
+      modelCatalog: kClovaStudioModelIds,
+    ),
     LlmConnectorDefinition(
       id: 'amazon-q',
       displayName: 'Amazon Q Developer',
@@ -781,6 +790,7 @@ abstract final class LlmConnectorRegistry {
   /// Keep those records routable while preserving their account IDs and refs.
   static String canonicalId(String id) => switch (id.trim()) {
         'anthropic' => 'claude',
+        'clova' => 'clova-studio',
         'openai' => 'openai-compatibility',
         'cf' => 'cloudflare-ai',
         'glmt' => 'glm',
@@ -790,6 +800,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
+        'clova-studio' => 'clova.studio.chat',
         'amazon-q' => 'amazon-q.chat',
         'xai' ||
         'grok-cli' ||
@@ -1991,6 +2002,19 @@ class LlmAccountConnectorService {
             // The Cursor adapter maps Stroom's supported inline image blocks;
             // remote or unsupported image representations fail explicitly.
             'cursor' => const {'chat': true, 'streaming': true, 'vision': true},
+            'clova-studio' => {
+                'chat': true,
+                'streaming': true,
+                if (connector.modelCatalog[index] == 'HCX-005') 'vision': true,
+                if (connector.modelCatalog[index] == 'HCX-007')
+                  'reasoning': true,
+                'contextLength': connector.modelCatalog[index] == 'HCX-DASH-002'
+                    ? 32000
+                    : 128000,
+                'maxOutputTokens':
+                    connector.modelCatalog[index] == 'HCX-007' ? 32768 : 4096,
+                'supportedApiProtocols': [kClovaStudioProtocolId],
+              },
             'codebuddy-cn' ||
             'codebuddy-intl' =>
               _staticTencentModelCapabilities(
@@ -5858,6 +5882,7 @@ class LlmNativeRequestBuilder {
     if (connector == null ||
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
+        (account.connectorType == 'clova-studio' && nativeFormat != 'clova') ||
         (account.connectorType == 'aihorde' &&
             nativeFormat != null &&
             nativeFormat != 'openai.chat_completions') ||
@@ -6775,6 +6800,16 @@ class LlmNativeRequestBuilder {
     required bool stream,
     required String? nativeFormat,
   }) {
+    if (account.connectorType == 'clova-studio') {
+      if (account.authType != 'api_key' || nativeFormat != 'clova') {
+        throw const LlmAccountConnectorException();
+      }
+      try {
+        return ClovaStudioProtocol.requestUri(modelId);
+      } on ArgumentError {
+        throw const LlmAccountConnectorException();
+      }
+    }
     String baseUrl;
     String path;
     String? query;

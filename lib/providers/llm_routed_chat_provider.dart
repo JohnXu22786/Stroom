@@ -15,9 +15,11 @@ import 'chat_api_provider.dart';
 import '../services/conversation_media_storage.dart';
 import '../services/reasoning_replay_cache.dart';
 import '../services/bai_reasoning_content_echo.dart';
+import '../services/clova_studio_protocol.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
+      'clova.studio.chat' => const {'clova-studio'},
       'amazon-q.chat' => const {'amazon-q'},
       'cursor.agent_connect_rpc' => const {'cursor'},
       'anthropic' || 'anthropic.messages' => const {
@@ -93,6 +95,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'openai.chat_completions',
       'openai.responses',
       'anthropic.messages',
+      'clova.studio.chat',
       'google.gemini.generate_content',
       'google.gemini.interactions',
       'ollama.chat',
@@ -117,6 +120,9 @@ String llmRoutedChatProtocolForAccountModel({
   String? apiProtocol,
   String? apiProtocolOverride,
 }) {
+  if (account.connectorType == 'clova-studio') {
+    return kClovaStudioProtocolId;
+  }
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.
   if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
@@ -304,6 +310,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             modelId: candidate.upstreamModelId,
             body: body,
             conversationId: conversationId,
+            stream: protocolId == kClovaStudioProtocolId,
             nativeFormat: _nativeFormatFor(protocolId),
             cancelToken: cancelToken,
             onRequestSent: progress.markRequestSent,
@@ -314,7 +321,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                   protocolId == 'cursor.agent_connect_rpc'
               ? 'openai.chat_completions'
               : protocolId;
-          final result = _readCompletion(response.body, completionProtocol);
+          final result = completionProtocol == kClovaStudioProtocolId
+              ? await _readClovaCompletion(response.body)
+              : _readCompletion(response.body, completionProtocol);
           _lastResponseData = result.data;
           _rememberReturnedReasoning(
             messages,
@@ -906,6 +915,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   String? _nativeFormatFor(String protocolId) => switch (protocolId) {
+        'clova.studio.chat' => 'clova',
         'openai.responses' => 'responses',
         'anthropic.messages' => 'anthropic',
         _ => null,
@@ -1014,7 +1024,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? accountId,
   }) async {
-    final requestProtocolId = protocolId == 'devin.connect_rpc' ||
+    final requestProtocolId = protocolId == kClovaStudioProtocolId ||
+            protocolId == 'devin.connect_rpc' ||
             protocolId == 'devin.acp' ||
             protocolId == 'cursor.agent_connect_rpc'
         ? 'openai.chat_completions'
@@ -1077,6 +1088,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       throw StateError('No internal request builder for $protocolId.');
     }
     final body = request.body;
+    if (protocolId == kClovaStudioProtocolId) {
+      return ClovaStudioProtocol.buildRequest(
+        upstreamModelId,
+        Map<String, dynamic>.from(body as Map),
+      );
+    }
     if (protocolId == 'devin.connect_rpc') {
       return Map<String, dynamic>.from(body as Map)
         ..['conversation_id'] = conversationId;
@@ -1226,8 +1243,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
     unawaited(() async {
       try {
-        final payloads =
-            protocolId == 'ollama.chat' ? _ndjsonData(body) : _sseData(body);
+        final payloads = protocolId == 'ollama.chat'
+            ? _ndjsonData(body)
+            : protocolId == kClovaStudioProtocolId
+                ? _clovaSseData(body)
+                : _sseData(body);
         await for (final payload in payloads) {
           final trimmedPayload = payload.trim();
           if (trimmedPayload.isEmpty) continue;
@@ -1237,6 +1257,16 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             if (decoded is! Map) continue;
             final data = Map<String, dynamic>.from(decoded);
             _lastResponseData = data;
+            if (protocolId == kClovaStudioProtocolId) {
+              final status = _jsonMap(data['status']);
+              if (status?['code'] != null &&
+                  status!['code'].toString() != '20000') {
+                throw _streamRequestError({
+                  'code': status['code'].toString(),
+                  'message': status['message'],
+                });
+              }
+            }
             if (protocolId == 'openai.responses' &&
                 data['type'] == 'response.output_item.done') {
               final item = data['item'];
@@ -1545,6 +1575,83 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     return parsedEvents.stream;
   }
 
+  Future<_LlmCompletionResult> _readClovaCompletion(Object? raw) async {
+    final parser = ClovaStudioSseAccumulator();
+    ClovaStudioStreamEvent? terminal;
+    if (raw is Stream<List<int>>) {
+      var eventType = '';
+      final dataLines = <String>[];
+      Future<void> finishFrame() async {
+        if (dataLines.isEmpty) return;
+        final frame = [
+          if (eventType.isNotEmpty) 'event: $eventType',
+          for (final line in dataLines) 'data: $line',
+          '',
+        ].join('\n');
+        try {
+          final event = parser.addFrame(frame);
+          if (event.done) terminal = event;
+        } on ClovaStudioUpstreamException catch (error) {
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
+            statusCode: error.code.startsWith('4') ? 400 : 502,
+            code: error.code,
+          );
+        }
+        dataLines.clear();
+        eventType = '';
+      }
+
+      await for (final line
+          in raw.transform(utf8.decoder).transform(const LineSplitter())) {
+        if (line.startsWith('event:')) {
+          eventType = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          var data = line.substring(5);
+          if (data.startsWith(' ')) data = data.substring(1);
+          dataLines.add(data);
+        } else if (line.isEmpty) {
+          await finishFrame();
+        }
+      }
+      await finishFrame();
+    } else {
+      final data = _jsonMap(raw);
+      if (data == null) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
+      try {
+        terminal = parser.addFrame(
+          'event: result\ndata: ${jsonEncode(data)}\n\n',
+        );
+      } on ClovaStudioUpstreamException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          statusCode: error.code.startsWith('4') ? 400 : 502,
+          code: error.code,
+        );
+      }
+    }
+    if (terminal?.done != true) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
+    final usage = Map<String, dynamic>.from(terminal!.usage ?? const {});
+    final data = <String, dynamic>{
+      'choices': [
+        {
+          'message': {
+            'role': 'assistant',
+            'content': parser.text,
+            'reasoning_content': parser.reasoning,
+          },
+          'finish_reason': terminal!.finishReason,
+        },
+      ],
+      if (usage.isNotEmpty) 'usage': usage,
+    };
+    return _LlmCompletionResult(data: data, text: parser.text, usage: usage);
+  }
+
   _LlmCompletionResult _readCompletion(Object? raw, String protocolId) {
     final data = _jsonMap(raw);
     if (data == null) {
@@ -1610,6 +1717,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .join();
     }
     if (protocolId == 'openai.chat_completions' ||
+        protocolId == kClovaStudioProtocolId ||
         protocolId == 'amazon-q.chat') {
       final choices = data['choices'];
       final message = choices is List && choices.isNotEmpty
@@ -2293,6 +2401,38 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       }
     }
     if (dataLines.isNotEmpty) yield dataLines.join('\n');
+  }
+
+  static Stream<String> _clovaSseData(Stream<List<int>> bytes) async* {
+    var eventType = '';
+    final dataLines = <String>[];
+    Map<String, dynamic>? decode() {
+      if (dataLines.isEmpty) return null;
+      final decoded = jsonDecode(dataLines.join('\n'));
+      dataLines.clear();
+      if (decoded is! Map) return null;
+      return <String, dynamic>{
+        ...Map<String, dynamic>.from(decoded),
+        '_eventType': eventType,
+      };
+    }
+
+    await for (final line
+        in bytes.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (line.startsWith('event:')) {
+        eventType = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        var data = line.substring(5);
+        if (data.startsWith(' ')) data = data.substring(1);
+        dataLines.add(data);
+      } else if (line.isEmpty) {
+        final frame = decode();
+        if (frame != null) yield jsonEncode(frame);
+        eventType = '';
+      }
+    }
+    final frame = decode();
+    if (frame != null) yield jsonEncode(frame);
   }
 
   static Stream<String> _ndjsonData(Stream<List<int>> bytes) async* {

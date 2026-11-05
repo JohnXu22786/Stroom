@@ -69,6 +69,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'muse-code' =>
         'openai.responses',
       'claude' => 'anthropic.messages',
+      'clova-studio' => 'clova.studio.chat',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
       'gemini-interactions' => 'google.gemini.interactions',
       'amazon-q' => 'amazon-q.chat',
@@ -147,6 +148,7 @@ Set<String> supportedApiProtocolsForSupplier(
 
   final nativeProtocol = switch (connectorType) {
     'claude' => 'anthropic.messages',
+    'clova-studio' => 'clova.studio.chat',
     'gemini' || 'aistudio' => 'google.gemini.generate_content',
     'gemini-interactions' => 'google.gemini.interactions',
     'ollama' => 'ollama.chat',
@@ -175,6 +177,7 @@ Set<String> supportedApiProtocolsForSupplier(
 }
 
 const apiProtocolLabels = <String, String>{
+  'clova.studio.chat': 'Naver CLOVA Studio v3',
   'openai.chat_completions': 'OpenAI Chat Completions',
   'openai.responses': 'OpenAI Responses',
   'anthropic.messages': 'Anthropic Messages',
