@@ -256,7 +256,10 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'poolside',
-      )!.fallbackModels.first.capabilities,
+      )!
+          .fallbackModels
+          .first
+          .capabilities,
       {
         'toolCalling': true,
         'reasoning': true,
@@ -305,7 +308,9 @@ void main() {
     expect(
       findLlmOpenAiProviderPreset(
         'sarvam',
-      )!.fallbackModels.map((m) => m.capabilities['contextLength']),
+      )!
+          .fallbackModels
+          .map((m) => m.capabilities['contextLength']),
       [131072, 65536],
     );
     expect(
