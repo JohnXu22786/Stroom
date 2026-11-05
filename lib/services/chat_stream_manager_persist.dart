@@ -2,7 +2,7 @@ part of 'chat_stream_manager.dart';
 
 extension _ChatStreamManagerPersistExt on ChatStreamManager {
   /// Periodic partial persistence for the given conversation's stream.
-  void _doPeriodicPersist(_ConversationStreamState s) {
+  Future<void> _doPeriodicPersist(_ConversationStreamState s) async {
     // Guard: if the timer was cancelled (stream ended), the state might
     // still be referenced from a late-arriving timer callback. The final
     // save has already run by now; don't overwrite it with partial data.
@@ -61,7 +61,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
           ));
         }
       }
-      ref.read(conversationsProvider.notifier).updateMessages(
+      await ref.read(conversationsProvider.notifier).updateMessages(
             s.convId,
             partialHistory,
             resetTemporaryCountdown: true,

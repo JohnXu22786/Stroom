@@ -325,7 +325,7 @@ class ChatStreamManager {
 
     // Start periodic persistence timer
     state.persistTimer = Timer.periodic(_persistInterval, (_) {
-      _doPeriodicPersist(state);
+      unawaited(_doPeriodicPersist(state));
     });
 
     // Snapshot the ChatService instance BEFORE the first await so that
