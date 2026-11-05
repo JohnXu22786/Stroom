@@ -84,6 +84,28 @@ void main() {
     expect(response, isEmpty);
   });
 
+  test('valid query credentials survive unrelated malformed components', () {
+    const url = 'https://ocr.test/v1?api_key=opaque-secret&'
+        'api_key=another-secret&other=%FF';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 502, 'requestId': 'opaque-secret'},
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, containsAll(['opaque-secret', 'another-secret']));
+    expect(response, {'statusCode': 502});
+  });
+
+  test('malformed query credentials are skipped without stopping extraction',
+      () {
+    const url = 'https://ocr.test/v1?api_key=%FF&%FF=opaque-malformed-key&'
+        'token=safe-token';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+
+    expect(credentialValues, ['safe-token']);
+  });
+
   test('request URL extraction recognizes camel case secret key parameters',
       () {
     for (final entry in [

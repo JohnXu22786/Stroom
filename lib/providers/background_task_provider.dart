@@ -1397,6 +1397,14 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
       _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(text, prefix)) {
     return r'(?:[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
   }
+  if (prefix.toLowerCase() == 'password') {
+    // A common word can be a masked key prefix; only bridge a newline when
+    // the following token also has substantial alphabetic and numeric runs.
+    return r'(?:[\r\n]+[ \t]*'
+        r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
+        r'(?=(?:[a-zA-Z]*[0-9]){4})'
+        r'[a-zA-Z0-9]{10,}(?=$|[^a-zA-Z0-9])))?';
+  }
   return '';
 }
 
@@ -1414,6 +1422,38 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
   return RegExp(
     r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
   ).hasMatch(text);
+}
+
+String? _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'password') continue;
+    final pattern = RegExp(
+      '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
+      r'[\r\n]+[ \t]*'
+      r'([a-zA-Z0-9_./+=~-]{10,})(?=$|[^a-zA-Z0-9_./+=~-])',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(text);
+    final token = match?.group(2);
+    if (match != null &&
+        token != null &&
+        RegExp(r'[a-zA-Z]').allMatches(token).length >= 4 &&
+        RegExp(r'[0-9]').allMatches(token).length >= 4) {
+      return text.replaceRange(
+        match.start,
+        match.end,
+        '${match.group(1)}[redacted]',
+      );
+    }
+  }
+  return null;
 }
 
 const _legacyOcrNaturalCarefulInstructionActions = {
@@ -3390,9 +3430,30 @@ Map<String, dynamic>? _retryDataFromTaskMap(
           }
           retryData['modelRef'] = safeModelRef;
         }
-        return Map<String, dynamic>.from(
+        final sanitizedRetryData = Map<String, dynamic>.from(
           _withoutCredentialEchoes(retryData, credentialValues) as Map,
         );
+        final originalInstruction = rawRetryData['instructionContent'];
+        if (map['type'] == BackgroundTaskType.ocr.name &&
+            originalInstruction is String) {
+          final redactedPasswordEcho =
+              _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
+            originalInstruction,
+            credentialValues,
+          );
+          if (redactedPasswordEcho != null &&
+              !_legacyOcrTextContainsCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              ) &&
+              !_legacyOcrTextContainsMaskedCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              )) {
+            sanitizedRetryData['instructionContent'] = redactedPasswordEcho;
+          }
+        }
+        return sanitizedRetryData;
       }
       malformedRetryData = retryData;
     } catch (_) {

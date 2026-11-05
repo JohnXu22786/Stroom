@@ -93,16 +93,21 @@ class OcrDiagnosticSnapshot {
         }
       }
     }
-    try {
-      for (final entry in uri.queryParametersAll.entries) {
-        if (!_credentialQueryParameter.hasMatch(entry.key)) continue;
-        for (final value in entry.value) {
-          addValue(value);
-        }
+    for (final component in uri.query.split('&')) {
+      final separator = component.indexOf('=');
+      final rawKey =
+          separator < 0 ? component : component.substring(0, separator);
+      if (rawKey.isEmpty) continue;
+      try {
+        final key = Uri.decodeQueryComponent(rawKey);
+        if (!_credentialQueryParameter.hasMatch(key)) continue;
+
+        final rawValue =
+            separator < 0 ? '' : component.substring(separator + 1);
+        addValue(Uri.decodeQueryComponent(rawValue));
+      } on FormatException {
+        // Skip only this component; malformed bytes are not credential text.
       }
-    } on FormatException {
-      // Keep any values recovered from userinfo when a malformed query cannot
-      // be decoded safely.
     }
     return values.toList(growable: false);
   }
