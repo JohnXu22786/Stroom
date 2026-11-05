@@ -40,7 +40,8 @@ import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
-import '../services/chat_stream_manager.dart' show StreamResult;
+import '../services/chat_stream_manager.dart'
+    show ChatStreamManager, StreamResult;
 import '../providers/provider_config.dart';
 import '../providers/assistant_provider.dart'
     show
@@ -208,6 +209,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
   String? _streamingMsgId;
+  final Object _streamPageOwner = Object();
+  ChatStreamManager? _attachedStreamManager;
+  String? _attachedStreamConvId;
+  String? _attachedStreamMsgId;
 
   /// 防止快速连点保存按钮时弹出多个保存面板。
   bool _isSavingMarkdown = false;
@@ -431,6 +436,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController.dispose();
     _overlayMetricsTick.dispose();
     _streamingBubbleRevision.dispose();
+    _detachStreamPage(clearIfCompleted: true);
     super.dispose();
   }
 

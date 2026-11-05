@@ -286,15 +286,17 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       }
     }
 
-    // Do NOT clear segment-related providers here (streamingFullReplyProvider,
-    // streamingTextSectionsProvider, streamingReasoningSectionsProvider,
-    // streamingToolCallsProvider, streamingToolCallRoundStartsProvider).
-    // The chat_page's post-stream code in _startStreaming handles provider
-    // cleanup AFTER updating _history and calling _buildFinalSegments.
-    // Clearing segment providers prematurely triggers _rebuildLiveSegments
-    // with empty data, overwriting the correct segments (including reasoning
-    // with isStreaming=true that should have been replaced by
-    // _buildFinalSegments with isStreaming=false).
+    // Keep segment providers while any page is displaying this completed
+    // message: its post-stream path builds finalized segments before clearing
+    // them, and a re-entered page reloads the saved message on completion.
+    // If the originating page was disposed and no page re-entered, release
+    // the large stream buffers now instead of retaining them indefinitely.
+    final streamingMsgId = state.streamingMsgId;
+    if (!replaced &&
+        (streamingMsgId == null ||
+            !_hasAttachedStreamPage(convId, streamingMsgId))) {
+      _clearCompletedSegmentProviders(convId);
+    }
 
     return result;
   }

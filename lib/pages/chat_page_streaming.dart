@@ -6,6 +6,38 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageStreamingExt on _ChatPageState {
+  void _attachStreamPage(
+      ChatStreamManager manager, String convId, String msgId) {
+    _detachStreamPage();
+    manager.attachStreamPage(convId, msgId, _streamPageOwner);
+    _attachedStreamManager = manager;
+    _attachedStreamConvId = convId;
+    _attachedStreamMsgId = msgId;
+  }
+
+  void _detachStreamPageFor(String convId, String msgId) {
+    if (_attachedStreamConvId == convId && _attachedStreamMsgId == msgId) {
+      _detachStreamPage();
+    }
+  }
+
+  void _detachStreamPage({bool clearIfCompleted = false}) {
+    final manager = _attachedStreamManager;
+    final convId = _attachedStreamConvId;
+    final msgId = _attachedStreamMsgId;
+    if (manager != null && convId != null && msgId != null) {
+      manager.detachStreamPage(
+        convId,
+        msgId,
+        _streamPageOwner,
+        clearIfCompleted: clearIfCompleted,
+      );
+    }
+    _attachedStreamManager = null;
+    _attachedStreamConvId = null;
+    _attachedStreamMsgId = null;
+  }
+
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
   /// generation and came back). Uses per-conversation state from the manager
@@ -19,6 +51,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     final msgId = manager.streamingMsgIdFor(activeConvId);
     if (msgId == null) return;
+    _attachStreamPage(manager, activeConvId, msgId);
 
     final fullReply = manager.fullReplyFor(activeConvId);
     final reasoningSections = manager.reasoningSectionsFor(activeConvId);
@@ -181,6 +214,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     _isStreamingActive = false;
     _streamingMsgId = null;
+    _detachStreamPage();
     final convId = ref.read(activeConversationIdProvider);
     try {
       if (convId != null) {
@@ -324,7 +358,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
-    final StreamResult result = await manager.startStreaming(
+    final streamFuture = manager.startStreaming(
       text: text,
       convId: effectiveConvId,
       history: histBefore,
@@ -337,6 +371,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
       customParamValues: customParamValues,
       streamingMsgId: aiMsgId,
     );
+    _attachStreamPage(manager, effectiveConvId, aiMsgId);
+    final StreamResult result = await streamFuture;
+    _detachStreamPageFor(effectiveConvId, aiMsgId);
 
     if (!mounted) return;
 

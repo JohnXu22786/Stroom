@@ -63,6 +63,10 @@ class ChatStreamManager {
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
 
+  /// Pages currently displaying a specific stream. A completed stream only
+  /// needs its provider buffers retained while at least one page is attached.
+  final Map<String, Map<Object, String>> _streamPageOwners = {};
+
   // ── Throttle constants ──
   static const Duration _textThrottle = Duration(milliseconds: 200); // 5次/秒
   static const Duration _reasoningThrottle = Duration(milliseconds: 200);
@@ -166,6 +170,44 @@ class ChatStreamManager {
 
   /// Whether [convId] is currently streaming.
   bool isStreamingFor(String convId) => _streams.containsKey(convId);
+
+  /// Records that a chat page is displaying [streamingMsgId] for [convId].
+  void attachStreamPage(String convId, String streamingMsgId, Object owner) {
+    (_streamPageOwners[convId] ??= {})[owner] = streamingMsgId;
+  }
+
+  /// Removes a page's stream attachment. A disposed page can arrive just
+  /// after finalization, so clear its completed buffers here when no page
+  /// remains attached to that message.
+  void detachStreamPage(
+    String convId,
+    String streamingMsgId,
+    Object owner, {
+    bool clearIfCompleted = false,
+  }) {
+    final owners = _streamPageOwners[convId];
+    owners?.remove(owner);
+    if (owners?.isEmpty == true) _streamPageOwners.remove(convId);
+    if (clearIfCompleted &&
+        !_streams.containsKey(convId) &&
+        !_hasAttachedStreamPage(convId, streamingMsgId)) {
+      _clearCompletedSegmentProviders(convId);
+    }
+  }
+
+  bool _hasAttachedStreamPage(String convId, String streamingMsgId) =>
+      _streamPageOwners[convId]?.containsValue(streamingMsgId) ?? false;
+
+  void _clearCompletedSegmentProviders(String convId) {
+    final ref = _ref;
+    if (ref == null) return;
+    ref.read(streamingFullReplyProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
+    ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+    ref.read(streamingToolCallsProvider(convId).notifier).state = [];
+    ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state = [];
+  }
 
   /// The streaming message ID for a specific conversation.
   String? streamingMsgIdFor(String convId) => _streams[convId]?.streamingMsgId;
