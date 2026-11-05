@@ -64,7 +64,7 @@ class ChatStreamManager {
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
-  final Map<String, Future<void> Function(ChatMessage)>
+  final Map<String, Future<bool> Function(ChatMessage)>
       _pendingContinuationHandlers = {};
 
   /// Pages currently displaying a specific stream. A completed stream only
@@ -545,8 +545,12 @@ class ChatStreamManager {
           );
           state.history.add(continuation);
           state.historyOnSuccess?.add(continuation);
+          state.pendingContinuation = continuation;
           try {
-            await state.onContinuation?.call(continuation);
+            final handler = state.onContinuation;
+            if (handler != null) {
+              await _deliverContinuation(state, continuation, handler);
+            }
           } catch (callbackError) {
             debugPrint(
                 '[ChatStreamManager] continuation display callback failed: $callbackError');
@@ -607,13 +611,35 @@ class ChatStreamManager {
   /// sent continuation. Call immediately before [startStreaming].
   void setContinuationHandler(
     String convId,
-    Future<void> Function(ChatMessage continuation) handler,
+    Future<bool> Function(ChatMessage continuation) handler,
   ) {
     final activeState = _streams[convId];
     if (activeState != null && !activeState.cancelledByUser) {
       activeState.onContinuation = handler;
+      final pendingContinuation = activeState.pendingContinuation;
+      if (pendingContinuation != null) {
+        unawaited(
+          _deliverContinuation(activeState, pendingContinuation, handler),
+        );
+      }
     } else {
       _pendingContinuationHandlers[convId] = handler;
+    }
+  }
+
+  Future<void> _deliverContinuation(
+    _ConversationStreamState state,
+    ChatMessage continuation,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) async {
+    try {
+      final displayed = await handler(continuation);
+      if (displayed && identical(state.pendingContinuation, continuation)) {
+        state.pendingContinuation = null;
+      }
+    } catch (callbackError) {
+      debugPrint(
+          '[ChatStreamManager] continuation display callback failed: $callbackError');
     }
   }
 
