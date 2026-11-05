@@ -95,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录AnkiWeb'), findsOneWidget);
-    expect(find.text('登录自建同步服务器'), findsNothing);
+    expect(find.text('登录自建服务器'), findsNothing);
   });
 
   testWidgets('shows the retained custom server after migrating settings', (
@@ -118,7 +118,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('https://sync.example.invalid/sync/'), findsOneWidget);
-    expect(find.text('登录自建同步服务器'), findsOneWidget);
+    expect(find.text('登录自建服务器'), findsOneWidget);
   });
 
   testWidgets('saves an edited server URL before checking sync status', (
@@ -174,7 +174,7 @@ void main() {
     expect(preferences.getString('custom_sync_server_collection_url'), newUrl);
     expect(factoryUrls, [oldUrl]);
     expect(requests, isEmpty);
-    expect(find.text('登录自建同步服务器'), findsOneWidget);
+    expect(find.text('登录自建服务器'), findsOneWidget);
   });
 
   testWidgets('formats the server modification time as Unix seconds', (
