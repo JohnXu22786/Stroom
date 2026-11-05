@@ -201,6 +201,7 @@ void main() {
         'bazaarlink',
         'beatapi',
         'chenzk',
+        'dahl',
         'cheaperinference',
         'byteplus',
         'cerebras',
@@ -314,6 +315,92 @@ void main() {
       expect(credentials.values.values, ['cheaperinference-test-key']);
     },
   );
+
+  testWidgets('Dahl preset seeds the manual API-key account defaults', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('dahl');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'dahl-test-key',
+    );
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  widget.decoration?.labelText == '端点地址（连接器需要时填写）',
+            ),
+          )
+          .controller!
+          .text,
+      'https://inference.dahl.global/v1/chat/completions',
+    );
+    final models = tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == '上游模型与能力',
+          ),
+        )
+        .controller!
+        .text;
+    expect(models, 'MiniMaxAI/MiniMax-M2.7\nmoonshotai/Kimi-K2.6');
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'dahl');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://inference.dahl.global/v1/chat/completions',
+    );
+    expect(saved.endpointConfig['modelsUrl'], isNull);
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      ['MiniMaxAI/MiniMax-M2.7', 'moonshotai/Kimi-K2.6'],
+    );
+    expect(
+      saved.models.map((model) => model.capabilities),
+      [
+        {'contextLength': 200000},
+        {'contextLength': 200000},
+      ],
+    );
+    expect(credentials.values.values, ['dahl-test-key']);
+    expect(saved.endpointConfig.toString(), isNot(contains('dahl-test-key')));
+  });
 
   testWidgets(
     'preset switches apply defaults without replacing explicit model overrides',
