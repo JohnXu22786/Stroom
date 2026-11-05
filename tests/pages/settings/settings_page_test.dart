@@ -10,8 +10,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/notification_settings_page.dart';
@@ -157,7 +158,7 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('General'), findsOneWidget);
     expect(find.text('Task Completion Notifications'), findsOneWidget);
-    expect(find.text('Background Optimization'), findsOneWidget);
+    expect(find.text('Background Operation Optimization'), findsOneWidget);
     await _scrollSettingsToEnd(tester);
     await tester.ensureVisible(find.text('About'));
     expect(find.text('About'), findsOneWidget);
@@ -180,6 +181,21 @@ void main() {
   testWidgets('notification settings page follows the selected locale', (
     tester,
   ) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 1};
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(

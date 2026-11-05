@@ -33,7 +33,7 @@ void main() {
     await tester.pumpWidget(createTestApp(locale: const Locale('en', 'US')));
     await tester.pumpAndSettle();
     expect(find.text('Backup and Restore'), findsOneWidget);
-    expect(find.text('Chat history and attachments'), findsOneWidget);
+    expect(find.text('Chat History and Attachments'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
@@ -103,7 +103,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('确定清除'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, '清除所选数据'),
+      );
       await tester.pumpAndSettle();
 
       // Button-based restart prompt (mirrors the startup migration dialog),
