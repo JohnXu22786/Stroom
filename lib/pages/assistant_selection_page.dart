@@ -10,7 +10,6 @@ import '../providers/assistant_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../providers/provider_config.dart';
 import '../services/chat_adapter.dart' show resolveModelRef;
-import 'home_shared.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'assistant/assistant_defaults_tab.dart';
@@ -22,6 +21,29 @@ part 'assistant_selection_page_edit_dialog.dart';
 part 'assistant_selection_page_edit_params_tab.dart';
 part 'assistant_selection_page_add_custom_param.dart';
 part 'assistant_selection_page_edit_custom_param.dart';
+
+/// Carries whether the retained chat tab is currently visible to its routes.
+/// Offstage routes stay mounted, so loading animations must pause in the
+/// background to let the surrounding UI settle.
+class ChatTabVisibility extends InheritedWidget {
+  const ChatTabVisibility({
+    required this.isVisible,
+    required super.child,
+    super.key,
+  });
+
+  final bool isVisible;
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ChatTabVisibility>()
+          ?.isVisible ??
+      true;
+
+  @override
+  bool updateShouldNotify(ChatTabVisibility oldWidget) =>
+      isVisible != oldWidget.isVisible;
+}
 
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.

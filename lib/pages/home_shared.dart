@@ -1,28 +1,3 @@
-import 'package:flutter/widgets.dart';
-
-/// Carries whether the retained chat tab is currently visible to its routes.
-/// Offstage routes stay mounted, so loading animations must pause in the
-/// background to let the surrounding UI settle.
-class ChatTabVisibility extends InheritedWidget {
-  const ChatTabVisibility({
-    required this.isVisible,
-    required super.child,
-    super.key,
-  });
-
-  final bool isVisible;
-
-  static bool of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<ChatTabVisibility>()
-          ?.isVisible ??
-      true;
-
-  @override
-  bool updateShouldNotify(ChatTabVisibility oldWidget) =>
-      isVisible != oldWidget.isVisible;
-}
-
 String formatDurationShort(String durationStr) {
   final parts = durationStr.split(':');
   if (parts.length != 3) return durationStr;

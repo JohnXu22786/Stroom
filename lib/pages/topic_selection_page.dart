@@ -9,7 +9,6 @@ import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
 import '../services/attachment_storage.dart';
-import 'home_shared.dart';
 
 /// Merged page: after selecting an assistant, choose or create a conversation.
 /// Features: card-based UI, selection mode, pin, rename, reorder, search panel.
