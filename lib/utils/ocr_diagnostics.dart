@@ -159,7 +159,7 @@ class OcrDiagnosticSnapshot {
     String bounded(String credential) =>
         credential.length <= _maxCredentialValueLength
             ? credential
-            : credential.substring(0, _maxTextLength);
+            : credential.substring(0, _maxCredentialValueLength);
 
     values.add(bounded(value));
     final token = RegExp(
@@ -703,15 +703,16 @@ class OcrDiagnosticSnapshot {
           ? value.clamp(0, 1 << 50).toInt()
           : null;
 
-  static bool _matchesCredentialPrefix(
+  static bool _matchesCredentialFragment(
     String value,
     Iterable<String> excludedValues,
   ) {
     final normalized = value.toLowerCase();
     return excludedValues.any((secret) {
       final normalizedSecret = secret.toLowerCase();
-      return normalizedSecret.length > normalized.length &&
-          normalizedSecret.startsWith(normalized);
+      return (normalizedSecret.length > normalized.length &&
+              normalizedSecret.startsWith(normalized)) ||
+          (normalized.length >= 8 && normalizedSecret.contains(normalized));
     });
   }
 
@@ -726,7 +727,7 @@ class OcrDiagnosticSnapshot {
     }
     if (RegExp(r'data:image/', caseSensitive: false).hasMatch(cleaned) ||
         _isShortEncodedImageBody(cleaned) ||
-        _matchesCredentialPrefix(cleaned, excludedValues) ||
+        _matchesCredentialFragment(cleaned, excludedValues) ||
         containsCredential(cleaned, excludedValues: excludedValues)) {
       return null;
     }

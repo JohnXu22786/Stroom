@@ -19,7 +19,6 @@ void main() {
       {'statusCode': 429, 'requestId': safeRequestId},
       excludedValues: excludedValues,
     )!;
-
     expect(echoedResponse, {'statusCode': 401});
     expect(safeResponse, {
       'statusCode': 429,
@@ -27,6 +26,38 @@ void main() {
     });
     expect(jsonEncode([echoedResponse, safeResponse]),
         isNot(contains(echoedPrefix)));
+  });
+
+  test('long body credentials exclude later request ID fragments', () {
+    final echoedRequestId = 'req-${List.filled(146, 'e').join()}';
+    final credential =
+        '${List.filled(180, 'x').join()}$echoedRequestId${List.filled(400, 'y').join()}';
+    const safeRequestId = 'req-safe-after-long-credential-fragment-202';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final shortSafeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'requestId': 'req'},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(echoedRequestId.length, 150);
+    expect(credential.length, greaterThan(512));
+    expect(excludedValues, isNot(contains(echoedRequestId)));
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(shortSafeResponse, {'requestId': 'req'});
   });
 
   test('long Bearer credentials exclude stripped URL and header echoes', () {
