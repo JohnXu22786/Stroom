@@ -21,6 +21,48 @@ class TodoToolService {
   /// 内存中的待办事项列表（按 position 排序）
   static final List<TodoItem> _todos = [];
 
+  /// Read or replace a conversation's own TODO list without touching the
+  /// legacy unscoped list. The chat service supplies the persisted list and
+  /// save callback so the storage owner remains ConversationsNotifier.
+  static Future<String> handleConversationTodo(
+    Map<String, dynamic> args, {
+    required List<TodoItem> currentTodos,
+    required Future<bool> Function(List<TodoItem>) saveTodos,
+  }) async {
+    final todos = args['todos'];
+    if (todos == null) return _formatTodos(currentTodos);
+    if (todos is! List) {
+      return '错误: todos 参数必须是数组（省略或传 null 表示读取待办列表）';
+    }
+
+    final updated = <TodoItem>[];
+    for (var i = 0; i < todos.length; i++) {
+      final item = todos[i];
+      if (item is! Map) continue;
+      updated.add(TodoItem(
+        content: item['content'] is String ? item['content'] as String : '',
+        status: item['status'] is String ? item['status'] as String : 'pending',
+        priority:
+            item['priority'] is String ? item['priority'] as String : 'medium',
+        position: i,
+      ));
+    }
+    if (!await saveTodos(updated)) {
+      return 'Error: the TODO list could not be saved. Please retry.';
+    }
+    return _formatTodos(updated);
+  }
+
+  static String _formatTodos(List<TodoItem> todos) {
+    if (todos.isEmpty) return '当前没有待办事项。';
+    final activeCount = todos
+        .where(
+            (todo) => todo.status != 'completed' && todo.status != 'cancelled')
+        .length;
+    final jsonStr = jsonEncode(todos.map((todo) => todo.toJson()).toList());
+    return '$activeCount todos\n\n```json\n$jsonStr\n```';
+  }
+
   /// 工具定义列表（单一 todowrite 工具，读写一体）
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
@@ -144,6 +186,15 @@ class TodoItem {
     this.priority = 'medium',
     this.position = 0,
   });
+
+  factory TodoItem.fromJson(Map<String, dynamic> json) => TodoItem(
+        content: json['content'] is String ? json['content'] as String : '',
+        status: json['status'] is String ? json['status'] as String : 'pending',
+        priority:
+            json['priority'] is String ? json['priority'] as String : 'medium',
+        position:
+            json['position'] is num ? (json['position'] as num).toInt() : 0,
+      );
 
   Map<String, dynamic> toJson() => {
         'content': content,

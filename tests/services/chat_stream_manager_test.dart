@@ -13,6 +13,7 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/services/todo_tool_service.dart';
 part 'chat_stream_manager_test_p1.dart';
 part 'chat_stream_manager_test_p2.dart';
 part 'chat_stream_manager_test_p3.dart';
