@@ -2536,6 +2536,188 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
       ),
     ],
   ),
+  // M46 entries use the pinned OmniRoute d1ba822 OpenAI-compatible helper or
+  // default executor: API-key authentication uses Bearer Authorization.
+  // Evidence for each entry is recorded next to its provider ID.
+  // Evidence: registry/sealion/index.ts, shared.ts.
+  LlmProviderPreset(
+    id: 'sealion',
+    displayName: 'SEA-LION',
+    baseUrl: 'https://api.sea-lion.ai/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('aisingapore/Llama-SEA-LION-v3.5-70B-R',
+          displayName: 'Llama SEA-LION v3.5 70B R',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('aisingapore/Llama-SEA-LION-v3-70B-IT',
+          displayName: 'Llama SEA-LION v3 70B IT',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('aisingapore/Gemma-SEA-LION-v4-27B-IT',
+          displayName: 'Gemma SEA-LION v4 27B IT',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('aisingapore/Qwen-SEA-LION-v4.5-27B-IT',
+          displayName: 'Qwen SEA-LION v4.5 27B IT',
+          capabilities: {'contextLength': 32768}),
+      LlmProviderPresetModel('aisingapore/Qwen-SEA-LION-v4-32B-IT',
+          displayName: 'Qwen SEA-LION v4 32B IT',
+          capabilities: {'contextLength': 32768}),
+    ],
+  ),
+  // Evidence: registry/seekai/index.ts, shared.ts.
+  LlmProviderPreset(
+    id: 'seekai',
+    displayName: 'SeekAi',
+    baseUrl: 'https://seekai.cc/v1/chat/completions',
+    modelsUrl: 'https://seekai.cc/v1/models',
+  ),
+  // Evidence: registry/sensenova/index.ts.
+  LlmProviderPreset(
+    id: 'sensenova',
+    displayName: 'SenseNova',
+    baseUrl: 'https://token.sensenova.cn/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('sensenova-6.7-flash-lite',
+          displayName: 'SenseNova 6.7 Flash-Lite',
+          capabilities: {
+            'contextLength': 262144,
+            'maxOutputTokens': 65536,
+            'vision': true,
+            'toolCalling': true,
+          }),
+      LlmProviderPresetModel('deepseek-v4-flash',
+          displayName: 'DeepSeek V4 Flash',
+          capabilities: {
+            'contextLength': 1048576,
+            'maxOutputTokens': 65536,
+            'reasoning': true,
+            'supportedThinkingEfforts': ['none', 'low', 'medium', 'high'],
+            'supportsXHighEffort': false,
+            'interleavedField': 'reasoning_content',
+          }),
+      LlmProviderPresetModel('glm-5.2', displayName: 'GLM 5.2', capabilities: {
+        'contextLength': 1048576,
+        'maxOutputTokens': 65536,
+        'reasoning': true,
+        'interleavedField': 'reasoning_content',
+      }),
+    ],
+  ),
+  // Evidence: registry/sparkdesk/index.ts.
+  LlmProviderPreset(
+    id: 'sparkdesk',
+    displayName: 'SparkDesk',
+    baseUrl: 'https://spark-api-open.xf-yun.com/v1/chat/completions',
+    fallbackModels: [
+      LlmProviderPresetModel('4.0Ultra',
+          displayName: 'Spark 4.0 Ultra',
+          capabilities: {'contextLength': 32768}),
+      LlmProviderPresetModel('generalv3',
+          displayName: 'Spark Pro', capabilities: {'contextLength': 8192}),
+      LlmProviderPresetModel('pro-128k',
+          displayName: 'Spark Pro 128K',
+          capabilities: {'contextLength': 131072}),
+      LlmProviderPresetModel('lite',
+          displayName: 'Spark Lite', capabilities: {'contextLength': 4096}),
+    ],
+  ),
+  // Evidence: registry/speka/index.ts, shared.ts.
+  LlmProviderPreset(
+    id: 'speka',
+    displayName: 'Speka AI',
+    baseUrl: 'https://speka.me/v1/chat/completions',
+    modelsUrl: 'https://speka.me/v1/models',
+  ),
+  // Evidence: registry/synthetic/index.ts.
+  LlmProviderPreset(
+    id: 'synthetic',
+    displayName: 'Synthetic',
+    baseUrl: 'https://api.synthetic.new/openai/v1/chat/completions',
+    modelsUrl: 'https://api.synthetic.new/openai/v1/models',
+    fallbackModels: [
+      LlmProviderPresetModel('hf:openai/gpt-oss-120b',
+          displayName: 'openai/gpt-oss-120b',
+          capabilities: {
+            'contextLength': 131072,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+          }),
+      LlmProviderPresetModel('hf:zai-org/GLM-5.2',
+          displayName: 'zai-org/GLM-5.2',
+          capabilities: {
+            'contextLength': 524288,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+          }),
+      LlmProviderPresetModel('hf:moonshotai/Kimi-K2.7-Code',
+          displayName: 'moonshotai/Kimi-K2.7-Code',
+          capabilities: {
+            'contextLength': 262144,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+            'vision': true,
+          }),
+      LlmProviderPresetModel('hf:Qwen/Qwen3.6-27B',
+          displayName: 'Qwen/Qwen3.6-27B',
+          capabilities: {
+            'contextLength': 262144,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+            'vision': true,
+          }),
+      LlmProviderPresetModel('hf:MiniMaxAI/MiniMax-M3',
+          displayName: 'MiniMaxAI/MiniMax-M3',
+          capabilities: {
+            'contextLength': 262144,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+            'vision': true,
+          }),
+      LlmProviderPresetModel('hf:zai-org/GLM-4.7-Flash',
+          displayName: 'zai-org/GLM-4.7-Flash',
+          capabilities: {
+            'contextLength': 196608,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+          }),
+      LlmProviderPresetModel(
+          'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
+          displayName: 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
+          capabilities: {
+            'contextLength': 262144,
+            'maxOutputTokens': 65536,
+            'toolCalling': true,
+            'reasoning': true,
+          }),
+    ],
+  ),
+  // Evidence: registry/tokenmarket/index.ts, shared.ts.
+  LlmProviderPreset(
+    id: 'tokenmarket',
+    displayName: 'Token Market',
+    baseUrl: 'https://api.tokensmarket.ai/v1/chat/completions',
+    modelsUrl: 'https://api.tokensmarket.ai/v1/models',
+  ),
+  // Evidence: registry/tokenreply/index.ts, shared.ts.
+  LlmProviderPreset(
+    id: 'tokenreply',
+    displayName: 'TokenReply',
+    baseUrl: 'https://api.tokenreply.com/v1/chat/completions',
+    modelsUrl: 'https://api.tokenreply.com/v1/models',
+  ),
+  // M46 deferred: the pinned Tencent registry warns that its legacy Hunyuan
+  // platform discontinues 46 model lines (including TurboS/T1) on 2026-06-22
+  // and requests a recheck by 2026-09-30. That date has passed; this cohort
+  // audit has no post-deadline source verifying current endpoint/model support,
+  // so Tencent remains excluded pending verification. This does not assert
+  // that the entire provider is discontinued. SumoPod, Token Kiosk and
+  // TokenRouter declare defaultContextLength=128000 with dynamic /models, which
+  // the existing preset contract cannot attach to remotely discovered models.
+  // TheB.AI has no per-ID registry entry/executable adapter at M33 pin d1ba822.
   // M45 deferred: Pollinations is dispatched to a dedicated executor and uses
   // optional API-key auth (registry/pollinations/index.ts:8-22;
   // executors/index.ts:70); Predibase's pinned endpoint is recorded as
