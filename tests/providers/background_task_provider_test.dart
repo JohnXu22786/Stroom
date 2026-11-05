@@ -5682,6 +5682,83 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves a Calculate prompt after redacting an echoed Authorization credential',
+      () {
+        const apiKey = 'calculate-receipt-total-key-7391';
+        const instruction = 'Calculate the receipt total using $apiKey';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-calculate-instruction-auth-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'Calculate the receipt total using [redacted]',
+        );
+        expect(
+          persisted,
+          contains('Calculate the receipt total using [redacted]'),
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration drops a bare Calculate action after credential redaction',
+      () {
+        const apiKey = 'calculate-bare-action-key-7391';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-calculate-bare-action-auth-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer $apiKey'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Calculate $apiKey'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          isNull,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves a lowercase categorize command under a prefix-only mask',
       () {
         const instruction = 'categorize this receipt';
