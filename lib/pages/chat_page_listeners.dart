@@ -18,7 +18,6 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (msgId == null) return;
       _updateStreamingMessage(msgId, next);
       _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
     });
 
     ref.listen(streamingReasoningSectionsProvider(convId),
@@ -45,7 +44,7 @@ extension _ChatPageListenersExt on _ChatPageState {
         _isReasoningCompletedForMsg[msgId] = false;
       }
       _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
+      _refreshStreamingBubble(msgId);
     });
 
     ref.listen(streamingHasFirstTokenProvider(convId), (bool? prev, bool next) {
@@ -54,7 +53,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (msgId == null) return;
       if ((_reasoningContents[msgId]?.length ?? 0) > 0) {
         _isReasoningCompletedForMsg[msgId] = true;
-        if (mounted) setState(() {});
+        _refreshStreamingBubble(msgId);
       }
     });
 
@@ -64,7 +63,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
       _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
+      _refreshStreamingBubble(msgId);
     });
 
     ref.listen(streamingTextSectionsProvider(convId),
@@ -74,7 +73,9 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (msgId == null) return;
       _isReasoningCompletedForMsg[msgId] = true;
       _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
+      // Text updates are followed by streamingFullReplyProvider, whose
+      // controller update refreshes this bubble. Other segment changes are
+      // refreshed by their corresponding reasoning/tool listener.
     });
   }
 
@@ -321,5 +322,13 @@ extension _ChatPageListenersExt on _ChatPageState {
         createdAt: DateTime.now(),
       ),
     );
+    _refreshStreamingBubble(msgId);
+  }
+
+  /// Rebuilds only the active message item after its live segments change.
+  void _refreshStreamingBubble(String msgId) {
+    if (!mounted) return;
+    if (_streamingMsgId != msgId) return;
+    _streamingBubbleRevision.value++;
   }
 }
