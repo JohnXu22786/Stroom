@@ -143,13 +143,17 @@ extension ChatServiceStreamingExt on ChatService {
     _lastReasoningLength = 0;
     _thinkingSignature = '';
 
-    final controller = StreamController<ChatEvent>(
+    late final StreamController<ChatEvent> controller;
+    controller = StreamController<ChatEvent>(
       onCancel: () {
         _cancelToken?.cancel();
         _cancelToken = null;
         _streamSubscription?.cancel();
         _streamSubscription = null;
-        _chatEventController = null;
+        if (identical(_chatEventController, controller)) {
+          _chatEventController = null;
+          _releaseResponseBuffers();
+        }
       },
     );
     _chatEventController = controller;
@@ -303,8 +307,12 @@ extension ChatServiceStreamingExt on ChatService {
           // （manager 已通过 addError 收到错误并走错误路径）。
           if (roundStreamError != null) break;
 
-          // No tool calls → done
-          if (toolCallRefs.isEmpty) break;
+          // No tool calls → done. Visible text is already retained by the
+          // stream manager, so the service no longer needs its duplicate.
+          if (toolCallRefs.isEmpty) {
+            _contentBuffer = '';
+            break;
+          }
 
           // Emit ReasoningSectionEndEvent before starting the next round.
           // This allows the UI to split multi-step reasoning chains into
@@ -431,11 +439,22 @@ extension ChatServiceStreamingExt on ChatService {
         if (!controller.isClosed) {
           await controller.close();
         }
+        if (identical(_chatEventController, controller)) {
+          _chatEventController = null;
+          _releaseResponseBuffers();
+        }
         _cleanUp();
       }
     });
 
     return controller.stream;
+  }
+
+  void _releaseResponseBuffers() {
+    _contentBuffer = '';
+    _reasoningBuffer = '';
+    _lastReasoningLength = 0;
+    _thinkingSignature = '';
   }
 
   String get reasoningContent => _reasoningBuffer;
@@ -492,6 +511,7 @@ extension ChatServiceStreamingExt on ChatService {
       _chatEventController!.close();
     }
     _chatEventController = null;
+    _releaseResponseBuffers();
     _cleanUp();
   }
 
