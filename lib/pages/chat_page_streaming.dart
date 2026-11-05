@@ -15,6 +15,51 @@ extension _ChatPageStreamingExt on _ChatPageState {
     _attachedStreamMsgId = msgId;
   }
 
+  void _registerContinuationHandler(
+      ChatStreamManager manager, String convId, String msgId) {
+    manager.setContinuationHandler(convId, (continuation) async {
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return false;
+      }
+      final pendingLoad = _messageLoadCompleter;
+      if (pendingLoad != null) await pendingLoad.future;
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return false;
+      }
+
+      final streamController = _controller;
+      if (streamController == null) return false;
+      final continuationAlreadyVisible = streamController.messages
+          .any((message) => message.id == continuation.id);
+      final assistantPlaceholder = streamController?.messages
+          .where((message) => message.id == msgId)
+          .firstOrNull;
+      if (assistantPlaceholder != null) {
+        await streamController?.removeMessage(assistantPlaceholder);
+      }
+      if (!continuationAlreadyVisible) {
+        await streamController?.insertMessage(
+          Message.text(
+            id: continuation.id,
+            authorId: _currentUser.id,
+            text: continuation.content,
+            createdAt: continuation.createdAt,
+          ),
+        );
+      }
+      await streamController?.insertMessage(
+        assistantPlaceholder ??
+            Message.text(
+              id: msgId,
+              authorId: _aiUser.id,
+              text: manager.fullReplyFor(convId),
+              createdAt: DateTime.now(),
+            ),
+      );
+      return true;
+    });
+  }
+
   void _detachStreamPageFor(String convId, String msgId) {
     if (_attachedStreamConvId == convId && _attachedStreamMsgId == msgId) {
       _detachStreamPage();
@@ -52,6 +97,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final msgId = manager.streamingMsgIdFor(activeConvId);
     if (msgId == null) return;
     _attachStreamPage(manager, activeConvId, msgId);
+    _registerContinuationHandler(manager, activeConvId, msgId);
 
     final fullReply = manager.fullReplyFor(activeConvId);
     final reasoningSections = manager.reasoningSectionsFor(activeConvId);
@@ -358,6 +404,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
+    _registerContinuationHandler(manager, effectiveConvId, aiMsgId);
+
     final streamFuture = manager.startStreaming(
       text: text,
       convId: effectiveConvId,

@@ -22,6 +22,8 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'chat_retry_policy.dart'
+    show kAutoContinuationMessage, shouldAutoContinueStream;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -62,6 +64,8 @@ class ChatStreamManager {
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
+  final Map<String, Future<bool> Function(ChatMessage)>
+      _pendingContinuationHandlers = {};
 
   /// Pages currently displaying a specific stream. A completed stream only
   /// needs its provider buffers retained while at least one page is attached.
@@ -313,6 +317,7 @@ class ChatStreamManager {
     final resultCompleter = Completer<StreamResult>();
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
+    state.onContinuation = _pendingContinuationHandlers.remove(convId);
     state.history = List.from(history);
     state.historyOnSuccess = historyOnSuccess == null
         ? null
@@ -482,21 +487,22 @@ class ChatStreamManager {
     // await-for loop subscribes below.
     //
     // requestHistory 已在上方上下文管理块计算（有摘要时 = 尾部快照起）。
-    final stream = state.cancelledByUser
-        ? const Stream<ChatEvent>.empty()
-        : _adapter.sendStreamWithTools(
-            text,
-            history: requestHistory,
-            reasoning: reasoning,
-            reasoningEffort: reasoningEffort,
-            reasoningParamValues: reasoningParamValues,
-            customParamValues: customParamValues,
-            tools: tools,
-            convId: convId,
-            assistant: assistant,
-            entriesState:
-                entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-          );
+    Stream<ChatEvent> createStream(List<ChatMessage> streamHistory) =>
+        state.cancelledByUser
+            ? const Stream<ChatEvent>.empty()
+            : _adapter.sendStreamWithTools(
+                text,
+                history: streamHistory,
+                reasoning: reasoning,
+                reasoningEffort: reasoningEffort,
+                reasoningParamValues: reasoningParamValues,
+                customParamValues: customParamValues,
+                tools: tools,
+                convId: convId,
+                assistant: assistant,
+                entriesState:
+                    entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+              );
 
     // Now safe to yield to event loop — all state is established and the
     // provider stream is already created.
@@ -512,10 +518,51 @@ class ChatStreamManager {
         // 永不被消费，回复丢失）
       }
 
-      await for (final event in stream) {
-        if (state.cancelledByUser) break;
+      var streamHistory = List<ChatMessage>.from(requestHistory);
+      var continuedAfterNetworkFailure = false;
+      while (true) {
+        try {
+          await for (final event in createStream(streamHistory)) {
+            if (state.cancelledByUser) break;
+            _handleStreamEvent(event, state, convId);
+          }
+          break;
+        } catch (e) {
+          if (continuedAfterNetworkFailure ||
+              state.cancelledByUser ||
+              !shouldAutoContinueStream(
+                error: e,
+                hasPartialOutput: state.fullReply.isNotEmpty,
+                hasToolHistory: state.toolCalls.isNotEmpty,
+              )) {
+            rethrow;
+          }
 
-        _handleStreamEvent(event, state, convId);
+          continuedAfterNetworkFailure = true;
+          final continuation = ChatMessage(
+            role: 'user',
+            content: kAutoContinuationMessage,
+          );
+          state.history.add(continuation);
+          state.historyOnSuccess?.add(continuation);
+          state.pendingContinuation = continuation;
+          try {
+            final handler = state.onContinuation;
+            if (handler != null) {
+              await _deliverContinuation(state, continuation, handler);
+            }
+          } catch (callbackError) {
+            debugPrint(
+                '[ChatStreamManager] continuation display callback failed: $callbackError');
+          }
+          streamHistory = [
+            ...streamHistory,
+            ChatMessage(role: 'assistant', content: state.fullReply),
+            continuation,
+          ];
+          debugPrint(
+              '[ChatStreamManager] network stream interrupted; continuing once, convId=$convId');
+        }
       }
     } catch (e, s) {
       streamError = e;
@@ -558,6 +605,42 @@ class ChatStreamManager {
       streamError: streamError,
       snappedChatService: snappedChatService,
     );
+  }
+
+  /// Registers a conversation-scoped handler for displaying an automatically
+  /// sent continuation. Call immediately before [startStreaming].
+  void setContinuationHandler(
+    String convId,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) {
+    final activeState = _streams[convId];
+    if (activeState != null && !activeState.cancelledByUser) {
+      activeState.onContinuation = handler;
+      final pendingContinuation = activeState.pendingContinuation;
+      if (pendingContinuation != null) {
+        unawaited(
+          _deliverContinuation(activeState, pendingContinuation, handler),
+        );
+      }
+    } else {
+      _pendingContinuationHandlers[convId] = handler;
+    }
+  }
+
+  Future<void> _deliverContinuation(
+    _ConversationStreamState state,
+    ChatMessage continuation,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) async {
+    try {
+      final displayed = await handler(continuation);
+      if (displayed && identical(state.pendingContinuation, continuation)) {
+        state.pendingContinuation = null;
+      }
+    } catch (callbackError) {
+      debugPrint(
+          '[ChatStreamManager] continuation display callback failed: $callbackError');
+    }
   }
 
   /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。

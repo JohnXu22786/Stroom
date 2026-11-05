@@ -20,6 +20,7 @@ import 'context_manager.dart'
         kToolOutputTruncatedSuffix,
         truncateUtf8;
 import 'chat_service_shared.dart' show setNestedParam;
+import 'chat_retry_policy.dart' show retryRateLimitedStream;
 import 'mcp_client.dart';
 import 'app_log_service.dart';
 
