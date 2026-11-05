@@ -4,17 +4,80 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
-import 'package:stroom/ai_gateway/ai_gateway_contracts.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/services/api_protocol_config.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
 
 void main() {
+  test(
+      'Azure deployments are available through Chat and Task Flow model groups',
+      () {
+    final account = LlmAccount(
+      id: 'm50-azure-group',
+      connectorType: 'azure-ai',
+      authType: 'api_key',
+      displayName: 'Azure Foundry',
+      endpointConfig: const {
+        'baseUrl': 'https://example.services.ai.azure.com',
+        'azureDeploymentId': 'chat-deployment',
+        'apiVersion': '2024-12-01-preview',
+        'apiProtocol': 'openai.chat_completions',
+      },
+      models: const [
+        LlmUpstreamModel(
+          id: 'm50-azure-deployment-model',
+          upstreamModelId: 'chat-deployment',
+          displayName: 'chat-deployment',
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'supportedApiProtocols': ['openai.chat_completions'],
+          },
+          config: {'catalogSource': 'configured-azure-deployment'},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: stableLlmModelGroupId(account.id, 'chat-deployment'),
+      displayName: 'Azure production',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'm50-azure-group',
+          upstreamModelId: 'chat-deployment',
+          localModelId: 'chat-deployment',
+        ),
+      ],
+    );
+
+    final configs = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    );
+
+    expect(LlmConnectorRegistry.chatAdapterEndpointType('azure-ai'), 'openai');
+    expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('azure-openai'), 'openai');
+    expect(builtinDefaultApiProtocolForConnector('azure-ai'),
+        'openai.chat_completions');
+    expect(
+      supportedApiProtocolsForSupplier(null, connectorType: 'azure-openai'),
+      {'openai.chat_completions'},
+    );
+    expect(configs, hasLength(1));
+    expect(configs.single.apiProtocol, 'openai.chat_completions');
+    expect(configs.single.models.single.modelId, 'chat-deployment');
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      containsAll(['azure-ai', 'azure-openai']),
+    );
+  });
+
   test('M49 API-key presets preserve source endpoint and header contracts', () {
     const expected = {
       'api-airforce': (

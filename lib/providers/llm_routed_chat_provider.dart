@@ -58,6 +58,8 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       _ => const {
           'openai-compatibility',
           'openai-api',
+          'azure-ai',
+          'azure-openai',
           'aihorde',
           'uncloseai',
           'bedrock',

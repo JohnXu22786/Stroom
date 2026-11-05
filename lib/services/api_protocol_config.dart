@@ -80,6 +80,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'command-code' =>
         'openai.chat_completions',
       'openference' || 'openference-api' => 'openai.chat_completions',
+      'azure-ai' || 'azure-openai' => 'openai.chat_completions',
       'kimi-coding' => 'openai.chat_completions',
       _ => 'openai.chat_completions',
     };
@@ -109,6 +110,7 @@ Set<String> supportedApiProtocolsForSupplier(
 }) {
   final builtinProtocols = switch (connectorType) {
     'openai-api' => const {'openai.chat_completions', 'openai.responses'},
+    'azure-ai' || 'azure-openai' => const {'openai.chat_completions'},
     'opencode-go' ||
     'opencode-zen' ||
     'command-code' =>
