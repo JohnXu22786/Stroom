@@ -11,8 +11,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           state.hasReceivedFirstToken = true;
           _pushToProvider(convId, streamingHasFirstTokenProvider, true);
         }
-        state.fullReply += e.text;
-        state.textChunks[state.textChunks.length - 1] += e.text;
+        state.appendText(e.text);
         // 节流：最长200ms更新一次 provider
         final now = DateTime.now();
         if (now.difference(state.lastTextUpdate) >=
@@ -27,14 +26,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
 
       case ReasoningEvent e:
-        state.reasoningBuffer += e.text;
-        final sections = List<String>.from(state.reasoningSections);
-        if (sections.isNotEmpty) {
-          sections[sections.length - 1] = state.reasoningBuffer;
-        } else {
-          sections.add(state.reasoningBuffer);
-        }
-        state.reasoningSections = sections;
+        state.appendReasoning(e.text);
         // 节流
         final now = DateTime.now();
         if (now.difference(state.lastReasoningUpdate) >=
@@ -42,14 +34,13 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           state.lastReasoningUpdate = now;
           _pushToProvider(
               convId, streamingReasoningProvider, state.reasoningBuffer);
-          _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
+          _pushToProvider(convId, streamingReasoningSectionsProvider,
+              state.reasoningSections);
         }
 
       case ReasoningSectionEndEvent():
-        final sections = List<String>.from(state.reasoningSections);
-        sections.add('');
-        state.reasoningSections = sections;
-        state.reasoningBuffer = ''; // Reset for new reasoning section
+        state.endReasoningSection();
+        final sections = state.reasoningSections;
         // The service emits one ReasoningSectionEndEvent per tool round,
         // right before that round's ToolCallStartEvents. Mark that the
         // next tool call begins a new round: the reasoning-section
@@ -83,9 +74,9 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // tools emitted in one response) don't satisfy any condition and
         // stay grouped in the same round.
         if (state.pendingRoundStart ||
-            state.textChunks.last.isNotEmpty ||
+            state.currentTextChunkIsNotEmpty ||
             state.textChunks.length == 1) {
-          state.textChunks.add('');
+          state.startTextChunk();
           // Record that this tool call starts a new round.
           state.toolCallRoundStarts.add(state.toolCalls.length - 1);
         }
