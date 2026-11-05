@@ -908,17 +908,13 @@ class ManifestOperations<T extends FileRecord> {
       final toRemoveRecords = <T>[];
 
       for (final child in descendants) {
-        _folderCache.remove(child);
         final childRecords =
             _cache!.where((r) => folderOf(r) == child).toList();
         toRemoveRecords.addAll(childRecords);
         for (final record in childRecords) {
           idsToDelete.add(record.id);
         }
-        await ManifestDatabase.deleteFolder(child, recordTable: tableName);
       }
-
-      _folderCache.remove(folderName);
 
       final folderRecords =
           _cache!.where((r) => folderOf(r) == folderName).toList();
@@ -926,7 +922,6 @@ class ManifestOperations<T extends FileRecord> {
       for (final record in folderRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
       // Pre-count storage names and hash counts across ALL records before deletion
       final storageNameCount = <String, int>{};
@@ -936,6 +931,17 @@ class ManifestOperations<T extends FileRecord> {
         storageNameCount[sn] = (storageNameCount[sn] ?? 0) + 1;
         final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 0) + 1;
+      }
+
+      // Commit record deletion before removing its content. If manifest
+      // persistence fails, the existing records must still point to files.
+      if (idsToDelete.isNotEmpty) {
+        await _dbDeleteRecords(idsToDelete);
+      }
+      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+      for (final folder in [...descendants, folderName]) {
+        await ManifestDatabase.deleteFolder(folder, recordTable: tableName);
+        _folderCache.remove(folder);
       }
 
       // Decrement per record being deleted; only delete file when count reaches 0
@@ -970,13 +976,6 @@ class ManifestOperations<T extends FileRecord> {
           }
           await _deleteLegacyThumbIfImage(h);
         }
-      }
-
-      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-
-      // Delete records from DB
-      if (idsToDelete.isNotEmpty) {
-        await _dbDeleteRecords(idsToDelete);
       }
     } catch (e, st) {
       await AppLogService.error(

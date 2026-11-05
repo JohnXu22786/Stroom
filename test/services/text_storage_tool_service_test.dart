@@ -168,27 +168,30 @@ void main() {
   });
 
   test('preserves format and folder when omitted on replacement', () async {
-    final created = jsonDecode(
-      await TextStorageToolService.handleTool('stroom_space_write', {
-        'name': 'Class Notes',
-        'content': 'Original text',
-        'format': 'txt',
-        'folder': 'Biology/Week 1',
-      }),
-    ) as Map<String, dynamic>;
+    for (final format in ['txt', 'mmd']) {
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Class Notes',
+          'content': 'Original text',
+          'format': format,
+          'folder': 'Biology/Week 1',
+        }),
+      ) as Map<String, dynamic>;
 
-    final updated = jsonDecode(
-      await TextStorageToolService.handleTool('stroom_space_write', {
-        'record_id': created['id'],
-        'expected_hash': created['hash'],
-        'expected_metadata_hash': created['metadata_hash'],
-        'name': 'Class Notes Updated',
-        'content': 'Updated text',
-      }),
-    ) as Map<String, dynamic>;
+      final updated = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'record_id': created['id'],
+          'expected_hash': created['hash'],
+          'expected_metadata_hash': created['metadata_hash'],
+          'name': 'Class Notes Updated.$format',
+          'content': 'Updated text',
+        }),
+      ) as Map<String, dynamic>;
 
-    expect(updated['format'], 'txt');
-    expect(updated['folder'], 'Biology/Week 1');
+      expect(updated['name'], 'Class Notes Updated');
+      expect(updated['format'], format);
+      expect(updated['folder'], 'Biology/Week 1');
+    }
   });
 
   test('rejects a stale text editor save after a tool replacement', () async {
@@ -1001,6 +1004,45 @@ void main() {
       expect(
         await TextManifest.readText(oldRecord.storageFileName),
         oldContent,
+      );
+    },
+  );
+
+  test(
+    'failed JSON folder removal retains records, folders, and content files',
+    () async {
+      const content = 'Folder content survives manifest failure';
+      final record = TextRecord(
+        id: 'folder-delete-write-failure',
+        name: 'Keep this note',
+        hash: computeTextHash(Uint8List.fromList(utf8.encode(content))),
+        format: 'txt',
+        createdAt: DateTime.utc(2026),
+        size: utf8.encode(content).length,
+        folder: 'Keep/This',
+      );
+      await TextManifest.writeText(record.storageFileName, content);
+      await TextManifest.addRecord(record);
+      await ManifestDatabase.insertFolder(
+        'Keep/This',
+        recordTable: 'text_records',
+      );
+      await ManifestDatabase.insertImageRecord({
+        'id': 'serialization-failure',
+        'unserializable': Object(),
+      });
+
+      await expectLater(
+        TextManifest.removeFolder('Keep'),
+        throwsA(isA<JsonUnsupportedObjectError>()),
+      );
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      expect((await TextManifest.loadRecords()).single.id, record.id);
+      expect(await TextManifest.getAllFolders(), contains('Keep/This'));
+      expect(
+        await ManifestDatabase.getAllFolders(recordTable: 'text_records'),
+        contains('Keep/This'),
       );
     },
   );

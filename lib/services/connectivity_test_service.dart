@@ -249,17 +249,21 @@ class ConnectivityTestService {
           break;
         case 'stroom_space_read':
           final records = await TextManifest.loadRecords();
-          if (records.isEmpty) {
-            result = '读取工具可用；文本空间当前没有文档可供测试。';
-            break;
-          }
           final recordId = arguments.containsKey('record_id')
               ? arguments['record_id']
-              : records.first.id;
+              : records.isEmpty
+                  ? '__stroom_connectivity_probe__'
+                  : records.first.id;
           final readResult = await TextStorageToolService.handleTool(toolName, {
             'record_id': recordId,
             'length': 0,
           });
+          if (records.isEmpty &&
+              !arguments.containsKey('record_id') &&
+              readResult.startsWith('错误: 找不到 ID')) {
+            result = '读取工具可用；文本空间当前没有文档可供读取。';
+            break;
+          }
           if (readResult.startsWith('错误:')) {
             return _finish(stopwatch, false, 'Stroom 工具测试失败', readResult);
           }

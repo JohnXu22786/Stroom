@@ -24,6 +24,19 @@ void main() {
   });
 
   test(
+    'built-in read connectivity test honors an unknown record id in an empty space',
+    () async {
+      final result = await ConnectivityTestService.runBuiltinTest(
+        toolName: 'stroom_space_read',
+        testContent: jsonEncode({'record_id': 'missing-record'}),
+      );
+
+      expect(result.succeeded, isFalse);
+      expect(result.details, contains('missing-record'));
+    },
+  );
+
+  test(
     'built-in read connectivity test honors the configured record id',
     () async {
       final bytes = Uint8List.fromList(utf8.encode('first document'));

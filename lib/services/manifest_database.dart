@@ -1487,8 +1487,15 @@ class ManifestDatabase {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[folderTable] as List<dynamic>? ?? [];
-        list.remove(path);
-        await _saveWebData();
+        final index = list.indexOf(path);
+        if (index < 0) return;
+        list.removeAt(index);
+        try {
+          await _saveWebDataOrThrow();
+        } catch (_) {
+          list.insert(index, path);
+          rethrow;
+        }
         return;
       }
       final db = await database;

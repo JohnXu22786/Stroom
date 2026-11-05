@@ -326,14 +326,12 @@ class TextStorageToolService {
       r'\.(txt|md|mmd)$',
       caseSensitive: false,
     ).firstMatch(name);
-    if (formatSuffix != null) {
+    if (formatSuffix != null && args['format'] != null) {
       if (formatSuffix.group(1)!.toLowerCase() != formatValue) {
         return '错误: name 不要包含扩展名；请通过 format 指定文件格式。';
       }
       name = name.substring(0, formatSuffix.start);
     }
-    final nameError = FolderPathUtils.validateFileName(name);
-    if (nameError != null) return '错误: $nameError。';
     final folderResult = _validateFolder(args['folder']);
     if (folderResult.error != null) return '错误: ${folderResult.error}。';
     final folder = folderResult.folder!;
@@ -342,6 +340,14 @@ class TextStorageToolService {
     final recordId = args['record_id'];
 
     if (recordId == null) {
+      if (formatSuffix != null) {
+        if (formatSuffix.group(1)!.toLowerCase() != formatValue) {
+          return '错误: name 不要包含扩展名；请通过 format 指定文件格式。';
+        }
+        name = name.substring(0, formatSuffix.start);
+      }
+      final nameError = FolderPathUtils.validateFileName(name);
+      if (nameError != null) return '错误: $nameError。';
       final record = TextRecord(
         name: name,
         hash: hash,
@@ -382,6 +388,15 @@ class TextStorageToolService {
     if (_metadataHash(oldRecord) != expectedMetadataHash) {
       return '错误: 文档的名称、格式或文件夹在读取后已更改。请重新读取并基于最新信息重试。';
     }
+
+    if (formatSuffix != null && args['format'] == null) {
+      if (formatSuffix.group(1)!.toLowerCase() != oldRecord.format) {
+        return '错误: name 不要包含扩展名；请通过 format 指定文件格式。';
+      }
+      name = name.substring(0, formatSuffix.start);
+    }
+    final nameError = FolderPathUtils.validateFileName(name);
+    if (nameError != null) return '错误: $nameError。';
 
     final now = DateTime.now();
     final updated = TextRecord(
