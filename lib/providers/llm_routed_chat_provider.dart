@@ -14,6 +14,7 @@ import '../services/api_protocol_config.dart';
 import 'chat_api_provider.dart';
 import '../services/conversation_media_storage.dart';
 import '../services/reasoning_replay_cache.dart';
+import '../services/bai_reasoning_content_echo.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
@@ -278,6 +279,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           messages,
           accountId: candidate.account.id,
           providerId: candidate.account.connectorType,
+          providerPresetId: _stringValue(
+            candidate.account.endpointConfig['providerPresetId'],
+          ),
           executorFamilyId: _executorReplayFamilyId(runtime.executor),
           executorId: _executorReplayScopeId(runtime.executor),
           modelId: candidate.upstreamModelId,
@@ -497,6 +501,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               messages,
               accountId: candidate.account.id,
               providerId: candidate.account.connectorType,
+              providerPresetId: _stringValue(
+                candidate.account.endpointConfig['providerPresetId'],
+              ),
               executorFamilyId: _executorReplayFamilyId(runtime.executor),
               executorId: _executorReplayScopeId(runtime.executor),
               modelId: candidate.upstreamModelId,
@@ -831,12 +838,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>> messages, {
     required String accountId,
     required String providerId,
+    String? providerPresetId,
     required String executorFamilyId,
     required String executorId,
     required String modelId,
     required String protocolId,
   }) {
-    return _reasoningReplayCache.restore(
+    final restored = _reasoningReplayCache.restore(
       accountId: accountId,
       providerId: providerId,
       executorFamilyId: executorFamilyId,
@@ -845,6 +853,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       sessionId: conversationId ?? '',
       protocolId: protocolId,
       requestMessages: messages,
+    );
+    return prepareBaiDeepSeekReasoningContentEcho(
+      messages: restored,
+      originalMessages: messages,
+      providerId: providerId,
+      providerPresetId: providerPresetId,
+      protocolId: protocolId,
+      modelId: modelId,
     );
   }
 

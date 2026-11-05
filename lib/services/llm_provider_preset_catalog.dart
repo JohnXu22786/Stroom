@@ -452,6 +452,21 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     modelsUrl: 'https://api.auriko.ai/v1/models',
   ),
   LlmProviderPreset(
+    id: 'bai',
+    displayName: 'b.ai',
+    baseUrl: 'https://api.b.ai/v1/chat/completions',
+    modelsUrl: 'https://api.b.ai/v1/models',
+    // The pinned registry names only DeepSeek Reasoner as b.ai's thinking
+    // model; other discovered models remain untouched by reasoning echo.
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'deepseek-reasoner',
+        displayName: 'DeepSeek Reasoner',
+        capabilities: {'reasoning': true},
+      ),
+    ],
+  ),
+  LlmProviderPreset(
     id: 'baichuan',
     displayName: 'Baichuan',
     baseUrl: 'https://api.baichuan-ai.com/v1/chat/completions',
