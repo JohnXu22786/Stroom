@@ -668,7 +668,8 @@ void main() {
 
     // ==================== Font Size Button in View Mode ====================
 
-    testWidgets('font size button is visible in view mode (non-edit state) '
+    testWidgets(
+        'font size button is visible in view mode (non-edit state) '
         'and pops up font size dialog with reset button', (tester) async {
       await tester.pumpWidget(_buildTestApp(testFile, testContent));
       await navigateToEditor(tester);
@@ -934,7 +935,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('desktop touch drag on the text scrolls the page instead of '
+    testWidgets(
+        'desktop touch drag on the text scrolls the page instead of '
         'selecting text', (tester) async {
       await _withPlatform(tester, TargetPlatform.windows, () async {
         await tester.pumpWidget(_buildTestApp(testFile, longContent(100)));

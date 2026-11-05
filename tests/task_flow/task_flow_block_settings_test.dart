@@ -212,7 +212,8 @@ void main() {
     });
   });
 
-  testWidgets('ASR block save-folder picker lists TEXT page folders, not the '
+  testWidgets(
+      'ASR block save-folder picker lists TEXT page folders, not the '
       'audio/file page ones (records must land where the user sees them)', (
     tester,
   ) async {
@@ -326,7 +327,8 @@ void main() {
     );
   }
 
-  testWidgets('ASR block panel lists MODELS as "modelName | providerName" '
+  testWidgets(
+      'ASR block panel lists MODELS as "modelName | providerName" '
       '(same granularity as the ASR page)', (tester) async {
     await pumpPanel(
       tester,
@@ -346,7 +348,8 @@ void main() {
     expect(find.text('distil-whisper | Groq'), findsOneWidget);
   });
 
-  testWidgets('ASR panel excludes models of configs without host/key '
+  testWidgets(
+      'ASR panel excludes models of configs without host/key '
       '(index alignment with the executor)', (tester) async {
     final entries = ProviderEntriesState(
       entries: [
@@ -399,7 +402,8 @@ void main() {
     expect(find.text('distil-whisper | Groq'), findsOneWidget);
   });
 
-  testWidgets('chat panel with a DELETED assistant id shows the warning line '
+  testWidgets(
+      'chat panel with a DELETED assistant id shows the warning line '
       '(no crash, re-selection works)', (tester) async {
     await pumpPanel(
       tester,
@@ -444,7 +448,8 @@ void main() {
     expect(find.textContaining('通用助手'), findsNothing);
   });
 
-  testWidgets('TTS panel with a stale voice id shows 音色已失效 (never the '
+  testWidgets(
+      'TTS panel with a stale voice id shows 音色已失效 (never the '
       'raw id string)', (tester) async {
     final entries = ProviderEntriesState(
       entries: [
@@ -606,7 +611,8 @@ void main() {
     },
   );
 
-  testWidgets('block card shows the MODEL name for modelSelector params '
+  testWidgets(
+      'block card shows the MODEL name for modelSelector params '
       '(no raw index)', (tester) async {
     final entries = _asrEntries();
     await tester.pumpWidget(
@@ -732,7 +738,8 @@ void main() {
     );
   });
 
-  testWidgets('a stale voice (not in the selected model) resets on confirm '
+  testWidgets(
+      'a stale voice (not in the selected model) resets on confirm '
       '(no invalid id survives)', (tester) async {
     final entries = _ttsEntries();
     TaskFlowBlock? result;
@@ -784,8 +791,7 @@ void main() {
     expect(
       result!.params['voice'],
       '',
-      reason:
-          'a stale voice must reset to the model default, not '
+      reason: 'a stale voice must reset to the model default, not '
           'survive confirm',
     );
   });
@@ -857,7 +863,8 @@ void main() {
     expect(result!.params['voice'], 'custom-voice-id');
   });
 
-  testWidgets('TTS panel with duplicate voice ids within one model does not '
+  testWidgets(
+      'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
     final entries = ProviderEntriesState(
       entries: [

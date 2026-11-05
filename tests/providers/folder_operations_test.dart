@@ -428,8 +428,7 @@ void main() {
       expect(
         notifier.state,
         hasLength(4),
-        reason:
-            'BUG: copying must not throw ConcurrentModificationError '
+        reason: 'BUG: copying must not throw ConcurrentModificationError '
             'or drop records when the source folder has multiple records',
       );
       final copies = notifier.state.where((r) => r.folder == 'x/a');

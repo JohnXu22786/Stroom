@@ -65,7 +65,8 @@ void main() {
   // edited bytes once it pops.
   // ====================================================================
   group('AppFilePickerDialog quick-edit flow', () {
-    testWidgets('the quick editor processes in place, then the selection holds '
+    testWidgets(
+        'the quick editor processes in place, then the selection holds '
         'the edited bytes', (tester) async {
       // Room for the tab content + preview bar + confirm button.
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
@@ -120,9 +121,8 @@ void main() {
         tester,
         () => find.byType(PreviewChip).evaluate().isNotEmpty,
       );
-      final originalChipBytes = tester
-          .widget<PreviewChip>(find.byType(PreviewChip))
-          .bytes;
+      final originalChipBytes =
+          tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
 
       // Preview chip → preview dialog → quick editor.
       await tester.tap(find.byType(PreviewChip));
@@ -265,7 +265,8 @@ void main() {
       await _pumpUntil(tester, () => find.text('work').evaluate().isNotEmpty);
     }
 
-    testWidgets('system back inside a subfolder navigates up one level '
+    testWidgets(
+        'system back inside a subfolder navigates up one level '
         'instead of closing the picker', (tester) async {
       await seedTextLibrary(tester);
       await openPicker(tester);
@@ -292,8 +293,7 @@ void main() {
       expect(
         find.text('返回根目录'),
         findsOneWidget,
-        reason:
-            'back from work/inner must land in work, whose parent '
+        reason: 'back from work/inner must land in work, whose parent '
             'is the root',
       );
       expect(
@@ -308,8 +308,7 @@ void main() {
       expect(
         find.text('选择文件'),
         findsOneWidget,
-        reason:
-            'the picker must stay open at the root after the '
+        reason: 'the picker must stay open at the root after the '
             'second back press',
       );
       expect(
@@ -362,7 +361,8 @@ void main() {
       );
     });
 
-    testWidgets('the close (X) button still closes the picker from inside a '
+    testWidgets(
+        'the close (X) button still closes the picker from inside a '
         'subfolder', (tester) async {
       await seedTextLibrary(tester);
       await openPicker(tester);
